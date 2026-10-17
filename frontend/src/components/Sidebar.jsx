@@ -11,12 +11,17 @@ import {
   X,
   ClipboardList,
   Users,
-  ChartLine
+  ChartLine,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
+import { getMfaStatus } from '../api/mfa';
 import { usePermissions } from '../permissions/context';
 import { permissionForPath } from '../permissions/keys';
 import Modal from './Modal';
+import AccountSecurityModal from './AccountSecurityModal';
+import AuthHandoff, { holdForHandoff } from './AuthHandoff';
 import './Sidebar.css';
 
 // Initials for the bottom-profile avatar, e.g. "Audrey Bugayong" -> "AB".
@@ -28,25 +33,33 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
+// Grouped by what a person comes to do (UI pass, 2026-10-08): the overview,
+// the analysis pages, the inventory pages, then administration. Routes and
+// the permission each one needs are unchanged.
 const navSections = [
+  {
+    label: 'Overview',
+    items: [
+      { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
+    ],
+  },
   {
     label: 'Analytics',
     items: [
-      { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
       { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
       { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
     ],
   },
   {
-    label: 'Management',
+    label: 'Inventory',
     items: [
       { name: 'SKU Management', icon: List, path: '/sku-management' },
       { name: 'ABC Classification', icon: Layers, path: '/abc' },
-      { name: 'Reorder Recs', icon: RotateCcw, path: '/reorder' },
+      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
     ],
   },
   {
-    label: 'Admin',
+    label: 'Administration',
     items: [
       { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
       { name: 'Data Management', icon: Upload, path: '/upload' },
@@ -79,15 +92,44 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
   }, []);
   const navigate = useNavigate();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  // Log out confirmed: the hand-off screen ("Logging out of the
+  // dashboard…") over everything for a moment, then the sign-out.
+  const [loggingOut, setLoggingOut] = useState(false);
+  // Your own two-step sign-in, opened from your name below.
+  const [showSecurity, setShowSecurity] = useState(false);
+  // Whether it is on, for the "Account security" line under your name
+  // (GET /auth/mfa, the same answer the dialog reads): "Action required"
+  // while it is off, "Protected" once it is on. Null until it has
+  // loaded, or when the server has two-step sign-in paused (available:
+  // false), when the line just says "Account security": there is nothing
+  // to act on. The dialog hands back the fresh status after any change,
+  // so the line follows without a second request.
+  const [mfaStatus, setMfaStatus] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    getMfaStatus()
+      .then((status) => { if (!cancelled) setMfaStatus(status); })
+      .catch(() => { if (!cancelled) setMfaStatus(null); });
+    return () => { cancelled = true; };
+  }, []);
+  const securityState = mfaStatus?.available ? (mfaStatus.enabled ? 'protected' : 'pending') : null;
   const currentUser = getCurrentUser();
   // Role and tabs come from /auth/me (PermissionsProvider), not the login
   // token, so a change an admin makes shows on the next click.
-  const { role, hasPermission } = usePermissions();
-  const displayName = currentUser?.fullName || currentUser?.email || 'Signed in';
+  const { role, hasPermission, profile } = usePermissions();
+  // The name and picture as /auth/me has them now (a save on the My
+  // profile page shows at once); the login token is the fallback.
+  const displayName = profile?.fullName || currentUser?.fullName || currentUser?.email || 'Signed in';
+  const avatarUrl = profile?.avatar || null;
   const displayRole = role ? role.toUpperCase() : '';
 
-  const handleConfirmLogout = () => {
+  const handleConfirmLogout = async () => {
     setShowLogoutModal(false);
+    // The screen first, with the session still whole beneath it (a fetch
+    // in those moments must not be taken for an expired session); then
+    // the sign-out and the login page.
+    setLoggingOut(true);
+    await holdForHandoff();
     logout();
     navigate('/login');
   };
@@ -112,14 +154,13 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
       {/* Only rendered (and only visible, via Sidebar.css's max-width: 900px
           block) on the overlay breakpoint, so the sidebar can slide over the
           page instead of pushing it, with a click-outside-to-close scrim. */}
+      {loggingOut && <AuthHandoff kind="out" />}
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-      {/* Desktop: the shell holds the sidebar's place in the layout — the
-          icon rail's width, or the full width when pinned open with the
-          topbar's menu button. The sidebar inside stretches open over the
-          page on hover or keyboard focus without pushing the page, so charts
-          don't re-flow every time the pointer passes. Below 900px the shell
-          takes no space and the sidebar is the old slide-over. */}
+      {/* Desktop: a docked column that pushes the page; the topbar's menu
+          button slides it away and back. Below 900px the shell takes no
+          space and the sidebar is a slide-over. (The shell is left from the
+          floating icon rail, taken out 2026-10-11 — see Sidebar.css.) */}
       <div className={`sidebar-shell ${isOpen ? 'is-open' : 'is-closed'}`}>
         <aside className={`sidebar ${isOpen ? 'is-open' : 'is-closed'}`} aria-label="Main navigation">
           {/* App identity — the real SAN2 logo (cropped to its own content
@@ -169,12 +210,43 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
           {/* Bottom Profile */}
           <div className="sidebar-bottom">
+            {/* Your name and picture open My profile (/profile); the line
+                under them opens Account security (two-step sign-in). */}
             <div className="sidebar-profile-bottom">
-              <div className="avatar blue-avatar">{getInitials(displayName)}</div>
-              <div className="profile-info">
-                <span className="profile-name">{displayName}</span>
-                <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
-              </div>
+              <button
+                type="button"
+                className="sidebar-profile-btn"
+                onClick={() => navigate('/profile')}
+                title="My profile"
+              >
+                <div className="avatar blue-avatar" aria-hidden="true">
+                  {avatarUrl ? <img src={avatarUrl} alt="" className="avatar-img" /> : getInitials(displayName)}
+                </div>
+                <div className="profile-info">
+                  <span className="profile-name">{displayName}</span>
+                  <span className="profile-role">{displayRole ? `${displayRole} - URDANETA` : 'URDANETA'}</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`profile-security${securityState ? ` is-${securityState}` : ''}`}
+                onClick={() => setShowSecurity(true)}
+                title="Account security"
+              >
+                {securityState === 'pending' && (
+                  <>
+                    <AlertTriangle size={12} aria-hidden="true" />
+                    Account security: Action required
+                  </>
+                )}
+                {securityState === 'protected' && (
+                  <>
+                    <CheckCircle2 size={12} aria-hidden="true" />
+                    Account security: <strong>Protected</strong>
+                  </>
+                )}
+                {!securityState && 'Account security'}
+              </button>
             </div>
             
             {/* Was a hardcoded green "SYS ONLINE" (shown even with the backend
@@ -194,6 +266,8 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
           </div>
         </aside>
       </div>
+
+      <AccountSecurityModal isOpen={showSecurity} onClose={() => setShowSecurity(false)} onStatusChange={setMfaStatus} />
 
       {/* Logout Confirmation Modal Popup */}
       {showLogoutModal && (

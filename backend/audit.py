@@ -12,7 +12,9 @@ Actions: Add User, Edit User, Delete User, Invite Resent, Reset Link Sent,
 Change Access (a user's role and permission boxes, PUT
 /admin/users/{id}/permissions), Password Reset Requested, Password Set,
 Password Reset, Sign-in Locked, Sign-in Failed, Sign-in Failure Logging
-Paused, Add SKU, Edit SKU, Reorder Recommendation Accepted / Dismissed.
+Paused, Add SKU, Edit SKU, Reorder Recommendation Accepted / Dismissed,
+Two-Step Sign-In On / Off / Reset, Recovery Codes Replaced, Recovery Code
+Used, Device Remembered, Two-Step Code Skipped (backend/mfa.py).
 """
 from __future__ import annotations
 

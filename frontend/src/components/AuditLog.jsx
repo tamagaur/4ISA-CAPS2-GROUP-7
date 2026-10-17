@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import SectionLede from './ui/SectionLede';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
-import { formatDateTime } from '../utils/formatDate';
+import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTable } from './Skeleton';
+import PageHeader from './ui/PageHeader';
 import './AuditLog.css';
+
+// Events out of the ordinary get the one badge on the page; the rest are
+// plain text, so a badge still means something.
+const EXCEPTIONAL_ACTIONS = new Set(['Sign-in Failed', 'Sign-in Locked', 'Delete User']);
 
 const RECENT_CHANGES_LIMIT = 10;
 // Sign-ins are summarised per user above, so they are left out of the
@@ -24,13 +30,19 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
-const getAvatarColor = (name) => {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const colors = ['#f56565', '#4299e1', '#48bb78', '#ed8936', '#9f7aea', '#ed64a6'];
-  return colors[Math.abs(hash) % colors.length];
+// One neutral tile for every avatar (UI pass): a column of six strong
+// colours competed with the one badge on the page that means something.
+const getAvatarColor = () => 'var(--badge-neutral-bg)';
+
+// A span of days as the page states periods: "Aug 23, 2026 – Oct 2, 2026", or
+// one day when both ends fall on it. Every count on this page says the span
+// it covers (Technical Adviser, 2026-10-03): a bare "90 sign-ins" read as
+// "ever", while the record only starts at the first tracked sign-in.
+const daySpan = (from, to) => {
+  if (!from || !to) return null;
+  const a = formatDate(from);
+  const b = formatDate(to);
+  return a === b ? a : `${a} \u2013 ${b}`;
 };
 
 // 5400 -> "1h 30m", 600 -> "10m", 42 -> "42s".
@@ -72,14 +84,17 @@ const UserBadge = ({ name, email }) => {
 
 // Loads one section's data; each section fails or loads on its own, so a
 // problem with one never blanks the other.
+// `meta` keeps the rest of the response (GET /audit-log/users' sign-in span).
 const useSection = (load) => {
-  const [state, setState] = useState({ loading: true, error: null, items: [] });
+  const [state, setState] = useState({ loading: true, error: null, items: [], meta: {} });
   useEffect(() => {
     let cancelled = false;
     load()
-      .then((res) => { if (!cancelled) setState({ loading: false, error: null, items: res.items || [] }); })
+      .then((res) => {
+        if (!cancelled) setState({ loading: false, error: null, items: res.items || [], meta: res || {} });
+      })
       .catch((err) => {
-        if (!cancelled) setState({ loading: false, error: err.message || 'Failed to load', items: [] });
+        if (!cancelled) setState({ loading: false, error: err.message || 'Failed to load', items: [], meta: {} });
       });
     return () => { cancelled = true; };
   }, [load]);
@@ -114,16 +129,17 @@ const AuditLog = () => {
 
   const totalLogins = users.items.reduce((sum, u) => sum + u.login_count, 0);
   const longestSeconds = users.items[0]?.longest_session_seconds ?? null;
+  // The span the sign-in counts cover: the first recorded sign-in (session
+  // tracking plus the sign-ins backfilled from the audit log) to the latest.
+  const signInSpan = daySpan(users.meta.first_login_at, users.meta.last_login_at);
+  // The span the listed changes cover, oldest to newest of those shown.
+  const changeTimes = changes.items.map((c) => c.created_at).filter(Boolean).sort();
+  const changesSpan = daySpan(changeTimes[0], changeTimes[changeTimes.length - 1]);
 
   return (
     <div className="audit-page">
       <div className="audit-content">
-        <div className="audit-page-header">
-          <div className="audit-header-left">
-            <h2 className="audit-page-title">Audit <span className="page-title-accent">log</span></h2>
-            <p className="audit-page-subtitle">Who signs in, and what they change. Visible to admins only.</p>
-          </div>
-        </div>
+        <PageHeader title="Audit" accent="log" subtitle="Who signs in, and what they change. Visible to people with Audit Log access." />
 
         <section className="audit-section" aria-labelledby="audit-users-heading">
           <div className="audit-section-header">
@@ -132,12 +148,16 @@ const AuditLog = () => {
               <span className="audit-section-count">
                 {users.items.length.toLocaleString()} user{users.items.length === 1 ? '' : 's'} ·{' '}
                 {totalLogins.toLocaleString()} sign-in{totalLogins === 1 ? '' : 's'}
+                {signInSpan ? `, ${signInSpan}` : ''}
               </span>
             )}
           </div>
+          <SectionLede className="is-standalone">Who uses the system</SectionLede>
           <p className="audit-section-note">
-            A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
-            30 minutes without activity. Older sign-ins have no measured length.
+            Sign-ins are counted from the first recorded sign-in
+            {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
+            on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
+            4 hours without activity. Older sign-ins have no measured length.
           </p>
           <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} />
           {!users.loading && !users.error && (
@@ -147,7 +167,7 @@ const AuditLog = () => {
                   <tr>
                     <th>User</th>
                     <th>Role</th>
-                    <th className="audit-num-cell">Sign-ins</th>
+                    <th className="audit-num-cell" title="Since the user's first recorded sign-in">Sign-ins (count)</th>
                     <th className="audit-num-cell">Longest session</th>
                     <th>Last sign-in</th>
                   </tr>
@@ -162,7 +182,13 @@ const AuditLog = () => {
                         <tr key={row.user_email}>
                           <td className="audit-stack-head"><UserBadge name={name} email={row.user_email} /></td>
                           <td data-label="Role" className="audit-role-cell">{row.role || '—'}</td>
-                          <td data-label="Sign-ins" className="audit-num-cell">{row.login_count.toLocaleString()}</td>
+                          <td
+                            data-label="Sign-ins"
+                            className="audit-num-cell"
+                            title={row.first_login_at ? `Since ${formatDateTime(row.first_login_at)}` : undefined}
+                          >
+                            {row.login_count.toLocaleString()}
+                          </td>
                           <td data-label="Longest session" className="audit-num-cell" title={longestSessionTitle(row)}>
                             <span className="audit-duration">
                               {isLongest && <span className="pill pill-planned audit-longest-badge">Longest</span>}
@@ -189,8 +215,16 @@ const AuditLog = () => {
         <section className="audit-section" aria-labelledby="audit-changes-heading">
           <div className="audit-section-header">
             <h3 id="audit-changes-heading" className="audit-section-title">Recent changes</h3>
-            <span className="audit-section-count">Latest {RECENT_CHANGES_LIMIT}</span>
+            {/* Its scope: the newest RECENT_CHANGES_LIMIT changes, and the
+                days those span — or every change, when fewer are recorded. */}
+            <span className="audit-section-count">
+              {!changes.loading && !changes.error && changes.items.length < RECENT_CHANGES_LIMIT
+                ? `All ${changes.items.length.toLocaleString()} recorded`
+                : `Latest ${RECENT_CHANGES_LIMIT}`}
+              {!changes.loading && !changes.error && changesSpan ? `, ${changesSpan}` : ''}
+            </span>
           </div>
+          <SectionLede className="is-standalone">What changed, and who changed it</SectionLede>
           <p className="audit-section-note">
             SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
           </p>
@@ -210,7 +244,11 @@ const AuditLog = () => {
                   {changes.items.length > 0 ? (
                     changes.items.map((log) => (
                       <tr key={log.audit_log_key}>
-                        <td className="audit-stack-head audit-action-cell">{ACTION_LABELS[log.action] || log.action}</td>
+                        <td className="audit-stack-head audit-action-cell">
+                          {EXCEPTIONAL_ACTIONS.has(log.action)
+                            ? <span className="badge badge-warning">{ACTION_LABELS[log.action] || log.action}</span>
+                            : (ACTION_LABELS[log.action] || log.action)}
+                        </td>
                         <td data-label="By"><UserBadge name={log.user_name || log.user_email} /></td>
                         <td data-label="When" className="audit-timestamp-cell">{formatDateTime(log.created_at)}</td>
                         <td data-label="Details" className="audit-desc-cell">{log.details || '—'}</td>

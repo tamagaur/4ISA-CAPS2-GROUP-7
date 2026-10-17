@@ -80,18 +80,19 @@ def test_writes_still_require_a_token(client, method, path, permission, body):
 
 
 def test_staff_can_still_read(client):
-    """GET /sku needs sign-in only (the ABC, Reorder and SKU Forecast pages
-    read product names from it). Checked on the route table rather than by
-    calling it, which would need the SKU query faked. Walks the SKU router
-    itself: fastapi 0.141 keeps an included router as one nested entry in
-    app.routes instead of copying its routes up, and main.py adds no
-    dependencies when it includes a router."""
+    """GET /sku opens with any of the four pages that read product names
+    (SKU Management, ABC, Reorder, SKU Forecast), all in the staff preset,
+    so staff keep reading it (2026-10-02; it was sign-in only before).
+    Checked on the route table rather than by calling it, which would need
+    the SKU query faked. Walks the SKU router itself: fastapi 0.141 keeps an
+    included router as one nested entry in app.routes instead of copying its
+    routes up, and main.py adds no dependencies when it includes a router."""
     from backend.routers import sku
 
     for route in sku.router.routes:
         if getattr(route, "path", None) == "/sku" and "GET" in route.methods:
             calls = [d.call for d in route.dependant.dependencies]
-            assert get_current_user in calls
-            assert not any(hasattr(call, "permission_keys") for call in calls)
+            keys = next(set(call.permission_keys) for call in calls if hasattr(call, "permission_keys"))
+            assert keys == {"sku.view", "abc.view", "lp.view", "forecast.view"}
             return
     pytest.fail("GET /sku route not found")

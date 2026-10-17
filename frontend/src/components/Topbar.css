@@ -11,7 +11,7 @@
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 12px;
 }
 
 .sidebar-toggle-btn {
@@ -29,6 +29,48 @@
 
 .sidebar-toggle-btn:hover {
   background-color: var(--color-border);
+}
+
+.sidebar-toggle-btn:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.sidebar-toggle-logo {
+  display: none;
+}
+
+/* Sidebar closed, on a desktop: the button is the SAN2 logo with no
+   background. It is public/logo-topbar.png, a copy of the sidebar's logo
+   with the silver and white lettering turned to the sidebar's navy (the
+   red is untouched): the original is drawn for a dark ground and all but
+   disappears on this bar's light one. */
+@media (min-width: 901px) {
+  .sidebar-toggle-btn.is-sidebar-closed {
+    height: 36px;
+    padding: 0 6px;
+  }
+
+  .sidebar-toggle-btn.is-sidebar-closed .menu-icon {
+    display: none;
+  }
+
+  .sidebar-toggle-btn.is-sidebar-closed .sidebar-toggle-logo {
+    display: block;
+    height: 32px;
+    width: auto;
+    animation: sidebar-toggle-logo-in 0.25s ease-out;
+  }
+}
+
+@keyframes sidebar-toggle-logo-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-toggle-logo {
+    animation: none !important;
+  }
 }
 
 .breadcrumb-path {
@@ -125,10 +167,12 @@
   align-items: center;
 }
 
+/* The shared segmented look (components/ui/ui.css .segmented), so the
+   principal switch reads as the same control as every tab set below it. */
 .principal-segmented {
   display: flex;
-  background-color: #f1f5f9;
-  border-radius: 20px;
+  background-color: #EEF1F5;
+  border-radius: var(--radius-pill);
   padding: 3px;
   gap: 2px;
 }
@@ -136,11 +180,13 @@
 .principal-segment {
   border: none;
   background: none;
-  padding: 0.35rem 0.9rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #4a5568;
-  border-radius: 16px;
+  height: 30px;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-body);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -151,9 +197,14 @@
 }
 
 .principal-segment.active {
-  background-color: #ffffff;
-  color: #c53030;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  background-color: rgba(232, 92, 74, 0.13);
+  color: var(--color-brand-primary);
+  font-weight: 600;
+}
+
+.principal-segment:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
 }
 
 .principal-dropdown {
@@ -211,13 +262,15 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.35rem 0.55rem 0.35rem 0.75rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 20px;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-text-body);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease;
@@ -236,6 +289,15 @@
 .data-mode-toggle.is-on {
   border-color: var(--color-brand-primary);
   color: var(--color-brand-primary);
+}
+
+/* No synthetic data on this server (DM_DEMO_ENABLED off): the title says so. */
+.data-mode-toggle:disabled,
+.data-mode-toggle:disabled:hover {
+  cursor: not-allowed;
+  opacity: 0.55;
+  border-color: var(--color-border);
+  color: var(--color-text-body);
 }
 
 .data-mode-toggle-track {

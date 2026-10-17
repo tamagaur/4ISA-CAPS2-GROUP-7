@@ -13,6 +13,7 @@ rather than silently presented as a SKU for both principals.
 """
 from __future__ import annotations
 
+import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -126,3 +127,12 @@ class ABCResponse(BaseModel):
     # at or before classification_period — never ranked, so they have no tier
     # to show. None in the default view, which does not compute it.
     unclassified_count: int | None = None
+    # {principal: day its latest stock count was taken} — the count every
+    # row's current_stock comes from (routers/sku.py's STOCK_COUNT_DATE_SQL).
+    # Unilever's "Mar 2026" file was counted 2026-04-06, so the page states
+    # the day instead of the month the file is filed under (2026-10-03).
+    stock_count_dates: dict[str, datetime.date] = {}
+    # The LP cycle each row's target stock comes from (a month's first day,
+    # "Mar 2026 plan"). None without lp.view — the target stock itself is
+    # withheld then — or when there is no current cycle.
+    planning_cycle_date: datetime.date | None = None

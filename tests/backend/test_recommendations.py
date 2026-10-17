@@ -78,6 +78,10 @@ class FakeSession:
         self.lp_generated_at = lp_generated_at
         self.forecast_generated_at = forecast_generated_at
         self.lp_run = None  # the lp_run row stored_run finds; None = table not applied
+        # The live shape: Unilever's '2026-02' count (taken 2 Mar 2026) opens
+        # the 2026-03 cycle; its '2026-03' count was taken on 6 Apr 2026.
+        self.count_date_by_period = {"2026-02": datetime.date(2026, 3, 2), "2026-03": datetime.date(2026, 4, 6),
+                                     "2025-12": datetime.date(2025, 12, 1)}
         # backend/stock_units.STOCK_COUNTS_SQL: {(principal, period): (row_count,
         # first_date, last_date)}. Unilever's count of 2026-02, counted
         # 2026-03-02, opens the sample rows' cycle 2026-03.
@@ -119,6 +123,10 @@ class FakeSession:
             return FakeResult([{"t": self.lp_generated_at, "row_count": 1, "stale_count": stale}])
         if "MAX(generated_at) AS t FROM forecast_result" in sql:
             return FakeResult([self.forecast_generated_at])
+        # label_context: one row of dates, for the page's period labels.
+        if "MAX(snapshot_date) FROM inventory_fact_real" in sql:
+            count_date = self.count_date_by_period.get(params.get("inv_period"))
+            return FakeResult([{"count_date": count_date, "sales_start": "2025-12", "sales_end": "2026-02"}])
         if "lr.planning_cycle_date < :cycle" in sql:
             return FakeResult([self.superseded_pending])
         if "GROUP BY inv.principal, inv._period" in sql:
@@ -543,6 +551,28 @@ def test_response_carries_forecast_and_short(sample_rows):
     assert item["short_units"] == 0.0
 
 
+def test_response_states_the_periods_its_figures_were_read_at(client, session):
+    """The page labels every number with its period (2026-10-02): the stock
+    count's own date, the ABC month revenue share is from, and the sales
+    months cover averages. Since the stock-timing fix (2026-10-03) the stock
+    is the count that OPENS the cycle: for 2026-03, the '2026-02' count of
+    2 Mar 2026, not the later '2026-03' count of 6 Apr 2026."""
+    body = client.get("/recommendations?principal=unilever").json()
+    assert body["stock_period"] == "2026-02"
+    assert body["stock_count_date"] == "2026-03-02"
+    assert body["abc_period"] == "2026-02"
+    assert (body["cover_sales_start"], body["cover_sales_end"]) == ("2025-12", "2026-02")
+    # The count date is read in the same principal scope as the stock itself.
+    sql, params = next((s, p) for s, p in session.calls if "MAX(snapshot_date)" in s)
+    assert params["inv_period"] == "2026-02" and params["principal"] == "unilever"
+    assert "principal = :principal" in sql
+
+
+def test_period_labels_are_none_without_a_stock_period(session, client):
+    session.inventory_period_by_scope["delmonte"] = None
+    body = client.get("/recommendations?principal=delmonte").json()
+    assert body["stock_count_date"] is None and body["stock_period"] is None
+    assert not any("MAX(snapshot_date)" in s for s, _ in session.calls)
 # ---- stock timing (2026-10-03) ----------------------------------------------
 # The rows are checked against the count that OPENS their cycle, the one
 # scripts/run_lp.py now plans from, never the latest (counted after the

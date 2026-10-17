@@ -21,7 +21,7 @@ import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import mailer
+from backend import email_templates, mailer
 from backend.auth_utils import hash_link_token, new_link_token
 
 INVITE_MINUTES = 48 * 60
@@ -94,30 +94,32 @@ def _valid_for(minutes: int) -> str:
     return f"{minutes // 60} hours" if minutes >= 120 and minutes % 60 == 0 else f"{minutes} minutes"
 
 
-def send_link_email(*, purpose: str, email: str, full_name: str, token: str, minutes: int) -> str | None:
-    """Emails the link. Returns None when it was sent, otherwise the reason it
-    wasn't — shown to the admin, who then gets the link to pass on."""
+def send_link_email(
+    *, purpose: str, email: str, full_name: str, token: str, minutes: int,
+    expires_at: datetime.datetime | None = None, invited_by: str | None = None, role: str | None = None,
+) -> str | None:
+    """Emails the link, as a designed HTML email with the same words in plain
+    text (backend/email_templates.py). An invite names who sent it, the role
+    and the exact expiry, so the person can tell it's genuine. Returns None
+    when it was sent, otherwise the reason it wasn't — shown to the admin,
+    who then gets the link to pass on."""
     link, valid = link_url(token), _valid_for(minutes)
     if purpose == "invite":
-        subject = "Your SSM Decision Support Dashboard account"
-        body = (
-            f"Hi {full_name},\n\n"
-            "An account has been created for you on the SSM Decision Support Dashboard.\n"
-            f"Set your password here. The link works once and expires in {valid}:\n\n"
-            f"{link}\n\n"
-            "If you weren't expecting this, you can ignore this email.\n"
+        from backend import mfa  # imports this module's neighbours; kept local
+
+        subject, body, html = email_templates.invite_email(
+            full_name=full_name, email=email, link=link, valid=valid, sign_in_url=mailer.app_link("/login"),
+            expires_at=expires_at, invited_by=invited_by, role=role,
+            two_step_required=bool(role) and mfa.is_required(role),
         )
     else:
-        subject = "Reset your SSM Decision Support Dashboard password"
-        body = (
-            f"Hi {full_name},\n\n"
-            f"A password reset was requested for your account ({email}).\n"
-            f"Choose a new password here. The link works once and expires in {valid}:\n\n"
-            f"{link}\n\n"
-            "If you didn't ask for this, ignore this email. Your password stays the same.\n"
+        subject, body, html = email_templates.reset_email(
+            full_name=full_name, email=email, link=link, valid=valid, expires_at=expires_at,
         )
+    logo = email_templates.logo_bytes()
     try:
-        mailer.send(email, subject, body)
+        mailer.send(email, subject, body, html=html,
+                    inline_images={email_templates.LOGO_CID: logo} if logo else None)
     except mailer.MailError as exc:
         return str(exc)
     return None

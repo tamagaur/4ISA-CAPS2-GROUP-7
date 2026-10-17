@@ -1,0 +1,31 @@
+/* Period basis of a card: teal when it follows the date filter, slate with
+   a pin when it is fixed to a plan or a count. */
+.basis-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.basis-tag > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.basis-tag.is-follows {
+  background: #E6F6F8;
+  color: #0F7480;
+}
+
+.basis-tag.is-fixed {
+  background: #EEF1F5;
+  color: #475467;
+}

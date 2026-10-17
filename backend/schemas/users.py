@@ -22,8 +22,13 @@ class UserOut(BaseModel):
     created_at: datetime
     # Path inside the Supabase Storage "avatars" bucket; null when there is no
     # picture, so the frontend shows its initials fallback instead of a
-    # placeholder image or an empty string (migration 0058).
+    # placeholder image or an empty string (migration 0059).
     avatar_path: str | None = None
+    # Two-step sign-in on (backend/mfa.py). Always false before migration 0035.
+    mfa_enabled: bool = False
+    # Latest sign-in, from user_session (backend/routers/users.py
+    # USER_COLUMNS). None = never signed in.
+    last_sign_in_at: datetime | None = None
 
 
 class UserUpdate(BaseModel):

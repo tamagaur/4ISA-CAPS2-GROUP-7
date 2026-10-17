@@ -1,0 +1,280 @@
+/* The dashboard's "below safety stock" list. Its own overlay and card
+   classes: the Dashboard chunk doesn't load the user-management modal CSS,
+   so nothing here leans on it. */
+.at-risk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(15, 23, 42, 0.45);
+}
+
+.at-risk-card {
+  display: flex;
+  flex-direction: column;
+  width: min(980px, 100%);
+  max-height: min(86vh, 860px);
+  padding: 20px 22px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.at-risk-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.at-risk-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.at-risk-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.at-risk-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 6px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.at-risk-close:hover {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-heading);
+}
+
+/* The chain: four counts, each a subset of the one before it. */
+.at-risk-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px 4px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.at-risk-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.at-risk-step-arrow {
+  flex-shrink: 0;
+  color: var(--color-text-subtle);
+}
+
+.at-risk-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 132px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+}
+
+.at-risk-step.is-last .at-risk-step-body {
+  background-color: var(--color-danger-bg);
+  box-shadow: inset 0 0 0 1px var(--color-danger-border);
+}
+
+.at-risk-step-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.at-risk-step-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.at-risk-step-note {
+  font-size: 0.68rem;
+  color: var(--color-text-muted);
+}
+
+.at-risk-money {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-body);
+}
+
+.at-risk-money strong {
+  color: var(--color-text-heading);
+}
+
+.at-risk-table-wrap {
+  flex: 1;
+  min-height: 0;
+  margin-top: 12px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.at-risk-table-wrap:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.at-risk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.at-risk-table th,
+.at-risk-table td {
+  padding: 9px 12px;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.at-risk-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--color-surface-raised);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  vertical-align: bottom;
+  /* Headings wrap so the six columns fit the card without a sideways scroll
+     on a laptop; the figures below them stay on one line. */
+  white-space: normal;
+}
+
+.at-risk-th-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-subtle);
+}
+
+.at-risk-table .at-risk-col-product {
+  text-align: left;
+  white-space: normal;
+  min-width: 220px;
+}
+
+.at-risk-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.at-risk-table tbody tr:hover {
+  background-color: var(--color-surface-muted);
+}
+
+.at-risk-short {
+  font-weight: 700;
+  color: var(--color-danger-text);
+}
+
+.at-risk-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.at-risk-footnote {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+}
+
+.at-risk-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.at-risk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background-color: var(--color-surface);
+  color: var(--color-text-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.at-risk-btn:hover {
+  background-color: var(--color-surface-muted);
+}
+
+.at-risk-btn.is-primary {
+  border-color: var(--color-brand-primary);
+  background-color: var(--color-brand-primary);
+  color: #fff;
+}
+
+.at-risk-btn.is-primary:hover {
+  background-color: var(--color-brand-hover);
+}
+
+.at-risk-btn:focus-visible,
+.at-risk-close:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .at-risk-card {
+    padding: 16px 14px 14px;
+    max-height: 92vh;
+  }
+
+  .at-risk-step-body {
+    min-width: 0;
+  }
+
+  .at-risk-actions {
+    width: 100%;
+  }
+
+  .at-risk-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* The class list's year-over-year column: up green, down red (soft tones). */
+.at-risk-table .class-yoy-up { color: #278552; }
+.at-risk-table .class-yoy-down { color: #C84040; }

@@ -5,10 +5,10 @@
 }
 
 .reorder-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Header */
@@ -113,15 +113,15 @@
 .reorder-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 .reorder-summary-card {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 1.2rem 1.5rem;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -183,8 +183,84 @@
 /* The per-row severity stripe is gone (2026-09-18): with 248 of 250 rows
    CRITICAL it striped the whole table red and said nothing. Position in
    the ranked list now carries urgency; the pill keeps the LP state. */
+/* All thirteen columns: the table keeps its own width and scrolls sideways
+   inside its card on a narrow screen rather than squeezing every header
+   into a tower. Headers may wrap to two lines; the product column gets
+   the room a two-line name needs. */
 .reorder-table {
   min-width: 1180px;
+}
+
+.data-table.reorder-table thead th.col-fit {
+  white-space: normal;
+  min-width: 74px;
+}
+
+/* Thirteen columns in one laptop-wide card: less side padding per cell
+   than the shared table. */
+.data-table.reorder-table th,
+.data-table.reorder-table td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* The class column holds one letter, so it takes its content's width. */
+.data-table.reorder-table thead th.reorder-th-class {
+  min-width: 0;
+}
+
+/* The rank column is a short "#12". */
+.data-table.reorder-table thead th:first-child {
+  min-width: 44px;
+}
+
+.data-table.reorder-table thead th.col-product {
+  width: auto;
+  min-width: 230px;
+}
+
+/* Urgency pill with the review badge under it, each on one line. */
+.reorder-urgency-cell {
+  min-width: 150px;
+}
+
+.reorder-urgency-cell .pending-review-badge {
+  display: inline-flex;
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+/* The solver's weights inside the fold. */
+.reorder-weights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 24px;
+  margin: 12px 0;
+}
+
+.reorder-weight dt {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.reorder-weight dd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0;
+}
+
+.reorder-weight dd strong {
+  font-size: 1.1rem;
+  color: var(--color-text);
+}
+
+.reorder-weight dd span {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
 }
 
 .reorder-rank {
@@ -242,8 +318,8 @@
 }
 
 .reorder-table-note {
-  margin: 0;
-  font-size: 0.75rem;
+  margin: -8px 0 0;
+  font-size: var(--text-meta);
   color: var(--color-text-muted);
 }
 
@@ -266,32 +342,9 @@
   white-space: nowrap;
 }
 
-/* Bulk accept is a primary action button — brand chrome, not a data colour. */
-.reorder-bulk-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.9rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-brand-primary);
-  background-color: var(--color-brand-primary);
-  color: #fff;
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s;
-}
-
-.reorder-bulk-btn:hover:not(:disabled) {
-  background-color: var(--color-brand-hover);
-  border-color: var(--color-brand-hover);
-}
-
-.reorder-bulk-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* Bulk accept is the shared secondary button (ui.css .btn-secondary): each
+   row already carries the one coral Accept, so the bulk action stands apart
+   from them rather than as a twenty-first coral button. */
 
 /* Current stock against the target stock (rop_i): below half = critical, below
    target = low. Weight carries part of the signal so it isn't color-only. */
@@ -482,4 +535,99 @@
   font-weight: 400;
   color: var(--color-text-muted);
   white-space: nowrap;
+}
+
+/* The period under a column's label ("Mar 2026 plan", "counted Apr 6,
+   2026"): four periods meet in one row, so each header names its own.
+   Sentence case and lighter than the uppercase label, so the label still
+   reads first and the period reads as its qualifier. */
+.data-table thead th .reorder-th-period {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-muted);
+}
+
+/* The plan's own facts (run, date, allocation, service level, stock count):
+   the line the rest of the page's numbers rest on, so it reads first. */
+.reorder-plan-facts {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+/* "How this was optimized": a compact block above the table — the rule as
+   small print at the left, the solver's weights as thin bars at the right. */
+.reorder-how {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px 32px;
+  padding: 16px 20px;
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
+}
+
+.reorder-how-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reorder-how-text .reorder-table-note {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.reorder-how-title {
+  font-size: var(--text-card-title);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.reorder-how-weights {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  align-self: center;
+}
+
+.reorder-how-weight dt {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-meta);
+  font-weight: 500;
+  color: var(--color-text-body);
+}
+
+.reorder-how-weight dt span {
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-how-weight dd {
+  height: 6px;
+  margin: 4px 0 0;
+  border-radius: 3px;
+  background-color: var(--color-surface-sunken);
+  overflow: hidden;
+}
+
+.reorder-how-weight dd span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background-color: var(--color-forecast);
+}
+
+@media (max-width: 900px) {
+  .reorder-how {
+    grid-template-columns: 1fr;
+  }
 }

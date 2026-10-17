@@ -13,7 +13,8 @@ export async function getAuditLog({ action, excludeActions, userEmail, limit } =
 
   const res = await apiFetch(`/audit-log?${query.toString()}`);
   if (!res.ok) {
-    throw new Error('Failed to fetch audit log');
+    const body = await res.json().catch(() => null);
+    throw new Error(typeof body?.detail === 'string' ? body.detail : 'Failed to fetch audit log');
   }
   return res.json();
 }

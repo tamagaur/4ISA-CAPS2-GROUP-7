@@ -8,7 +8,7 @@ Phase 6 (CLAUDE.md Step 24):
     data is served without a valid token. Since 2026-09-28 it also checks
     the account and its session in the database on every request (see
     _load_active_principal), so signing out, an admin's change to the
-    account and the 30-minute idle limit take effect immediately.
+    account and the idle limit (SESSION_IDLE_MINUTES) take effect immediately.
 
 Story #89: replaces the previous static X-API-Key scheme (see git history)
 with real per-user JWT auth backed by the Users table (analytics/db/schema.sql
@@ -248,7 +248,7 @@ def _load_active_principal(db: Session, payload: TokenPayload) -> TokenPayload:
 
     Until 2026-09-28 a signature check was all a token needed for its 8
     hours, so signing out, deleting an account or demoting an admin changed
-    nothing until it expired, and the 30-minute idle rule only fed the Audit
+    nothing until it expired, and the idle rule only fed the Audit
     Log's numbers. Now a request is refused (401) when the account is gone,
     or its session was signed out, ended by an admin change, or idle for
     SESSION_IDLE_MINUTES. The role returned is the database's, not the

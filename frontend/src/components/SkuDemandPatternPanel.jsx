@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import SectionLede from './ui/SectionLede';
 import { ArrowUpRight, ArrowDownRight, Minus, Activity, CalendarRange, Waves } from 'lucide-react';
 import { getSegment } from '../api/segment';
 import { getDecomposition } from '../api/analytics';
 import { formatMonth } from '../utils/formatDate';
 import { SEMANTIC } from '../theme/colors';
 import { LoadingStatus, SkeletonLine } from './Skeleton';
+import InfoTip from './InfoTip';
 import './SkuDemandPatternPanel.css';
 
 // "Demand pattern" — the SKU's trend and variability, question D4 of the
@@ -15,7 +17,8 @@ import './SkuDemandPatternPanel.css';
 // Forecast page and inside the Reorder detail modal, the two places a
 // planner looks at one SKU. Everything here is printed from a real column;
 // the only labels this component adds are the volatility band (from the
-// backend's cv_band, with the raw cv always beside it), the plain-
+// backend's cv_band, with the cv under it as a percentage of an average
+// month and the raw figure behind the "?"), the plain-
 // language gloss on each stability_group code, the plain name of the
 // SKU's bin (both codes stay in the tooltip), and the seasonality band
 // over STL's measured strength (GET /decomposition). bin_reason is printed
@@ -34,11 +37,12 @@ const CV_BAND_META = {
 
 // Mann-Kendall trend (p < 0.05). Direction only — a rising or falling
 // series isn't good or bad on its own, so these stay neutral ink, never
-// green/red.
+// green/red. `plain` is the tile's own line (the Technical Adviser, 2 Oct
+// 2026: no score without its meaning); the test's name sits behind the "?".
 const TREND_META = {
-  up: { label: 'Rising', Icon: ArrowUpRight, gloss: 'statistically significant upward trend' },
-  down: { label: 'Falling', Icon: ArrowDownRight, gloss: 'statistically significant downward trend' },
-  none: { label: 'No clear trend', Icon: Minus, gloss: 'no significant direction either way' },
+  up: { label: 'Rising', Icon: ArrowUpRight, gloss: 'statistically significant upward trend', plain: 'a consistent rise, unlikely to be chance' },
+  down: { label: 'Falling', Icon: ArrowDownRight, gloss: 'statistically significant downward trend', plain: 'a consistent fall, unlikely to be chance' },
+  none: { label: 'No clear trend', Icon: Minus, gloss: 'no significant direction either way', plain: 'no consistent rise or fall' },
 };
 
 // stability_group codes from reports/BINNING_ROUND1_2026-09.md (38-period
@@ -52,10 +56,18 @@ const TREND_META = {
 // a SKU with history_months = 31 rendered "31 selling months" beside
 // "Fewer than 30 selling months". history_months is a separate trait and is
 // shown in its own tile.
-const STABILITY_GLOSS = {
-  all_38: 'Class A in all 38 periods observed',
-  at_least_30: 'Class A in at least 30 of the 38 periods',
-  churn: 'Moves in and out of Class A — fewer than 30 of the 38 periods',
+//
+// The number in a code is the run's own period count: 38 on the single-month
+// Tier A basis, 27 on the 12-month one (all_27 and at_least_21 are live since
+// 2026-10-11, Kelvin's 930792a and migration 0051). It is read from the code,
+// so another basis needs no change here.
+const stabilityGloss = (group) => {
+  const all = /^all_(\d+)$/.exec(group || '');
+  if (all) return `Class A in all ${all[1]} periods observed`;
+  const atLeast = /^at_least_(\d+)$/.exec(group || '');
+  if (atLeast) return `Class A in at least ${atLeast[1]} of the periods observed, but not all`;
+  if (group === 'churn') return 'Moves in and out of Class A';
+  return group;
 };
 
 // Bins of the combined_v1 scheme (sales-month length, with the long bin
@@ -80,17 +92,40 @@ const BIN_LABELS = {
 // as strong at our lengths. Peak and trough months are named only for a
 // product that repeats yearly; STL strength stays as a measured number.
 const SEASONALITY_TOOLTIP =
-  'Does a month sell like the same month a year earlier? Lag-12 autocorrelation of monthly '
-  + 'demand from the first sale, against the 95% bound 1.96/√months; needs 24 months.';
+  'Does a month sell like the same month a year earlier? Measured as the correlation between each '
+  + 'month and the same month a year before (lag-12 autocorrelation), from the first sale; it counts '
+  + 'as a yearly pattern above the 95% bound 1.96/√months, and needs 24 months.';
 
+// The STL figures, each with its scale, for the "?" only.
+const stlStrength = (stl) => (stl.available
+  ? `seasonal strength ${stl.seasonal_strength.toFixed(2)} and trend strength ${stl.trend_strength.toFixed(2)}, each on a scale of 0 to 1 (STL decomposition)`
+  : null);
+
+// The tile's one line, in plain words: the peak and trough months for a
+// product that repeats yearly, else what the test found. The figures sit
+// behind the tile's "?" (the Technical Adviser, 2 Oct 2026: a score means
+// nothing to the reader without its meaning).
+const shortSeasonality = (stl) => {
+  const yp = stl.yearly_pattern;
+  if (!yp) return stl.available ? `seasonal strength ${stl.seasonal_strength.toFixed(2)} on a scale of 0 to 1` : stl.reason;
+  if (yp.repeats_yearly == null) return `${yp.months} month${yp.months === 1 ? '' : 's'} from the first sale`;
+  if (!yp.repeats_yearly) return 'months do not repeat last year\u2019s ups and downs';
+  return stl.available ? `peaks ${stl.peak_month}, lowest ${stl.trough_month}` : 'months repeat last year\u2019s ups and downs';
+};
+
+// The same finding with its figures, for the "?".
 const yearlyDescription = (stl) => {
   const yp = stl.yearly_pattern;
-  if (!yp) return stl.available ? `STL seasonal strength ${stl.seasonal_strength.toFixed(2)}` : stl.reason;
+  if (!yp) return stl.available ? stlStrength(stl) : stl.reason;
   if (yp.repeats_yearly == null) return `${yp.months} month${yp.months === 1 ? '' : 's'} from the first sale`;
-  const acf = `ACF(12) ${yp.acf_lag12 == null ? 'n/a' : yp.acf_lag12.toFixed(2)} vs bound ${yp.acf_bound.toFixed(2)}`;
-  const peaks = yp.repeats_yearly && stl.available ? `peaks in ${stl.peak_month}, lowest in ${stl.trough_month} · ` : '';
-  const strength = stl.available ? ` · STL seasonal strength ${stl.seasonal_strength.toFixed(2)}, trend ${stl.trend_strength.toFixed(2)}` : '';
-  return `${peaks}${acf}${strength}`;
+  const verdict = yp.repeats_yearly
+    ? `it does${stl.available ? `, peaking in ${stl.peak_month} and lowest in ${stl.trough_month}` : ''}`
+    : 'it does not';
+  const measured = yp.acf_lag12 == null
+    ? 'sales never varied, so there is nothing to correlate'
+    : `correlation with a year earlier ${yp.acf_lag12.toFixed(2)}, against a bound of ${yp.acf_bound.toFixed(2)}`;
+  const strength = stlStrength(stl);
+  return `${verdict} (${measured})${strength ? `; ${strength}` : ''}`;
 };
 
 const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
@@ -122,7 +157,7 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
     setStl(null);
     getDecomposition(skuId, { principal })
       .then((res) => { if (!cancelled) setStl(res ?? { available: false, reason: 'No SKU-level series for this product.' }); })
-      .catch(() => { if (!cancelled) setStl({ available: false, reason: 'Could not load the STL decomposition.' }); });
+      .catch(() => { if (!cancelled) setStl({ available: false, reason: 'Could not load the seasonality check.' }); });
     return () => { cancelled = true; };
   }, [skuId, principal]);
 
@@ -132,9 +167,15 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
         <Activity size={15} aria-hidden="true" />
         Demand pattern
       </h4>
+      <SectionLede>How this product's sales behave</SectionLede>
+      {/* The months the volatility, trend and history tiles measure:
+          traits.py reads the monthly pieces from the SKU's first sale up to
+          the cohort month (the ABC run the cohort was drawn from). */}
       {state.data?.traits?.cohort_period && (
-        <span className="sku-pattern-cohort" title="The ABC classification period this SKU's demand pattern was measured for">
-          Cohort {formatMonth(state.data.traits.cohort_period)}
+        <span className="sku-pattern-cohort" title={`Monthly pieces sold, measured from the first sale to the ${formatMonth(state.data.traits.cohort_period)} cohort (the ABC run this pattern was measured for)`}>
+          {state.data.traits.first_sale_period
+            ? `Monthly pieces, ${formatMonth(state.data.traits.first_sale_period)} – ${formatMonth(state.data.traits.cohort_period)}`
+            : `Cohort ${formatMonth(state.data.traits.cohort_period)}`}
         </span>
       )}
     </div>
@@ -212,49 +253,76 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
         <div className="sku-pattern-tiles">
           {/* Volatility: the band is the headline, the raw cv sits under
               it so the label never replaces the measurement. */}
+          {/* Each tile: a label, a short value, one measured figure under it.
+              The gloss and the method sit behind the label's "?" (UI pass). */}
           <div className="sku-pattern-tile" style={{ '--tile-accent': band?.color || SEMANTIC.noData }}>
-            <span className="sku-pattern-tile-label">Volatility</span>
+            <span className="sku-pattern-tile-label">
+              Volatility
+              <InfoTip label="About volatility" size={12}>
+                Coefficient of variation (CV) of monthly pieces: how far a month&apos;s sales swing around the
+                average. Under 0.5 reads low, under 1.0 medium, else high
+                {t.cv != null || band
+                  ? ` — this product: ${[t.cv != null ? `CV ${t.cv.toFixed(2)}` : null, band?.gloss].filter(Boolean).join(', ')}`
+                  : ''}.
+              </InfoTip>
+            </span>
             <span className="sku-pattern-tile-value">{band ? band.label : 'Not measured'}</span>
+            {/* The cv as a share of an average month: 0.43 reads "about 43%". */}
             <span className="sku-pattern-tile-desc">
-              {t.cv != null ? `CV ${t.cv.toFixed(2)} · ${band.gloss}` : 'no coefficient of variation stored'}
+              {t.cv != null
+                ? `a typical month swings about ${Math.round(t.cv * 100)}% around the average`
+                : 'the month-to-month swing was not measured'}
             </span>
           </div>
 
           <div className="sku-pattern-tile sku-pattern-tile-trend">
-            <span className="sku-pattern-tile-label">Trend</span>
+            <span className="sku-pattern-tile-label">
+              Trend
+              <InfoTip label="About the trend" size={12}>
+                Mann–Kendall test on the monthly series from the first sale; a direction counts only when
+                p &lt; 0.05{trend ? ` — this product: ${trend.gloss}` : ''}.
+              </InfoTip>
+            </span>
             <span className="sku-pattern-tile-value">
               {TrendIcon && <TrendIcon size={18} aria-hidden="true" className="sku-pattern-trend-icon" />}
               {trend ? trend.label : '—'}
             </span>
-            <span className="sku-pattern-tile-desc">{trend ? `${trend.gloss} (Mann-Kendall, p < 0.05)` : ''}</span>
+            <span className="sku-pattern-tile-desc">{trend ? trend.plain : ''}</span>
           </div>
 
           <div className="sku-pattern-tile">
             <span className="sku-pattern-tile-label">
               <CalendarRange size={11} aria-hidden="true" /> History
+              <InfoTip label="About the history" size={12}>
+                {stabilityGloss(t.stability_group)}
+                {t.restart_flag ? '; sales restarted after a gap of 3 or more months' : ''}
+                {` (stability group: ${t.stability_group}).`}
+              </InfoTip>
             </span>
             <span className="sku-pattern-tile-value">
               {t.history_months} selling month{t.history_months === 1 ? '' : 's'}
             </span>
-            <span className="sku-pattern-tile-desc" title={`stability_group: ${t.stability_group}`}>
-              {STABILITY_GLOSS[t.stability_group] || t.stability_group}
-              {t.first_sale_period ? ` · first sale ${formatMonth(t.first_sale_period)}` : ''}
-              {` · longest run ${t.longest_run}`}
-              {t.restart_flag ? ' · restarted after a 3+ month gap' : ''}
+            <span className="sku-pattern-tile-desc">
+              {t.first_sale_period ? `first sale ${formatMonth(t.first_sale_period)} · ` : ''}
+              {`longest run ${t.longest_run} month${t.longest_run === 1 ? '' : 's'}`}
             </span>
           </div>
 
-          {/* Seasonality: STL decomposition of the SKU's monthly demand. */}
+          {/* Seasonality: the yearly-pattern test on the SKU's monthly demand. */}
           {principal !== 'delmonte' && (
-            <div className="sku-pattern-tile" title={SEASONALITY_TOOLTIP}>
+            <div className="sku-pattern-tile">
               <span className="sku-pattern-tile-label">
                 <Waves size={11} aria-hidden="true" /> Seasonality
+                <InfoTip label="About seasonality" size={12}>
+                  {SEASONALITY_TOOLTIP}
+                  {stl ? ` This product${stl.periods?.length ? `, ${formatMonth(stl.periods[0])} – ${formatMonth(stl.periods[stl.periods.length - 1])}` : ''}: ${yearlyDescription(stl)}.` : ''}
+                </InfoTip>
               </span>
               <span className="sku-pattern-tile-value">
                 {!stl ? '…' : stl.yearly_pattern?.label || 'Not enough history'}
               </span>
               <span className="sku-pattern-tile-desc">
-                {!stl ? 'Decomposing…' : yearlyDescription(stl)}
+                {!stl ? 'Decomposing…' : shortSeasonality(stl)}
               </span>
             </div>
           )}
@@ -273,7 +341,8 @@ const SkuDemandPatternPanel = ({ skuId, principal, compact = false }) => {
         <p className="sku-pattern-bin" title={`${binSegment.scheme}: ${binSegment.bin}`}>
           <span className="sku-pattern-bin-label">Bin</span>
           <span className="sku-pattern-bin-name">{BIN_LABELS[binSegment.bin] || binSegment.bin}</span>
-          {binSegment.bin_reason ? ` — ${binSegment.bin_reason}` : ''}
+          {/* bin_reason verbatim — the pipeline's own words — one tap away. */}
+          {binSegment.bin_reason && <InfoTip label="Why this bin" size={12}>{binSegment.bin_reason}</InfoTip>}
         </p>
       )}
     </section>

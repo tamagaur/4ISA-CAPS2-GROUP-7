@@ -141,6 +141,10 @@ from backend.principals import (
 )
 from backend.stock_status import CRITICAL, NO_DATA, stock_status
 from backend.stock_units import STOCK_AT_LATEST_SQL
+# The stock count's own date (routers/sku.py, 2026-10-03): GET /sku and GET
+# /abc state the same count, so they share the one query rather than each
+# keeping a copy that could name a different day.
+from backend.routers.sku import STOCK_COUNT_DATE_SQL, stock_count_dates
 from analytics.classification.abc import abc_rules, pareto_check
 from analytics.params import abc_method_sql
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
@@ -240,16 +244,25 @@ def _tier_shares(current: list[ABCItem]) -> dict[str, float] | None:
     each rounded to 4 dp: Unilever's 2026-02 Class B summed to 0.1493 and
     read 14.9%, where its revenue is 14.99% of the month (0.9498 - 0.7999 =
     0.1499 from the running total, rounded once). None — fall back to the
-    sum — when a row has no cumulative share or the boundaries are out of
-    tier order, so a run without a consistent running total is never
-    differenced into nonsense."""
+    sum — when a row has no cumulative share, the boundaries are out of
+    tier order, or a tier is not one unbroken block of the ranking, so a run
+    without a consistent running total is never differenced into nonsense.
+
+    The unbroken-block case is Unilever's 12-month Tier A basis (migration
+    0044): the tier is set on 12 months but the running total ranks one
+    month, so Class A rows sit as deep as 0.9465 with Class B rows above
+    them. Differencing read A 94.7% / B 0.3% / C 5.0% for 2026-02, where the
+    rows' own shares add up to 81.0% / 14.0% / 4.6% (found 2026-10-12)."""
     if not current or any(i.cumulative_share is None for i in current):
         return None
     bounds: dict[str, float] = {}
+    lowest: dict[str, float] = {}
     for item in current:
-        bounds[item.tier] = max(bounds.get(item.tier, 0.0), float(item.cumulative_share))
+        share = float(item.cumulative_share)
+        bounds[item.tier] = max(bounds.get(item.tier, 0.0), share)
+        lowest[item.tier] = min(lowest.get(item.tier, share), share)
     ordered = sorted(bounds)  # 'A' < 'B' < 'C'
-    if any(bounds[a] > bounds[b] for a, b in zip(ordered, ordered[1:])):
+    if any(bounds[a] > bounds[b] or lowest[b] < bounds[a] for a, b in zip(ordered, ordered[1:])):
         return None
     shares, previous = {}, 0.0
     for tier in ordered:
@@ -505,10 +518,12 @@ def _get_abc_period(
             inv.stock_pieces AS current_stock,
             inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
-            rop.ss_i AS safety_stock{_PLAN_POOL_COLUMNS}
+            rop.ss_i AS safety_stock,
+            stock_count.count_date AS stock_count_date{_PLAN_POOL_COLUMNS}
         FROM {abc_source} ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
+        LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = ac.principal
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
@@ -518,7 +533,9 @@ def _get_abc_period(
         WHERE {abc_period_pred("=", "ac")} AND {abc_method_sql("ac")}
     """
     query += principal_clause(principal, "ac.principal")[0]
-    query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST"
+    # product_key last: equal shares otherwise come back in whatever order the
+    # joins leave them, so the list reshuffled between loads (2026-10-02).
+    query += " ORDER BY ac.tier, ac.revenue_share DESC NULLS LAST, ac.product_key"
 
     params: dict = {
         **abc_period_params(periods),
@@ -541,6 +558,8 @@ def _get_abc_period(
         tier_summary=tier_summary,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
+        stock_count_dates=stock_count_dates(rows),
+        planning_cycle_date=cycle if lp_visible else None,
     )
 
 
@@ -623,10 +642,12 @@ def _get_abc_last_known(
             inv.stock_pieces AS current_stock,
             inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
-            rop.ss_i AS safety_stock{_PLAN_POOL_COLUMNS}
+            rop.ss_i AS safety_stock,
+            stock_count.count_date AS stock_count_date{_PLAN_POOL_COLUMNS}
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
+        LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = ac.principal
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
@@ -636,7 +657,8 @@ def _get_abc_last_known(
         ORDER BY ac.tier,
                  ({abc_period_pred("=", "ac")}) DESC,
                  ac.classification_period DESC,
-                 ac.revenue_share DESC NULLS LAST
+                 ac.revenue_share DESC NULLS LAST,
+                 ac.product_key
     """
     params: dict = {
         **abc_period_params(periods),
@@ -660,4 +682,6 @@ def _get_abc_last_known(
         unclassified_count=unclassified_count,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
+        stock_count_dates=stock_count_dates(rows),
+        planning_cycle_date=cycle if lp_visible else None,
     )

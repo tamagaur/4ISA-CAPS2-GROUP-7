@@ -15,7 +15,7 @@
 // for staff. So this can deploy ahead of the backend without changing
 // anyone's access, and it switches over by itself once /auth/me exists.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { getMe } from '../api/permissions';
 import { PERMISSION_DENIED_EVENT, getCurrentUser, logout } from '../auth';
@@ -25,18 +25,30 @@ import './AccessGate.css';
 
 const PermissionsProvider = ({ children }) => {
   const navigate = useNavigate();
-  const [state, setState] = useState({ status: 'loading', role: null, permissions: [], legacy: false, error: '' });
+  const [state, setState] = useState({ status: 'loading', role: null, permissions: [], legacy: false, error: '', profile: null });
 
   const refresh = useCallback(async () => {
     try {
       const me = await getMe();
-      setState({
-        status: 'ready',
-        role: me?.role ?? null,
-        permissions: Array.isArray(me?.permissions) ? me.permissions : [],
-        legacy: false,
-        error: '',
-      });
+      const role = me?.role ?? null;
+      const permissions = Array.isArray(me?.permissions) ? me.permissions : [];
+      // Who this is, for the sidebar and the My profile page (ProfilePage.jsx).
+      const profile = {
+        userId: me?.user_id ?? null,
+        email: me?.email ?? null,
+        fullName: me?.full_name ?? null,
+        role,
+        avatar: me?.avatar_data_url ?? null,
+        profilePictures: Boolean(me?.profile_pictures),
+      };
+      // Unchanged access and details keep the same state, so a re-check
+      // (below) doesn't re-render the whole app.
+      setState((prev) => (prev.status === 'ready' && !prev.legacy && prev.role === role
+        && prev.permissions.length === permissions.length && prev.permissions.every((k, i) => k === permissions[i])
+        && prev.profile && prev.profile.fullName === profile.fullName && prev.profile.avatar === profile.avatar
+        && prev.profile.email === profile.email && prev.profile.profilePictures === profile.profilePictures
+        ? prev
+        : { status: 'ready', role, permissions, legacy: false, error: '', profile }));
     } catch (err) {
       // No /auth/me on this backend yet: keep the access the app gave before.
       if (err?.status === 404) {
@@ -47,6 +59,7 @@ const PermissionsProvider = ({ children }) => {
           permissions: role === 'staff' ? LEGACY_STAFF_ACCESS : [],
           legacy: true,
           error: '',
+          profile: null,
         });
         return;
       }
@@ -55,12 +68,35 @@ const PermissionsProvider = ({ children }) => {
       // to show yet, stops at the error.
       setState((prev) => (prev.status === 'ready'
         ? prev
-        : { status: 'error', role: null, permissions: [], legacy: false, error: err.message }));
+        : { status: 'error', role: null, permissions: [], legacy: false, error: err.message, profile: null }));
     }
   }, []);
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Re-checked while signed in (2026-10-16): an admin's change in User
+  // Management applies on the server at once, so the menu and buttons follow
+  // within a page change, a return to the tab, or a minute, not only after a
+  // reload or a refused request.
+  const location = useLocation();
+  const ready = state.status === 'ready';
+  useEffect(() => {
+    if (ready) refresh();
+    // A path change is the trigger; ready/refresh only guard it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    const timer = setInterval(onVisible, 60_000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      clearInterval(timer);
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -80,9 +116,12 @@ const PermissionsProvider = ({ children }) => {
       // An admin always has everything (the proposal's rule); anyone else
       // has what /auth/me lists. No key means no access.
       hasPermission: (key) => state.role === 'admin' || (Boolean(key) && granted.has(key)),
+      // { userId, email, fullName, role, avatar, profilePictures } from
+      // /auth/me; null on a backend without it.
+      profile: state.profile,
       refresh,
     };
-  }, [state.role, state.permissions, state.legacy, refresh]);
+  }, [state.role, state.permissions, state.legacy, state.profile, refresh]);
 
   if (state.status === 'loading') {
     return (

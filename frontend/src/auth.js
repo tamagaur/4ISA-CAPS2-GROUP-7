@@ -113,11 +113,62 @@ function extractErrorMessage(body, fallback) {
   return fallback;
 }
 
-export async function login(email, password) {
+// ── "Remember me" on the code step (backend/mfa.py, REMEMBER_DAYS) ────────
+// Ticking it at the code step makes the backend hand this browser a
+// remember_token. Sent with the next sign-ins, it skips the code (never the
+// password) for 7 days; the backend checks it and ignores a stale one. One
+// token per email, so two people sharing a computer don't replace each
+// other's. Kept through sign-out on purpose: that is the point of it. It
+// goes when it expires, or when that person next passes the code step with
+// the box unticked.
+const REMEMBER_KEY = 'dsd_remembered_devices';
+export const REMEMBER_DAYS = 7;
+
+function readRemembered() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(REMEMBER_KEY) || '{}');
+    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRemembered(emailKey, token) {
+  try {
+    const stored = readRemembered();
+    if (token) stored[emailKey] = token;
+    else delete stored[emailKey];
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify(stored));
+  } catch { /* storage unavailable: the code is simply asked next time */ }
+}
+
+const rememberKeyFor = (email) => String(email || '').trim().toLowerCase();
+
+function getRememberToken(email) {
+  const key = rememberKeyFor(email);
+  const token = readRemembered()[key];
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    writeRemembered(key, null);
+    return null;
+  }
+  return token;
+}
+
+// Whether this browser is remembered for `email` (the sign-in page ticks
+// "Remember me" for it).
+export const isDeviceRemembered = (email) => Boolean(getRememberToken(email));
+
+// `remember` is the sign-in page's "Remember me" box (2026-10-16: it moved
+// there from the code step). Unticked, this browser forgets `email` and the
+// code is asked again; ticked, a remembered browser skips the code.
+export async function login(email, password, { remember = true } = {}) {
+  if (!remember) writeRemembered(rememberKeyFor(email), null);
+  const rememberToken = remember ? getRememberToken(email) : null;
   const res = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...(rememberToken ? { remember_token: rememberToken } : {}) }),
   });
 
   if (!res.ok) {
@@ -129,6 +180,10 @@ export async function login(email, password) {
   // backend/routers/auth.py) — the Audit Log page counts sign-ins from
   // there, so nothing is posted to /audit-log from here.
   const data = await res.json();
+  // Two-step sign-in (backend/mfa.py): a right password for an account with
+  // an authenticator app answers { mfa_step: 'verify' | 'setup', mfa_token }
+  // instead of a session. The login page takes it from there.
+  if (data.mfa_step) return data;
   setSession(data.access_token, data.role);
   return data;
 }
@@ -148,9 +203,54 @@ async function postPublic(path, payload, fallbackError) {
     const body = await res.json().catch(() => null);
     const err = new Error(extractErrorMessage(body, fallbackError));
     err.status = res.status;
+    err.code = body?.code;
     throw err;
   }
   return res;
+}
+
+// ── Two-step sign-in, the step after the password ─────────────────────────
+// Public like the password links: no session exists yet, only the 5-minute
+// mfa_token login() returned. A thrown error with err.code 'mfa_expired'
+// means that token ran out: back to the password.
+
+// The 6-digit code from the app, or a recovery code. Signs in. With
+// `remember`, this browser isn't asked for `email`'s code for REMEMBER_DAYS;
+// without it, anything remembered for that email here is dropped.
+export async function verifyLoginCode(mfaToken, code, { email, remember = false } = {}) {
+  const res = await postPublic(
+    '/auth/login/verify',
+    { mfa_token: mfaToken, code, remember_device: remember },
+    'Could not check the code. Please try again.'
+  );
+  const data = await res.json();
+  if (email) writeRemembered(rememberKeyFor(email), remember ? data.remember_token : null);
+  setSession(data.access_token, data.role);
+  return data;
+}
+
+// A role that must use two-step sign-in, setting it up at sign-in:
+// -> { secret, otpauth_uri } for the QR code.
+export async function startLoginMfaSetup(mfaToken) {
+  const res = await postPublic(
+    '/auth/login/setup',
+    { mfa_token: mfaToken },
+    'Could not start setting up two-step sign-in. Please try again.'
+  );
+  return res.json();
+}
+
+// Its first code turns it on and signs in: -> { recovery_codes, access_token, ... }.
+// The session starts now; the page shows the recovery codes before going on.
+export async function confirmLoginMfaSetup(mfaToken, code) {
+  const res = await postPublic(
+    '/auth/login/setup/confirm',
+    { mfa_token: mfaToken, code },
+    'Could not check the code. Please try again.'
+  );
+  const data = await res.json();
+  setSession(data.access_token, data.role);
+  return data;
 }
 
 // Resolves to the server's "we've sent a link" message. Throws with
@@ -203,7 +303,7 @@ export function logout() {
 // Tells the backend the signed-in user is still here, which is what a
 // session's length on the Audit Log page is measured from. Beats every
 // minute and when the tab becomes visible again; a hidden tab stays quiet,
-// and after 30 idle minutes the backend closes the session. Returns the
+// and after 4 idle hours (backend/sessions.py) the backend closes the session. Returns the
 // cleanup for a useEffect.
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 

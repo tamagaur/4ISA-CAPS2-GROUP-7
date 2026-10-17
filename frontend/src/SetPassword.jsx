@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole } from 'lucide-react';
 import { getLinkInfo, setPasswordWithLink } from './auth';
-import './Login.css';
+import AuthShell from './components/AuthShell';
 
 // The server's rules (POST /auth/set-password): at least 8 characters and
 // at most 72 bytes of UTF-8 — bcrypt ignores everything past byte 72.
@@ -181,6 +181,7 @@ const SetPassword = () => {
           <input type="email" name="username" autoComplete="username" value={linkInfo.email} readOnly hidden />
 
           <div className="input-group password-group">
+            <LockKeyhole className="input-icon" aria-hidden="true" />
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="New password"
@@ -200,6 +201,7 @@ const SetPassword = () => {
           </div>
 
           <div className="input-group">
+            <LockKeyhole className="input-icon" aria-hidden="true" />
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="Confirm new password"
@@ -223,27 +225,7 @@ const SetPassword = () => {
     );
   };
 
-  return (
-    <div className="login-container">
-      <div className="login-left">
-        <div className="logo-section">
-          <img src="/logo.png" alt="SAN2 Corporation Logo" className="logo-image" />
-          <p className="dashboard-title">Inventory Decision Support Dashboard</p>
-          <ul className="login-feature-list">
-            <li>Per-SKU demand forecasting</li>
-            <li>ABC-classified replenishment</li>
-            <li>Reorder recommendations</li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="login-right">
-        <div className="login-card">{renderCard()}</div>
-
-        <p className="help-text">Having trouble? Contact your system administrator.</p>
-      </div>
-    </div>
-  );
+  return <AuthShell>{renderCard()}</AuthShell>;
 };
 
 export default SetPassword;

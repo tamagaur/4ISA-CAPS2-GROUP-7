@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Mail } from 'lucide-react';
 import { getPasswordResetInfo, requestPasswordReset } from './auth';
-import './Login.css';
+import AuthShell from './components/AuthShell';
 
 const ENTER_REGISTERED_EMAIL = 'Enter the email address your account was created with.';
 // The server's own words for an email no account uses (404); also shown for
@@ -62,21 +63,7 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-left">
-        <div className="logo-section">
-          <img src="/logo.png" alt="SAN2 Corporation Logo" className="logo-image" />
-          <p className="dashboard-title">Inventory Decision Support Dashboard</p>
-          <ul className="login-feature-list">
-            <li>Per-SKU demand forecasting</li>
-            <li>ABC-classified replenishment</li>
-            <li>Reorder recommendations</li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="login-right">
-        <div className="login-card">
+    <AuthShell>
           <h2>Reset your <span className="page-title-accent">password</span></h2>
 
           {noEmailMessage || sentMessage ? (
@@ -89,6 +76,7 @@ const ForgotPassword = () => {
               <form onSubmit={handleSubmit} className="login-form" noValidate>
                 {error && <div id="forgot-email-error" className="error-message" role="alert">{error}</div>}
                 <div className="input-group">
+                  <Mail className="input-icon" aria-hidden="true" />
                   <input
                     ref={emailRef}
                     type="email"
@@ -115,11 +103,7 @@ const ForgotPassword = () => {
           <div className="auth-links">
             <Link to="/login" className="auth-link">Back to sign in</Link>
           </div>
-        </div>
-
-        <p className="help-text">Having trouble? Contact your system administrator.</p>
-      </div>
-    </div>
+    </AuthShell>
   );
 };
 

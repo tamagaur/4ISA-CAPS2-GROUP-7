@@ -199,6 +199,13 @@ zero):
     matching each of the 12 calendar months. If
     UNILEVER_SOH_UNIT_CONFIRMED is ever flipped to False, every point in
     this series is null, per the note on kpis.soh_value above.
+  sales_vs_stock[].stock_count_date / kpis.soh_count_date /
+  tier_stock_count_date
+    — display only: the day the snapshot behind each stock figure was
+    counted (MAX(Inventory_Fact_Real.snapshot_date) for that `_period`,
+    when the scope's rows share one count day — _stock_count_dates). A
+    `_period` is not a count date: "2026-03" is Unilever's 2026-04-06
+    count. No figure is computed from these.
   sales_vs_stock[].received
     — SUPPLIER-ALLOCATION PROXY, not a fabricated fixed_allocation
     constant: no supplier allocation schedule exists anywhere in the
@@ -325,12 +332,16 @@ zero):
     both-sides-real rule), or when no ABC run exists.
   safety_stock_exposure
     — {tier_a_count, comparable_count, below_count, below_revenue_share,
-    blocked_reason}. Same rows and same "both figures or excluded" rule as
+    below_items, blocked_reason}. Same rows and same "both figures or excluded" rule as
     kpis.safety_stock_rate, plus each product's revenue_share, so "N of M
     measurable Category A SKUs are below safety stock, X% of revenue" is
     one query, not two that could disagree. below_revenue_share is the sum
     of revenue_share over the below-SS products (a share of the WHOLE
-    period's revenue, not of Tier A's).
+    period's revenue, not of Tier A's). below_items is those same below-SS
+    products, most revenue first — [{sku_id, product_name, current_stock,
+    ss_i, short_by, target_stock, order_qty, revenue_share}], pieces
+    throughout — the list behind the count, built from the rows the count
+    was taken from so the two can never disagree (2026-10-03).
   policy_comparison
     — {cycle_date, sku_count, lp_target_stock_units, lp_safety_stock_units,
     rule_stock_units, target_vs_rule_pct, lp_target_weeks, skus_above_rule,
@@ -635,6 +646,72 @@ def _sales_by_period(
         if principal in ("all", "delmonte") else {p: None for p in periods}
     )
     return _combine_principal_sums(periods, unilever, delmonte, principal)
+
+
+def _not_real_sales_months(db: Session, periods: list[str], principal: str, mode: str) -> set[str]:
+    """The months whose sales figure holds rows that are not SSM's own (filled or
+    generated), for any principal in scope: marts.COUNT_FILLED_AND_GENERATED counts
+    them as sales, and every card and chart that shows the figure must say so."""
+    out: set[str] = set()
+    for who in ("unilever", "delmonte"):
+        if principal in ("all", who):
+            sources = marts.sales_sources_by_period(db, periods, who, mode)
+            out |= {p for p, kinds in sources.items() if any(k != "real" for k in kinds)}
+    return out
+
+
+# The Annual View card shows this many calendar years, ending at the latest
+# year with sales (its title: "5-Year Trend").
+ANNUAL_SALES_YEARS = 5
+
+
+def _annual_sales(db: Session, scope: str, mode: str) -> dict:
+    """Total sales per calendar year for the Annual View card (Audrey,
+    2026-10-12): each year is the sum of its months' sales from
+    _sales_by_period, the same per-month figures the sales cards, the
+    allocation card and the Sales vs Inventory chart read, so a year here
+    can never disagree with them. Nothing is projected and nothing is
+    scaled up: a year with fewer than 12 months on record is the sum of
+    the months it has, and `months` says how many.
+
+    Fixed like the allocation card: it does not follow the date range.
+    Fiscal year = calendar year, as on that card ("FY 2026 sales, Jan-Feb").
+
+    years[]: {year, sales, months, first_month, last_month,
+    synthetic_months}. `sales` is null (never 0) for a year in the window
+    with no month on record. `synthetic_months` are the months counted in
+    `sales` that are not SSM's own figures (_not_real_sales_months); the
+    card must mark them. earlier_years: years with sales that fall before
+    the window, so the card can say they exist."""
+    out: dict = {"years": [], "window_years": ANNUAL_SALES_YEARS, "earlier_years": [], "blocked_reason": None}
+    span = marts.sales_month_span(db, scope)
+    if span is None:
+        out["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
+        return out
+    first_year, last_year = int(span[0][:4]), int(span[1][:4])
+    periods = [f"{y:04d}-{m:02d}" for y in range(first_year, last_year + 1) for m in range(1, 13)]
+    by_period = _sales_by_period(db, periods, scope, mode)
+    not_real = _not_real_sales_months(db, periods, scope, mode)
+    counted = sorted(p for p in periods if by_period.get(p) is not None)
+    if not counted:
+        out["blocked_reason"] = f"No month has a sales figure for {_scope_label(scope)}."
+        return out
+    # The window ends at the latest year a month is counted in, not at the
+    # last row: generated months after the last real month are not sales.
+    end_year = int(counted[-1][:4])
+    start_year = end_year - ANNUAL_SALES_YEARS + 1
+    for year in range(start_year, end_year + 1):
+        months = [p for p in counted if p.startswith(f"{year:04d}-")]
+        out["years"].append({
+            "year": year,
+            "sales": round(sum(by_period[p] for p in months), 2) if months else None,
+            "months": len(months),
+            "first_month": months[0] if months else None,
+            "last_month": months[-1] if months else None,
+            "synthetic_months": [p for p in months if p in not_real],
+        })
+    out["earlier_years"] = sorted({int(p[:4]) for p in counted if int(p[:4]) < start_year})
+    return out
 
 
 def _estimate_points(periods: list[str], real: dict, by_principal: dict[str, dict], principal: str) -> dict[str, dict]:
@@ -1232,6 +1309,7 @@ def get_dashboard(
 
     periods = _range_periods(db, period, start_period, scope)
     sales_by_period = _sales_by_period(db, periods, scope, mode)
+    not_real_sales = _not_real_sales_months(db, periods, scope, mode)
     # Walk backward from the picker's applied end month to the nearest
     # period WITHIN the selected range that actually has a real sales row,
     # rather than requiring an exact match on the range's literal end —
@@ -1273,6 +1351,9 @@ def get_dashboard(
         "months_in_range": len(periods),
         "months_with_data": len(range_months),
         "missing_months": range_missing,
+        # Months of the total that are not SSM's own data (filled or generated rows,
+        # counted since 2026-10-11): the card says how many.
+        "synthetic_months": [p for p in range_months if p in not_real_sales],
         "blocked_reason": None if range_months else sales_blocked_reason,
     }
     sales_snapshot = {
@@ -1326,6 +1407,12 @@ def get_dashboard(
     allocation: dict = {
         "basis_year": None, "basis_sales": None, "basis_months": 0,
         "latest_month": None, "ytd_sales": None, "ytd_months": 0,
+        # The basis year's sales over the same calendar months as ytd (Jan-Feb
+        # 2025 against Jan-Feb 2026): the card's like-for-like year-over-year.
+        "prior_ytd_sales": None, "prior_ytd_months": 0,
+        # The latest month with sales and the 12 months up to it (kpi_trend's
+        # shape): the annual card's "latest month", fixed like the rest of it.
+        "latest_sales": None, "trend": None,
         "levels": [], "vat_basis": None, "blocked_reason": None,
         # analytics/allocation.py: the basis is the calendar year before the
         # planning month (the month after the latest sales month), in pesos
@@ -1341,13 +1428,19 @@ def get_dashboard(
     elif latest_by_principal.get(scope) is None:
         allocation["blocked_reason"] = f"No sales rows for {_scope_label(scope)} at all."
     else:
+        # The card does NOT follow the date range (Audrey, 2026-10-09): the
+        # allocation is the year being planned — the planning month is the
+        # one after the latest sales month — and its basis is ONE previous
+        # calendar year, whatever the range's length (a 2-5 year range still
+        # reads only the year before). It reverses 0a0756f, which moved the
+        # year with the range's end. Sales so far run Jan to the latest month
+        # in the allocation year; a January plan (latest data in December)
+        # has none yet, and the card shows the allocation alone.
         latest_month = latest_by_principal[scope]
         planning_month = planning_month_after(latest_month)
         allocation_year = int(planning_month[:4])
         basis_year = allocation_basis_year(planning_month)
         basis_periods = [f"{basis_year:04d}-{m:02d}" for m in range(1, 13)]
-        # Sales so far in the allocation year. A January plan (latest data
-        # in December) has none yet: the card shows the allocation alone.
         ytd_periods = (
             [f"{allocation_year:04d}-{m:02d}" for m in range(1, int(latest_month[5:7]) + 1)]
             if int(latest_month[:4]) == allocation_year else []
@@ -1358,6 +1451,11 @@ def get_dashboard(
         by_period = {**sales_by_period, **(_sales_by_period(db, missing, scope, mode) if missing else {})}
         basis_values = [by_period[p] for p in basis_periods if by_period.get(p) is not None]
         ytd_values = [by_period[p] for p in ytd_periods if by_period.get(p) is not None]
+        # The same calendar months a year earlier, from the basis year's own
+        # months (already fetched): Jan-Feb 2025 for Jan-Feb 2026.
+        prior_values = [
+            by_period[p] for p in basis_periods[:len(ytd_periods)] if by_period.get(p) is not None
+        ]
         basis_sales = sum(basis_values) if basis_values else None
         allocation["basis_year"] = basis_year
         allocation["latest_month"] = latest_month
@@ -1383,6 +1481,18 @@ def get_dashboard(
                 "basis_months": basis_months,
                 "ytd_sales": round(ytd_sales, 2) if ytd_sales is not None else None,
                 "ytd_months": len(ytd_values),
+                "prior_ytd_sales": round(sum(prior_values), 2) if prior_values else None,
+                "prior_ytd_months": len(prior_values),
+                "latest_sales": (
+                    round(by_period[latest_month], 2) if by_period.get(latest_month) is not None else None
+                ),
+                "trend": kpi_trend(
+                    {
+                        p: by_period.get(p)
+                        for p in sorted(q for q in set(basis_periods + ytd_periods) if q <= latest_month)[-12:]
+                    },
+                    latest_month,
+                ),
                 # monthly = an average month of the basis x pct, and annual
                 # only when the basis IS a year (null otherwise; the footnote
                 # already calls the basis partial) — analytics/allocation.py's
@@ -1490,6 +1600,19 @@ def get_dashboard(
     # (a range ending before the plan's opening count) is not judged against a
     # later plan's safety stock.
     lp_opening_period = opening_period(lp_cycle) if lp_cycle is not None else None
+    # A range ending before that count (Option A, Audrey 2026-10-08): the card
+    # does not go blank. Like the pending-reorder card, it reads the current
+    # plan — the plan's own opening count and the ABC run at or before it —
+    # and says so (safety_stock_exposure.pinned_to_plan), instead of
+    # comparing an earlier count with a later plan's safety stock.
+    ss_pinned_to_plan = (
+        lp_opening_period is not None and inventory_period is not None and inventory_period < lp_opening_period
+    )
+    ss_stock_period = inventory_period
+    if ss_pinned_to_plan:
+        ss_stock_period = _latest_inventory_period(db, scope, end=lp_opening_period)
+        abc_periods = _nearest_abc_periods_at_or_before(db, lp_opening_period, scope)
+        abc_period = max(abc_periods.values()) if abc_periods else None
     safety_stock_rate = None
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     ss_rows: list = []
@@ -1501,11 +1624,13 @@ def get_dashboard(
         # three-year-old pending row can't supply them.
         plan_rows = batch.rows(db, *_plan_rows_query(scope, mode, lp_cycle, abc_periods))
         stock_at_count = marts.stock_pieces_by_product(
-            db, inventory_period, [int(r["product_key"]) for r in plan_rows]
+            db, ss_stock_period, [int(r["product_key"]) for r in plan_rows]
         )
         ss_rows = [{**r, "current_stock": stock_at_count.get(int(r["product_key"]))} for r in plan_rows]
+        # Only when the plan's own count is missing too (pinning found none
+        # at or after the plan opens): then nothing is compared.
         count_before_plan = (
-            lp_opening_period is not None and inventory_period is not None and inventory_period < lp_opening_period
+            lp_opening_period is not None and ss_stock_period is not None and ss_stock_period < lp_opening_period
         )
         comparable = [] if count_before_plan else [
             r for r in ss_rows
@@ -1517,7 +1642,7 @@ def get_dashboard(
             safety_stock_rate_blocked_reason = None
         elif count_before_plan:
             safety_stock_rate_blocked_reason = (
-                f"The stock at this range's end was counted for {marts.month_label(inventory_period)}, before the "
+                f"The stock at this range's end was counted for {marts.month_label(ss_stock_period)}, before the "
                 f"count the {marts.month_label(str(lp_cycle)[:7])} plan starts from "
                 f"({marts.month_label(lp_opening_period)}); its safety stock is not compared with an earlier count."
             )
@@ -1585,12 +1710,18 @@ def get_dashboard(
         }
     # The count the stock is read at (the range's end) and when it was taken,
     # the Tier A run the cohort comes from, and the count the plan opens from.
-    safety_stock_exposure["stock_period"] = inventory_period
-    safety_stock_exposure["stock_counts"] = latest_stock_counts
+    safety_stock_exposure["stock_period"] = ss_stock_period
+    safety_stock_exposure["stock_counts"] = (
+        stock_counts(db, ss_stock_period, stock_coverage or ([] if scope == "all" else [scope]))
+        if ss_pinned_to_plan else latest_stock_counts
+    )
     safety_stock_exposure["tier_a_period"] = abc_period
     # Per principal ({display name: 'YYYY-MM'}); tier_a_period above is unchanged.
     safety_stock_exposure["tier_a_periods"] = tier_a_periods(abc_periods)
     safety_stock_exposure["plan_opening_period"] = lp_opening_period
+    # True when the range ends before the plan's count: the figures are the
+    # current plan's, not the range's (the card says it does not follow it).
+    safety_stock_exposure["pinned_to_plan"] = bool(ss_pinned_to_plan)
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
@@ -1751,7 +1882,7 @@ def get_dashboard(
             "returns_estimated_kind": returns_estimated[p]["kind"] if p in returns_estimated else None,
         }
         point["provenance"] = _point_provenance(
-            point, bool(placeholder and placeholder["start"] <= p <= placeholder["end"])
+            point, bool(placeholder and placeholder["start"] <= p <= placeholder["end"]) or p in not_real_sales
         )
         # Why a month has no sales value (backend/series_gaps.py): the series is never zero-filled, a month with
         # no rows for the whole scope is null, and now says so. Added only where there is a reason; a point with a
@@ -2245,6 +2376,9 @@ def get_dashboard(
         # Sales against SSM's allocation rule (prior-year sales x 103/105/
         # 108% — client meeting, Sep 2026), per principal.
         "allocation": allocation,
+        # Total sales per calendar year, for the Annual View card beside the
+        # Sales vs Inventory chart (_annual_sales). Fixed, like allocation.
+        "annual_sales": _annual_sales(db, scope, mode),
         # Which LP run the page is showing, and whether it can still be
         # trusted (backend/lp_cycle.py). Every LP-derived figure above is
         # pinned to this cycle; superseded_pending_count says how many

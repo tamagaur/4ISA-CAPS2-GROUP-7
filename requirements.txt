@@ -63,6 +63,10 @@ PyJWT==2.14.0  # 2026-09-30: replaces python-jose[cryptography]==3.3.0, which ha
                # CVE-2024-33663 (CRITICAL) and CVE-2024-29370 and pulled in ecdsa
                # (CVE-2024-23342, no fix released). HS256 only (backend/auth_utils.py).
                # Release 2026-09-11, >7 days old.
+cryptography==46.0.3  # Two-step sign-in (backend/mfa.py) encrypts authenticator secrets
+                      # with Fernet. It used to arrive through python-jose[cryptography];
+                      # with PyJWT (no [crypto] extra) it has to be listed itself.
+                      # The codes themselves use the standard library (hmac/hashlib).
 
 # --- Testing ---
 pytest==9.0.3  # 2026-09-30: from 8.3.3 (PYSEC-2026-1845, fixed in 9.0.3).

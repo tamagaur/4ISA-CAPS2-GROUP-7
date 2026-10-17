@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info } from 'lucide-react';
+import SectionLede from './ui/SectionLede';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import AbcRangeView from './AbcRangeView';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -17,13 +19,17 @@ import { GRID_PROPS, usePrefersTexture } from './ChartZoom';
 import { getABCClassification } from '../api/abc';
 import { getFsn } from '../api/analytics';
 import { ParetoCard, AbcFsnMatrix } from './AbcBreakdowns';
+import KPICard from './KPICard';
+import PageHeader from './ui/PageHeader';
+import { ClassBadge } from './ui/StatusBadge';
 import DateFilter from './DateFilter';
-import { formatMonth } from '../utils/formatDate';
+import { formatDate, formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { labelForPrincipal } from '../principals';
 import { isPlaceholderPeriod } from '../dataMode';
 import Pagination from './Pagination';
 import InfoTip from './InfoTip';
+import ProductName from './ProductName';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -78,6 +84,16 @@ const formatSKU = (sku) => {
   return sku;
 };
 
+// The code shown under a row's name. A Del Monte row is a product category
+// (sku_id carries its path, DEC-03), so it has no SKU code to show — its
+// name is the category. Rows saved in recent searches before this field
+// existed still carry principal and sku, so they read the same way.
+const codeOf = (item) => (item.principal === 'delmonte' ? null : formatSKU(item.sku));
+
+// A month range as the Technical Adviser reads periods: "Mar 2025 – Feb 2026".
+const monthRange = (start, end) =>
+  start === end ? formatMonth(end) : `${formatMonth(start)} – ${formatMonth(end)}`;
+
 // Class-level aggregation replaces the old per-SKU Pareto chart: with
 // 600+ SKUs a per-item bar chart is illegible and not actionable.
 // Per class we show two things, both from real fields only (no $ value —
@@ -102,7 +118,7 @@ const CLASS_ARCHETYPE = {
 // The note counts them instead of assuming either way.
 const classDrilldownNote = (cat, breakdown) => {
   if (cat === 'A') {
-    return 'Top-value SKUs below their target stock or out of stock are the highest-priority reorders — a stockout here has the biggest revenue impact.';
+    return 'Top-value SKUs below their safety stock or target stock are the highest-priority reorders — a stockout there has the biggest revenue impact.';
   }
   const withTarget = breakdown
     .filter((r) => r.status === 'IN STOCK' || r.status === 'LOW')
@@ -148,7 +164,11 @@ const ACCURACY_CHECK_NOTE = 'The plan only uses forecasts that beat simply repea
 const STATUS_LABELS = {
   'IN STOCK': 'Above target stock',
   LOW: 'Below target stock',
-  CRITICAL: 'Out of stock',
+  // CRITICAL is "below safety stock" since kelvin-etl's 2026-10 rule
+  // (backend/stock_status.py: below ss_i; before, below half the target
+  // with no source). It never meant a zero count: the stock file lists no
+  // zero rows, so "Out of stock" here named SKUs holding 22 pieces.
+  CRITICAL: 'Below safety stock',
   'NO ROP': 'No target stock',
   'NO DATA': 'No stock record',
   // For an account without lp.view the backend sends ON HAND instead of the
@@ -159,8 +179,8 @@ const STATUS_LABELS = {
 const statusLabel = (status) => STATUS_LABELS[status] || status;
 
 // Colours follow the app-wide SEMANTIC rule (theme/colors.js): green =
-// healthy (above target stock), amber = watch (below it), red = act now (out of
-// stock), slate = no data. NO DATA is its own status, not folded into
+// healthy (above target stock), amber = watch (below it), red = act now (below
+// safety stock), slate = no data. NO DATA is its own status, not folded into
 // CRITICAL — Inventory_Fact_Real only covers a subset of classified
 // products, so "no record yet" and "confirmed zero stock" stay distinct.
 const STOCK_STATUS_COLORS = {
@@ -175,9 +195,12 @@ const STOCK_STATUS_COLORS = {
 // The statuses GET /abc can send, in drill-down order: with the LP's target
 // stock, or without it (no lp.view).
 const STATUSES_WITH_ROP = ['CRITICAL', 'LOW', 'IN STOCK', 'NO ROP', 'NO DATA'];
+
+// The movement class as the table prints it; the badge's hover says why (fsnTitle).
+const FSN_LABEL = { F: 'Fast', S: 'Slow', N: 'Non-moving' };
 const STATUSES_WITHOUT_ROP = ['CRITICAL', 'ON HAND', 'NO DATA'];
 
-const ClassAggregateTooltip = ({ active, payload, lpHidden }) => {
+const ClassAggregateTooltip = ({ active, payload, lpHidden, periodLabel, unit }) => {
   if (active && payload && payload.length) {
     const point = payload[0].payload;
     // Swatch + ink rows: the coloured square carries identity, the words
@@ -193,7 +216,7 @@ const ClassAggregateTooltip = ({ active, payload, lpHidden }) => {
       <div className="abc-pareto-tooltip">
         <p className="abc-pareto-tooltip-title">{point.label}</p>
         {point.revenueTotal != null
-          && row(COLORS[`abc${point.cat}`], 'Revenue share', `${point.revenueTotal.toFixed(1)}%`)}
+          && row(COLORS[`abc${point.cat}`], `Share of ${periodLabel ? `${periodLabel} ` : ''}revenue`, `${point.revenueTotal.toFixed(1)}%`)}
         {lpHidden ? (
           <>
             {row(STOCK_STATUS_COLORS['ON HAND'], statusLabel('ON HAND'), `${point.onHandPct.toFixed(0)}%`)}
@@ -209,7 +232,7 @@ const ClassAggregateTooltip = ({ active, payload, lpHidden }) => {
         )}
         {row(STOCK_STATUS_COLORS['NO DATA'], statusLabel('NO DATA'), `${point.noDataPct.toFixed(0)}%`)}
         <p className="abc-pareto-tooltip-line" style={{ color: CHART_COLORS.axisLabel }}>
-          {point.skuCount} {point.skuCount === 1 ? 'item' : 'items'} ({point.skuSharePct.toFixed(0)}% of total)
+          {point.skuCount.toLocaleString()} {unit} ({point.skuSharePct.toFixed(0)}% of all classified)
         </p>
       </div>
     );
@@ -219,13 +242,13 @@ const ClassAggregateTooltip = ({ active, payload, lpHidden }) => {
 
 // Cold-load placeholder in the shape of the real page, top to bottom: four
 // summary cards, the Pareto chart and its drill-down, the brand Pareto and
-// movement matrix, the filter bar and the 8-column SKU table — so the
+// movement matrix, the filter bar and the 7-column SKU table — so the
 // layout doesn't jump when the rows arrive. Mirrors DashboardSkeleton's
 // approach with this page's classes.
 const ABCSkeleton = () => (
   <div className="abc-body" aria-hidden="true">
     <div className="abc-summary-grid">
-      <SkeletonStatCards count={4} cardClassName="abc-summary-card" />
+      <SkeletonStatCards count={4} cardClassName="kpi-card" />
     </div>
     <div className="abc-analysis-row">
       <SkeletonChartCard className="abc-pareto-container abc-analysis-chart" variant="bars" height={260} />
@@ -243,7 +266,7 @@ const ABCSkeleton = () => (
       <SkeletonLine width="100%" height="2.25rem" />
     </div>
     <div className="data-table-card">
-      <SkeletonTable rows={8} columns={8} />
+      <SkeletonTable rows={8} columns={7} />
     </div>
   </div>
 );
@@ -260,6 +283,14 @@ const ABCClassification = () => {
   // (ON HAND instead), so the chart, legend and drill-down show those.
   const { hasPermission } = usePermissions();
   const lpHidden = !hasPermission(P.LP_VIEW);
+  // A product's name opens its sales history and forecast (SKU Forecast), so
+  // the table leads somewhere. Unilever SKUs only: a Del Monte row is a
+  // category, which has no product series to open.
+  const navigate = useNavigate();
+  const canOpenForecast = hasPermission(P.FORECAST_VIEW);
+  const openForecast = (item) => (canOpenForecast && item.principal === 'unilever' && item.sku
+    ? () => navigate(`/forecast?sku=${encodeURIComponent(item.sku)}`)
+    : undefined);
   // Shared principal scope (Topbar's segmented control). Refetches on
   // change via this page's load effect deps.
   const { principal } = dashboardRange;
@@ -292,20 +323,48 @@ const ABCClassification = () => {
   // All principals the two differ, and a row is current against ITS principal's run.
   const [tierAPeriods, setTierAPeriods] = useState({});
   const [paretoCheck, setParetoCheck] = useState(null);
+  // When the stock was counted and which LP plan the target stock comes
+  // from (GET /abc's stock_count_dates / planning_cycle_date, 2026-10-03):
+  // the Technical Adviser asked that every stock figure state its count
+  // date — the file filed as "Mar 2026" was counted on 6 Apr 2026.
+  const [stockCountDates, setStockCountDates] = useState({});
+  const [planCycle, setPlanCycle] = useState(null);
   // Which request the rows currently on screen came from — null until the
   // first one lands. Distinguishes "nothing to show yet" (cold load, needs
   // a skeleton) from "showing the previous answer while a new one loads"
   // (refetch, keep it), which `loading` alone cannot: it is true for both.
   const [loadedKey, setLoadedKey] = useState(null);
 
+  // Arriving from the Dashboard's ABC card (/abc?class=B): the page opens
+  // on that class — the table filtered to it and narrowed to this run's
+  // ranking, so its row count is the count the dashboard card showed — and
+  // scrolls to the table.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedClass = ['A', 'B', 'C'].includes(searchParams.get('class')) ? searchParams.get('class') : null;
+  // Ranking basis: one month's ABC run (the default, with stock status and
+  // movement classes), or the dashboard's selected range (AbcRangeView, the
+  // ranking the dashboard's ABC card draws). ?basis=range opens the range,
+  // which is where the dashboard's class list sends people, so counts match.
+  const basis = searchParams.get('basis') === 'range' ? 'range' : 'month';
+  const setBasis = (next) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'range') params.set('basis', 'range'); else params.delete('basis');
+    setSearchParams(params, { replace: true });
+  };
+  const rangeStartPeriod = toClassificationPeriod(dashboardRange.startMonth, dashboardRange.startYear);
+  const rangeEndPeriod = toClassificationPeriod(dashboardRange.endMonth, dashboardRange.endYear);
+  const rangeLabel = dashboardRange.startMonth && dashboardRange.endMonth
+    ? `${dashboardRange.startMonth} ${dashboardRange.startYear} – ${dashboardRange.endMonth} ${dashboardRange.endYear}`
+    : 'the selected range';
+  const classTableRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [categoryFilter, setCategoryFilter] = useState(linkedClass || 'ALL');
   const [brandFilter, setBrandFilter] = useState('ALL');
   const [fsnFilter, setFsnFilter] = useState('ALL');
   // Off by default: the table lists every SKU's most recent tier. On, it
   // narrows to the SKUs ranked in THIS run — what the page showed before
   // last-known tiers, and the only set whose Rev % values sum to 100%.
-  const [currentRunOnly, setCurrentRunOnly] = useState(false);
+  const [currentRunOnly, setCurrentRunOnly] = useState(Boolean(linkedClass));
 
   // Table pagination — the full SKU table can run 600+ rows, which is
   // slow to render and hard to scan in one scroll. PAGE_SIZE_OPTIONS
@@ -313,6 +372,12 @@ const ABCClassification = () => {
   // matches the old "show everything" feel most closely while still
   // capping the DOM node count per render.
   const PAGE_SIZE_OPTIONS = [25, 50, 100];
+  const scrolledToClass = useRef(false);
+  useEffect(() => {
+    if (!linkedClass || loading || scrolledToClass.current || !classTableRef.current) return;
+    scrolledToClass.current = true;
+    classTableRef.current.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }, [linkedClass, loading]);
   const [pageSize, setPageSize] = useState(25);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -321,7 +386,7 @@ const ABCClassification = () => {
   // of revenue) and the one a reviewer most wants to see on
   // first load, not the long-tail Class C. Still swappable via any
   // class's bar or the tab buttons.
-  const [selectedClass, setSelectedClass] = useState('A');
+  const [selectedClass, setSelectedClass] = useState(linkedClass || 'A');
   // Hatch the CRITICAL segments only when the reader asked for a
   // non-colour channel (high-contrast / forced-colors) — see ChartZoom.
   const wantsTexture = usePrefersTexture();
@@ -359,6 +424,8 @@ const ABCClassification = () => {
         setTierSummary(res.tier_summary || []);
         setTierAPeriods(res.tier_a_periods || {});
         setParetoCheck(res.pareto_check ?? null);
+        setStockCountDates(res.stock_count_dates || {});
+        setPlanCycle(res.planning_cycle_date ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
       })
       .catch((err) => {
@@ -389,9 +456,10 @@ const ABCClassification = () => {
         productKey: item.product_key,
         principal: item.principal,
         // A Del Monte row is a product category (sku_id carries its path),
-        // and the old sub-categories have no name — "Unknown Product" would
-        // imply a product that should have one.
-        product: item.product_name || (item.principal === 'delmonte' ? '—' : 'Unknown Product'),
+        // and many old sub-categories have no name, so the path is the name
+        // then. A Unilever SKU with no name shows its code alone
+        // (ProductName's fallback) rather than "Unknown Product".
+        product: item.product_name || (item.principal === 'delmonte' ? item.sku_id : ''),
         brand: brandLookup?.get(String(item.sku_id)) ?? null,
         cat: item.tier,
         // The run this row's tier and shares come from. When it is older than
@@ -429,16 +497,24 @@ const ABCClassification = () => {
   // response's classification period. A classified product with no FSN
   // row sold nothing in the window, which is non-moving by definition.
   const fsnKey = `${principal ?? ''}|${classificationPeriod ?? ''}`;
-  const [fsn, setFsn] = useState({ key: null, byKey: new Map(), rules: null, error: false });
+  // `windows` is GET /fsn's {principal: {start, end}}: the months the
+  // movement classes were judged over, which the matrix and column state.
+  const [fsn, setFsn] = useState({ key: null, byKey: new Map(), rules: null, windows: {}, error: false });
   useEffect(() => {
     if (!classificationPeriod) return undefined;
     let cancelled = false;
     getFsn({ principal, period: classificationPeriod })
       .then((res) => {
         if (cancelled) return;
-        setFsn({ key: fsnKey, byKey: new Map((res?.items || []).map((i) => [i.product_key, i])), rules: res?.rules ?? null, error: false });
+        setFsn({
+          key: fsnKey,
+          byKey: new Map((res?.items || []).map((i) => [i.product_key, i])),
+          rules: res?.rules ?? null,
+          windows: res?.windows || {},
+          error: false,
+        });
       })
-      .catch(() => { if (!cancelled) setFsn({ key: fsnKey, byKey: new Map(), rules: null, error: true }); });
+      .catch(() => { if (!cancelled) setFsn({ key: fsnKey, byKey: new Map(), rules: null, windows: {}, error: true }); });
     return () => { cancelled = true; };
   }, [principal, classificationPeriod, fsnKey]);
   const fsnLoaded = fsn.key === fsnKey && !fsn.error;
@@ -446,9 +522,20 @@ const ABCClassification = () => {
     if (!fsnLoaded) return null;
     return fsn.byKey.get(row.productKey) ?? { fsn: 'N', adi: null, months_with_sales: 0, months_observed: null, noSaleInWindow: true };
   }, [fsn, fsnLoaded]);
+  // "Mar 2025 – Feb 2026" for one principal; each principal's own window
+  // when the rows span both (their data ends in different months).
+  // `fsnWindowMonths` says how many of those months had data: Del Monte's
+  // sell-out has gaps, so its 12 observed months span more of the calendar.
+  const fsnWindowEntries = fsnLoaded ? Object.entries(fsn.windows || {}) : [];
+  const fsnWindowText = fsnWindowEntries.length === 0
+    ? null
+    : fsnWindowEntries.length === 1
+      ? monthRange(fsnWindowEntries[0][1].start, fsnWindowEntries[0][1].end)
+      : fsnWindowEntries.map(([p, w]) => `${labelForPrincipal(p)} ${monthRange(w.start, w.end)}`).join('; ');
+  const fsnWindowMonths = fsnWindowEntries.length === 1 ? fsnWindowEntries[0][1].observed_months : null;
   const fsnTitle = (f) => {
     const label = { F: 'Fast-moving', S: 'Slow-moving', N: 'Non-moving' }[f.fsn];
-    if (f.noSaleInWindow) return `${label} — no sale in the 12 months with data up to this run`;
+    if (f.noSaleInWindow) return `${label} — no sale in ${fsnWindowText || 'the 12 months with data up to this run'}`;
     if (f.fsn === 'N') {
       return `${label} — no sale in the last 6 months with data (sold in ${f.months_with_sales} of the ${f.months_observed} months with data)`;
     }
@@ -484,9 +571,45 @@ const ABCClassification = () => {
   // column header names both.
   const isDelMonte = principal === 'delmonte';
   const hasDelMonteRows = sourceData.some((d) => d.principal === 'delmonte');
+  // `unit` is what a count on this page counts, said beside the number.
   const rowNoun = isDelMonte
-    ? { one: 'category', many: 'categories', header: 'Category', count: 'Category Count', CAPS: 'CATEGORIES' }
-    : { one: 'SKU', many: 'SKUs', header: hasDelMonteRows ? 'SKU / Category' : 'SKU', count: 'SKU Count', CAPS: 'SKUS' };
+    ? { one: 'category', many: 'categories', header: 'Category', count: 'Categories', CAPS: 'CATEGORIES', unit: 'categories' }
+    : {
+      one: 'SKU',
+      many: 'SKUs',
+      header: hasDelMonteRows ? 'Product / category' : 'Product',
+      count: hasDelMonteRows ? 'SKUs / categories' : 'SKUs',
+      CAPS: 'SKUS',
+      unit: hasDelMonteRows ? 'SKUs / categories' : 'SKUs',
+    };
+
+  // The run's month, as every share on the page names it ("Feb 2026").
+  const periodLabel = classificationPeriod ? formatMonth(classificationPeriod) : null;
+  // The stock count the statuses compare. Unilever's only: Del Monte's rows
+  // here are categories, which have no stock record (the chart says so), so
+  // its count date would label figures that aren't there.
+  const stockCountDate = isDelMonte ? null : (stockCountDates.unilever ?? null);
+  // "Stock counted Apr 6, 2026 · target stock from the Mar 2026 plan" — the
+  // period line of the cover chart, drill-down and table column. The plan
+  // half needs lp.view (GET /abc sends no cycle without it).
+  const stockBasisText = [
+    stockCountDate && `Stock counted ${formatDate(stockCountDate)}`,
+    !lpHidden && !isDelMonte && planCycle && `target stock from the ${formatMonth(planCycle)} plan`,
+  ].filter(Boolean).join(' · ');
+  // The Dashboard and Reorder pages judge the plan on the count that opens
+  // it; this page reads the latest count, so the same question ("how many
+  // Class A products are below safety stock?") gets a different number here
+  // (43 against 10 for the Mar 2026 plan, checked 2026-10-12). Said beside
+  // the count date rather than left for a reader to trip over.
+  const otherCountNote = !lpHidden && !isDelMonte && planCycle && stockCountDate
+    ? 'This is the latest stock count. The Dashboard and Reorder pages judge the plan on the count that opens it, '
+      + 'so their numbers can differ.'
+    : null;
+  // The same, short enough for the table's column header.
+  const coverHeaderText = [
+    stockCountDate && `counted ${formatDate(stockCountDate)}`,
+    !lpHidden && !isDelMonte && planCycle && `${formatMonth(planCycle)} plan`,
+  ].filter(Boolean).join(' · ');
 
   // This run's measured shares for one tier, from GET /abc's tier_summary,
   // naming the group they describe: the card's headline counts carried-
@@ -499,9 +622,11 @@ const ABCClassification = () => {
     const s = tierSummary.find((t) => t.tier === tier);
     if (!s) return null;
     const ranked = s.sku_count - (s.carried_forward_count || 0);
+    const when = periodLabel ? ` in ${periodLabel}` : ' in this run';
     return s.sku_share != null
-      ? `${ranked.toLocaleString()} ranked: ${asPct(s.sku_share)} of ${currentRunCount.toLocaleString()} · ${asPct(s.revenue_share_total)} of revenue`
-      : `${ranked.toLocaleString()} ranked in this run`;
+      ? `${ranked.toLocaleString()} ranked${when} (${asPct(s.sku_share)} of ${currentRunCount.toLocaleString()}) · `
+        + `${asPct(s.revenue_share_total)} of ${periodLabel ? `${periodLabel} ` : ''}revenue`
+      : `${ranked.toLocaleString()} ranked${when}`;
   };
 
   // 'pass' | 'fail' | 'not_applicable' (too few ranked rows for an 80/20
@@ -723,44 +848,70 @@ const ABCClassification = () => {
   const periodPlaceholderNote = isPlaceholderPeriod(classificationPeriod, placeholder)
     ? " — a placeholder month: these classes come from placeholder sales, not SSM's"
     : '';
+  // How to read the table's faded rows and its boundary flag; shown above
+  // the table (tableLegend below), not in the page's subtitle. "More
+  // likely", not "likely": measured, 42% of flagged SKUs change class the
+  // next month against 17% of unflagged ones — most flagged SKUs stay put.
+  const tableLegend = (
+    <p className="ui-note abc-table-legend">
+      <Info size={14} aria-hidden="true" />
+      <span>
+        {isDelMonte
+          ? 'Categories with no sales that month keep their most recent tier, shown faded with the month it was set.'
+          : 'SKUs with no sales that month keep their most recent category, shown faded with the month it was set.'}
+        {rules && (
+          <> <AlertTriangle size={12} className="abc-boundary-legend-icon" aria-hidden="true" /> flags a {rowNoun.one} within{' '}
+            {asPp(rules.boundary_margin)} of a class cutoff — more likely to change class next month.</>
+        )}
+      </span>
+    </p>
+  );
+  const basisSwitch = (
+    <div className="segmented abc-basis-switch" role="tablist" aria-label="Rank by">
+      {[['month', 'One month'], ['range', 'Selected range']].map(([value, text]) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={basis === value}
+          className={`segmented-item${basis === value ? ' is-active' : ''}`}
+          onClick={() => setBasis(value)}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
   const header = (
     <div className="abc-page-header">
-      <div className="abc-page-title-row">
-        <h2 className="abc-page-title">ABC <span className="page-title-accent">Classification</span></h2>
-        <DateFilter
-          singleMonth
-          localValue={{
-            startMonth: selectedMonth.month, startYear: selectedMonth.year,
-            endMonth: selectedMonth.month, endYear: selectedMonth.year,
-          }}
-          onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
-          onReset={isCustomMonth
-            ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
-            : undefined}
-        />
-      </div>
-      <TierBasisLabel periods={tierAPeriods} period={classificationPeriod} />
-      <p className="abc-page-subtitle">
-        {isDelMonte ? (
-          <>
-            Product categories ranked by sales value.{rules && <> {tierRuleText(rules)}</>}
-            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
-            {' '}Categories with no sales that month keep their most recent tier, shown faded with the month it was set.
-          </>
-        ) : (
-          <>
-            Products ranked by sales value.{rules && <> {tierRuleText(rules)}</>}
-            {classificationPeriod && <> Period: {formatMonth(classificationPeriod)}{periodPlaceholderNote}.</>}
-            {' '}SKUs with no sales that month keep their most recent category, shown faded with the month it was set.
-          </>
+      <PageHeader
+        title="ABC"
+        accent="Classification"
+        subtitle={basis === 'range'
+          ? `${isDelMonte ? 'Product categories' : 'Products'} ranked by sales value over ${rangeLabel} (the dashboard's range).`
+            + `${rules ? ` ${tierRuleText(rules)}` : ''}`
+          : `${isDelMonte ? 'Product categories' : 'Products'} ranked by sales value`
+          + `${classificationPeriod ? `, ${formatMonth(classificationPeriod)}${periodPlaceholderNote}` : ''}.`
+          + `${rules ? ` ${tierRuleText(rules)}` : ''}`}
+        actions={basis === 'range' ? basisSwitch : (
+          <div className="abc-header-actions">
+          {basisSwitch}
+          <DateFilter
+            singleMonth
+            localValue={{
+              startMonth: selectedMonth.month, startYear: selectedMonth.year,
+              endMonth: selectedMonth.month, endYear: selectedMonth.year,
+            }}
+            onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
+            onReset={isCustomMonth
+              ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
+              : undefined}
+          />
+          </div>
         )}
-        {/* "More likely", not "likely": measured, 42% of flagged SKUs change
-            class the next month against 17% of unflagged ones — most flagged
-            SKUs stay put. */}
-        {rules && (
-          <span className="abc-boundary-legend"> <AlertTriangle size={12} className="abc-boundary-legend-icon" /> flags a {rowNoun.one} within {asPp(rules.boundary_margin)} of a class cutoff — more likely to change class next month.</span>
-        )}
-      </p>
+      />
+      {/* The monthly run's basis; a range ranking is not a run. */}
+      {basis !== 'range' && <TierBasisLabel periods={tierAPeriods} period={classificationPeriod} />}
       {/* Del Monte's rows are product categories, not SKUs. Said once, up
           front, and it also separates the two meanings of "category" on
           this page: the product category a row IS, and the A/B/C tier it
@@ -791,6 +942,23 @@ const ABCClassification = () => {
   // that unmount WAS the blank page, so keeping the view means driving the
   // replay explicitly, the same way the dashboard does.
   const enterCycle = useEntranceReplay(loadedKey ?? '');
+
+  if (basis === 'range') {
+    return (
+      <div className="abc-page">
+        <div className="abc-content">
+          {header}
+          <AbcRangeView
+            startPeriod={rangeStartPeriod}
+            endPeriod={rangeEndPeriod}
+            principal={principal}
+            initialClass={linkedClass}
+            onShowMonth={() => setBasis('month')}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (isColdLoad) {
     return (
@@ -845,56 +1013,46 @@ const ABCClassification = () => {
         >
 
           {/* Summary Cards */}
-          <div className="abc-summary-grid">
-            <div className="abc-summary-card abc-card-a">
-              <span className="abc-card-label">CLASS A</span>
-              <span className="abc-card-value">{catACount.toLocaleString()}</span>
-              {measuredShares('A') && <span className="abc-card-desc">{measuredShares('A')}</span>}
-              {carriedCountOf('A') > 0 && (
-                <span className="abc-card-desc">{carriedCountOf('A').toLocaleString()} carried forward</span>
-              )}
-            </div>
-            <div className="abc-summary-card abc-card-b">
-              <span className="abc-card-label">CLASS B</span>
-              <span className="abc-card-value">{catBCount.toLocaleString()}</span>
-              {measuredShares('B') && <span className="abc-card-desc">{measuredShares('B')}</span>}
-              {carriedCountOf('B') > 0 && (
-                <span className="abc-card-desc">{carriedCountOf('B').toLocaleString()} carried forward</span>
-              )}
-            </div>
-            <div className="abc-summary-card abc-card-c">
-              <span className="abc-card-label">CLASS C</span>
-              <span className="abc-card-value">{catCCount.toLocaleString()}</span>
-              {measuredShares('C') && <span className="abc-card-desc">{measuredShares('C')}</span>}
-              {carriedCountOf('C') > 0 && (
-                <span className="abc-card-desc">{carriedCountOf('C').toLocaleString()} carried forward</span>
-              )}
-            </div>
-            <div className="abc-summary-card abc-card-total">
-              <span className="abc-card-label">CLASSIFIED {rowNoun.CAPS}</span>
-              <span className="abc-card-value">{sourceData.length.toLocaleString()}</span>
-              <span className="abc-card-desc">
-                {currentRunCount.toLocaleString()} ranked in this run
-                {/* Not for Del Monte: its unclassified count is SKU-level
-                    product records, which are never ranked one by one (the
-                    ranking is by category) — beside a category count it
-                    would read as categories missing. */}
-                {!isDelMonte && unclassifiedCount > 0 && (
-                  <>
-                    {' · '}{unclassifiedCount.toLocaleString()} never classified
-                    {/* Under All the count is GET /abc's for both principals,
-                        and most of Del Monte's share is item codes, which are
-                        never ranked one by one. */}
-                    {hasDelMonteRows && ' (includes Del Monte item codes, which are ranked by category)'}
-                  </>
-                )}
-              </span>
-              {boundaryCount > 0 && (
-                <span className="abc-card-desc abc-card-desc-warning">
-                  <AlertTriangle size={11} /> {boundaryCount} near a class boundary
-                </span>
-              )}
-            </div>
+          {/* The shared KPI card (UI pass): the count, its measured shares
+              on one line, carried-forward rows as a second quiet line. */}
+          <SectionLede className="is-standalone">How the products split by value</SectionLede>
+          <div className="kpi-strip abc-summary-grid">
+            {['A', 'B', 'C'].map((cat) => (
+              <KPICard
+                key={cat}
+                title={`Class ${cat}`}
+                value={{ A: catACount, B: catBCount, C: catCCount }[cat].toLocaleString()}
+                unit={rowNoun.unit}
+                contextLine={measuredShares(cat) || undefined}
+                note={carriedCountOf(cat) > 0 ? `${carriedCountOf(cat).toLocaleString()} carried forward from earlier months` : null}
+                accent={{ A: 'var(--color-abc-a)', B: 'var(--color-abc-b)', C: 'var(--color-abc-c)' }[cat]}
+                icon={<span className={`abc-kpi-letter abc-kpi-letter-${cat.toLowerCase()}`} aria-hidden="true">{cat}</span>}
+              />
+            ))}
+            <KPICard
+              title={`Classified ${rowNoun.many}`}
+              value={sourceData.length.toLocaleString()}
+              unit={rowNoun.unit}
+              contextLine={`${currentRunCount.toLocaleString()} ranked in ${periodLabel ?? 'this run'}`
+                + (!isDelMonte && unclassifiedCount > 0 ? ` · ${unclassifiedCount.toLocaleString()} never classified` : '')}
+              // Not for Del Monte: its unclassified count is SKU-level product
+              // records, which are never ranked one by one (the ranking is by
+              // category) — beside a category count it would read as
+              // categories missing. Under All, most of the never-classified
+              // count is Del Monte item codes, said behind the "?".
+              tooltip={!isDelMonte && unclassifiedCount > 0 && hasDelMonteRows
+                ? 'The never-classified count includes Del Monte item codes, which are ranked by category, never one by one.'
+                : undefined}
+              flag={boundaryCount > 0
+                ? {
+                    label: `${boundaryCount.toLocaleString()} near a class boundary`,
+                    detail: `${boundaryCount.toLocaleString()} ${boundaryCount === 1 ? rowNoun.one : rowNoun.many} within `
+                      + `${rules ? asPp(rules.boundary_margin) : 'a few points'} of a class cutoff — more likely to change class next month.`,
+                  }
+                : null}
+              icon={<Layers size={20} />}
+              accent="var(--color-nav-bg)"
+            />
           </div>
 
           {/* The manuscript's validation of the classification (§3.4.4.2.2),
@@ -904,7 +1062,7 @@ const ABCClassification = () => {
               neutral note: Del Monte's 4 categories read as a red "fails"
               when the top fifth was simply one category. */}
           {paretoCheck && paretoState === 'not_applicable' && (
-            <p className="abc-pareto-check is-na">
+            <p className="ui-note is-info">
               <Info size={14} aria-hidden="true" />
               <span>
                 <strong>Pareto check not applicable:</strong> {paretoCheck.reason}
@@ -912,14 +1070,14 @@ const ABCClassification = () => {
             </p>
           )}
           {paretoCheck && paretoState !== 'not_applicable' && (
-            <p className={`abc-pareto-check${paretoCheck.passes ? ' is-pass' : ' is-fail'}`}>
+            <p className={`ui-note ${paretoCheck.passes ? 'is-success' : 'is-warning'}`}>
               {paretoCheck.passes
                 ? <CheckCircle2 size={14} aria-hidden="true" />
                 : <AlertTriangle size={14} aria-hidden="true" />}
               <span>
                 <strong>Pareto check {paretoCheck.passes ? 'passes' : 'fails'}:</strong>{' '}
-                the top {asPct(paretoCheck.top_fraction, 0)} of {rowNoun.many} ({paretoCheck.top_count.toLocaleString()} of{' '}
-                {paretoCheck.ranked_count.toLocaleString()}) earn {asPct(paretoCheck.revenue_share)} of
+                the top {asPct(paretoCheck.top_fraction, 0)} of {rowNoun.many} ({paretoCheck.top_count.toLocaleString()} of the{' '}
+                {paretoCheck.ranked_count.toLocaleString()} ranked) earn {asPct(paretoCheck.revenue_share)} of
                 {classificationPeriod ? ` ${formatMonth(classificationPeriod)}` : ''} revenue —{' '}
                 {paretoCheck.passes ? 'inside' : 'outside'} the {asPct(paretoCheck.band_low, 0)}–{asPct(paretoCheck.band_high, 0)} range
                 a valid classification should fall in.
@@ -956,6 +1114,16 @@ const ABCClassification = () => {
                     <h3 className="abc-pareto-title">
                       {`${panel.label ? `${panel.label} — ` : ''}${lpHidden ? 'Stock status' : 'Cover vs target stock'}, by class`}
                     </h3>
+                    <SectionLede>Which classes have too much or too little stock</SectionLede>
+                    {/* The period line (2026-10-03): when the stock was
+                        counted and which plan the target stock is from, so
+                        no status here reads as "now". */}
+                    {stockBasisText && (
+                      <p className="abc-pareto-period">
+                        {stockBasisText}. Bars: % of each class&apos;s {rowNoun.many}.
+                        {otherCountNote && <> {otherCountNote}</>}
+                      </p>
+                    )}
                     <p className="abc-pareto-subtitle">
                       {isDelMonte ? (
                         <>
@@ -969,11 +1137,12 @@ const ABCClassification = () => {
                         </>
                       ) : (
                         <>
-                          Compares each SKU&apos;s current stock, in pieces, with its own target stock from the LP&apos;s
-                          current planning cycle. The plan covers only Class A SKUs whose forecast passed the
-                          accuracy check; every other SKU shows No target stock, and the ? beside it says why.
-                          Not the warehouse&apos;s Active/Inactive flag, which is what the Dashboard&apos;s
-                          warehouse-status chart shows.
+                          Each SKU&apos;s stock, in pieces, against its own target stock from the LP&apos;s current plan.
+                          <InfoTip label="What this measures">
+                            The plan covers only Class A SKUs whose forecast passed the accuracy check; every other SKU
+                            shows No target stock, and the ? beside it says why. Not the warehouse&apos;s Active/Inactive
+                            flag, which is what the Dashboard&apos;s warehouse-status chart shows.
+                          </InfoTip>
                         </>
                       )}
                     </p>
@@ -1014,7 +1183,7 @@ const ABCClassification = () => {
                 </div>
                 <div className="abc-pareto-chart-wrapper">
                   <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={panel.classAggregates} margin={{ top: 10, right: 20, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+                    <BarChart data={panel.classAggregates} margin={{ top: 10, right: 20, left: 8, bottom: 0 }} barCategoryGap="30%" barGap={4}>
                       {/* Colorblind safety: CRITICAL and IN STOCK sit right next
                           to each other in this stack, and red/green is the one
                           hue pair ~8% of men (red-green deficiency) can't
@@ -1042,8 +1211,17 @@ const ABCClassification = () => {
                         axisLine={{ stroke: CHART_COLORS.gridline }}
                         tickLine={{ stroke: CHART_COLORS.gridline }}
                         tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                        label={{
+                          value: `% of the class's ${rowNoun.many}`,
+                          angle: -90,
+                          position: 'insideLeft',
+                          style: { textAnchor: 'middle', fill: CHART_COLORS.axisLabel, fontSize: 11 },
+                        }}
                       />
-                      <Tooltip content={<ClassAggregateTooltip lpHidden={lpHidden} />} cursor={{ fill: '#f7fafc' }} />
+                      <Tooltip
+                        content={<ClassAggregateTooltip lpHidden={lpHidden} periodLabel={periodLabel} unit={rowNoun.unit} />}
+                        cursor={{ fill: '#f7fafc' }}
+                      />
                       {/* Was a two-bar-per-class combo: this stock-status stack
                           next to a separate solid "revenue share" bar on the
                           SAME 0-100% axis. Dropped the revenue-share bar
@@ -1060,33 +1238,33 @@ const ABCClassification = () => {
                           status segment is on top. Each stacked segment is
                           clickable and outlines the whole column for
                           whichever class is selected. */}
-                      <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={28} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="noDataPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO DATA']} barSize={44} {...chartAnim(0)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="noRopPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO ROP']} barSize={28} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="noRopPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['NO ROP']} barSize={44} {...chartAnim(1)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={28} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="criticalPct" stackId="stockMix" fill={wantsTexture ? "url(#criticalHatch)" : STOCK_STATUS_COLORS.CRITICAL} barSize={44} {...chartAnim(2)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={28} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="lowPct" stackId="stockMix" fill={STOCK_STATUS_COLORS.LOW} barSize={44} {...chartAnim(3)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
-                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(4)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="inStockPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['IN STOCK']} radius={[4, 4, 0, 0]} barSize={44} {...chartAnim(4)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
                       </Bar>
                       {/* Zero, so invisible, unless the account lacks lp.view. */}
-                      <Bar dataKey="onHandPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['ON HAND']} radius={[4, 4, 0, 0]} barSize={28} {...chartAnim(5)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
+                      <Bar dataKey="onHandPct" stackId="stockMix" fill={STOCK_STATUS_COLORS['ON HAND']} radius={[4, 4, 0, 0]} barSize={44} {...chartAnim(5)} onClick={(data) => setSelectedClass(data.payload?.cat ?? data.cat)} style={{ cursor: 'pointer' }}>
                         {panel.classAggregates.map((entry) => (
                           <Cell key={entry.cat} stroke={entry.cat === selectedClass ? '#1a202c' : '#fff'} strokeWidth={2} />
                         ))}
@@ -1117,16 +1295,19 @@ const ABCClassification = () => {
                   <h3 className="abc-pareto-title">
                     {`${panel.label ? `${panel.label} — ` : ''}Drill-down · Class ${selectedClass} ${lpHidden ? 'stock status' : 'cover vs target stock'}`}
                   </h3>
+                  <SectionLede>Where the stock problems sit within a class</SectionLede>
                 </div>
+                {stockBasisText && <p className="abc-pareto-period">{stockBasisText}.</p>}
                 {/* Tab buttons — same class-switching as clicking the chart,
                     but explicit/tappable for touch and keyboard users. */}
-                <div className="abc-drilldown-tabs" role="tablist" aria-label="Select ABC class to drill into">
+                <div className="segmented abc-drilldown-tabs" role="tablist" aria-label="Select ABC class to drill into">
                   {['A', 'B', 'C'].map((cat) => (
                     <button
                       key={cat}
+                      type="button"
                       role="tab"
                       aria-selected={selectedClass === cat}
-                      className={`abc-drilldown-tab abc-drilldown-tab-${cat.toLowerCase()} ${selectedClass === cat ? 'active' : ''}`}
+                      className={`segmented-item${selectedClass === cat ? ' is-active' : ''}`}
                       onClick={() => setSelectedClass(cat)}
                     >
                       Class {cat}
@@ -1138,7 +1319,7 @@ const ABCClassification = () => {
                     <tr>
                       <th>Status</th>
                       <th className="table-num">{rowNoun.count}</th>
-                      <th className="table-num">% of Class {selectedClass}</th>
+                      <th className="table-num">% of Class {selectedClass} {rowNoun.many}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1192,8 +1373,15 @@ const ABCClassification = () => {
               fsnOf={fsnOf}
               rules={fsn.rules}
               loaded={fsnLoaded}
+              windowText={fsnWindowText && fsnWindowMonths
+                ? `${fsnWindowText} (${fsnWindowMonths} months with data)`
+                : fsnWindowText}
+              periodLabel={periodLabel}
+              unit={rowNoun.unit}
             />
           </div>
+
+          {tableLegend}
 
           {/* Searchable Combobox & Filters Bar */}
           <div className="abc-filters-row">
@@ -1203,7 +1391,7 @@ const ABCClassification = () => {
                 <Search className="abc-search-icon" size={16} />
                 <input
                   type="text"
-                  placeholder={isDelMonte ? 'Search by category or name...' : 'Search by product name, SKU, or brand...'}
+                  placeholder={isDelMonte ? 'Search by category name...' : 'Search by product name, SKU code, or brand...'}
                   value={searchQuery}
                   onFocus={() => setIsComboboxOpen(true)}
                   onChange={(e) => {
@@ -1236,13 +1424,12 @@ const ABCClassification = () => {
                             onClick={() => handleSelectSuggestion(item)}
                           >
                             <div className="abc-row-middle">
-                              <span className="abc-row-product">{item.product}</span>
-                              <span className="abc-row-codeline">
-                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
-                              <span className="abc-row-brand">{item.brand}</span>
-                              </span>
+                              <ProductName name={item.product} code={codeOf(item)} className="abc-row-product" />
+                            </div>
+                            <div className="abc-row-left">
+                              {item.brand && <span className="abc-row-brand">{item.brand}</span>}
                               <span className="abc-row-rev">
-                                {item.revPct.toFixed(1)}% of {item.isCurrent ? '' : `${formatMonth(item.catPeriod)} `}revenue
+                                {item.revPct.toFixed(1)}% of {formatMonth(item.isCurrent ? classificationPeriod : item.catPeriod)} revenue
                               </span>
                             </div>
                             <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
@@ -1268,12 +1455,13 @@ const ABCClassification = () => {
                               onClick={() => handleSelectSuggestion(item)}
                             >
                               <div className="abc-row-middle">
-                                <span className="abc-row-product">{item.product}</span>
-                                <span className="abc-row-codeline">
-                                <span className="abc-row-sku">{formatSKU(item.sku)}</span>
-                                <span className="abc-row-brand">{item.brand}</span>
-                                </span>
+                                <ProductName name={item.product} code={codeOf(item)} className="abc-row-product" />
                               </div>
+                              {item.brand && (
+                                <div className="abc-row-left">
+                                  <span className="abc-row-brand">{item.brand}</span>
+                                </div>
+                              )}
                               <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
                             </div>
                           ))}
@@ -1291,13 +1479,12 @@ const ABCClassification = () => {
                             onClick={() => handleSelectSuggestion(item)}
                           >
                             <div className="abc-row-middle">
-                              <span className="abc-row-product">{item.product}</span>
-                              <span className="abc-row-codeline">
-                              <span className="abc-row-sku">{formatSKU(item.sku)}</span>
-                              <span className="abc-row-brand">{item.brand}</span>
-                              </span>
+                              <ProductName name={item.product} code={codeOf(item)} className="abc-row-product" />
+                            </div>
+                            <div className="abc-row-left">
+                              {item.brand && <span className="abc-row-brand">{item.brand}</span>}
                               <span className="abc-row-rev">
-                                {item.revPct.toFixed(1)}% of {item.isCurrent ? '' : `${formatMonth(item.catPeriod)} `}revenue
+                                {item.revPct.toFixed(1)}% of {formatMonth(item.isCurrent ? classificationPeriod : item.catPeriod)} revenue
                               </span>
                             </div>
                             <span className={getCatBadgeClass(item.cat)}>{item.cat}</span>
@@ -1327,14 +1514,14 @@ const ABCClassification = () => {
               <div className="abc-filter-select-wrapper">
                 <span className="abc-filter-icon-label"><Activity size={12} /> Movement:</span>
                 <select value={fsnFilter} onChange={(e) => setFsnFilter(e.target.value)} disabled={!fsnLoaded}>
-                  <option value="ALL">All (FSN)</option>
+                  <option value="ALL">All</option>
                   <option value="F">Fast-moving</option>
                   <option value="S">Slow-moving</option>
                   <option value="N">Non-moving</option>
                 </select>
               </div>
 
-              <div className="abc-cat-toggle-group">
+              <div className="abc-cat-toggle-group" ref={classTableRef}>
                 {['ALL', 'A', 'B', 'C'].map(cat => (
                   <button
                     key={cat}
@@ -1421,17 +1608,30 @@ const ABCClassification = () => {
           )}
 
           {/* Table */}
+          <SectionLede className="is-standalone">Every product, ranked by sales value</SectionLede>
           <div className="data-table-card">
             <table className="data-table abc-table">
               <thead>
                 <tr>
                   <th className="table-num col-fit">#</th>
-                  <th className="col-text col-product">Product / {rowNoun.header}</th>
+                  <th className="col-text col-product">{rowNoun.header}</th>
                   <th className="col-fit">Brand</th>
                   <th className="table-center col-fit">Class</th>
-                  <th className="table-center col-fit" title="Fast / Slow / Non-moving over the 12 months with data up to this run">FSN</th>
-                  <th className="table-num col-fit" title={`Share of revenue in the run the ${rowNoun.one} was classified in`}>Rev %</th>
-                  <th className="col-fit" title="Current stock, in pieces, against the LP's target stock for the SKU">Cover vs target</th>
+                  <th className="table-center col-fit" title={`Fast / Slow / Non-moving over ${fsnWindowText || 'the 12 months with data up to this run'}`}>
+                    Movement
+                    {fsnWindowText && <span className="abc-th-sub">{fsnWindowText}</span>}
+                  </th>
+                  {/* A carried-forward row's share is of its own month's
+                      revenue, named under its value; the header names the
+                      run's month, which every other row's share is of. */}
+                  <th className="table-num col-fit" title={`Share of revenue in the run the ${rowNoun.one} was classified in`}>
+                    Revenue share (%)
+                    {periodLabel && <span className="abc-th-sub">of {periodLabel} revenue</span>}
+                  </th>
+                  <th className="col-fit" title="Stock, in pieces, against the LP's target stock for the SKU">
+                    {lpHidden ? 'Stock status' : 'Cover vs target'}
+                    {coverHeaderText && <span className="abc-th-sub">{coverHeaderText}</span>}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1443,14 +1643,12 @@ const ABCClassification = () => {
                   >
                     <td className="cell-rownum table-num">{(safeCurrentPage - 1) * pageSize + index + 1}</td>
                     <td className="cell-product">
-                      {/* Product name first, its code beneath. A Del Monte row
-                          is a category whose code IS its name, so it shows once. */}
-                      {item.product && item.product !== '—' ? (
-                        <>
-                          {item.product}
-                          <span className="cell-product-sku">{formatSKU(item.sku)}</span>
-                        </>
-                      ) : formatSKU(item.sku)}
+                      <ProductName
+                        name={item.product}
+                        code={codeOf(item)}
+                        onOpen={openForecast(item)}
+                        openLabel="Open the sales history and forecast for"
+                      />
                     </td>
                     <td className={item.brand ? 'cell-muted' : 'cell-empty'}>{item.brand || '—'}</td>
                     <td className="table-center" title={catTitle(item)}>
@@ -1458,7 +1656,7 @@ const ABCClassification = () => {
                           stay in one straight column whether or not a row is
                           near a tier boundary. */}
                       <span className="abc-cat-cell-inner">
-                        <span className={`${getCatBadgeClass(item.cat)}${item.isCurrent ? '' : ' abc-cat-stale'}`}>{item.cat}</span>
+                        <ClassBadge tier={item.cat} faded={!item.isCurrent} />
                         {item.isStale && <span className="tier-chip-stale">stale</span>}
                         <span className="abc-boundary-slot">
                           {item.nearBoundary && (
@@ -1477,7 +1675,7 @@ const ABCClassification = () => {
                       {(() => {
                         const f = fsnOf(item);
                         return f
-                          ? <span className={`fsn-badge fsn-${f.fsn}`} title={fsnTitle(f)}>{f.fsn}</span>
+                          ? <span className={`fsn-badge fsn-${f.fsn}`} title={fsnTitle(f)}>{FSN_LABEL[f.fsn] ?? f.fsn}</span>
                           : <span className="fsn-badge fsn-pending" title="Loading movement class">…</span>;
                       })()}
                     </td>
@@ -1498,7 +1696,7 @@ const ABCClassification = () => {
                           February's Class A read "No target stock" with no
                           why, beside copy saying the LP plans Class A. */}
                       {item.status === 'NO ROP' && item.noTargetReason && (
-                        <InfoTip label={`Why ${formatSKU(item.sku)} has no target stock`}>
+                        <InfoTip label={`Why ${item.product || formatSKU(item.sku)} has no target stock`}>
                           {item.noTargetReason}.
                           {item.noTargetCode === 'accuracy' && (
                             <span className="abc-no-target-tip-foot">{ACCURACY_CHECK_NOTE}</span>

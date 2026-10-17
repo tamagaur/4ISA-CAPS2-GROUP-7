@@ -91,6 +91,7 @@ const noop = () => {};
 // trend minimum.
 const DateFilter = ({
   onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false, realOnly = false,
+  showToday = true,
 }) => {
   const outlet = useOutletContext() || {};
   const years = yearsFrom(
@@ -300,7 +301,7 @@ const DateFilter = ({
         </button>
       )}
 
-      {!isLocal && (
+      {!isLocal && showToday && (
         <button className="date-today-btn" onClick={outlet.handleResetToToday || noop}>
           <Calendar size={14} />
           Today
@@ -349,6 +350,7 @@ const DateFilter = ({
         </span>
       </p>
     )}
+
     </div>
   );
 };

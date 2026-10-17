@@ -44,6 +44,32 @@ from backend.response_cache import cached
 
 router = APIRouter(prefix="/sku", tags=["sku"])
 
+# The day each principal's latest stock count was taken (2026-10-03). The
+# warehouse file is filed under a month (_period) but counted on a day of its
+# own: the Unilever stock the pages called "Mar 2026" was counted on 6 Apr
+# 2026, Del Monte's "Dec 2025" on 1 Dec 2025. The Technical Adviser asked for
+# every stock figure to say when it was counted, so this reads
+# MAX(snapshot_date) from the SAME latest-snapshot-per-principal rows
+# STOCK_AT_LATEST_SQL takes the stock from — one row per principal, joined
+# on principal, so it can't name a different count than the figure beside
+# it. Read-only; GET /abc joins it too.
+STOCK_COUNT_DATE_SQL = """
+    SELECT inv.principal, MAX(inv.snapshot_date) AS count_date
+    FROM inventory_fact_real inv
+    JOIN (
+        SELECT principal, MAX(_period) AS latest_period
+        FROM inventory_fact_real
+        GROUP BY principal
+    ) latest_inv ON latest_inv.principal = inv.principal AND inv._period = latest_inv.latest_period
+    GROUP BY inv.principal
+"""
+
+
+def stock_count_dates(rows) -> dict:
+    """{principal: count date} from rows carrying stock_count_date — one
+    entry per principal present, so an 'all' list states both counts."""
+    return {r["principal"]: r.get("stock_count_date") for r in rows if r.get("stock_count_date") is not None}
+
 # Product_Dimension's own CHECK (migration 0030): a Unilever sku_code is
 # exactly 8 digits. Checked here too so a bad code gets a 400 that says why,
 # not a 500 from the constraint.
@@ -72,9 +98,11 @@ _SELECT_ONE = f"""
         inv.stock_cases AS current_stock_cases,
         rop.rop_i AS reorder_point,
         abc.tier AS tier,
-        abc.classification_period AS tier_period
+        abc.classification_period AS tier_period,
+        stock_count.count_date AS stock_count_date
     FROM product_dimension pd
     LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = pd.product_key
+    LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = pd.principal
     LEFT JOIN (
         SELECT product_key, rop_i
         FROM lp_recommendation
@@ -138,6 +166,7 @@ def _to_item(r) -> SKUItem:
         reorder_point=float(r["reorder_point"]) if r.get("reorder_point") is not None else None,
         tier=r.get("tier"),
         tier_period=r.get("tier_period"),
+        stock_count_date=r.get("stock_count_date"),
     )
 
 
@@ -162,12 +191,16 @@ def get_skus(
     status: str | None = Query(None, description="Filter to 'ACTIVE' or 'DISABLED'. Omit for both."),
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(get_current_user),
+    current_user: TokenPayload = Depends(
+        require_permission("sku.view", "abc.view", "lp.view", "forecast.view")
+    ),
 ) -> SKUListResponse:
-    # Sign-in only, on purpose (Yuan's permissions proposal): the ABC,
-    # Reorder and SKU Forecast pages read product and brand names from here
-    # too, so reading the product catalog needs no page permission. Its one
-    # LP figure, reorder_point, still follows lp.view (below).
+    # Any one of the four pages that read it (was sign-in only, from Yuan's
+    # permissions proposal): the ABC, Reorder and SKU Forecast pages read
+    # product and brand names from here too, so each of their permissions
+    # opens it, but someone with none of them no longer gets the whole
+    # catalog with its stock and classes (2026-10-02). Its one LP figure,
+    # reorder_point, still follows lp.view (below).
     # Both principals again (2026-09-17) — see backend/principals.py.
     # Unlike the ABC/forecast endpoints, Del Monte DOES have real rows
     # here (15,127 sku-grain + 182 category-grain product_dimension rows),
@@ -182,8 +215,9 @@ def get_skus(
     # SKU reported current_stock NULL despite Del Monte inventory existing at
     # 2025-12. Stock now resolves per principal inside the query
     # (STOCK_AT_LATEST_SQL), which is what keeps it right under 'all' too.
+    cycle = current_cycle(db, principal)
     params: dict = {
-        "current_cycle": current_cycle(db, principal),
+        "current_cycle": cycle,
         **abc_period_params(latest_abc_periods(db, principal)),
         **scope_params,
     }
@@ -194,12 +228,18 @@ def get_skus(
 
     rows = db.execute(text(query), params).mappings().all()
     items = [_to_item(r) for r in rows]
-    if not can_see_lp(db, current_user):
+    lp_visible = can_see_lp(db, current_user)
+    if not lp_visible:
         for item in items:
             item.reorder_point = None
-    # Anchor None = the latest run, per principal.
     return SKUListResponse(
-        items=items, count=len(items),
+        items=items,
+        count=len(items),
+        stock_count_dates=stock_count_dates(rows),
+        # The cycle the target stock comes from ("Mar 2026 plan"); an LP
+        # fact, so it follows lp.view like reorder_point.
+        planning_cycle_date=cycle if lp_visible else None,
+        # Anchor None = the latest run, per principal.
         tier_a_periods=tier_a_periods(latest_abc_periods(db, principal)),
     )
 

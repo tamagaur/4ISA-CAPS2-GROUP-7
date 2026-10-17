@@ -5,7 +5,7 @@ DESIGN CONSTRAINT: the Supabase project is on the free plan and was at 4.63 of
 5 GB monthly egress when this was written. Image bytes are never stored in
 Postgres and never served through the API from the database — only this
 module's output (a 128x128 WebP, ~6 KB) ever leaves the server, and it goes to
-Supabase Storage, not a column. avatar_path (migration 0058) holds only the
+Supabase Storage, not a column. avatar_path (migration 0059) holds only the
 resulting object's path.
 
 The re-encode is also what strips EXIF: a phone photo commonly carries GPS

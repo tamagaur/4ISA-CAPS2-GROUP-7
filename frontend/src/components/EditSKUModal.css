@@ -48,8 +48,20 @@
 }
 
 .edit-sku-modal-header.centered-header {
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   padding-bottom: 0.5rem;
+}
+
+/* The product being edited: its name, with the SKU code under it. */
+.edit-sku-modal-product {
+  margin-bottom: 0.35rem;
+}
+
+.centered-header .edit-sku-modal-product {
+  align-items: center;
+  text-align: center;
 }
 
 .edit-sku-modal-title {

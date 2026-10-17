@@ -5,10 +5,10 @@
 }
 
 .audit-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: var(--section-gap);
 }
 
 /* Page Header */
@@ -66,10 +66,12 @@
 }
 
 .audit-section-title {
+  display: inline-flex;
+  align-items: center;
   margin: 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--color-text-heading);
+  font-size: var(--text-section);
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .audit-section-count {
@@ -79,11 +81,11 @@
 }
 
 .audit-section-note {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
+  margin: 0 0 4px;
+  font-size: var(--text-meta);
   line-height: 1.5;
-  color: var(--color-text-subtle);
-  max-width: 70ch;
+  color: var(--color-text-muted);
+  max-width: 80ch;
 }
 
 .audit-section-status {
@@ -98,40 +100,40 @@
 }
 
 /* Table */
+/* The shared table look (index.css .data-table), on this page's own
+   classes so its stacked layout keeps working. */
 .audit-table-wrapper {
   background-color: var(--color-surface);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
 }
 
 .audit-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
 }
 
-.audit-table thead {
-  border-bottom: 2px solid var(--color-surface-muted);
-}
-
-.audit-table th {
+.audit-table thead th {
+  background-color: #FAFAF9;
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
-  padding: 0.9rem 1.25rem;
-  font-size: 0.72rem;
+  padding: 10px 16px;
+  font-size: var(--text-micro);
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   color: var(--color-text-subtle);
   white-space: nowrap;
-  vertical-align: middle;
+  vertical-align: bottom;
   text-transform: uppercase;
 }
 
 .audit-table tbody tr {
-  border-bottom: 1px solid var(--color-surface-raised);
-  transition: background-color 0.15s;
+  border-bottom: 1px solid #EEF0F2;
+  transition: background-color 0.12s;
 }
 
 .audit-table tbody tr:last-child {
@@ -139,14 +141,58 @@
 }
 
 .audit-table tbody tr:hover {
-  background-color: var(--color-surface-raised);
+  background-color: #F6F5F1;
 }
 
 .audit-table td {
-  padding: 0.9rem 1.25rem;
+  padding: 12px 16px;
   color: var(--color-text-body);
   vertical-align: middle;
   line-height: 1.45;
+}
+
+/* The changes list's controls. */
+.audit-filter-bar {
+  margin-bottom: 0;
+}
+
+.audit-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.audit-filter select {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text);
+  outline: none;
+  cursor: pointer;
+}
+
+.audit-filter-count {
+  flex: 1 1 auto;
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+.audit-details-toggle {
+  font-size: inherit;
 }
 
 /* User cell: avatar, name, and the email beneath it */
@@ -326,4 +372,15 @@
   .audit-page-title .page-title-accent {
     font-size: 1.7rem;
   }
+}
+
+/* Initials in ink on the neutral avatar tile (the tile used to be a strong
+   colour with white initials). */
+.audit-user-info .audit-avatar {
+  color: var(--color-text-body);
+}
+
+.audit-filter select {
+  max-width: 220px;
+  text-overflow: ellipsis;
 }

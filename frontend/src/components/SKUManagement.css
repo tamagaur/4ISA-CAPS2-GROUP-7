@@ -5,10 +5,10 @@
 }
 
 .sku-content {
-  padding: 0 3rem 3rem 3rem;
+  padding: 0 var(--page-padding-x) 48px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
 /* Page Header */
@@ -64,15 +64,17 @@
 .sku-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  gap: var(--card-gap);
 }
 
+/* Kept for the pages that still use the old card class; the summary row
+   itself is KPICard now. */
 .sku-summary-card {
   background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 1.5rem 2rem;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08), 0 6px 6px rgba(0, 0, 0, 0.04);
-  border-top: 3px solid transparent;
+  border-radius: var(--radius-card);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
 }
 
 .summary-total {
@@ -119,6 +121,24 @@
   color: var(--color-text);
 }
 
+/* What the card's count counts ("SKUs"), beside the number. */
+.summary-unit {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-subtle);
+}
+
+/* Period under a table header label ("counted Apr 6, 2026", "Mar 2026
+   plan"). The header row is uppercase and spaced; this reads as text. */
+.sku-th-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .sku-grain-note {
   margin: -0.5rem 0 0 0;
   padding: 0.6rem 0.9rem;
@@ -159,10 +179,11 @@
 
 .sku-search-input {
   width: 100%;
-  padding: 0.6rem 2.2rem 0.6rem 2.4rem;
+  height: 38px;
+  padding: 0 2.2rem 0 2.4rem;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  font-size: 0.85rem;
+  border-radius: 9px;
+  font-size: 13px;
   color: var(--color-text);
   background-color: var(--color-surface);
   outline: none;
@@ -245,17 +266,13 @@
   background-color: var(--color-surface-raised);
 }
 
+/* The brand, after the name (name first, 2026-10-03). */
 .sku-row-left {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   min-width: 95px;
-}
-
-.sku-row-code {
-  font-size: 0.8rem;
-  font-weight: 700;
-  font-family: monospace;
-  color: var(--color-info-alt);
+  text-align: right;
 }
 
 .sku-row-brand {
@@ -270,10 +287,16 @@
   overflow: hidden;
 }
 
+/* A ProductName (name, SKU code under it), each part cut to one line so a
+   long name never pushes the class badge off the row. */
 .sku-row-product {
   font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-slate-800);
+  max-width: 100%;
+}
+
+.sku-row-product .product-name-title,
+.sku-row-product .product-name-code {
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -337,9 +360,10 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  height: 38px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 0 0.6rem;
   transition: border-color 0.2s;
 }

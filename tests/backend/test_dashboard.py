@@ -23,7 +23,7 @@ import datetime
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import auth_utils
+from backend import auth_utils, marts
 from backend.deps import get_current_user, get_db
 from backend.main import app
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, _last_12_periods
@@ -128,6 +128,10 @@ class FakeSession:
         # DEC-31 derived Unilever receipts: None = no derived_receipt_fact table
         # (public before migration 0038); a dict = the table, {period: (value, negative_skus, skus)}.
         derived: dict | None = None,
+        # Inventory_Fact_Real.snapshot_date per _period (_stock_count_dates):
+        # {period: date} for one count day, or {period: (first, last)} for a
+        # period whose rows in scope were counted on two different days.
+        count_dates: dict | None = None,
         # backend/stock_units.STOCK_COUNTS_SQL: {(principal, period): (row_count,
         # first_date, last_date)}. Empty = no principal counted at any period.
         stock_counts: dict | None = None,
@@ -208,6 +212,7 @@ class FakeSession:
         self.abc_product_revenue = abc_product_revenue or {}
         self.received_tax = received_tax or {}
         self.derived = derived
+        self.count_dates = count_dates or {}
         # Every (sql, params) issued, so a test can assert on the query text
         # itself — the only way to check scope/unit handling that lives in
         # SQL rather than in Python (see this module's docstring).
@@ -1196,7 +1201,34 @@ def test_safety_stock_exposure_blocked_when_nothing_measurable():
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
     exp = resp.json()["safety_stock_exposure"]
     assert exp["below_count"] is None
+    assert exp["below_items"] == []
     assert exp["blocked_reason"]
+
+
+def test_safety_stock_exposure_lists_the_products_behind_the_count():
+    """The list a reader opens from "N below safety stock" is the rows the
+    count was taken from: most revenue first, named, with the shortfall in
+    pieces — and never a product that is at or above its safety stock, or
+    one with no stock count (2026-10-03)."""
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.10, current_stock=10, ss_i=50),    # below, smaller share
+        _abc_row(2, "A", "2024-02", 0.30, current_stock=0, ss_i=40.5),   # below, biggest share
+        _abc_row(3, "A", "2024-02", 0.20, current_stock=80, ss_i=50),    # at/above
+        _abc_row(4, "A", "2024-02", 0.25, current_stock=None, ss_i=50),  # not measurable
+    ]
+    rows[1].update(rop_i=120.0, q_i=300.0)
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    items = exp["below_items"]
+    assert len(items) == exp["below_count"] == 2
+    assert [i["sku_id"] for i in items] == ["SKU2", "SKU1"]
+    assert items[0] == {
+        "sku_id": "SKU2", "product_name": "Product 2", "current_stock": 0.0, "ss_i": 40.5,
+        "short_by": 40.5, "target_stock": 120.0, "order_qty": 300.0, "revenue_share": 0.30,
+    }
+    assert items[1]["short_by"] == 40.0 and items[1]["order_qty"] is None
 
 
 def test_policy_comparison_sums_lp_ss_against_three_week_rule():
@@ -1521,7 +1553,7 @@ def test_portfolio_forecast_insight_compares_forecast_with_last_actual():
         pf = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["portfolio_forecast"]
     assert pf["mase_gate"] == 1.0
     # 150 forecast vs 120 actual = +25%
-    assert pf["insight"]["text"] == "The Mar 2024 forecast is 150 pieces — 25.0% above the 120 sold in Feb 2024."
+    assert pf["insight"]["text"] == "The Mar 2024 forecast is 150 pieces — 25.0% above the 120 pieces sold in Feb 2024."
     assert pf["insight"]["forecast_period"] == "2024-03"
 
 
@@ -1667,7 +1699,8 @@ def test_allocation_and_combined_pesos_are_withheld_under_all_principals():
     # One shape whatever the state: withheld keys are present and null.
     assert set(body["allocation"]) == {
         "basis_year", "basis_sales", "basis_months", "latest_month", "ytd_sales",
-        "ytd_months", "levels", "vat_basis", "blocked_reason",
+        "ytd_months", "prior_ytd_sales", "prior_ytd_months", "latest_sales", "trend",
+        "levels", "vat_basis", "blocked_reason",
         "planning_month", "allocation_year", "unit", "default_pct",
     }
     assert body["allocation"]["levels"] == [] and body["allocation"]["basis_sales"] is None
@@ -1690,9 +1723,44 @@ def test_allocation_basis_is_the_year_before_the_planning_month():
     assert (a["planning_month"], a["allocation_year"], a["basis_year"]) == ("2026-01", 2026, 2025)
     assert a["basis_sales"] == pytest.approx(12_000.0) and a["basis_months"] == 12
     assert a["ytd_months"] == 0 and a["ytd_sales"] is None
+    assert a["prior_ytd_months"] == 0 and a["prior_ytd_sales"] is None
     assert a["unit"] == "pesos" and a["default_pct"] == 103
     assert [level["pct"] for level in a["levels"]] == [103, 105, 108]
     assert a["levels"][0]["monthly"] == pytest.approx(12_000.0 * 1.03 / 12)
+
+
+@pytest.mark.parametrize("query", [
+    "",                                         # the default range
+    "&start_period=2025-01&period=2025-06",     # a range ending mid-year
+    "&start_period=2023-01&period=2025-12",     # a three-year range
+])
+def test_allocation_does_not_follow_the_date_range(query):
+    """Since 2026-10-09 (reversing 0a0756f) the allocation is the year being
+    planned, with ONE previous year as its basis, whatever the range: 2026's
+    allocation from 2025's sales, 2026's sales so far (Jan-Feb), and the same
+    months of 2025 for the year-over-year."""
+    sales = {
+        **{f"2023-{m:02d}": 90.0 for m in range(1, 13)},
+        **{f"2024-{m:02d}": 100.0 for m in range(1, 13)},
+        **{f"2025-{m:02d}": 110.0 for m in range(1, 13)},
+        "2026-01": 120.0, "2026-02": 130.0,
+    }
+    session = FakeSession(latest_sales_period="2026-02", sales=sales)
+    with make_client(session) as c:
+        a = c.get(
+            f"/dashboard?principal=unilever{query}",
+            headers={"Authorization": f"Bearer {user_token()}"},
+        ).json()["allocation"]
+    assert a["blocked_reason"] is None
+    assert (a["allocation_year"], a["basis_year"], a["latest_month"]) == (2026, 2025, "2026-02")
+    assert a["basis_sales"] == pytest.approx(1_320.0) and a["basis_months"] == 12
+    assert a["ytd_months"] == 2 and a["ytd_sales"] == pytest.approx(250.0)
+    assert a["prior_ytd_months"] == 2 and a["prior_ytd_sales"] == pytest.approx(220.0)
+    # The latest month is the latest with sales, not the range's last month,
+    # with the 12 months up to it (Mar 2025 - Feb 2026).
+    assert a["latest_sales"] == pytest.approx(130.0)
+    assert [p["period"] for p in a["trend"]["points"]][0] == "2025-03"
+    assert a["trend"]["prev_period"] == "2026-01"
 
 
 def test_allocation_is_withheld_when_the_prior_year_nets_to_zero():
@@ -1821,7 +1889,7 @@ def test_stock_card_compares_with_the_last_count_not_flagged_as_unusual():
     text = _get(session, "principal=unilever&period=2026-02&start_period=2025-03")["sales_vs_stock_insight"]["text"]
     assert "stood at ₱24.3M in Jan 2026" in text
     assert "₱46.6M" not in text
-    assert "Feb 2026's count is marked as unusual" in text
+    assert "Feb 2026's count needs checking" in text
 
 
 def test_kpi_trend_gives_no_delta_from_an_unusual_latest_month():
@@ -1918,7 +1986,39 @@ def test_abc_class_shares_and_revenue_come_from_the_products_own_revenue():
     assert body["abc_revenue"]["ranked_total"] == pytest.approx(10_000.0)
 
 
-def test_abc_ranking_reads_real_rows_only():
+@pytest.fixture
+def real_rows_only(monkeypatch):
+    """marts.COUNT_FILLED_AND_GENERATED off: the rule before 2026-10-11, kept
+    tested so it can be switched back on a decision."""
+    monkeypatch.setattr(marts, "COUNT_FILLED_AND_GENERATED", False)
+
+
+def test_complete_months_switch_is_off_since_the_demo_rule():
+    """The 2026-10-11 COMPLETE MONTHS switch (a month with no file showed its
+    filled or generated figure as sales) is off since 2026-10-15: those sales
+    rows are retired for display and schema demo is the only display source for
+    generated data (CLAUDE.md hard rule 2, docs/DEMO_DATA.md). A month with no
+    real sales is a gap again, and nothing is marked synthetic."""
+    assert marts.COUNT_FILLED_AND_GENERATED is False
+    periods = _periods()
+    session = FakeSession(
+        sales={periods[-1]: 500.0},
+        estimated_sales={"unilever": {periods[-2]: ("generated", 450.0), periods[-1]: ("filled", 999.0)}},
+    )
+    body = _get(session, "principal=unilever")
+    pts = {pt["period"]: pt for pt in body["sales_vs_stock"]}
+    assert pts[periods[-2]]["sales"] is None
+    assert pts[periods[-1]]["sales"] == 500.0 and pts[periods[-1]]["provenance"]["sales"] == "real"
+    total = body["kpis"]["sales_cumulative"]
+    assert total["value"] == 500.0 and total["months_with_data"] == 1
+    assert total["synthetic_months"] == []
+
+    sql, _ = _sql_for(session, "WITH rev AS")
+    assert "'filled', 'generated'" not in sql
+    assert marts._kinds("real", {"data_kind": "generated", "period": "2026-02"}, "2026-02") is False
+
+
+def test_abc_ranking_reads_real_rows_only(real_rows_only):
     """KPIs, the Pareto and accuracy read data_kind = 'real' (preview adds
     Unilever's placeholder months): a filled or generated row never ranks."""
     session = FakeSession(range_revenue={"unilever": {1: 10.0}})
@@ -2090,3 +2190,120 @@ def test_a_flagged_count_without_a_ruling_gives_its_reviewed_reason():
     assert note == ("Counted for Feb 2023 (exact date not recorded): "
                     + UNUSUAL_STOCK_SNAPSHOTS[("delmonte", "2023-02")])
     assert flagged_count_note("unilever", "2026-01", 24_339_386.24, [46_576_778.51], "2026-02-03") is None
+
+
+# ---- stock count dates (2026-10-02) -------------------------------------------
+# The Technical Adviser's rule: every number states its period. A stock
+# snapshot's _period is not the day it was counted — Unilever's "2026-03" is
+# the 2026-04-06 count — so GET /dashboard exposes the count day, read-only.
+
+def test_insight_sentence_names_inventory_at_cost_and_its_count_day():
+    from backend.chart_insights import sales_vs_stock_insight
+
+    series = [
+        {"period": "2026-01", "sales": 30_000_000.0, "stock_on_hand": 24_339_386.24, "stock_count_date": "2026-02-03"},
+        {"period": "2026-02", "sales": 27_900_000.0, "stock_on_hand": None, "stock_count_date": None},
+    ]
+    text = sales_vs_stock_insight(series)["text"]
+    assert "inventory at last purchase price stood at ₱24.3M in Jan 2026 (counted Feb 3, 2026)" in text
+    # Without a count day the month alone is stated, never a raw string.
+    series[0]["stock_count_date"] = None
+    text = sales_vs_stock_insight(series)["text"]
+    assert "stood at ₱24.3M in Jan 2026." in text and "counted" not in text
+
+
+def test_day_label():
+    from backend.chart_insights import day_label
+
+    assert day_label("2026-04-06") == "Apr 6, 2026"
+    assert day_label(None) is None
+    assert day_label("not a date") is None
+
+
+# ---- annual_sales (2026-10-12): the Annual View card's bars ---------------------
+# One bar per calendar year = the sum of that year's months, from the same
+# per-month sales every other peso figure on the page reads.
+
+def test_annual_sales_totals_each_year_and_agrees_with_the_allocation_card():
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 13)}
+    sales.update({f"2024-{m:02d}": 50.0 for m in (3, 4, 5)})
+    sales.update({"2026-01": 110.0, "2026-02": 120.0})
+    body = _get(FakeSession(latest_sales_period="2026-02", sales=sales), "principal=unilever")
+    annual = body["annual_sales"]
+    assert annual["blocked_reason"] is None and annual["window_years"] == 5
+    years = {y["year"]: y for y in annual["years"]}
+    assert list(years) == [2022, 2023, 2024, 2025, 2026]
+    # A year with nothing on record is null with 0 months, never 0 pesos.
+    assert years[2022]["sales"] is None and years[2022]["months"] == 0
+    assert years[2022]["first_month"] is None and years[2022]["synthetic_months"] == []
+    # A part year is the sum of the months it has: no scaling up to 12.
+    assert years[2024]["sales"] == pytest.approx(150.0) and years[2024]["months"] == 3
+    assert (years[2024]["first_month"], years[2024]["last_month"]) == ("2024-03", "2024-05")
+    assert years[2026]["sales"] == pytest.approx(230.0) and years[2026]["months"] == 2
+    assert (years[2026]["first_month"], years[2026]["last_month"]) == ("2026-01", "2026-02")
+    # The bars and the allocation card are the same sums.
+    assert years[2025]["sales"] == body["allocation"]["basis_sales"] == pytest.approx(1200.0)
+    assert years[2026]["sales"] == body["allocation"]["ytd_sales"]
+    assert annual["earlier_years"] == []
+
+
+@pytest.mark.parametrize("query", ["principal=unilever", "principal=unilever&start_period=2025-06&period=2025-09"])
+def test_annual_sales_does_not_follow_the_date_range(query):
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 13)}
+    sales.update({"2026-01": 110.0})
+    annual = _get(FakeSession(latest_sales_period="2026-01", sales=sales), query)["annual_sales"]
+    assert [(y["year"], y["sales"], y["months"]) for y in annual["years"][-2:]] == [(2025, 1200.0, 12), (2026, 110.0, 1)]
+
+
+def test_annual_sales_counts_real_months_only_since_the_demo_rule():
+    """Since 2026-10-15 the filled and generated sales rows are retired for
+    display (marts.COUNT_FILLED_AND_GENERATED off): a year is the sum of its
+    real months, and a year with only generated rows has no sales, not a
+    synthetic total."""
+    sales = {f"2025-{m:02d}": 100.0 for m in range(1, 11)}
+    generated = {f"2020-{m:02d}": ("generated", 10.0) for m in range(1, 13)}
+    generated.update({"2025-11": ("generated", 40.0), "2025-12": ("filled", 60.0),
+                      "2026-01": ("generated", 999.0), "2025-03": ("generated", 999.0)})
+    session = FakeSession(latest_sales_period="2025-10", sales=sales, estimated_sales={"unilever": generated})
+    annual = _get(session, "principal=unilever")["annual_sales"]
+    years = {y["year"]: y for y in annual["years"]}
+    # The window ends at the last year with a real month (2025).
+    assert list(years) == [2021, 2022, 2023, 2024, 2025]
+    assert years[2025]["sales"] == pytest.approx(1000.0)
+    assert years[2025]["months"] == 10 and years[2025]["synthetic_months"] == []
+    # 2020 has generated rows only: no sales, so not an earlier year with sales either.
+    assert years[2021]["sales"] is None and annual["earlier_years"] == []
+
+
+def test_annual_sales_leaves_retired_fills_inside_real_history_out():
+    sales = {"2025-01": 100.0, "2025-04": 100.0}
+    generated = {"2025-02": ("generated", 40.0), "2025-03": ("filled", 60.0)}
+    session = FakeSession(latest_sales_period="2025-04", sales=sales, estimated_sales={"unilever": generated})
+    year = _get(session, "principal=unilever")["annual_sales"]["years"][-1]
+    # Two real months, and "2 of 12 months" on the card: the gap is shown, not filled.
+    assert year["year"] == 2025 and year["sales"] == pytest.approx(200.0) and year["months"] == 2
+    assert year["synthetic_months"] == []
+
+
+def test_annual_sales_real_rows_only(real_rows_only):
+    sales = {"2025-01": 100.0, "2025-04": 100.0}
+    generated = {"2025-02": ("generated", 40.0), "2025-03": ("filled", 60.0)}
+    session = FakeSession(latest_sales_period="2025-04", sales=sales, estimated_sales={"unilever": generated})
+    year = _get(session, "principal=unilever")["annual_sales"]["years"][-1]
+    assert year["sales"] == pytest.approx(200.0) and year["months"] == 2 and year["synthetic_months"] == []
+
+
+def test_annual_sales_under_all_needs_both_principals_in_a_month():
+    """_combine_principal_sums: a month one principal has no figure for is not
+    summed as if it were the whole portfolio, so the year says fewer months."""
+    session = FakeSession(latest_sales_period="2025-03", sales={"2025-01": 100.0, "2025-02": 100.0, "2025-03": 100.0})
+    session.delmonte_latest_sales_period = "2025-02"
+    session.delmonte_sales = {"2025-01": 10.0, "2025-02": 20.0}
+    year = _get(session, "principal=all")["annual_sales"]["years"][-1]
+    assert year["year"] == 2025 and year["sales"] == pytest.approx(230.0) and year["months"] == 2
+    assert (year["first_month"], year["last_month"]) == ("2025-01", "2025-02")
+
+
+def test_annual_sales_is_blocked_with_a_reason_when_there_are_no_sales():
+    annual = _get(FakeSession(latest_sales_period=None), "principal=unilever")["annual_sales"]
+    assert annual["years"] == [] and "No " in annual["blocked_reason"]

@@ -280,3 +280,24 @@
   line-height: 1.5;
   margin: 0 0 0.9rem 0;
 }
+
+/* The link from a recommendation to the product's own page (SKU Forecast). */
+.reorder-modal-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-info);
+  cursor: pointer;
+}
+
+.reorder-modal-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

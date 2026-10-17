@@ -35,8 +35,15 @@ class AuditUserSummary(BaseModel):
     longest_session_seconds: float | None = None
     longest_session_started_at: datetime.datetime | None = None
     last_login_at: datetime.datetime | None = None
+    # This user's earliest recorded sign-in (user_session, which includes
+    # the sign-ins backfilled from audit_log) — where login_count starts.
+    first_login_at: datetime.datetime | None = None
 
 
 class AuditUserSummaryResponse(BaseModel):
     items: list[AuditUserSummary]
     count: int
+    # The span every login_count covers: the first and latest recorded
+    # sign-in across all users. None when nobody has signed in.
+    first_login_at: datetime.datetime | None = None
+    last_login_at: datetime.datetime | None = None

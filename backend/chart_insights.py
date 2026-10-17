@@ -36,6 +36,19 @@ def month_label(period: str | None) -> str | None:
         return str(period)
 
 
+def day_label(day: str | None) -> str | None:
+    """'2026-04-06' -> 'Apr 6, 2026' — a stock count's own day, written the
+    way the frontend's shared formatDate() writes every day. None for anything unparseable,
+    so a sentence leaves the day out rather than printing a raw string."""
+    if not day:
+        return None
+    try:
+        year, num, dd = (int(x) for x in str(day)[:10].split("-"))
+        return f"{_MONTHS[num - 1]} {dd}, {year}"
+    except (ValueError, IndexError):
+        return None
+
+
 def compact_pesos(value: float) -> str:
     """₱27.9M / ₱504k / ₱37 — mirrors frontend formatCompactPesos, so a
     figure inside an insight sentence matches the axis tick beside it."""
@@ -162,11 +175,16 @@ def sales_vs_stock_insight(series: list[dict], unusual_stock: dict[str, str] | N
         s = stock_pts[-1]
         passed = [r["period"] for r in all_stock_pts if r["period"] > s["period"]]
         aside = (
-            f" ({' and '.join(month_label(p) for p in passed)}'s count is marked as unusual on the chart)"
+            f" ({' and '.join(month_label(p) for p in passed)}'s count needs checking and is marked on the chart)"
             if passed else ""
         )
+        # Named as what the line measures — inventory value at cost — and,
+        # when known, the day it was counted: "Mar 2026" stock is the count
+        # taken on 6 Apr 2026, and a bare month read as a month-end figure.
+        counted = day_label(s.get("stock_count_date"))
         stock_part = (
-            f"; stock on hand stood at {compact_pesos(s['stock_on_hand'])} in {month_label(s['period'])}{aside}."
+            f"; inventory at last purchase price stood at {compact_pesos(s['stock_on_hand'])} in {month_label(s['period'])}"
+            f"{f' (counted {counted})' if counted else ''}{aside}."
         )
     else:
         stock_part = "."
@@ -205,7 +223,7 @@ def portfolio_forecast_insight(series: list[dict]) -> dict | None:
             direction = "above" if pct > 0 else "below"
             text = (
                 f"The {month_label(target['period'])} forecast is {qty} pieces — "
-                f"{abs(pct)}% {direction} the {round(float(last['actual'])):,d} sold in {month_label(last['period'])}."
+                f"{abs(pct)}% {direction} the {round(float(last['actual'])):,d} pieces sold in {month_label(last['period'])}."
             )
         else:
             text = (

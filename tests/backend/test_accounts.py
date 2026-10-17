@@ -239,6 +239,47 @@ def test_a_signed_out_token_is_refused(client, db):
 # --- invites and one-time links ---------------------------------------------
 
 
+def test_the_invite_email_says_who_sent_it_the_role_and_when_it_expires(client, outbox):
+    token = invite(client, outbox)
+    sent = outbox[-1]
+    assert sent["subject"] == "You're invited to the SSM Decision Support Dashboard"
+    # Plain text and HTML carry the same facts; the link is in both.
+    for part in (sent["body"], sent["html"]):
+        assert f"/set-password#token={token}" in part
+        assert "Admin User invited you" in part
+        assert "Staff" in part
+        assert "Philippine time" in part
+    assert 'src="cid:ssm-dsd-logo"' in sent["html"]
+    assert sent["inline_images"]["ssm-dsd-logo"][:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_the_real_mailer_sends_text_html_and_the_logo_together(monkeypatch):
+    from backend import email_templates
+
+    subject, text, html = email_templates.invite_email(
+        full_name="New <User>", email="new@ssmcapstone.com", link="https://x/set-password#token=abc",
+        valid="48 hours", sign_in_url="https://x/login", invited_by="Admin User", role="staff",
+    )
+    assert "New &lt;User&gt;" in html and "<User>" not in html  # names are escaped
+    captured = {}
+
+    class FakeSMTP:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def starttls(self, **k): pass
+        def login(self, *a): pass
+        def send_message(self, msg, **k): captured["msg"] = msg
+
+    for name in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"):
+        monkeypatch.setenv(name, "587" if name == "SMTP_PORT" else "ssm@example.com")
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    REAL_SEND("new@ssmcapstone.com", subject, text, html=html,
+              inline_images={email_templates.LOGO_CID: email_templates.logo_bytes()})
+    types = [part.get_content_type() for part in captured["msg"].walk()]
+    assert types == ["multipart/alternative", "text/plain", "multipart/related", "text/html", "image/png"]
+
+
 def test_an_invite_link_lets_the_new_user_set_their_own_password(client, db, outbox):
     token = invite(client, outbox)
     info = client.post("/auth/link-info", json={"token": token}).json()

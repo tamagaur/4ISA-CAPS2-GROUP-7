@@ -554,6 +554,26 @@ def test_class_shares_come_from_the_running_total_not_rounded_row_shares():
     assert sum(summary.values()) == pytest.approx(1.0, abs=1e-6)
 
 
+def test_class_shares_are_summed_when_a_class_is_not_one_block_of_the_ranking():
+    """The 12-month Tier A basis sets the class on 12 months while the running
+    total ranks one month, so a Class A row can rank below Class B rows.
+    Differencing the boundaries then credits A with everything above its
+    deepest row (Unilever 2026-02 read A 94.7% / B 0.3%); the rows' own
+    shares are summed instead."""
+    from backend.routers.abc import _summarize, _tier_shares
+    from backend.schemas.abc import ABCItem
+
+    def row(tier, share, cumulative):
+        return ABCItem(sku_id="x", principal="unilever", tier=tier, tier_period="2026-02",
+                       revenue_share=share, cumulative_share=cumulative, stock_status="NO DATA")
+
+    # Ranked by the month's sales: A, B, then an A product that sold little this month, then C.
+    items = [row("A", 0.50, 0.50), row("B", 0.30, 0.80), row("A", 0.15, 0.95), row("C", 0.05, 1.00)]
+    assert _tier_shares(items) is None
+    summary = {t.tier: t.revenue_share_total for t in _summarize(items, {"unilever": "2026-02"})[0]}
+    assert summary == {"A": pytest.approx(0.65), "B": pytest.approx(0.30), "C": pytest.approx(0.05)}
+
+
 def test_lp_mase_gate_matches_the_forecast_gate():
     from analytics.forecasting.baseline import MASE_GATE
     from backend.routers.abc import LP_MASE_GATE
@@ -641,6 +661,42 @@ def test_items_carry_the_no_target_reason_and_the_query_joins_the_pool(monkeypat
     monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
     hidden = _get(CycleFakeSession(_reason_rows(), latest_period="2024-02"), "principal=unilever")["items"]
     assert all(i["no_target_reason"] is None and i["no_target_code"] is None for i in hidden)
+
+
+# ---- every stock figure says when it was counted (2026-10-03) ----
+
+COUNT_DATES = {"unilever": "2026-04-06", "delmonte": "2025-12-01"}
+
+
+class CountDateFakeSession(CycleFakeSession):
+    """Adds each row's principal's stock count date, but only when the row
+    query really joins MAX(snapshot_date) of the latest snapshot by
+    principal — a query that dropped the join gets no date, as live."""
+
+    def execute(self, stmt, params=None):
+        result = super().execute(stmt, params)
+        sql = str(stmt)
+        if "FROM abc_classification ac" in sql and "MAX(inv.snapshot_date) AS count_date" in sql \
+                and "stock_count.principal = ac.principal" in sql:
+            return FakeResult([{**r, "stock_count_date": COUNT_DATES[r["principal"]]} for r in result.all()])
+        return result
+
+
+def test_response_states_the_stock_count_date_and_plan_cycle(monkeypatch):
+    """The Technical Adviser's rule: a stock figure says when it was counted
+    (Unilever's "Mar 2026" file was counted 6 Apr 2026) and a target stock
+    which plan it comes from."""
+    body = _get(CountDateFakeSession(_reason_rows(), latest_period="2024-02"), "principal=unilever")
+    assert body["stock_count_dates"] == {"unilever": "2026-04-06"}
+    assert body["planning_cycle_date"] == "2026-03-01"
+
+    # The plan cycle is LP information; the count date is not.
+    from backend import permissions
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    hidden = _get(CountDateFakeSession(_reason_rows(), latest_period="2024-02"), "principal=unilever")
+    assert hidden["planning_cycle_date"] is None
+    assert hidden["stock_count_dates"] == {"unilever": "2026-04-06"}
 
 
 def test_scope_all_reports_each_principals_own_run_and_marks_both_current():

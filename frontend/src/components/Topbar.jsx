@@ -7,6 +7,7 @@ import './Topbar.css';
 
 const Topbar = ({
   toggleSidebar,
+  isSidebarOpen = true,
   rightSlot,
   startMonth,
   startYear,
@@ -29,6 +30,9 @@ const Topbar = ({
   setPrincipal = () => {},
   dataMode = DATA_MODES.REAL,
   onDataModeChange = () => {},
+  // Whether this server has synthetic data to show (DashboardLayout asks GET
+  // /data-mode): false greys the switch out; null while unknown.
+  syntheticAvailable = null,
 }) => {
   const preview = isPreviewMode(dataMode);
   const location = useLocation();
@@ -48,12 +52,23 @@ const Topbar = ({
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <button className="sidebar-toggle-btn" onClick={toggleSidebar} aria-label="Toggle Sidebar">
-          <svg className="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {/* Three lines while the sidebar is open; once it is closed on a
+            desktop the SAN2 logo takes their place, so the brand stays on
+            screen and clicking it brings the sidebar back. Phones and
+            tablets keep the three lines (Topbar.css), where the sidebar
+            starts closed and a logo alone would not read as a menu. */}
+        <button
+          className={`sidebar-toggle-btn${isSidebarOpen ? '' : ' is-sidebar-closed'}`}
+          onClick={toggleSidebar}
+          aria-label={isSidebarOpen ? 'Hide the menu' : 'Show the menu'}
+          aria-expanded={isSidebarOpen}
+        >
+          <svg className="menu-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <line x1="3" y1="12" x2="21" y2="12"></line>
             <line x1="3" y1="6" x2="21" y2="6"></line>
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
+          <img src="/logo-topbar.png" alt="" className="sidebar-toggle-logo" />
         </button>
 
         {/* Date Filter removed and placed in page headers */}
@@ -92,23 +107,29 @@ const Topbar = ({
           </div>
         )}
 
-        {/* Preview mode (src/dataMode.js): adds Unilever's 2021-22
-            placeholder months. Same pages as the principal filter; the
-            banner under this bar says what it changes whenever it is on. */}
+        {/* Real data, or real data plus the labelled synthetic demonstration
+            data (src/dataMode.js; schema demo, CLAUDE.md rule 2), asked for by
+            Kelvin on 2026-10-16. Same pages as the principal filter; the
+            banner under this bar says what it adds whenever it is on. Greyed
+            out while the server has no synthetic data to show, unless it is
+            already on, so it can always be turned off. */}
         {showPrincipalFilter && (
           <button
             type="button"
             role="switch"
             aria-checked={preview}
-            aria-label="5-year preview with 2021–22 placeholder data"
+            aria-label="Include synthetic data"
+            disabled={!preview && syntheticAvailable === false}
             className={`data-mode-toggle${preview ? ' is-on' : ''}`}
             onClick={() => onDataModeChange(preview ? DATA_MODES.REAL : DATA_MODES.PREVIEW)}
             title={preview
-              ? 'On: Jan 2021 – Dec 2022 is placeholder data. Click to go back to real data only.'
-              : 'See the dashboard over five years, with Jan 2021 – Dec 2022 filled by placeholder (synthetic) Unilever data. For viewing only, not for decisions.'}
+              ? 'On: real data plus synthetic data, marked as synthetic on every chart. Click to go back to real data only.'
+              : syntheticAvailable === false
+                ? 'Synthetic data is not switched on for this server.'
+                : "Show SSM's real data plus synthetic (generated) data for the months SSM has no figures for. For viewing only, not for decisions."}
           >
             <FlaskConical size={14} aria-hidden="true" />
-            <span className="data-mode-toggle-label">5-year preview</span>
+            <span className="data-mode-toggle-label">Include synthetic data</span>
             <span className="data-mode-toggle-track" aria-hidden="true"><span className="data-mode-toggle-thumb" /></span>
           </button>
         )}

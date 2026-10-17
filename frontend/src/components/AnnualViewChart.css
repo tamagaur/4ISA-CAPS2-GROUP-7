@@ -1,0 +1,100 @@
+/* The Annual View bar card (AnnualViewChart.jsx), left of the Sales vs
+   Inventory chart in the dashboard's "What happened?" row. */
+.annual-view .chart-header {
+  margin-bottom: 8px;
+}
+
+.annual-view-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0 0 6px;
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-muted);
+}
+
+.annual-view-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.annual-view-legend-band {
+  background: rgba(242, 140, 40, 0.18);
+  border-top: 1px dashed #C2410C;
+}
+
+/* The swatch for a bar that counts synthetic months: the bars' own hatch. */
+.annual-view-legend-hatch {
+  background: repeating-linear-gradient(45deg, #8FA3C4 0 3px, #D5DDEA 3px 6px);
+}
+
+/* Which years count synthetic months, and how many: the same amber the
+   cards above use for a figure that is not all SSM's own. */
+.annual-view-synthetic {
+  margin: 0 0 6px;
+  font-size: var(--text-micro, 11px);
+  font-weight: 600;
+  color: #B54708;
+}
+
+.annual-tooltip-synthetic {
+  color: #B54708;
+  font-weight: 600;
+}
+
+.annual-view .chart-title-area h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The plot takes whatever height the card has left under its header and
+   legend: side by side, the card stretches to the taller chart beside it
+   (the row's align-items: stretch) and the bars fill it, with no blank
+   band under them. Stacked, the card is only as tall as its content, so
+   the floor keeps the bars a readable height. */
+.annual-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-slot .annual-view .annual-view-plot,
+.dash-slot .annual-view-plot {
+  flex: 1 1 auto;
+  min-height: 300px;
+}
+
+@media (max-width: 600px) {
+  .dash-slot .annual-view .annual-view-plot { min-height: 240px; }
+}
+
+/* A narrow card: the bars stand too close for "₱384.8M" beside "₱387.3M",
+   so the figures round to the whole million, and the band's own label,
+   which lands on those figures in a short plot, goes (the legend already
+   names the band). Measured on the row (.dash-split-host), which is the
+   card's width once the two cards are stacked. */
+.annual-view-value-short {
+  display: none;
+}
+
+@container (max-width: 520px) {
+  .annual-view-value,
+  .annual-view-band-label {
+    display: none;
+  }
+
+  .annual-view-value-short {
+    display: inline;
+  }
+}
+
+/* Years with no records at all (before SSM's data starts), said once. */
+.annual-view-gap {
+  margin: 0 0 6px;
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-muted);
+}

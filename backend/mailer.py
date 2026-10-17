@@ -48,8 +48,12 @@ def _from_header(user: str) -> str:
     return formataddr((name or "SSM Dashboard", user))
 
 
-def send(to: str, subject: str, body: str) -> None:
-    """Sends one plain-text email. Raises MailError when it can't."""
+def send(to: str, subject: str, body: str, html: str | None = None,
+         inline_images: dict[str, bytes] | None = None) -> None:
+    """Sends one email: `body` as plain text, plus `html` as the version
+    email apps show when they can, with `inline_images` ({cid: PNG bytes})
+    inside it for <img src="cid:..."> (backend/email_templates.py). Raises
+    MailError when it can't."""
     if not is_configured():
         logger.warning("Email to %s not sent: the SMTP_* settings are missing.", to)
         raise MailError("Email isn't set up on the server yet, so nothing was sent.")
@@ -61,6 +65,12 @@ def send(to: str, subject: str, body: str) -> None:
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain=user.split("@")[-1])
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
+        html_part = msg.get_payload()[-1]
+        for cid, data in (inline_images or {}).items():
+            html_part.add_related(data, maintype="image", subtype="png", cid=f"<{cid}>",
+                                  disposition="inline", filename=f"{cid}.png")
     try:
         with smtplib.SMTP(os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"]), timeout=20) as smtp:
             smtp.starttls(context=ssl.create_default_context())

@@ -189,6 +189,7 @@ from backend.principals import (
     normalize_principal,
     abc_period_params,
     abc_period_pred,
+    latest_abc_period,
     latest_abc_periods,
     tier_a_periods,
     principal_clause,
@@ -510,6 +511,48 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
     )
 
 
+# The dates behind the row figures, so the page can label every number with
+# its period (the technical adviser's rule, 2026-10-02). Read-only and beside
+# the rows, never inside them: nothing here changes what the rows say.
+#   count_date  — the day the stock count was taken. The Unilever _period
+#                 '2026-03' is the count of 6 Apr 2026 (snapshot_date), so
+#                 "Mar 2026 stock" undersold how late it is. MAX because a
+#                 period could in principle hold more than one count day.
+#   sales_start/end — the sales months cover's daily rate averages over: the
+#                 same SKU_COVER_HISTORY_MONTHS window the row query's sales
+#                 join reads (latest months at or before the stock period).
+_LABEL_CONTEXT_SQL = f"""
+    SELECT
+        (SELECT MAX(snapshot_date) FROM inventory_fact_real
+         WHERE _period = :inv_period{{scope}}) AS count_date,
+        (SELECT MIN(m) FROM (
+            SELECT DISTINCT calendar_month AS m FROM unilever_sku_demand_fact_real
+            WHERE calendar_month <= :inv_period
+            ORDER BY m DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
+        ) cover_months) AS sales_start,
+        (SELECT MAX(calendar_month) FROM unilever_sku_demand_fact_real
+         WHERE calendar_month <= :inv_period) AS sales_end
+"""
+
+
+def label_context(db: Session, inv_period: str | None, abc_period: str | None, principal: str | None) -> dict:
+    """{stock_period, stock_count_date, abc_period, cover_sales_start,
+    cover_sales_end} for RecommendationsResponse — the periods the rows were
+    read at. All None when there is no stock period to anchor on."""
+    out = {"stock_period": inv_period, "stock_count_date": None, "abc_period": abc_period,
+           "cover_sales_start": None, "cover_sales_end": None}
+    if inv_period is None:
+        return out
+    scope_sql, scope_params = principal_clause(principal, "principal")
+    row = db.execute(
+        text(_LABEL_CONTEXT_SQL.format(scope=scope_sql)), {"inv_period": inv_period, **scope_params}
+    ).mappings().first()
+    if row:
+        out.update(stock_count_date=row["count_date"], cover_sales_start=row["sales_start"],
+                   cover_sales_end=row["sales_end"])
+    return out
+
+
 # On every row: what on_order is and isn't (decision 2026-10-04, DEC-34).
 ON_ORDER_NOTE = ("PO Qty meaning unverified, pending SSM: shown for information only, "
                  "never subtracted from any order quantity")
@@ -578,7 +621,12 @@ def get_recommendations(
     if planning_mart.usable(db, mode):
         served = _from_mart(db, status, cycle, from_date, to_date, principal)
         if served is not None:
-            return _attach_demo_unilever(served, db, principal, mode)
+            # The page's period labels, as the join path below gives them: the
+            # newest listed cycle's opening count, else no stock period.
+            newest = max((c["cycle"] for c in served.stock_counts if c.get("cycle")), default=None)
+            labels = label_context(db, opening_period(newest) if newest else None,
+                                   latest_abc_period(db, principal), principal)
+            return _attach_demo_unilever(served.model_copy(update=labels), db, principal, mode)
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)
     select_sql, lp_params = select_one(mode, present)
@@ -611,6 +659,9 @@ def get_recommendations(
     # list was what made the dashboard's pending count read 429 instead of
     # 250. `cycle=all` is the deliberate audit escape hatch.
     freshness = lp_freshness(db, principal, mode)
+    # Period labels for the page. No stock period until a cycle is known:
+    # the rows are read at their cycle's opening count (set below).
+    labels = label_context(db, None, latest_abc_period(db, principal), principal)
     if cycle == "current":
         current = current_cycle(db, principal, mode)
         if current is None:
@@ -621,6 +672,7 @@ def get_recommendations(
                 items=[], count=0, planning_cycle_date=None,
                 superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
                 stock_counts=[],
+                **labels,
             ), db, mode), db, principal, mode)
         cycles, cycle_clause = [current], CURRENT_CYCLE_CLAUSE
     else:
@@ -633,6 +685,13 @@ def get_recommendations(
         ), params).mappings().all()
         cycles = sorted((r["d"] for r in listed), reverse=True)
         cycle_clause = " AND lr.planning_cycle_date = :listed_cycle"
+
+    # The page's period labels follow the count the rows are read at: the
+    # newest listed cycle's opening count (below), not the latest count.
+    if cycles:
+        # ABC label = the run the newest cycle's rows are read at (its own month's, below).
+        labels = label_context(db, opening_period(cycles[0]),
+                               latest_abc_period(db, principal, str(cycles[0])[:7]), principal)
 
     rows: list = []
     counts: list[dict] = []
@@ -663,6 +722,7 @@ def get_recommendations(
         # What the run behind the current cycle used (lp_run), else the defaults, labelled.
         lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
         stock_counts=counts,
+        **labels,
         tier_a_periods=tier_a_periods(abc_periods_shown),
     ), db, mode), db, principal, mode)
 

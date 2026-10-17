@@ -10,6 +10,11 @@
 // the two can never disagree on formatting.
 export function formatCompactPesos(value) {
   const abs = Math.abs(value);
+  // A five-year total passes ₱1 billion (2026-10-16): ₱1.51B, not ₱1511.7M.
+  if (abs >= 1_000_000_000) {
+    const billions = abs / 1_000_000_000;
+    return `₱${Number.isInteger(billions) ? billions : Math.round(billions * 100) / 100}B`;
+  }
   if (abs >= 1_000_000) {
     const millions = abs / 1_000_000;
     return `₱${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;

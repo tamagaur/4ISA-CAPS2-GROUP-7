@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, XCircle } from 'lucide-react';
 import Modal from './Modal';
+import ProductName from './ProductName';
 import SaveResult from './SaveResult';
 import { useSaveResult } from '../utils/useSaveResult';
 import './EditSKUModal.css';
@@ -18,7 +19,10 @@ const formatSKU = (sku) => {
 // Helper to parse product string into name, size value, and unit of measurement
 const parseProductComponents = (fullProduct) => {
   if (!fullProduct) return { baseName: '', sizeVal: '', sizeUnit: 'L' };
-  const regex = /\b(\d+(?:\.\d+)?)\s*(g|ml|l|kg|L|KG|ML|G)\b/;
+  // A size only when it stands on its own: not glued to a letter, digit or
+  // point before it. "24X13.5ML" has no separate size (it used to split as
+  // "24X13." + "5ml" and save back as "24X13. 5ml"); "16(5+1)120G" does.
+  const regex = /(?<![\w.])(\d+(?:\.\d+)?)\s*(g|ml|l|kg|L|KG|ML|G)\b/;
   const match = fullProduct.match(regex);
   if (match) {
     const val = match[1];
@@ -87,8 +91,16 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // Helper to construct full product title with separate size and unit
+  // Helper to construct full product title with separate size and unit.
+  // Untouched name and size fields give back the stored name exactly: the
+  // split-and-rebuild is only for edits, so it can never reformat a name
+  // nobody changed (it rewrote 361 Unilever names that way, 2026-10-02).
   const constructFullProduct = () => {
+    const original = parseProductComponents(sku.product);
+    if (form.productNameOnly === original.baseName && form.sizeVal === original.sizeVal
+        && (!original.sizeVal || form.sizeUnit === original.sizeUnit)) {
+      return sku.product || '';
+    }
     const pName = form.productNameOnly.trim();
     if (form.sizeVal.trim()) {
       return `${pName} ${form.sizeVal.trim()}${form.sizeUnit}`;
@@ -146,7 +158,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      label={`Edit SKU ${sku.code}`}
+      label={`Edit ${sku.product || 'SKU'} (${sku.code})`}
       overlayClassName="edit-sku-modal-overlay"
       containerClassName="edit-sku-modal-card"
       closeOnOverlayClick={!saving}
@@ -157,7 +169,7 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
             ok={result.ok}
             title={result.ok ? 'Changes saved' : "Couldn't save the changes"}
             message={result.ok
-              ? <>Product details for <strong>{formatSKU(sku.code)}</strong> were updated.</>
+              ? <>Product details for <strong>{sku.product || formatSKU(sku.code)}</strong> ({formatSKU(sku.code)}) were updated.</>
               : result.message}
           />
         ) : step === 'FORM' ? (
@@ -165,7 +177,9 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
           <>
             <div className="edit-sku-modal-header">
               <div>
-                <h3 className="edit-sku-modal-title">Edit SKU — {formatSKU(sku.code)}</h3>
+                <h3 className="edit-sku-modal-title">Edit SKU</h3>
+                {/* Name first, code under it, as the product lists show it. */}
+                <ProductName name={sku.product} code={formatSKU(sku.code)} className="edit-sku-modal-product" />
                 <p className="edit-sku-modal-subtitle">
                   Update the product name or brand. Changes will be reflected immediately.
                 </p>
@@ -333,7 +347,8 @@ const EditSKUModal = ({ isOpen, sku, onClose, onSave }) => {
           /* STEP 2: CONFIRM CHANGES VIEW */
           <>
             <div className="edit-sku-modal-header centered-header">
-              <h3 className="edit-sku-modal-title">Confirm Changes — {formatSKU(sku.code)}</h3>
+              <h3 className="edit-sku-modal-title">Confirm Changes</h3>
+              <ProductName name={sku.product} code={formatSKU(sku.code)} className="edit-sku-modal-product" />
             </div>
 
             <div className="confirm-changes-body">

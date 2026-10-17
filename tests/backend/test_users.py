@@ -62,6 +62,8 @@ class FakeSession:
         return {
             **{k: user[k] for k in ("user_id", "email", "full_name", "role", "created_at")},
             "status": "invited" if user["password_hash"] is None else "active",
+            # USER_COLUMNS reads it from user_session; None = never signed in.
+            "last_sign_in_at": user.get("last_sign_in_at"),
         }
 
     def _find(self, user_id):
@@ -205,6 +207,16 @@ def test_list_users_success_for_admin(client):
     ]
     assert [u["status"] for u in body] == ["active", "active", "invited"]
     assert "password_hash" not in body[0]
+
+
+def test_the_list_shows_each_last_sign_in(client, fake_users):
+    """For the security audit: the latest sign-in (date and time) from
+    user_session, or null for an account that has never signed in."""
+    from backend.routers.users import USER_COLUMNS
+    assert "SELECT max(s.started_at) FROM user_session s WHERE s.user_id = users.user_id" in USER_COLUMNS
+    fake_users[0]["last_sign_in_at"] = "2026-10-02T13:05:11+00:00"
+    body = client.get("/users", headers=admin_headers()).json()
+    assert [u["last_sign_in_at"] for u in body] == ["2026-10-02T13:05:11Z", None, None]
 
 
 # --- PATCH /users/{user_id} -------------------------------------------------
@@ -361,7 +373,7 @@ def test_send_link_sends_a_reset_for_an_active_account(client, session, outbox):
 
 
 def test_send_link_hands_back_the_link_when_email_fails(client, monkeypatch):
-    def fail(to, subject, body):
+    def fail(to, subject, body, **_):
         raise mailer.MailError("The email couldn't be sent, so share the link another way.")
 
     monkeypatch.setattr(mailer, "send", fail)

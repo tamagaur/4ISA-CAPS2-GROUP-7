@@ -39,10 +39,40 @@ PESOS_BASIS_LABEL = {
 }
 
 
+# COMPLETE MONTHS (2026-10-11). The dashboard's SALES count every row the database holds
+# for a month, real, filled or generated, so a month SSM sent no file for is no longer a
+# gap: Del Monte has real sales for 17 months and generated ones for 51 (mart.sales_month,
+# read 2026-10-11). Asked for by Audrey and approved by Kelvin for the frontend, to see the
+# design with the months complete while SSM's files are outstanding; the Technical Adviser
+# is to be told. It applies to what the dashboard DISPLAYS: the sales cards, the sales
+# line, range totals and the range's Pareto. Stock cards, forecast accuracy, class changes
+# and the stored ABC, forecast and LP tables still read real rows only, and every payload
+# says which months are not SSM's data (sales_vs_stock[].provenance,
+# kpis.sales_cumulative.synthetic_months).
+#
+# OFF since 2026-10-15 (kelvin-etl a1b5465, approved by Kelvin, Sir Catubag informed;
+# CLAUDE.md hard rule 2 and docs/DEMO_DATA.md): the filled and generated (synthetic_v2)
+# sales rows are retired for display, and schema demo is the only display source for
+# generated data, shown in preview with DM_DEMO_ENABLED on. The snapshot no longer even
+# loads those rows (SNAPSHOT_SQL reads real sales only). Turning this back on would count
+# the retired rows in the range Pareto and let demo rows into real mode: a team decision,
+# not a code change.
+COUNT_FILLED_AND_GENERATED = False
+# A filled or generated month counts only up to the last month with real sales for either
+# principal (Feb 2026 today). The generator also wrote months after it (to Aug/Sep 2026);
+# those are not gaps in SSM's history but the months the forecasts are for, and counting
+# them would show invented sales as the actuals of a forecast month.
+_LAST_REAL_SALES_MONTH_SQL = "SELECT MAX(period) FROM mart.sales_month WHERE data_kind = 'real'"
+
+
 def _kind_filter(mode: str, alias: str = "") -> str:
     """Real rows, plus the demonstration back-cast months in preview when DM_DEMO_ENABLED is on. The older
-    synthetic_v2 rows are retired for display (2026-10-15); see sales_mart_relation()."""
+    synthetic_v2 rows are retired for display (2026-10-15); see sales_mart_relation(). With
+    COUNT_FILLED_AND_GENERATED on (off since the same day), the retired filled and generated rows too."""
     a = f"{alias}." if alias else ""
+    if COUNT_FILLED_AND_GENERATED:
+        return (f"({a}data_kind = 'real' OR ({a}data_kind IN ('filled', 'generated') "
+                f"AND {a}period <= ({_LAST_REAL_SALES_MONTH_SQL})))")
     if mode == PREVIEW and demo_enabled():
         return f"({a}data_kind = 'real' OR {a}preview_placeholder)"
     return f"{a}data_kind = 'real'"
@@ -213,9 +243,19 @@ def _sum(values) -> float | None:
     return sum(present) if present else None
 
 
-def _kinds(mode: str, row: dict) -> bool:
-    """_kind_filter in memory: real rows, plus preview placeholder months in preview."""
-    return row["data_kind"] == "real" or (mode == PREVIEW and bool(row.get("placeholder")))
+def _last_real_sales_month(db: Session) -> str | None:
+    """_LAST_REAL_SALES_MONTH_SQL in memory: the last month either principal has real sales."""
+    months = [k[1] for k in _snapshot(db).sales if k[2] == "real"]
+    return max(months) if months else None
+
+
+def _kinds(mode: str, row: dict, last_real: str | None = None) -> bool:
+    """_kind_filter in memory. `last_real` is _last_real_sales_month()."""
+    if row["data_kind"] == "real":
+        return True
+    if COUNT_FILLED_AND_GENERATED:
+        return last_real is not None and row["period"] <= last_real
+    return mode == PREVIEW and bool(row.get("placeholder"))
 
 
 # ---------------------------------------------------------------------------
@@ -230,13 +270,30 @@ def latest_sales_period(db: Session, principal: str) -> str | None:
 
 def _sales_rows(db: Session, principal: str, period: str, mode: str) -> list[dict]:
     snap = _snapshot(db)
-    rows = [snap.sales.get((principal, period, kind)) for kind in ("real", "filled", "generated")]
-    return [r for r in rows if r is not None and _kinds(mode, r)]
+    real = snap.sales.get((principal, period, "real"))
+    if real is not None and real["pesos"] is not None:
+        # Real data always wins (DEC-31): a month SSM has figures for is never topped up.
+        return [real]
+    rows = [real] + [snap.sales.get((principal, period, kind)) for kind in ("filled", "generated")]
+    last_real = _last_real_sales_month(db)
+    return [r for r in rows if r is not None and _kinds(mode, r, last_real)]
 
 
 def sales_by_period(db: Session, periods: list[str], principal: str, mode: str = REAL) -> dict[str, float | None]:
     """Pesos per month for ONE principal: real rows (plus preview placeholders)."""
     return {p: _sum(r["pesos"] for r in _sales_rows(db, principal, p, mode)) for p in periods}
+
+
+def sales_sources_by_period(db: Session, periods: list[str], principal: str, mode: str = REAL) -> dict[str, list[str]]:
+    """The data kinds behind each month's sales for ONE principal, among the rows
+    sales_by_period counts: ['real'], ['generated'], ['filled', 'real'], ... A month
+    with no row is left out. What a card or chart needs to say a figure is not SSM's."""
+    out = {}
+    for p in periods:
+        kinds = sorted(r["data_kind"] for r in _sales_rows(db, principal, p, mode) if r["pesos"] is not None)
+        if kinds:
+            out[p] = kinds
+    return out
 
 
 def pieces_by_period(db: Session, periods: list[str], principal: str, mode: str = REAL) -> dict[str, float | None]:
@@ -263,8 +320,17 @@ def tax_inclusive_months(db: Session) -> set[str]:
 
 def net_sales_total(db: Session, start: str, end: str, principal: str, mode: str = REAL) -> float | None:
     """The range's net sales for one principal (returns included), the KPI's own sum."""
-    return _sum(r["pesos"] for k, r in _snapshot(db).sales.items()
-                if k[0] == principal and start <= k[1] <= end and _kinds(mode, r))
+    months = sorted({k[1] for k in _snapshot(db).sales if k[0] == principal and start <= k[1] <= end})
+    return _sum(r["pesos"] for m in months for r in _sales_rows(db, principal, m, mode))
+
+
+def sales_month_span(db: Session, scope: str) -> tuple[str, str] | None:
+    """The first and last month with a sales row of any kind (real, filled or
+    generated) for the scope's principals. Only where to look: which of those
+    rows count as sales is still _sales_rows' rule, month by month."""
+    wanted = _scope_list(scope)
+    months = [k[1] for k in _snapshot(db).sales if k[0] in wanted]
+    return (min(months), max(months)) if months else None
 
 
 # ---------------------------------------------------------------------------

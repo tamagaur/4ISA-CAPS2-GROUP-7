@@ -386,7 +386,7 @@ def test_register_invites_without_a_password(client, fake_session, fake_users, o
 
 
 def test_register_hands_back_the_link_when_email_fails(client, monkeypatch):
-    def fail(to, subject, body):
+    def fail(to, subject, body, **_):
         raise mailer.MailError("Email isn't set up on the server yet, so nothing was sent.")
 
     monkeypatch.setattr(mailer, "send", fail)
@@ -500,7 +500,7 @@ def test_heartbeat_closes_an_idle_session_first_then_extends_it(client, fake_ses
     assert resp.status_code == 204
     (idle_sql, idle_params), (beat_sql, beat_params) = fake_session.session_updates
     assert "end_reason = 'idle'" in idle_sql
-    assert idle_params == {"session_id": sid, "idle_minutes": 30}
+    assert idle_params == {"session_id": sid, "idle_minutes": 240}
     assert "SET last_seen_at = now()" in beat_sql and "ended_at = now()" not in beat_sql
     assert beat_params == {"session_id": sid}
 

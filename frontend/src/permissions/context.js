@@ -17,6 +17,7 @@ const DENY_ALL = {
   permissions: [],
   legacy: false,
   hasPermission: () => false,
+  profile: null,
   refresh: () => {},
 };
 

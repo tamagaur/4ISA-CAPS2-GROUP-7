@@ -19,86 +19,20 @@
   overflow-x: hidden;
   width: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  /* The sign-in, forgot-password and set-password screens fade in when
+     they open, as the app's pages do (PageTransition.css). */
+  animation: auth-page-in 360ms ease-out both;
 }
 
-/* Left Side - Branding. Was flex:6 against the card's flex:4 — at a wide
-   viewport that left the logo floating in a large, otherwise-empty white
-   field. Evened to a 1:1 split and given the same warm-tinted ground the
-   rest of the app's page background now uses (--color-surface-raised),
-   rather than pure white, so this doesn't read as a colder, separate
-   product from the app behind it. */
-.login-left {
-  flex: 1;
-  background-color: var(--color-surface-raised);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
+@keyframes auth-page-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.logo-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.logo-image {
-  width: 520px;
-  max-width: 72%;
-  height: auto;
-  animation: pulse 3s infinite ease-in-out;
-}
-
-.dashboard-title {
-  color: #8c98a4;
-  font-size: 1.1rem;
-  margin-top: 1.5rem;
-}
-
-/* Names three concrete things the system does, so the panel reads as
-   "here's what you're signing into" rather than a logo on empty space.
-   Deliberately plain text, not icon cards — this is a login screen, not a
-   marketing page, so the restraint is the point. */
-.login-feature-list {
-  list-style: none;
-  margin: 1.75rem 0 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  align-items: center;
-}
-
-.login-feature-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  color: var(--color-text-body);
-  font-size: 0.92rem;
-}
-
-.login-feature-list li::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--color-brand-primary);
-  flex-shrink: 0;
-}
-
-/* Right Side - Login — same navy as the app sidebar (--color-nav-bg),
-   now that the sidebar uses it too; this used to be the only place that
-   colour appeared. */
-.login-right {
-  flex: 1;
-  background-color: var(--color-nav-bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  position: relative;
+@media (prefers-reduced-motion: reduce) {
+  .login-container {
+    animation: none;
+  }
 }
 
 .login-card {
@@ -242,58 +176,9 @@
   margin: 2rem 0 0 0;
 }
 
-.help-text {
-  /* Was --color-text-body (dark gray) on the navy login panel, barely readable. */
-  color: var(--color-nav-item);
-  font-size: 0.9rem;
-  margin-top: 2rem;
-  position: absolute;
-  bottom: 2rem;
-}
-
-/* Animations */
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.02); }
-  100% { transform: scale(1); }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .login-container {
-    flex-direction: column;
-  }
-
-  /* flex ratios were splitting a FIXED viewport height between the two
-     panels, which is what squeezed and clipped them once stacked. Stacked,
-     each panel should be as tall as its own content and let the page
-     scroll. */
-  .login-left {
-    flex: 0 0 auto;
-    padding: 2rem 1rem;
-  }
-
-  .login-right {
-    flex: 1 0 auto;
-    padding: 1rem;
-  }
-
-  /* The logo was 72% of a box that could be wider than the screen. Cap it
-     against the viewport itself so it can never overhang. */
-  .logo-image {
-    width: 100%;
-    max-width: min(320px, 70vw);
-  }
-  
-  .login-card {
-    padding: 2rem;
-  }
-  
-  .help-text {
-    position: static;
-    margin-top: 1.5rem;
-  }
-}
+/* (The old two-panel layout, logo panel left and navy panel right, and
+   its phone stacking were removed on 2026-10-16: every signed-out screen
+   now uses AuthShell, whose look is LoginPage.css.) */
 
 /* Explains an involuntary sign-out (expired/rejected token). Deliberately
    informational blue rather than .error-message's red — the user didn't do
@@ -385,4 +270,88 @@
   font-size: 0.85rem;
   margin: -0.5rem 0 0 0;
   text-align: left;
+}
+
+/* "Remember this Device?" beside "Forgot password?" (2026-10-16; it was on
+   the code step): skips the authenticator code on this browser for
+   REMEMBER_DAYS. */
+.login-options-row {
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.login-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-remember input {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--color-brand-strong);
+  cursor: pointer;
+}
+
+.login-options-row .auth-link {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* On the redesigned card (LoginPage.css): the subtitle's muted ink at the
+   link's size, and a box drawn like the fields (frosted, white edge, the
+   same blue focus ring), ticked in the focus blue. */
+.login-page .login-remember {
+  font-size: 14.5px;
+  color: var(--login-muted);
+}
+
+.login-page .login-remember input {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #B9C2DE;
+  border-radius: 5px;
+  background-color: var(--login-field);
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-page .login-remember input::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  transform: scale(0);
+  transition: transform 0.12s;
+  background-color: #fff;
+  clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 22%, 86% 8%, 38% 72%);
+}
+
+.login-page .login-remember input:checked {
+  border-color: #4C7BD9;
+  background-color: #4C7BD9;
+}
+
+.login-page .login-remember input:checked::after {
+  transform: scale(1);
+}
+
+.login-page .login-remember input:focus-visible {
+  outline: none;
+  border-color: #4C7BD9;
+  box-shadow: 0 0 0 3px rgba(76, 123, 217, 0.24);
+}
+
+.login-page .login-remember:hover input:not(:checked) {
+  border-color: #4C7BD9;
 }

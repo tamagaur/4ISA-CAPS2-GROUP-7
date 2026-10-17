@@ -12,6 +12,8 @@ when no matching row exists yet for a new/unclassified product.
 """
 from __future__ import annotations
 
+import datetime
+
 from pydantic import BaseModel
 
 
@@ -44,11 +46,23 @@ class SKUItem(BaseModel):
     # one — a SKU with no sales last month keeps its previous category, and
     # the consumer needs the date to say how stale that is.
     tier_period: str | None = None
+    # The day the stock above was counted: MAX(snapshot_date) of this
+    # product's principal's latest snapshot (routers/sku.py's
+    # STOCK_COUNT_DATE_SQL). Unilever's "Mar 2026" file -> 2026-04-06. Set
+    # whenever the principal has any stock count, even if this product has
+    # no row in it.
+    stock_count_date: datetime.date | None = None
 
 
 class SKUListResponse(BaseModel):
     items: list[SKUItem]
     count: int
+    # {principal: day its latest stock count was taken}, for the principals
+    # in the list — what the page's stock column header states.
+    stock_count_dates: dict[str, datetime.date] = {}
+    # The LP cycle reorder_point comes from (a month's first day). None
+    # without lp.view, like reorder_point itself, or when there is no cycle.
+    planning_cycle_date: datetime.date | None = None
     # {principal display name: 'YYYY-MM'} — each principal's latest ABC run.
     tier_a_periods: dict[str, str] = {}
 

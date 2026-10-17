@@ -1,0 +1,447 @@
+/* Two-step sign-in: the code box, the QR setup, the recovery codes
+   (TwoStepCodeForm, TwoStepSetup, RecoveryCodes) and the Account security
+   dialog. On the sign-in page the field and main button reuse Login.css. */
+
+/* ── Account security dialog ─────────────────────────────────────────── */
+.twostep-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+  animation: twostepFadeIn 0.2s ease-out;
+}
+
+.twostep-modal-card {
+  background-color: var(--color-surface);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.twostep-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem 0.5rem;
+}
+
+.twostep-modal-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.twostep-modal-title {
+  flex: 1;
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.twostep-icon-btn {
+  background: none;
+  border: none;
+  padding: 0.35rem;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+}
+
+.twostep-icon-btn:hover {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+.twostep-modal-body {
+  padding: 0.75rem 1.5rem 1.5rem;
+  color: var(--color-text-body);
+  font-size: 0.9rem;
+}
+
+.twostep-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+
+.twostep-status-label {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.twostep-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+}
+
+.twostep-pill.on {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.twostep-pill.off {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+
+.twostep-text {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+
+.twostep-muted {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.twostep-warn {
+  color: var(--color-severity-urgent);
+}
+
+.twostep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+/* ── Buttons, field, messages ────────────────────────────────────────── */
+.twostep-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text-heading);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.twostep-btn:hover:not(:disabled) {
+  background-color: var(--color-surface-sunken);
+}
+
+.twostep-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Solid logo red, not the coral gradient: white on its light end was
+   2.7:1 and looked grey on some screens. */
+.twostep-btn-primary {
+  background: var(--color-brand-strong);
+  border-color: var(--color-brand-strong);
+  color: white;
+  box-shadow: 0 2px 6px rgba(199, 78, 61, 0.35);
+}
+
+.twostep-btn-primary:hover:not(:disabled) {
+  background: var(--color-brand-strong-hover);
+  border-color: var(--color-brand-strong-hover);
+  box-shadow: 0 4px 12px rgba(199, 78, 61, 0.45);
+}
+
+.twostep-btn-primary:focus-visible {
+  outline: 3px solid rgba(199, 78, 61, 0.4);
+  outline-offset: 2px;
+}
+
+.twostep-btn-danger {
+  color: var(--color-brand-primary);
+  border-color: var(--color-danger-border);
+}
+
+.twostep-btn-small {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.twostep-code-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.twostep-code-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-heading);
+  font-family: inherit;
+  font-size: 1.25rem;
+  letter-spacing: 0.25em;
+  text-align: center;
+}
+
+.twostep-code-input::placeholder {
+  letter-spacing: normal;
+  font-size: 1rem;
+}
+
+.twostep-code-input:focus {
+  outline: none;
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface);
+}
+
+/* On the sign-in page: Login.css sizes the field; space the digits out. */
+.input-group .twostep-login-input {
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.input-group .twostep-login-input::placeholder {
+  letter-spacing: normal;
+}
+
+/* "Remember me" under the code box on the sign-in page: the box and its
+   words on one line, the plain-words hint beneath them. */
+.twostep-remember {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: -0.4rem;
+  text-align: left;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-heading);
+  cursor: pointer;
+}
+
+.twostep-remember input {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.twostep-remember-hint {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.twostep-error {
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-brand-primary);
+  font-size: 0.85rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  text-align: left;
+}
+
+/* A wrong code, on the sign-in page and in Account security: dark red ink
+   (7.8:1 on the pink box) instead of brand coral (3.2:1), so the reminder
+   is read. Two classes, so it wins over Login.css whichever loads last. */
+.error-message.twostep-code-error,
+.twostep-error.twostep-code-error {
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
+
+.twostep-link {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.twostep-link:hover {
+  color: var(--color-brand-primary);
+  text-decoration: underline;
+}
+
+.twostep-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Setup: steps, QR code, typed key ────────────────────────────────── */
+.twostep-setup {
+  text-align: left;
+  width: 100%;
+}
+
+.twostep-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.twostep-steps li + li {
+  margin-top: 0.75rem;
+}
+
+.twostep-steps strong {
+  color: var(--color-text-heading);
+}
+
+.twostep-qr {
+  display: flex;
+  justify-content: center;
+  margin: 0.75rem 0 0.5rem;
+}
+
+/* The QR code stays dark on white whatever the theme: phones read it best so. */
+.twostep-qr svg {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.twostep-manual summary {
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.twostep-manual p {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.twostep-key-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.twostep-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-heading);
+  overflow-wrap: anywhere;
+}
+
+/* The sign-in card centres its text; the setup steps read better left-aligned. */
+.twostep-setup-login {
+  margin-top: -1rem;
+}
+
+/* ── Recovery codes ──────────────────────────────────────────────────── */
+.twostep-recovery {
+  text-align: left;
+  width: 100%;
+}
+
+.twostep-recovery-intro {
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.twostep-recovery-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 1rem;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+}
+
+.twostep-recovery-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  color: var(--color-text-heading);
+}
+
+.twostep-recovery-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.twostep-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  font-weight: 500;
+  color: var(--color-text-heading);
+  cursor: pointer;
+}
+
+.twostep-recovery > .twostep-btn-primary {
+  width: 100%;
+}
+
+.twostep-done-login {
+  width: 100%;
+  margin-top: 0;
+}
+
+.twostep-done-login:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.twostep-spin {
+  animation: twostepSpin 1s linear infinite;
+}
+
+@keyframes twostepSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes twostepFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .twostep-recovery-list {
+    grid-template-columns: 1fr;
+  }
+}

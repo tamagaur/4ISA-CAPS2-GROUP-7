@@ -272,12 +272,17 @@ def test_frontend_dev_mock_presets_match():
 
 SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
-    ("GET", "/sku"),        # product and brand names for the ABC, Reorder and SKU Forecast pages
+    ("PATCH", "/auth/me"),  # your own name and picture (backend/profile.py, My profile)
     ("GET", "/data-mode"),  # the data-mode banner on every page
     ("POST", "/users/me/avatar"),  # any signed-in account sets its OWN picture; no users.manage needed
+    # Your own two-step sign-in (backend/routers/two_factor.py).
+    ("GET", "/auth/mfa"), ("POST", "/auth/mfa/setup"), ("POST", "/auth/mfa/confirm"),
+    ("POST", "/auth/mfa/recovery-codes"), ("POST", "/auth/mfa/disable"),
 }
 PUBLIC = {
     ("POST", "/auth/login"), ("GET", "/auth/forgot-password"), ("POST", "/auth/forgot-password"),
+    # Sign-in's second step: carries the 5-minute mfa_token instead of a session.
+    ("POST", "/auth/login/verify"), ("POST", "/auth/login/setup"), ("POST", "/auth/login/setup/confirm"),
     ("POST", "/auth/link-info"), ("POST", "/auth/set-password"), ("GET", "/status"), ("GET", "/health"),
 }
 
@@ -318,8 +323,10 @@ def _routes():
 # added six GET /dashboard/* range routes (2026-10-04); 44 since GET
 # /dashboard/class-changes (2026-10-05, DEC-37); 47 since GET /demo/series, /demo/index and /demo/totals
 # (2026-10-15, behind DM_DEMO_ENABLED, default off); 48 since POST /users/me/avatar (2026-10-17,
-# migration 0058). Change it when a route is added or removed.
-ROUTE_COUNT = 48
+# migration 0058); plus the 9 two-step sign-in routes (/auth/login/verify, /auth/login/setup[/confirm],
+# /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
+# page, 2026-10-16) from the Main-Final merge (2026-10-17). Change it when a route is added or removed.
+ROUTE_COUNT = 58
 
 
 def test_the_walk_finds_every_route():
@@ -354,7 +361,8 @@ ADMIN_ONLY_BEFORE = {
     ("GET", "/audit-log"), ("GET", "/audit-log/users"),
 }
 NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
-              ("PUT", "/admin/users/{user_id}/permissions")}
+              ("PUT", "/admin/users/{user_id}/permissions"),
+              ("POST", "/users/{user_id}/mfa/reset")}  # 2026-10-02, users.manage like the rest of /users
 
 
 def test_the_staff_preset_opens_exactly_what_staff_could_open_before():
@@ -449,6 +457,9 @@ def test_me_lists_the_effective_permissions():
     assert body == {
         "user_id": 2, "email": "user2@ssmcapstone.com", "full_name": "User 2", "role": "staff",
         "permissions": sorted((set(PRESETS["staff"]) | {"audit_log.view"}) - {"lp.view"}),
+        # The My profile page's fields (backend/profile.py): no picture set,
+        # and this fake store has no picture column (migration 0059).
+        "avatar_path": None, "profile_pictures": False,
     }
 
 
@@ -892,3 +903,22 @@ def test_each_page_works_on_its_own_permission_alone(only, monkeypatch):
     monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: overrides)
     with client_for(FakeStore([], strict=False), raise_errors=False) as c:
         assert _smoke(c, {only}, auth(9, "staff")) == []
+
+
+@pytest.mark.real_permission_store
+def test_the_product_list_needs_one_of_the_pages_that_read_it():
+    """GET /sku opens with any of sku.view, abc.view, lp.view, forecast.view
+    (the four pages that read product names), and only with one of them:
+    it used to be sign-in only, so someone with none of these pages still
+    got the whole catalog with its stock and classes (2026-10-02)."""
+    readers = ("sku.view", "abc.view", "lp.view", "forecast.view")
+    nothing_else = {key: False for key in PRESETS["staff"] if key in readers}
+    with client_for(FakeStore(team(), overrides={2: nothing_else}), raise_errors=False) as c:
+        denied = c.get("/sku", headers=auth(2, "staff"))
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "missing_permission"
+    for keep in readers:
+        overrides = {key: False for key in readers if key != keep and key in PRESETS["staff"]}
+        with client_for(FakeStore(team(), overrides={2: overrides}), raise_errors=False) as c:
+            resp = c.get("/sku", headers=auth(2, "staff"))
+        assert resp.status_code != 403, keep

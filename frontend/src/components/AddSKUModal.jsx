@@ -295,7 +295,13 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
               </div>
             </div>
 
+            {/* Name first, then its code: products read by name everywhere
+                (Technical Adviser, 2026-10-03). */}
             <div className="add-sku-summary-grid">
+              <div className="summary-field full">
+                <span className="summary-field-label">PRODUCT NAME</span>
+                <span className="summary-field-val">{constructedFullProduct}</span>
+              </div>
               <div className="summary-field">
                 <span className="summary-field-label">SKU CODE</span>
                 <span className="summary-field-val highlight-val">{form.skuCode}</span>
@@ -304,12 +310,8 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
                 <span className="summary-field-label">BRAND</span>
                 <span className="summary-field-val">{form.brand}</span>
               </div>
-              <div className="summary-field full">
-                <span className="summary-field-label">PRODUCT NAME</span>
-                <span className="summary-field-val">{constructedFullProduct}</span>
-              </div>
               <div className="summary-field">
-                <span className="summary-field-label">CATEGORY</span>
+                <span className="summary-field-label">ABC CLASS</span>
                 <span className="summary-field-val pending-category">Pending Auto-Classification</span>
               </div>
 

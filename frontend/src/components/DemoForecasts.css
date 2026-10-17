@@ -1,0 +1,201 @@
+/* The synthetic demonstration's Del Monte category forecasts (DemoForecasts.jsx).
+   Dashed borders and a muted tag mark everything here as synthetic. */
+.demo-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px dashed var(--color-border-strong, #D0D5DD);
+  border-radius: var(--radius-pill, 999px);
+  color: var(--color-text-muted, #64748B);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Dashboard, step 4: under the empty forecast card. */
+.demo-forecasts {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border, #E4E7EC);
+}
+
+.demo-forecasts-head {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.demo-forecasts-lead,
+.demo-forecasts-note {
+  margin: 0;
+  color: var(--color-text-muted, #64748B);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.demo-forecasts-table-wrap {
+  overflow-x: auto;
+}
+
+.demo-forecasts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.demo-forecasts-table th,
+.demo-forecasts-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border, #E4E7EC);
+  text-align: left;
+}
+
+.demo-forecasts-table th {
+  color: var(--color-text-muted, #64748B);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.demo-forecasts-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-forecasts-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand-primary, #E85C4A);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.demo-forecasts-link:hover {
+  text-decoration: underline;
+}
+
+.demo-forecasts-link:focus-visible,
+.demo-cat-chip:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+/* Forecast page: in place of Del Monte's "no product forecast" message. */
+.demo-cat {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px dashed var(--color-border-strong, #D0D5DD);
+  border-radius: 12px;
+  background: var(--color-surface, #fff);
+}
+
+.demo-cat-title {
+  margin: 0;
+  color: var(--color-text, #101828);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.demo-cat-lead,
+.demo-cat-note {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--color-text-muted, #64748B);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.demo-cat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.demo-cat-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border, #E4E7EC);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface, #fff);
+  color: var(--color-text-body, #344054);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.demo-cat-chip[aria-pressed="true"] {
+  border-color: var(--color-text, #101828);
+  color: var(--color-text, #101828);
+  font-weight: 600;
+}
+
+.demo-cat-summary {
+  margin: 0;
+  color: var(--color-text, #101828);
+  font-size: 14px;
+}
+
+.demo-cat-chart {
+  width: 100%;
+  height: 280px;
+}
+
+.demo-cat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted, #64748B);
+  font-size: 12px;
+}
+
+.demo-cat-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.demo-tooltip {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #E4E7EC);
+  border-radius: 8px;
+  background: var(--color-surface, #fff);
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  font-size: 12.5px;
+}
+
+.demo-tooltip p {
+  margin: 0;
+}
+
+.demo-tooltip p + p {
+  margin-top: 3px;
+}
+
+.demo-tooltip-title {
+  font-weight: 700;
+}
+
+.demo-tooltip-origin {
+  color: var(--color-text-muted, #64748B);
+  font-style: italic;
+}
+
+@media (max-width: 600px) {
+  .demo-cat {
+    padding: 14px;
+  }
+  .demo-cat-chart {
+    height: 230px;
+  }
+}

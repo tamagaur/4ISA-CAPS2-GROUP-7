@@ -1,9 +1,11 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import SectionLede from './ui/SectionLede';
+import { X, ArrowRight } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import InfoTip from './InfoTip';
-import { formatMonth } from '../utils/formatDate';
+import ProductName from './ProductName';
+import { formatDate, formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { CHART_COLORS } from '../theme/colors';
 import './ReorderModal.css';
@@ -41,10 +43,20 @@ const objectiveWeights = (lpModel) => {
 // Stock is valued at purchase cost and sales at selling price, so cover
 // reads a little short (backend/routers/recommendations.py days_of_cover).
 const COVER_BASIS_NOTE =
-  'Stock at cost (₱) ÷ average daily sales value (₱/day over the last 3 sales months; a month with no sales counts as 0). Cost against selling price, so cover reads slightly short.';
+  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day over the last 3 sales months; a month with no sales counts as 0). Cost against selling price, so cover reads slightly short.';
 
-const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
+// `periods` — the dates the page read its figures at (GET /recommendations'
+// label_context, passed through by ReorderRecommendations), so each figure
+// here names its period the way the table's headers do.
+const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {}, onOpenForecast }) => {
   if (!isOpen || !data) return null;
+  const plan = data.planningCycleDate ? `${formatMonth(data.planningCycleDate)} plan` : 'this plan';
+  const countLabel = periods.stockCountDate
+    ? `counted ${formatDate(periods.stockCountDate)}`
+    : periods.stockPeriod ? `${formatMonth(periods.stockPeriod)} count` : 'latest count';
+  const coverSales = periods.coverSalesStart && periods.coverSalesEnd
+    ? `${formatMonth(periods.coverSalesStart)} – ${formatMonth(periods.coverSalesEnd)}`
+    : null;
   const weightRows = objectiveWeights(lpModel);
   const inputs = lpModel?.inputs || {};
   // 'aggregate' (the placeholder) makes the 3-week rule its own stage in
@@ -62,13 +74,26 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
         {/* Header */}
         <div className="reorder-modal-header">
           <div>
-            <h3 className="reorder-modal-title">Reorder: {data.product}</h3>
+            {/* Name first, SKU code under it, as in the table. */}
+            <h3 className="reorder-modal-title">
+              <ProductName name={data.product} code={data.sku} />
+            </h3>
+            <SectionLede>Why this quantity</SectionLede>
             {/* Pieces, the LP's unit, with the rough case count beside it
                 (worked out once on the row by ReorderRecommendations). */}
             <p className="reorder-modal-subtitle">
               Order <strong>{formatUnits(data.orderQty)}</strong> pieces
-              {data.cases?.order ? ` (${data.cases.order})` : ''}. Below is how the optimizer (LP) arrived at this suggestion.
+              {data.cases?.order ? ` (${data.cases.order})` : ''} for the {plan}. Below is how the optimizer (LP)
+              arrived at this suggestion.
             </p>
+            {/* The product's own page: its sales history, the forecast and
+                how that was made. Passed only with forecast.view. */}
+            {onOpenForecast && (
+              <button type="button" className="reorder-modal-link" onClick={() => onOpenForecast(data.sku)}>
+                See this product&apos;s sales history and forecast
+                <ArrowRight size={13} aria-hidden="true" />
+              </button>
+            )}
           </div>
           <button className="reorder-modal-close" onClick={onClose} aria-label="Close modal">
             <X size={18} />
@@ -81,20 +106,21 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
             case counts (the table shows those only on hover). */}
         <div className="reorder-modal-grid">
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">PLANNING CYCLE</span>
+            <span className="reorder-grid-label">PLANNING CYCLE (MONTH)</span>
             <span className="reorder-grid-value">{formatMonth(data.planningCycleDate)}</span>
           </div>
           <div className="reorder-grid-item">
             <span className="reorder-grid-label">IMPACT RANK</span>
             <span className="reorder-grid-value">
-              {data.rank != null ? `#${data.rank} in cycle` : 'Unranked'}
+              {data.rank != null ? `#${data.rank} of the ${plan}` : 'Unranked'}
             </span>
           </div>
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">REVENUE SHARE</span>
+            <span className="reorder-grid-label">REVENUE SHARE (%)</span>
             <span className="reorder-grid-value">
               {data.revenueShare != null ? `${(data.revenueShare * 100).toFixed(2)}%` : '—'}
             </span>
+            {periods.abcPeriod && <span className="reorder-grid-sub">of {formatMonth(periods.abcPeriod)} revenue</span>}
           </div>
           <div className="reorder-grid-item">
             <span className="reorder-grid-label">
@@ -104,14 +130,17 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
             <span className="reorder-grid-value">
               {data.daysOfCover != null ? data.daysOfCover.toFixed(1) : '—'}
             </span>
+            <span className="reorder-grid-sub">
+              stock {countLabel}{coverSales ? ` ÷ sales ${coverSales}` : ''}
+            </span>
           </div>
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">TARGET STOCK</span>
+            <span className="reorder-grid-label">TARGET STOCK (PIECES)</span>
             <span className="reorder-grid-value">{formatUnits(data.rop)} pieces</span>
-            {data.cases?.target && <span className="reorder-grid-sub">{data.cases.target}</span>}
+            <span className="reorder-grid-sub">{plan}{data.cases?.target ? ` · ${data.cases.target}` : ''}</span>
           </div>
           <div className="reorder-grid-item">
-            <span className="reorder-grid-label">OPENING STOCK</span>
+            <span className="reorder-grid-label">OPENING STOCK (PIECES)</span>
             <span className="reorder-grid-value">
               {data.stock != null ? `${formatUnits(data.stock)} pieces` : '—'}
             </span>
@@ -119,7 +148,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
               ? <span className="reorder-grid-sub">Not in the opening stock count — treated as 0, as the plan does</span>
               : data.stock == null
                 ? data.stockBlockedReason && <span className="reorder-grid-sub">{data.stockBlockedReason}</span>
-                : data.cases?.stock && <span className="reorder-grid-sub">{data.cases.stock}</span>}
+                : <span className="reorder-grid-sub">{countLabel}{data.cases?.stock ? ` · ${data.cases.stock}` : ''}</span>}
           </div>
         </div>
 
@@ -196,7 +225,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel }) => {
               ? <>
                   {' '}SSM&apos;s {inputs.target_weeks ?? 3}-week rule asks that the stock left at month end of the SKUs
                   in this plan — not the whole warehouse — be worth at least {inputs.target_weeks ?? 3} weeks of their
-                  sales, at cost; the LP keeps it where the allocation allows.
+                  sales, at last purchase price; the LP keeps it where the allocation allows.
                 </>
               : <> SSM&apos;s {inputs.target_weeks ?? 3}-week rule is built into each SKU&apos;s target stock as a floor.</>}
             {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}

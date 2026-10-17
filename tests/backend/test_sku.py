@@ -47,6 +47,11 @@ class FakeResult:
         return self._rows[0] if self._rows else None
 
 
+# Each principal's latest stock count was taken on its own day: Unilever's
+# 2026-03 file on 6 Apr 2026, Del Monte's 2025-12 file on 1 Dec 2025 (live).
+COUNT_DATES = {"unilever": "2026-04-06", "delmonte": "2025-12-01"}
+
+
 class FakeSession:
     """Matches only the query shapes backend/routers/sku.py issues.
 
@@ -102,6 +107,10 @@ class FakeSession:
                 out.append({**r, "current_stock": stock,
                             "current_stock_cases": None if stock is None else stock / 288,
                             "reorder_point": rop, "tier": tier})
+            # The stock count's own day, only when the query joins it the
+            # way routers/sku.py does: latest snapshot per principal.
+            if "MAX(inv.snapshot_date) AS count_date" in sql and "stock_count.principal = pd.principal" in sql:
+                out = [{**r, "stock_count_date": COUNT_DATES[r["principal"]]} for r in out]
             return FakeResult(out)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -262,6 +271,26 @@ def test_reorder_point_is_left_out_without_lp_view(client, monkeypatch):
     items = {i["sku_id"]: i for i in client.get("/sku?principal=unilever").json()["items"]}
     assert items["U-1"]["reorder_point"] is None
     assert items["U-1"]["current_stock"] == 120.0  # stock is not an LP figure
+
+
+def test_list_states_each_principals_stock_count_date(client):
+    """Every stock figure says when it was counted (the Technical Adviser,
+    2026-10-03). Under 'all' each principal keeps its own count's day."""
+    body = client.get("/sku").json()
+    assert body["stock_count_dates"] == COUNT_DATES
+    items = {i["sku_id"]: i for i in body["items"]}
+    assert items["U-1"]["stock_count_date"] == "2026-04-06"
+    assert items["D-1"]["stock_count_date"] == "2025-12-01"
+    assert body["planning_cycle_date"] == "2026-03-01"
+
+
+def test_plan_cycle_is_left_out_without_lp_view(client, monkeypatch):
+    from backend import permissions
+
+    monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: {"lp.view": False})
+    body = client.get("/sku?principal=unilever").json()
+    assert body["planning_cycle_date"] is None
+    assert body["stock_count_dates"] == {"unilever": "2026-04-06"}
 
 
 def test_abc_period_params_keep_each_principal_on_its_own_run():

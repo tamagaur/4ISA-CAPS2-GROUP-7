@@ -15,109 +15,73 @@
   height: 100vh;
   padding: 1.5rem 0;
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.18);
-  transition: margin-left 0.3s ease, width 0.3s ease;
+  transition: transform 0.3s ease;
   overflow: hidden;
   white-space: nowrap;
 }
 
-/* ── Desktop: a floating icon rail that stretches open ─────────────────
-   Closed (the default), the sidebar is a 72px rail of icons floating on
-   the page canvas: inset 12px from the window's edges, with rounded
-   corners and a soft shadow. Hovering it or tabbing into it stretches it
-   to full width, and leaving folds it back. The shell around it is a real
-   column of the layout, so the page slides over as it opens instead of
-   being covered (Audrey, 2026-10-01: nothing on the dashboard may be
-   hidden behind it). The topbar's menu button pins it open (is-open).
-   Every icon sits on the rail's centre line (36px) in both states, so
-   nothing jumps sideways while it stretches; only widths and the labels'
-   opacity animate. A short delay before opening keeps a pointer that is
-   just passing by from flashing it open. */
+/* ── Desktop: a docked sidebar, flush to the window's edge ─────────────
+   Full height and full width, a column of the layout that pushes the
+   page; the topbar's menu button slides it away and back, as it did
+   before 2026-10-01. The floating icon rail that stretched open on hover
+   was taken out on 2026-10-11 (Audrey: not a floating bar for now); it is
+   in git at 419506b if it comes back. The spacing further down (icons at
+   27px, the 20px bottom padding) was set for that rail and is unchanged. */
+.sidebar-shell {
+  flex-shrink: 0;
+}
+
+/* Closed means slid away, at every width. Hidden once it has gone, so the
+   Tab key doesn't land on links that are off-screen. */
+.sidebar.is-closed {
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 0.3s ease, visibility 0s linear 0.3s;
+}
+
+/* How it moves on desktop: the column's width changes once, at the start,
+   and the slide itself is only a transform on the sidebar and on the page
+   beside it. Sliding by margin (until 2026-10-11) changed the page's width
+   on every frame, so every chart was measured and redrawn some 18 times
+   per open or close, and the slide stuttered. The page's slide only runs
+   after the menu button has been used (sidebar-animated, set in
+   DashboardLayout.jsx), never on first load. */
 @media (min-width: 901px) {
   .sidebar-shell {
-    flex-shrink: 0;
-    width: 96px; /* 72px rail + 12px gap either side */
-    height: 100%;
-    padding: 12px;
-    box-sizing: border-box;
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+    position: relative;
+    z-index: 20; /* its shadow stays over the page while both slide */
+    width: 250px;
   }
 
-  .sidebar {
-    width: 100%;
-    height: 100%;
-    border-radius: 18px;
-    border: 1px solid var(--color-nav-border);
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08);
-    transition: none;
+  .sidebar-shell.is-closed {
+    width: 0;
   }
 
-  .sidebar-shell.is-open,
-  .sidebar-shell.is-closed:focus-within {
-    width: 274px; /* 250px sidebar + the gaps */
-    transition-delay: 0s;
+  .dashboard-layout.sidebar-animated .main-content {
+    animation: main-slide-from-left 0.3s ease;
   }
 
-  /* Labels fade out quickly as the rail folds, and back in once it has
-     started to stretch, so text never shows squeezed mid-animation. */
-  .sidebar-shell.is-closed .nav-item-text,
-  .sidebar-shell.is-closed .modules-title,
-  .sidebar-shell.is-closed .profile-info,
-  .sidebar-shell.is-closed .status-text,
-  .sidebar-shell.is-closed .logout-text {
-    opacity: 0;
-    transition: opacity 0.12s ease;
-  }
-
-  .sidebar-shell.is-closed:focus-within .nav-item-text,
-  .sidebar-shell.is-closed:focus-within .modules-title,
-  .sidebar-shell.is-closed:focus-within .profile-info,
-  .sidebar-shell.is-closed:focus-within .status-text,
-  .sidebar-shell.is-closed:focus-within .logout-text {
-    opacity: 1;
-    transition: opacity 0.2s ease 0.12s;
-  }
-
-  /* The logo: only the swoosh shows on the rail; the full "SAN2" is
-     revealed (not scaled) as the sidebar stretches. */
-  .sidebar-shell.is-closed .sidebar-profile-top {
-    width: 44px;
-    margin-left: 14px;
-  }
-
-  .sidebar-shell.is-closed:focus-within .sidebar-profile-top {
-    width: 202px;
-    margin-left: 24px;
+  .dashboard-layout.sidebar-animated.sidebar-closed .main-content {
+    animation: main-slide-from-right 0.3s ease;
   }
 }
 
-/* Hover only where there is a real pointer: on touch screens a tap would
-   otherwise open it with no way to "leave". */
-@media (min-width: 901px) and (hover: hover) {
-  .sidebar-shell.is-closed:hover {
-    width: 274px;
-    transition-delay: 0.08s;
-  }
+@keyframes main-slide-from-left {
+  from { transform: translateX(-250px); }
+}
 
-  .sidebar-shell.is-closed:hover .nav-item-text,
-  .sidebar-shell.is-closed:hover .modules-title,
-  .sidebar-shell.is-closed:hover .profile-info,
-  .sidebar-shell.is-closed:hover .status-text,
-  .sidebar-shell.is-closed:hover .logout-text {
-    opacity: 1;
-    transition: opacity 0.2s ease 0.16s;
-  }
-
-  .sidebar-shell.is-closed:hover .sidebar-profile-top {
-    width: 202px;
-    margin-left: 24px;
-  }
+@keyframes main-slide-from-right {
+  from { transform: translateX(250px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
-  .sidebar-shell,
   .sidebar-profile-top {
     transition: none !important;
+  }
+
+  .dashboard-layout .main-content {
+    animation: none !important;
   }
 }
 
@@ -141,11 +105,6 @@
     left: 0;
     z-index: 900;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-  }
-
-  /* No rail on phones and tablets: closed means slid away. */
-  .sidebar.is-closed {
-    margin-left: -250px;
   }
 
   .sidebar-backdrop {
@@ -191,6 +150,14 @@
   color: white;
   font-weight: 600;
   font-size: 1.1rem;
+  overflow: hidden;
+}
+
+/* The profile picture, when one is set (My profile), in the initials' box. */
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .blue-avatar {
@@ -203,6 +170,9 @@
 .profile-info {
   display: flex;
   flex-direction: column;
+  /* May shrink beside the avatar, so a long line under the name (the
+     "Action required" pill) wraps instead of running off the sidebar. */
+  min-width: 0;
 }
 
 .profile-name {
@@ -219,8 +189,8 @@
 }
 
 .sidebar-nav-section {
-  margin-bottom: 0.75rem;
-  padding-top: 0.75rem;
+  margin-bottom: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--color-nav-border);
 }
 
@@ -236,9 +206,9 @@
 
 .modules-title {
   color: var(--color-nav-group-label);
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 0.08em;
 }
 
 .sidebar-nav {
@@ -247,16 +217,21 @@
   flex: 1;
 }
 
+/* Every item is the same rounded row, inset 12px, so hover and active
+   share one shape (hover used to run edge to edge while active was inset).
+   12px margin + 15px padding = the 27px every icon starts at in the rail. */
 .nav-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.8rem 27px;
+  margin: 1px 12px;
+  padding: 10px 15px;
+  border-radius: 8px;
   color: var(--color-nav-item);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: 13.5px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .nav-item:hover {
@@ -278,11 +253,7 @@
 .nav-item.active {
   background-color: var(--color-nav-item-active-bg);
   color: var(--color-nav-item-active-text);
-  border-radius: 8px;
-  margin: 0 12px;
-  /* 12px margin + 15px = the same 27px every icon starts at. */
-  padding-left: 15px;
-  box-shadow: inset 3px 0 0 var(--color-nav-item-active-rail);
+  box-shadow: inset 2px 0 0 var(--color-nav-item-active-rail);
 }
 
 .nav-item-left {
@@ -314,9 +285,125 @@
 
 .sidebar-profile-bottom {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+/* Your name and picture, a button that opens My profile. */
+.sidebar-profile-btn {
+  display: flex;
   align-items: center;
   gap: 0.8rem;
-  margin-bottom: 1rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  margin-left: -0.25rem;
+  border-radius: 8px;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sidebar-profile-btn:hover .profile-name,
+.sidebar-profile-btn:focus-visible .profile-name {
+  text-decoration: underline;
+}
+
+.sidebar-profile-btn:hover,
+.sidebar-profile-btn:focus-visible {
+  background-color: var(--color-nav-item-hover-bg);
+}
+
+.sidebar-profile-btn:focus-visible {
+  outline: 2px solid var(--color-nav-item-active-rail);
+  outline-offset: 1px;
+}
+
+/* "Account security", a button of its own under the name: opens the
+   two-step sign-in dialog. */
+.profile-security {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin: 0 0 0 0.25rem;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-nav-item);
+  font-family: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-security:hover {
+  color: var(--color-nav-item-hover-text);
+  text-decoration: underline;
+}
+
+.profile-security:focus-visible {
+  outline: 2px solid var(--color-nav-item-active-rail);
+  outline-offset: 2px;
+}
+
+/* The two-step sign-in state on that line (Sidebar.jsx, GET /auth/mfa).
+   Off: an amber pill with a warning triangle, "Action required"; the
+   amber is light enough to read on the navy (about 9:1) where the brand
+   red would not be. On: a green check and "Protected", quiet, no pill.
+   Both wrap onto a second line in the 250px sidebar rather than clip. */
+.profile-security.is-pending,
+.profile-security.is-protected {
+  max-width: 100%;
+  margin-top: 0.15rem;
+  line-height: 1.25;
+  white-space: normal;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.profile-security.is-pending {
+  align-self: flex-start;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid rgba(244, 178, 102, 0.4);
+  border-radius: 999px;
+  background: rgba(244, 178, 102, 0.14);
+  color: #F4B266;
+  font-weight: 600;
+}
+
+.profile-security.is-pending:hover,
+.profile-security.is-pending:focus-visible {
+  background: rgba(244, 178, 102, 0.24);
+  color: #FFC98A;
+  text-decoration: none;
+}
+
+.profile-security.is-protected {
+  color: var(--color-nav-subheading);
+}
+
+.profile-security.is-protected svg {
+  color: #5ED39A;
+}
+
+.profile-security.is-protected strong {
+  color: #5ED39A;
+  font-weight: 600;
+}
+
+.profile-security.is-protected:hover {
+  color: var(--color-nav-item-hover-text);
+  text-decoration: none;
+}
+
+.profile-security svg {
+  flex: none;
 }
 
 .sidebar-status {

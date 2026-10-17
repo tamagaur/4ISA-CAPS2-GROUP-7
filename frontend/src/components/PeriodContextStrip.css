@@ -1,0 +1,61 @@
+/* The shared filters, restated on pages without the filter bar. */
+.period-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0 32px 12px;
+  padding: 8px 14px;
+  border: 1px solid #E7EBF0;
+  border-left-width: 3px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #475467;
+}
+
+.period-strip.is-follows { border-left-color: #18A6B5; }
+.period-strip.is-partly { border-left-color: #E9A23B; }
+.period-strip.is-fixed { border-left-color: #94A3B8; }
+
+.period-strip-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #182230;
+}
+
+.period-strip-compare {
+  color: #667085;
+}
+
+.period-strip-rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 320px;
+}
+
+.period-strip-link {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--color-brand-primary, #E85C4A);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.period-strip-link:hover,
+.period-strip-link:focus-visible {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .period-strip {
+    margin: 0 16px 12px;
+  }
+  .period-strip-link {
+    margin-left: 0;
+  }
+}

@@ -53,7 +53,9 @@ def length_v2(history_months: int) -> tuple[str, str]:
 def _trend_reason(trend: str, trend_p: float | None, trend_slope: float | None) -> str:
     if trend_p is None or trend_slope is None:
         return f"trend={trend} (series too short or constant to test)"
-    return f"Mann-Kendall p={trend_p:.4f} from first sale, Theil-Sen slope {trend_slope:+.1f} units/month"
+    # "pieces", not "units": the series is quantity_sold in pieces, and the
+    # forecast page says pieces everywhere else (Technical Adviser, 2026-10).
+    return f"Mann-Kendall p={trend_p:.4f} from first sale, Theil-Sen slope {trend_slope:+.1f} pieces/month"
 
 
 def trend_v1(history_months: int, trend: str, trend_p: float | None, trend_slope: float | None) -> tuple[str, str]:

@@ -1,0 +1,691 @@
+/* ── SAN2 design system (2026-10-08 UI pass) ─────────────────────────────
+   One visual language for every page: the scale tokens, then the shared
+   pieces every page builds from — page header, card, section header,
+   buttons, badges, segmented control, filter bar, "How this works"
+   disclosure, empty state. Colours come from the tokens in index.css;
+   nothing here introduces a new hue except the soft badge tints, which
+   are each a light tint of an existing token's hue with darker ink. */
+:root {
+  /* Spacing — 4px base. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Layout rhythm: cards 20px apart, unrelated sections 40px apart. */
+  --card-gap: 20px;
+  --card-padding: 22px;
+  --section-gap: 40px;
+  --page-padding-x: 32px;
+
+  /* Shape and depth: a card sits on the page, it does not float. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.04);
+  --shadow-raised: 0 6px 16px rgba(16, 24, 40, 0.10);
+  --card-border: 1px solid #E7EBF0;
+
+  /* Type scale. */
+  --text-page-title: 30px;
+  --text-page-subtitle: 14px;
+  --text-section: 20px;
+  --text-card-title: 15px;
+  --text-kpi: 30px;
+  --text-body: 13.5px;
+  --text-meta: 12px;
+  --text-micro: 11px;
+
+  /* Soft badge tints: light background, darker ink of the same hue. */
+  --badge-critical-bg: #FDECEC;
+  --badge-critical-fg: #C84040;
+  --badge-warning-bg: #FFF4DD;
+  --badge-warning-fg: #B56E14;
+  --badge-success-bg: #E8F7EE;
+  --badge-success-fg: #278552;
+  --badge-neutral-bg: #F1F2F4;
+  --badge-neutral-fg: #4B5563;
+  --badge-info-bg: #EAF0F8;
+  --badge-info-fg: #2B4C7E;
+  --badge-plum-bg: #F3E6EF;
+  --badge-plum-fg: #76295E;
+  --badge-teal-bg: #E6F6F7;
+  --badge-teal-fg: #0F7F8A;
+  --badge-brand-bg: #FDEBE8;
+  --badge-brand-fg: #C84A3A;
+}
+
+/* ── Page header ──────────────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.page-header-text {
+  min-width: 0;
+}
+
+.page-header-title {
+  margin: 0;
+  font-size: var(--text-page-title);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.page-header-subtitle {
+  margin: var(--space-2) 0 0;
+  max-width: 760px;
+  font-size: var(--text-page-subtitle);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  .page-header {
+    flex-direction: column;
+  }
+
+  .page-header-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────── */
+.ui-card {
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--card-padding);
+}
+
+.ui-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.ui-card-title {
+  margin: 0;
+  font-size: var(--text-card-title);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.ui-card-subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* ── Section header (a heading above a group of cards) ────────────────── */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+}
+
+.section-header-title {
+  margin: 0;
+  font-size: var(--text-section);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.section-header-hint {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────
+   Primary: coral, one per view. Secondary: white with a border. Tertiary:
+   text only, for "View all", "More", "Dismiss". */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn-primary {
+  background-color: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+}
+
+.btn-secondary {
+  background-color: var(--color-surface);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-heading);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.btn-tertiary {
+  height: auto;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  color: var(--color-brand-primary);
+}
+
+.btn-tertiary:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A square icon-only action; the label lives in aria-label + title. */
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--color-text-muted);
+}
+
+.btn-icon:hover:not(:disabled) {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+.btn-icon.is-danger:hover:not(:disabled) {
+  background-color: var(--badge-critical-bg);
+  color: var(--badge-critical-fg);
+}
+
+/* ── Badges ───────────────────────────────────────────────────────────
+   Soft tint + darker ink; never a fully saturated block. A status badge
+   keeps its words, so colour is never the only signal. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
+}
+
+.badge-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.badge-critical { background-color: var(--badge-critical-bg); color: var(--badge-critical-fg); }
+.badge-warning { background-color: var(--badge-warning-bg); color: var(--badge-warning-fg); }
+.badge-success { background-color: var(--badge-success-bg); color: var(--badge-success-fg); }
+.badge-neutral { background-color: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
+.badge-info { background-color: var(--badge-info-bg); color: var(--badge-info-fg); }
+.badge-plum { background-color: var(--badge-plum-bg); color: var(--badge-plum-fg); }
+.badge-teal { background-color: var(--badge-teal-bg); color: var(--badge-teal-fg); }
+.badge-brand { background-color: var(--badge-brand-bg); color: var(--badge-brand-fg); }
+
+/* ABC class letters: the plum ramp, A strongest. */
+.badge-class {
+  justify-content: center;
+  min-width: 22px;
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+/* Pale tints with dark ink (the spec): A plum, B pink, C lavender. */
+.badge-class-a { background-color: #F0DFEA; color: #76295E; }
+.badge-class-b { background-color: #F9E8F1; color: #8E3A74; }
+.badge-class-c { background-color: #F3EFF9; color: #6B5A8A; }
+
+/* ── Segmented control (tabs, view switches, class pickers) ───────────── */
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background-color: #EEF1F5;
+}
+
+.segmented-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text-body);
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+.segmented-item:hover {
+  color: var(--color-text);
+}
+
+.segmented-item.is-active,
+.segmented-item[aria-selected='true'],
+.segmented-item[aria-pressed='true'] {
+  background-color: rgba(232, 92, 74, 0.13);
+  color: var(--color-brand-primary);
+  font-weight: 600;
+}
+
+.segmented-item:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+.segmented-count {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  color: var(--color-text-subtle);
+}
+
+/* ── Filter bar: search + selects + the page's one primary action ─────── */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.filter-bar-search {
+  position: relative;
+  flex: 1 1 280px;
+  min-width: 220px;
+}
+
+.filter-bar-spacer {
+  flex: 1 1 auto;
+}
+
+/* A search field in a filter bar: icon, then a borderless input. */
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text-subtle);
+}
+
+.filter-search:focus-within {
+  border-color: var(--color-brand-primary);
+}
+
+.filter-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.filter-search input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+/* ── "How this works": methodology kept, folded away ─────────────────── */
+.disclosure {
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+}
+
+.disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 12px 16px;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+  cursor: pointer;
+  border-radius: var(--radius-card);
+}
+
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure > summary:hover {
+  background-color: var(--color-surface-raised);
+}
+
+.disclosure > summary:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: -2px;
+}
+
+.disclosure-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-subtle);
+  transition: transform 0.15s;
+}
+
+.disclosure[open] > summary .disclosure-chevron {
+  transform: rotate(90deg);
+}
+
+.disclosure-hint {
+  margin-left: auto;
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--color-text-subtle);
+}
+
+.disclosure-body {
+  padding: 4px 16px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-body);
+}
+
+.disclosure-body > :first-child {
+  margin-top: 0;
+}
+
+.disclosure-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Flat variant inside a card: no border of its own. */
+.disclosure.is-flat {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: none;
+}
+
+.disclosure.is-flat > summary {
+  padding: 12px 0;
+  border-radius: 0;
+}
+
+.disclosure.is-flat > summary:hover {
+  background: none;
+  color: var(--color-text);
+}
+
+.disclosure.is-flat .disclosure-body {
+  padding: 0 0 4px;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+
+.empty-state-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.empty-state-text {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* SectionLede.jsx (2026-10-16): the one-line "what you learn here" under a
+   section's or chart's title, the same on every page. */
+.section-lede {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+/* EmptyState.jsx (2026-10-16): the body column, the action row, the
+   failed-load tone (LoadError.jsx) and the compact strip above a page's
+   cards. */
+.empty-state-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.empty-state-text p {
+  margin: 0 0 4px;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.empty-state-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.empty-state.is-error .empty-state-icon {
+  background-color: var(--color-danger-bg-strong);
+  color: var(--color-danger-text);
+}
+
+.empty-state.is-compact {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  text-align: left;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+}
+
+.empty-state.is-compact .empty-state-icon {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  flex-shrink: 0;
+  background-color: var(--color-surface);
+}
+
+.empty-state.is-compact .empty-state-body {
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.empty-state.is-compact .empty-state-text {
+  max-width: none;
+}
+
+.empty-state.is-compact .empty-state-actions {
+  justify-content: flex-start;
+  margin-top: var(--space-2);
+}
+
+.empty-state-spin {
+  animation: empty-state-spin 0.9s linear infinite;
+}
+
+@keyframes empty-state-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* SlowLoadNotice.jsx: a load past ~8 s (the live server waking up). */
+.slow-load-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 var(--space-4);
+  padding: 10px 14px;
+  border: 1px solid var(--color-severity-urgent-border);
+  border-radius: 10px;
+  background-color: var(--color-severity-urgent-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.slow-load-notice svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--color-severity-urgent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-state-spin {
+    animation: none;
+  }
+}
+
+/* ── Notes: one quiet line for a data caveat ──────────────────────────── */
+.ui-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-sunken);
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.ui-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ui-note.is-warning {
+  background-color: var(--badge-warning-bg);
+  color: var(--badge-warning-fg);
+}
+
+.ui-note.is-success {
+  background-color: var(--badge-success-bg);
+  color: var(--badge-success-fg);
+}
+
+.ui-note.is-info {
+  background-color: var(--badge-info-bg);
+  color: var(--badge-info-fg);
+}
+
+/* A lede with no title above it (a KPI row, a table): it stands in as the
+   section's caption, so it gets room below instead of above. */
+.section-lede.is-standalone {
+  margin: 4px 0 10px;
+}
+
+/* One key word of a card's title in the accent (2026-10-16): the logo red
+   into a deep amber, both 4.6:1 or more on white. */
+.title-accent {
+  background: linear-gradient(90deg, #C74E3D 0%, #B4581C 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: #C74E3D;
+  -webkit-text-fill-color: transparent;
+}

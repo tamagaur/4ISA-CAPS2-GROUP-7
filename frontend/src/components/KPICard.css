@@ -1,70 +1,100 @@
+/* KPI card (UI pass, 2026-10-08): a white card on the page, the status
+   colour on the icon tile only, the figure dominant, one context line. */
 .kpi-card {
-  background-color: var(--color-surface);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e8edf2;
-  border-top: 3px solid transparent;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  gap: 10px;
+  min-width: 0;
+  padding: 20px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 
-.kpi-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.09), 0 3px 6px rgba(0, 0, 0, 0.05);
+/* A thin accent at the top in the card's status colour (KPICard data-tier),
+   the spec's way of marking a card without colouring it. */
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background-color: var(--kpi-accent, transparent);
 }
+
+.kpi-card[data-tier='danger'] { --kpi-accent: var(--color-critical); }
+.kpi-card[data-tier='loss'] { --kpi-accent: var(--color-warning); }
+.kpi-card[data-tier='healthy'] { --kpi-accent: var(--color-success); }
+.kpi-card[data-tier='action'] { --kpi-accent: var(--color-forecast); }
+.kpi-card[data-tier='neutral'] { --kpi-accent: var(--color-slate-400); }
 
 .kpi-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The period basis tag sits at the header's right, and drops under the
+   title when the card is too narrow for both. */
+.kpi-basis {
+  margin-left: auto;
+  max-width: 100%;
 }
 
 .kpi-title {
-  color: var(--color-text-muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.9px;
+  display: inline-flex;
+  align-items: center;
   margin: 0;
+  font-size: var(--text-micro);
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .kpi-icon {
-  opacity: 0.55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
 }
 
-/* Bold, matching every other page's headline figure (.abc-card-value,
-   .reorder-card-value, .summary-value are all 700). This was the one
-   KPI number in the app still at 500, so the hero row read lighter than
-   the cards below it. */
+.kpi-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
 .kpi-value {
-  font-size: 32px;
+  font-size: var(--text-kpi);
   font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   color: var(--color-text);
-  margin-bottom: 4px;
-  line-height: 1.15;
-  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The count's unit ("SKUs"), read as part of the figure but quieter than it. */
 .kpi-unit {
   margin-left: 6px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: 0;
+  color: var(--color-text-muted);
 }
 
-/* Value + sparkline on one row: the number leads, the 12-point history
-   sits quietly at the right (stat-tile contract — trend in a de-emphasis
-   hue, the current period marked in the series hue). */
+/* Value + sparkline on one row: the number leads, the history sits quietly
+   at the right. */
 .kpi-value-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .kpi-sparkline {
@@ -75,54 +105,123 @@
 .kpi-footer {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .kpi-subtext {
-  font-size: 12px;
   display: flex;
   align-items: center;
   gap: 4px;
+  font-size: var(--text-meta);
 }
 
 .kpi-trend-icon {
   flex-shrink: 0;
 }
 
-/* Month-over-month change as a shaded pill: green when the figure rose,
-   red when it fell, gray when flat. The arrow repeats the direction, so the
-   pill never relies on colour alone (greyscale, colour-blind readers). */
+/* Change against the previous period as a soft pill; the arrow repeats the
+   direction, so it never relies on colour alone. */
 .kpi-delta-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  align-self: flex-start;
   padding: 2px 8px 2px 6px;
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .kpi-delta-pill.is-positive {
-  background-color: var(--color-success-bg-alt);
-  color: var(--color-success-text);
+  background-color: var(--badge-success-bg);
+  color: var(--badge-success-fg);
 }
 
 .kpi-delta-pill.is-negative {
-  background-color: var(--color-danger-bg-strong);
-  color: var(--color-danger-text);
+  background-color: var(--badge-critical-bg);
+  color: var(--badge-critical-fg);
 }
 
 .kpi-delta-pill.is-neutral {
-  background-color: var(--color-surface-sunken);
-  color: var(--color-text-body);
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
 }
 
 .kpi-context {
-  font-size: 12px;
-  color: var(--color-text-subtle);
-  line-height: 1.4;
+  font-size: var(--text-meta);
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+/* KPICard `flag`: a short amber badge beside the figure. */
+.kpi-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--badge-warning-fg);
+  background-color: var(--badge-warning-bg);
+}
+
+.kpi-flag svg {
+  flex-shrink: 0;
+}
+
+.kpi-flag .info-tip {
+  margin-left: 0;
+}
+
+.kpi-flag .info-tip-btn {
+  color: var(--badge-warning-fg);
+}
+
+/* An information tag, not a caution (e.g. "Current plan"). */
+.kpi-flag.is-info {
+  color: var(--badge-info-fg);
+  background-color: var(--badge-info-bg);
+}
+
+.kpi-flag.is-info .info-tip-btn {
+  color: var(--badge-info-fg);
+}
+
+/* The card's way through to what is behind its figure (KPICard `action`). */
+.kpi-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--text-meta);
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.kpi-action:hover,
+.kpi-action:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.kpi-action:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* A note with more than one reading of the figure (stock in pieces, then
+   weeks of cover): one per line. */
+.kpi-note-line {
+  display: block;
 }
 
 /* Period switch under a card's value (Sales: range total / end month). */

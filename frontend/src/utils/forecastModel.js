@@ -24,6 +24,33 @@ const METHOD_LABELS = {
   xgb_ma3_avg: 'XGBoost + MA3 average',
 };
 
+// What each model does, for a reader who doesn't know its name (the
+// Technical Adviser, 2 Oct 2026). `short` goes under the forecast number,
+// `long` beside the model's name in "How this forecast was made". Each says
+// what the model computes and nothing about how accurate it is.
+//
+// `season` answers the Technical Adviser's "the product is seasonal: does
+// the forecast use it?" (2 Oct 2026). The trained model takes the calendar
+// month as an input (FEATURE_NAMES' month_of_year, analytics/forecasting/
+// global_model.py); the 3-month average and TSB have no such term.
+const METHOD_PLAIN = {
+  ma3: {
+    short: 'average of the last 3 months',
+    long: 'the average of the last 3 months\u2019 sales',
+    season: 'Not used: an average of the last 3 months does not look at the same month a year earlier',
+  },
+  tsb: {
+    short: 'average for on-and-off sales',
+    long: 'an average that tracks both how often the product sells and how much when it does',
+    season: 'Not used: it follows how often and how much the product sells, not the time of year',
+  },
+  xgb_ma3_avg: {
+    short: 'average of two methods',
+    long: 'a model trained on every product\u2019s sales history (XGBoost), averaged with the last 3 months\u2019 average (MA3)',
+    season: 'Used by half of it: the trained model takes the calendar month as an input; the 3-month average does not',
+  },
+};
+
 // kind:          'forecast' — a real model forecast (MA3, TSB, the XGBoost +
 //                MA3 average, or MA3 as a fallback); 'provisional' — under 3
 //                sales months, a trailing average kept as a placeholder, NOT
@@ -32,6 +59,8 @@ const METHOD_LABELS = {
 // label:         the display name, or null for a method this file doesn't
 //                know. Never guessed as MA3: before 2026-09-21 every forecast
 //                was MA3, and a guess would bring that falsehood back.
+// plain:         { short, long } from METHOD_PLAIN, or null where the label
+//                is already plain words (provisional, no order) or unknown.
 // recomputable:  the browser can reproduce the model for an earlier cutoff.
 //                Only a served MA3: TSB and XGBoost run in the pipeline only,
 //                and whether a fallback's guard would fire at an earlier
@@ -47,17 +76,24 @@ export function describeServedModel(modelParams, status) {
   const { method } = params;
 
   if (status === 'insufficient_data' || params.provisional === true || method === 'trailing_average') {
-    return { kind: 'provisional', label: 'Provisional average', recomputable: false, fallback: false };
+    return { kind: 'provisional', label: 'Provisional average', plain: null, recomputable: false, fallback: false };
   }
   if (status === 'dead_sku' || method === 'zero_no_order') {
-    return { kind: 'no_order', label: 'No order (no recent sales)', recomputable: false, fallback: false };
+    return { kind: 'no_order', label: 'No order (no recent sales)', plain: null, recomputable: false, fallback: false };
   }
   if (method === 'ma3' && params.backup_fired === true) {
-    return { kind: 'forecast', label: `${METHOD_LABELS.ma3} (fallback)`, recomputable: false, fallback: true };
+    return {
+      kind: 'forecast',
+      label: `${METHOD_LABELS.ma3} (fallback)`,
+      plain: { ...METHOD_PLAIN.ma3, short: `${METHOD_PLAIN.ma3.short} (fallback)` },
+      recomputable: false,
+      fallback: true,
+    };
   }
   return {
     kind: 'forecast',
     label: METHOD_LABELS[method] ?? null,
+    plain: METHOD_PLAIN[method] ?? null,
     recomputable: method === 'ma3',
     fallback: false,
   };

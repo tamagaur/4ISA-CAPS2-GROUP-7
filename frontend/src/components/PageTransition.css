@@ -1,0 +1,59 @@
+/* The page-to-page transition (PageTransition.jsx). The wrapper stands in
+   for the page as .main-content's flex child, so every page keeps the
+   column it had (each page root is flex: 1 in a flex column): it grows
+   with its page and never shrinks it. */
+.page-transition {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* The new page fades in and lifts into place; the old one fades out and
+   drifts up a little, and takes no clicks while it goes. Opacity and a
+   small vertical shift only: nothing moves sideways, so no width ever
+   overflows, on any screen. The entrance fills backwards only: once it
+   has played, the wrapper is back to plain styles, with no transform of
+   its own (even an identity transform would make it the frame of
+   reference for a page's fixed-position dialogs), so dialogs behave as
+   they always did. The exit holds its last frame until the page is
+   taken down. */
+.page-transition.is-entering {
+  animation: page-transition-in 320ms cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+}
+
+.page-transition.is-leaving {
+  animation: page-transition-out 160ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes page-transition-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes page-transition-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition.is-entering,
+  .page-transition.is-leaving {
+    animation: none;
+  }
+}

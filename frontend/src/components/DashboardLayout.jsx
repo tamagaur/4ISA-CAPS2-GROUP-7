@@ -1,5 +1,7 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import PeriodContextStrip from './PeriodContextStrip';
+import { COMPARE_MODES, COMPARE_STORAGE_KEY, isValidCompare, periodFromParam, periodToParam } from '../periodFilter';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FlaskConical } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
@@ -9,13 +11,13 @@ import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import ErrorBoundary from './ErrorBoundary';
-import { usePermissions } from '../permissions/context';
+import PageTransition from './PageTransition';
 import { MOCK_PERMISSIONS } from '../api/mocks/permissionsMock';
 import { LoadingStatus, PageSkeleton } from './Skeleton';
-import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal, labelForPrincipal } from '../principals';
+import { DEFAULT_PRINCIPAL, PRINCIPAL_STORAGE_KEY, isValidPrincipal } from '../principals';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import {
-  DATA_MODES, PLACEHOLDER_PRINCIPAL, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
+  DATA_MODES, PLACEHOLDER_START, getDataMode, isPreviewMode, setDataMode as storeDataMode,
 } from '../dataMode';
 import './DashboardLayout.css';
 
@@ -105,83 +107,51 @@ const getDefaultDateRange = (mode = DATA_MODES.REAL) => {
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
 };
 
-// The range someone last saved, kept across reloads — per data mode, since
-// preview reaches back to 2021 and real mode can't. Until 2026-09-29 the
-// range was written to four san2_start_/san2_end_ keys that nothing ever
-// read, so every reload reset it. The key is new on purpose: a range saved
-// under the old seven-month default must not mask the twelve-month one.
-// A saved range is dropped, and the default comes back, when:
-//   - "today" has moved since it was saved (new data loaded, and the
-//     default is what ends on the newest month);
-//   - it no longer fits what the picker offers (before the mode's first
-//     month, after today, backwards, or under MIN_RANGE_MONTHS).
-// Storage can be unavailable (blocked, private mode), so every access is
-// guarded and falls back to the default.
+// Ranges and comparisons once kept in the browser (until 2026-10-09; the
+// four san2_start_/san2_end_ keys before 2026-09-29). Nothing reads them now:
+// the address carries the filters. They are removed once, at mount.
 const RANGE_STORAGE_KEY = 'san2_date_range_v2';
 const LEGACY_RANGE_KEYS = ['san2_start_month', 'san2_start_year', 'san2_end_month', 'san2_end_year'];
-const todayStamp = () => {
-  const today = getCurrentRealWorldPeriod();
-  return `${today.month} ${today.year}`;
-};
 
-const loadSavedRange = (mode) => {
-  let saved;
-  try {
-    saved = JSON.parse(localStorage.getItem(`${RANGE_STORAGE_KEY}:${mode}`) || 'null');
-  } catch {
-    return null;
-  }
-  if (!saved || typeof saved !== 'object' || saved.today !== todayStamp()) return null;
-  const { startMonth, startYear, endMonth, endYear } = saved;
-  const monthsOk = MONTHS.includes(startMonth) && MONTHS.includes(endMonth);
-  const yearsOk = [startYear, endYear].every((y) => /^\d{4}$/.test(String(y)));
-  if (!monthsOk || !yearsOk) return null;
+// A range in the address (?from=2025-03&to=2026-02), so a link or a reload
+// shows the same view. Checked against what the picker offers: inside the
+// data, not backwards, and at least MIN_RANGE_MONTHS long.
+const loadUrlRange = (mode) => {
+  const params = new URLSearchParams(window.location.search);
+  const from = periodFromParam(params.get('from'));
+  const to = periodFromParam(params.get('to'));
+  if (!from || !to) return null;
   const today = getCurrentRealWorldPeriod();
   const first = isPreviewMode(mode) ? PLACEHOLDER_START : { month: 'Jan', year: String(FIRST_DATA_YEAR) };
-  const start = periodValue(startMonth, startYear);
-  const end = periodValue(endMonth, endYear);
+  const start = periodValue(from.month, from.year);
+  const end = periodValue(to.month, to.year);
   const fits = start >= periodValue(first.month, first.year)
     && end <= periodValue(today.month, today.year)
     && end - start + 1 >= MIN_RANGE_MONTHS;
-  return fits ? { startMonth, startYear: String(startYear), endMonth, endYear: String(endYear) } : null;
+  return fits ? { startMonth: from.month, startYear: from.year, endMonth: to.month, endYear: to.year } : null;
 };
 
-const saveRange = (mode, range) => {
-  try {
-    localStorage.setItem(`${RANGE_STORAGE_KEY}:${mode}`, JSON.stringify({ ...range, today: todayStamp() }));
-  } catch {
-    // Not remembered this time; the range still applies.
-  }
+// The comparison in the address, else the default: the same months a year
+// earlier, the like-for-like one for seasonal FMCG sales and the Technical
+// Adviser's own question ("2025 vs 2024?").
+const loadCompare = () => {
+  const fromUrl = new URLSearchParams(window.location.search).get('compare');
+  return isValidCompare(fromUrl) ? fromUrl : COMPARE_MODES.YEAR;
 };
 
-const clearSavedRange = (mode) => {
-  try {
-    localStorage.removeItem(`${RANGE_STORAGE_KEY}:${mode}`);
-  } catch {
-    // Nothing stored to clear.
-  }
-};
 
-// "Open" means two things by width (Sidebar.css):
-// - desktop: pinned at full width. Closed is the icon rail, which stretches
-//   open on hover, so closed is the default and the menu button pins it,
-//   remembered per browser.
-// - phone/tablet (max-width: 900px): a slide-over. It starts closed so it
-//   doesn't cover the page on first load.
-// Computed once at mount, not live-tracked across resizes.
-const SIDEBAR_PINNED_KEY = 'san2_sidebar_pinned';
-const isNarrow = () => window.matchMedia('(max-width: 900px)').matches;
-const startsWithSidebarOpen = () => {
-  if (isNarrow()) return false;
-  try {
-    return localStorage.getItem(SIDEBAR_PINNED_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
+// On phone/tablet widths the sidebar becomes a slide-over overlay (see
+// Sidebar.css's matching max-width: 900px breakpoint) rather than a
+// permanently docked column, so it shouldn't default open and immediately
+// cover the page on first load there — computed once at mount, not
+// live-tracked across resizes.
+const startsWithSidebarOpen = () => !window.matchMedia('(max-width: 900px)').matches;
 
 const DashboardLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(startsWithSidebarOpen);
+  // True once the menu button has been used, so the page's slide
+  // (Sidebar.css) plays on a toggle and not on first load.
+  const [sidebarAnimated, setSidebarAnimated] = useState(false);
 
   // Warm every page's code in the background once someone is signed in, so
   // only the first page they land on waits on a chunk download.
@@ -200,15 +170,30 @@ const DashboardLayout = () => {
   // Held here as state so the Topbar, the banner and every page re-render
   // on a flip; the module copy is what apiFetch reads.
   const [dataMode, setDataModeState] = useState(getDataMode);
-  // Where the page opens: the range last saved for this mode, if it still
-  // fits (loadSavedRange), else the default. Read once, at mount.
-  const [initialRange] = useState(() => loadSavedRange(dataMode) || getDefaultDateRange(dataMode));
+  // Where the page opens (2026-10-09): the filters in the address when there
+  // are any (a reload, a shared link), else the default view — the last 12
+  // months, compared with the same months a year earlier. A range picked on
+  // an earlier visit is no longer carried over, so every new visit starts on
+  // the full-year, like-for-like view the Technical Adviser reads first.
+  const [initialRange] = useState(() => loadUrlRange(dataMode) || getDefaultDateRange(dataMode));
+
+  // What every comparison on the page is against (src/periodFilter.js):
+  // the same months a year earlier (default), the period just before, or
+  // none. Shared like the range, remembered per browser, kept in the address.
+  const [compare, setCompareState] = useState(loadCompare);
+  const setCompare = (next) => {
+    if (isValidCompare(next)) setCompareState(next);
+  };
 
   // What preview means right now (GET /data-mode): the placeholder window
   // and, when scripts/build_preview_outputs.py has run, `outputs` — the
   // what-if forecasts and LP the predictive and prescriptive cards show.
   // Null in real mode, and while the request is in flight.
   const [previewInfo, setPreviewInfo] = useState(null);
+  // Whether this server has synthetic data to show at all (DM_DEMO_ENABLED):
+  // null until GET /data-mode answers. The Topbar switch is greyed out when
+  // it has none, and the banner says so if the view is on anyway.
+  const [syntheticAvailable, setSyntheticAvailable] = useState(null);
 
   // Applied range: the saved one, or the 12-month default ending "today".
   const [startMonth, setStartMonth] = useState(initialRange.startMonth);
@@ -220,7 +205,8 @@ const DashboardLayout = () => {
   // once, so they don't linger in anyone's browser.
   useEffect(() => {
     try {
-      LEGACY_RANGE_KEYS.forEach((key) => localStorage.removeItem(key));
+      [...LEGACY_RANGE_KEYS, `${RANGE_STORAGE_KEY}:real`, `${RANGE_STORAGE_KEY}:preview`, COMPARE_STORAGE_KEY]
+        .forEach((key) => localStorage.removeItem(key));
     } catch {
       // Storage unavailable: nothing to tidy.
     }
@@ -238,6 +224,8 @@ const DashboardLayout = () => {
   // otherwise be sent straight to the backend, which 400s on anything
   // outside its allowlist.
   const [principal, setPrincipalState] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('principal');
+    if (isValidPrincipal(fromUrl)) return fromUrl;
     const stored = localStorage.getItem(PRINCIPAL_STORAGE_KEY);
     return isValidPrincipal(stored) ? stored : DEFAULT_PRINCIPAL;
   });
@@ -254,7 +242,6 @@ const DashboardLayout = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const isAdmin = usePermissions().role === 'admin';
 
   // Top-bar Refresh: drop every cached response and remount the current page
   // so its effects fetch again. Remounting (rather than asking each page to
@@ -266,16 +253,23 @@ const DashboardLayout = () => {
     setRefreshKey((k) => k + 1);
   };
 
-  // Refetched on every mode flip and Refresh, like the pages themselves.
+  // Asked as the synthetic view on load, on every mode flip and on Refresh, so
+  // the switch knows whether there is anything to show before it is used:
+  // the generated window is null when the server's DM_DEMO_ENABLED is off.
   useEffect(() => {
-    if (!isPreviewMode(dataMode)) {
-      setPreviewInfo(null);
-      return undefined;
-    }
+    if (!isPreviewMode(dataMode)) setPreviewInfo(null);
     let cancelled = false;
-    getDataModeInfo()
-      .then((info) => { if (!cancelled) setPreviewInfo(info); })
-      .catch(() => { if (!cancelled) setPreviewInfo(null); });
+    getDataModeInfo({ preview: true })
+      .then((info) => {
+        if (cancelled) return;
+        setSyntheticAvailable(Boolean(info?.placeholder));
+        if (isPreviewMode(dataMode)) setPreviewInfo(info);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSyntheticAvailable(null);
+        setPreviewInfo(null);
+      });
     return () => { cancelled = true; };
   }, [dataMode, refreshKey]);
 
@@ -306,15 +300,8 @@ const DashboardLayout = () => {
   const canApplyPendingPeriod = isPendingRangeValid && isPendingRangeLongEnough;
 
   const toggleSidebar = () => {
-    const next = !isSidebarOpen;
-    setIsSidebarOpen(next);
-    if (!isNarrow()) {
-      try {
-        localStorage.setItem(SIDEBAR_PINNED_KEY, next ? '1' : '0');
-      } catch {
-        // Private mode or blocked storage: it just isn't remembered.
-      }
-    }
+    setIsSidebarOpen(!isSidebarOpen);
+    setSidebarAnimated(true);
   };
 
   const handleApplyPeriod = () => {
@@ -323,10 +310,36 @@ const DashboardLayout = () => {
     setStartYear(pendingStartYear);
     setEndMonth(pendingEndMonth);
     setEndYear(pendingEndYear);
-    saveRange(dataMode, {
-      startMonth: pendingStartMonth, startYear: pendingStartYear, endMonth: pendingEndMonth, endYear: pendingEndYear,
-    });
   };
+
+  // A quick range (Last 12 months, 2025, ...) applies at once, with no Save
+  // step: the Technical Adviser changes the filter first and expects the
+  // screen to answer.
+  const applyPreset = (range) => {
+    updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
+  };
+
+  // The filters live in the address too (?from=&to=&compare=&principal=),
+  // merged into whatever the page keeps there (?sku=, ?class=), so a copied
+  // link or a reload opens the same view. Replaced, never pushed: Back still
+  // leaves the page rather than stepping through filter changes.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const wanted = {
+      from: periodToParam(startMonth, startYear),
+      to: periodToParam(endMonth, endYear),
+      compare,
+      principal,
+    };
+    let changed = false;
+    Object.entries(wanted).forEach(([key, value]) => {
+      if (value && params.get(key) !== value) {
+        params.set(key, value);
+        changed = true;
+      }
+    });
+    if (changed) navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
+  }, [startMonth, startYear, endMonth, endYear, compare, principal, location.pathname, location.search, navigate]);
 
   const handleDiscardPeriod = () => {
     setPendingStartMonth(startMonth);
@@ -343,23 +356,21 @@ const DashboardLayout = () => {
   const handleResetToToday = () => {
     const range = getDefaultDateRange(dataMode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
-    clearSavedRange(dataMode);
+    setCompareState(COMPARE_MODES.YEAR);
   };
 
   // Flipping the mode switches to that mode's own range: the one saved for
-  // it, else its default — all of Jan 2021 – today in preview, the usual
-  // 12 months in real mode (whose picker can't show 2021-22 at all).
-  // Turning preview on also switches to Unilever, the one principal with
-  // placeholder months — under All, the both-principals-or-nothing rule
-  // leaves those months blank. Every cached response is dropped and the
-  // page remounts, like the Refresh button.
+  // it, else its default — all of Jan 2021 – today with synthetic data, the
+  // usual 12 months in real mode (whose picker can't show 2021-22 at all).
+  // The principal stays: since the demonstration data (2026-10-15) both
+  // principals have synthetic months. Every cached response is dropped and
+  // the page remounts, like the Refresh button.
   const handleDataModeChange = (next) => {
     if (next === dataMode) return;
     const mode = storeDataMode(next);
     setDataModeState(mode);
-    const range = loadSavedRange(mode) || getDefaultDateRange(mode);
+    const range = getDefaultDateRange(mode);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
-    if (isPreviewMode(mode)) setPrincipal(PLACEHOLDER_PRINCIPAL);
     invalidateCache();
     setRefreshKey((k) => k + 1);
   };
@@ -404,7 +415,7 @@ const DashboardLayout = () => {
   };
 
   return (
-    <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'}`}>
+    <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'} ${sidebarAnimated ? 'sidebar-animated' : ''}`}>
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={toggleSidebar}
@@ -419,6 +430,7 @@ const DashboardLayout = () => {
       <div className="main-content">
         <Topbar
           toggleSidebar={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
           rightSlot={<DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
           startMonth={startMonth}
           startYear={startYear}
@@ -441,28 +453,36 @@ const DashboardLayout = () => {
           setPrincipal={setPrincipal}
           dataMode={dataMode}
           onDataModeChange={handleDataModeChange}
+          syntheticAvailable={syntheticAvailable}
         />
-        {/* On every page for as long as preview is on — a placeholder month
-            must never be readable as SSM's own figure. */}
+        {/* On every page for as long as synthetic data is on: a generated
+            month must never be readable as SSM's own figure (CLAUDE.md rule
+            2). What it adds differs by principal: Unilever's 2021-22 back-cast
+            rides in the real payloads, marked; Del Monte's comes in a block of
+            its own and is drawn apart from the real figures. */}
         {isPreviewMode(dataMode) && (
           <div className="preview-banner" role="status">
             <FlaskConical size={16} aria-hidden="true" className="preview-banner-icon" />
             <p className="preview-banner-text">
-              <strong>Preview: Jan 2021 – Dec 2022 is placeholder data, not SSM&apos;s.</strong>{' '}
-              Those months are synthetic Unilever sales, added so the dashboard can be seen over five years.
-              {previewInfo?.outputs
-                ? <> Forecasts, reorder recommendations and safety stock are a what-if run of the same models on that
-                  five-year history (built {String(previewInfo.outputs.built_at).slice(0, 10)}) — never saved, not for decisions.</>
-                : <> Forecasts, reorder recommendations and safety stock still use real data only.</>}
-              {/* GET /data-mode compares the placeholder the what-if files
-                  were built on with the one in the database now. */}
-              {previewInfo?.outputs_stale && (
-                <> <strong>That what-if run is outdated:</strong> the placeholder data has changed since it was built,
-                  so those figures may not match the months shown.
-                  {isAdmin ? ' Rebuild it with scripts/build_preview_outputs.py.' : ' Let an admin know.'}</>
-              )}
-              {principal !== PLACEHOLDER_PRINCIPAL && (
-                <> The placeholder is Unilever&apos;s, so under {labelForPrincipal(principal)} those months stay empty.</>
+              {syntheticAvailable === false ? (
+                <>
+                  <strong>Synthetic data is not switched on for this server,</strong> so every page still shows
+                  SSM&apos;s real data only.
+                </>
+              ) : principal === 'delmonte' ? (
+                <>
+                  <strong>Showing Del Monte&apos;s real data plus synthetic data, which is not SSM&apos;s.</strong>{' '}
+                  The months SSM did not collect, the Jan 2025 change of categories and Jan 2021 – Dec 2022 are filled
+                  with generated figures, drawn dotted and marked synthetic wherever they appear. The cards at the top
+                  stay real.
+                </>
+              ) : (
+                <>
+                  <strong>Showing Unilever&apos;s real data plus synthetic data, which is not SSM&apos;s.</strong>{' '}
+                  SSM&apos;s records start in January {FIRST_DATA_YEAR}, so Jan 2021 – Dec 2022 are generated: each
+                  product held at its own average, with no trend. They are marked on every chart, and the sales totals
+                  that count them say so. Forecasts, reorder plans and safety stock use real data only.
+                </>
               )}
             </p>
             <button type="button" className="preview-banner-btn" onClick={() => handleDataModeChange(DATA_MODES.REAL)}>
@@ -470,9 +490,23 @@ const DashboardLayout = () => {
             </button>
           </div>
         )}
+        {/* Off the dashboard, which has the full filter bar: what the shared
+            filters are set to, and whether this page follows them. */}
+        <PeriodContextStrip
+          pathname={location.pathname}
+          principal={principal}
+          range={{ startMonth, startYear, endMonth, endYear }}
+          compare={compare}
+        />
+        {/* The routed page, faded out and in on every change of page
+            (PageTransition renders the outlet). Keyed on the refresh count
+            as the outlet was, so Refresh rebuilds the page and it enters
+            again. */}
         <ErrorBoundary resetKey={`${location.pathname}:${refreshKey}`}>
-          <Suspense fallback={<PageLoadingFallback />}>
-            <Outlet key={refreshKey} context={{
+          <PageTransition
+            key={refreshKey}
+            fallback={<PageLoadingFallback />}
+            context={{
               startMonth, startYear, endMonth, endYear,
               pendingStartMonth, setPendingStartMonth,
               pendingStartYear, setPendingStartYear,
@@ -480,11 +514,12 @@ const DashboardLayout = () => {
               pendingEndYear, setPendingEndYear,
               isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
               handleApplyPeriod, handleResetToToday,
-              updatePeriodImmediately, realWorldPeriod,
+              updatePeriodImmediately, realWorldPeriod, applyPreset,
+              compare, setCompare,
               principal, setPrincipal,
-              dataMode, previewInfo,
-            }} />
-          </Suspense>
+              dataMode, previewInfo, syntheticAvailable,
+            }}
+          />
         </ErrorBoundary>
       </div>
 

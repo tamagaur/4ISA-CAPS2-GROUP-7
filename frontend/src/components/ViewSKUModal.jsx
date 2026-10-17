@@ -2,6 +2,8 @@ import React from 'react';
 import { X } from 'lucide-react';
 import Modal from './Modal';
 import { formatUnits } from '../utils/formatNumber';
+import { formatDate, formatMonth } from '../utils/formatDate';
+import ProductName from './ProductName';
 import './ViewSKUModal.css';
 
 // Helper to format SKU Code (e.g. SKU-10234)
@@ -14,14 +16,6 @@ const formatSKU = (sku) => {
   return sku;
 };
 
-// Helper to format date into "Apr 15, 2026"
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
 // Helper for category badge circle
 const getCatClass = (cat) => {
   switch (cat) {
@@ -32,7 +26,7 @@ const getCatClass = (cat) => {
   }
 };
 
-const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
+const ViewSKUModal = ({ isOpen, sku, onClose, onEdit, onOpenForecast, onOpenReorder }) => {
   // Escape-to-close now comes from the shared <Modal> shell below, along
   // with focus trapping and role="dialog".
   if (!isOpen || !sku) return null;
@@ -54,9 +48,13 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
       overlayClassName="view-sku-modal-overlay"
       containerClassName="view-sku-modal-card"
     >
-        {/* Header */}
+        {/* Header — the name first, its SKU code under it, as every
+            product list shows it. A Del Monte sell-out category has no code
+            (its id is the category path), so its name stands alone. */}
         <div className="view-sku-modal-header">
-          <h3 className="view-sku-product-title">{sku.product}</h3>
+          <h3 className="view-sku-product-title">
+            <ProductName name={sku.product} code={sku.grain === 'category' ? null : formatSKU(sku.code)} />
+          </h3>
           <button className="view-sku-close-btn" onClick={onClose} aria-label="Close modal">
             <X size={18} />
           </button>
@@ -68,7 +66,7 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
             {/* SKU Code */}
             {sku.code && (
               <div className="view-sku-field">
-                <span className="view-sku-label">SKU CODE</span>
+                <span className="view-sku-label">{sku.grain === 'category' ? 'CATEGORY PATH' : 'SKU CODE'}</span>
                 <span className="view-sku-value sku-code-text">{formatSKU(sku.code)}</span>
               </div>
             )}
@@ -81,12 +79,15 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
               </div>
             )}
 
-            {/* Category */}
+            {/* ABC class, with the run it comes from: a last-known class
+                can be months old. Labelled CATEGORY until 2026-10-03, the
+                word Del Monte's product categories also use. */}
             {sku.cat && (
               <div className="view-sku-field">
-                <span className="view-sku-label">CATEGORY</span>
+                <span className="view-sku-label">ABC CLASS</span>
                 <div className="view-sku-badge-wrapper">
                   <span className={getCatClass(sku.cat)}>{sku.cat}</span>
+                  {sku.catPeriod && <span className="view-sku-asof">{formatMonth(sku.catPeriod)} run</span>}
                 </div>
               </div>
             )}
@@ -118,6 +119,9 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
                       </>
                     : <>{sku.currentStockCases.toLocaleString()} cases</>}
                 </span>
+                {/* The count's own day (GET /sku's stock_count_date): the
+                    file filed as "Mar 2026" was counted on 6 Apr 2026. */}
+                {sku.stockCountDate && <span className="view-sku-asof">as of the count on {formatDate(sku.stockCountDate)}</span>}
               </div>
             )}
 
@@ -146,6 +150,7 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
                 <span className="view-sku-label">TARGET STOCK</span>
                 {/* Whole pieces rounded up, as the SKU table shows it. */}
                 <span className="view-sku-value mono-val">{formatUnits(sku.reorderPt)} pieces</span>
+                {sku.planCycle && <span className="view-sku-asof">{formatMonth(sku.planCycle)} plan</span>}
               </div>
             )}
 
@@ -195,6 +200,19 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit }) => {
 
         {/* Modal Footer Actions */}
         <div className="view-sku-modal-footer">
+          {/* Where this product goes next: its sales history and forecast,
+              and its order recommendation when the plan has one. Each is
+              passed only when the page it opens is allowed and applies. */}
+          {onOpenForecast && (
+            <button className="view-sku-btn-close" onClick={() => { onClose(); onOpenForecast(); }}>
+              Sales and forecast
+            </button>
+          )}
+          {onOpenReorder && (
+            <button className="view-sku-btn-close" onClick={() => { onClose(); onOpenReorder(); }}>
+              Order recommendation
+            </button>
+          )}
           <button className="view-sku-btn-close" onClick={onClose}>
             Close
           </button>

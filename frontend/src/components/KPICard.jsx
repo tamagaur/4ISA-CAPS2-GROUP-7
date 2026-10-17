@@ -1,5 +1,7 @@
 import React from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import BasisTag from './BasisTag';
+import { Link } from 'react-router-dom';
+import { ArrowUp, ArrowDown, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
 import InfoTip from './InfoTip';
 import './KPICard.css';
@@ -61,7 +63,7 @@ const CARD_ACCENT_COLORS = {
 const SPARK_W = 76;
 const SPARK_H = 26;
 
-const Sparkline = ({ points, color }) => {
+export const Sparkline = ({ points, color }) => {
   if (!points || points.length < 2) return null;
   const recent = points.slice(-12);
   const values = recent.map((p) => p.value);
@@ -101,6 +103,20 @@ const Sparkline = ({ points, color }) => {
 // card shows; the caller owns the state and re-labels contextLine to match.
 // unit: a short muted word after the value ("SKUs"); callers leave it off
 // when the card is blocked and the value is "—".
+// note: a second muted line under contextLine — another reading of the same
+// figure (e.g. the range's total under a month's sales).
+// flag: a caveat the reader must see beside the figure (e.g. a stock count
+// the team judged unusual): a string, or { label, detail, tone } — a short
+// amber badge on the card with the full sentence one tap away; tone 'info'
+// makes it a soft blue note instead of a caution (e.g. "Current plan").
+// accent: a colour for the thin top strip, when the card stands for
+// something other than a status (an ABC class's plum).
+// The status colour (metricType) marks the icon tile only, never the whole
+// card (UI pass, 2026-10-08): four KPI cards side by side were four
+// coloured stripes competing for the eye.
+// action: { label, onClick } or { label, to } — the way from this figure to
+// what is behind it (a list, another page), as a quiet link in the footer.
+// The figure's detail sits one click away instead of on the card.
 const KPICard = ({
   title,
   value,
@@ -111,14 +127,19 @@ const KPICard = ({
   isOverTarget,
   trendDirection,
   contextLine,
+  note,
+  flag,
   deltaLine,
   deltaTone,
   tooltip,
   trend,
+  action,
+  accent,
+  basis,
   toggle,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
-  const accentColor = CARD_ACCENT_COLORS[tier]; // card chrome (border, icon)
+  const accentColor = accent || CARD_ACCENT_COLORS[tier]; // card chrome (top strip, icon)
   // STATUS_TIERS has no 'danger' entry of its own — it's the same "this got
   // worse" delta-text meaning as 'loss', just with different card chrome.
   const statusColor = STATUS_TIERS[tier === 'danger' ? 'loss' : tier]; // delta text only
@@ -126,14 +147,23 @@ const KPICard = ({
 
   // `tooltip` holds a technical definition (e.g. weeks of cover) off the
   // always-visible text, behind a "?" that taps, hovers and tabs open.
+  const flagLabel = flag && typeof flag === 'object' ? flag.label : flag;
+  const flagDetail = flag && typeof flag === 'object' ? flag.detail : null;
+  const flagInfo = flag && typeof flag === 'object' && flag.tone === 'info';
   return (
-    <div className="kpi-card" style={{ borderTopColor: accentColor }}>
+    <div className="kpi-card" data-tier={tier} style={accent ? { '--kpi-accent': accent } : undefined}>
       <div className="kpi-header">
+        {icon && (
+          <div className="kpi-icon" style={{ color: accentColor, backgroundColor: `color-mix(in srgb, ${accentColor} 12%, white)` }}>
+            {icon}
+          </div>
+        )}
         <h3 className="kpi-title">
           {title}
           {tooltip && <InfoTip label={`About ${title}`}>{tooltip}</InfoTip>}
         </h3>
-        {icon && <div className="kpi-icon" style={{ color: accentColor }}>{icon}</div>}
+        {/* Whether this figure moves with the date filter (BasisTag). */}
+        {basis && <span className="kpi-basis"><BasisTag {...basis} /></span>}
       </div>
       <div className="kpi-value-row">
         <div className="kpi-value">
@@ -160,6 +190,14 @@ const KPICard = ({
       )}
       <div className="kpi-footer">
         {contextLine && <div className="kpi-context">{contextLine}</div>}
+        {note && <div className="kpi-context kpi-note">{note}</div>}
+        {flagLabel && (
+          <div className={`kpi-flag${flagInfo ? ' is-info' : ''}`}>
+            {flagInfo ? <Info size={12} aria-hidden="true" /> : <AlertTriangle size={12} aria-hidden="true" />}
+            <span>{flagLabel}</span>
+            {flagDetail && <InfoTip label={flagLabel} size={12}>{flagDetail}</InfoTip>}
+          </div>
+        )}
         {deltaLine && deltaTone && (
           <span className={`kpi-delta-pill is-${deltaTone}`}>
             {TrendIcon && <TrendIcon size={12} className="kpi-trend-icon" aria-hidden="true" />}
@@ -174,6 +212,15 @@ const KPICard = ({
             {deltaLine}
           </div>
         )}
+        {action && (action.to ? (
+          <Link to={action.to} className="kpi-action">
+            {action.label} <ArrowRight size={12} aria-hidden="true" />
+          </Link>
+        ) : (
+          <button type="button" className="kpi-action" onClick={action.onClick}>
+            {action.label} <ArrowRight size={12} aria-hidden="true" />
+          </button>
+        ))}
       </div>
     </div>
   );
