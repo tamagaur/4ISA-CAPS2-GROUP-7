@@ -378,6 +378,7 @@ from backend import batch, marts
 from backend.data_mode import (
     PREVIEW,
     REAL,
+    demo_data_enabled,
     forecast_source,
     get_data_mode,
     lp_source,
@@ -427,7 +428,6 @@ from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
 from backend.stock_units import STOCK_COUNTS_SQL, opening_period, stock_counts
 from backend.response_cache import cached
 from backend import demo_data
-from backend.demo_flag import demo_enabled
 from backend.series_gaps import (
     REASON_NO_DATA_BEFORE_2023, REASON_NOT_COLLECTED, gap_note as series_gap_note,
 )
@@ -2446,7 +2446,7 @@ def get_dashboard(
         payload["gap_note"] = note
     # The labelled Del Monte demonstration, behind DM_DEMO_ENABLED (default off). Its own block, with its own
     # data_source: the rest of this payload is real and stays labelled as it was.
-    if demo_enabled() and scope in ("all", "delmonte"):
+    if demo_data_enabled(mode) and scope in ("all", "delmonte"):
         payload["demonstration"] = demo_data.label({
             "principal": "delmonte",
             "index": demo_data.index(db, "delmonte")["series"],

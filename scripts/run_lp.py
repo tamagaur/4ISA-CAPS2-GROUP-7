@@ -968,6 +968,26 @@ def _run_demo_lp_unilever(write: bool) -> int:
         cur.execute("SELECT product_key, sku_code, forecast_quantity FROM demo.unilever_sku_forecast "
                     "WHERE run_id = %s AND forecast_period = %s", (run_id, forecast_period))
         forecasts = {int(pk): (sku, float(fq)) for pk, sku, fq in cur.fetchall()}
+        cohort_before_membership_filter = len(forecasts)
+        # Membership filter (Kelvin, 2026-10-16): the demo forecast cohort above is every Tier A SKU
+        # build_unilever_demo.py could fit an MA3 for -- it has no accuracy metric of its own (rule 2 forbids
+        # one in schema demo), so on its own it would plan for SKUs the real system refuses to (demand hard to
+        # forecast, not missing 2021-22 data). Read the REAL Forecast_Result's gate instead, at its own latest
+        # forecast_date -- the same status='ok' AND mase < MASE_GATE test run_lp.py's own CANDIDATE_QUERY applies
+        # -- and keep only SKUs that pass it. The metric itself never crosses into schema demo; only the SKU list
+        # does.
+        cur.execute(
+            "SELECT fr.product_key, fr.status, fr.mase FROM Forecast_Result fr "
+            "JOIN (SELECT MAX(forecast_date) AS d FROM Forecast_Result) lf ON fr.forecast_date = lf.d "
+            "WHERE fr.product_key = ANY(%s)", (list(forecasts),),
+        )
+        real_gate = {int(pk): (status, float(mase) if mase is not None else None) for pk, status, mase in cur.fetchall()}
+        membership_dropped = []
+        for pk in list(forecasts):
+            status, mase = real_gate.get(pk, (None, None))
+            if not (status == "ok" and mase is not None and mase < MASE_GATE):
+                membership_dropped.append((forecasts[pk][0], status, mase))
+                del forecasts[pk]
         product_keys = list(forecasts)
         cur.execute("SELECT product_key, period, quantity, net_amount FROM demo.unilever_sku_sales "
                     "WHERE run_id = %s AND product_key = ANY(%s)", (run_id, product_keys))
@@ -1015,6 +1035,16 @@ def _run_demo_lp_unilever(write: bool) -> int:
 
     print(json.dumps({
         "run_id": run_id, "forecast_period": forecast_period, "stock_period": stock_period,
+        "membership_filter": "real Forecast_Result, latest forecast_date, status='ok' AND mase < MASE_GATE "
+                              "(the real LP's own CANDIDATE_QUERY gate) -- no metric crosses into schema demo, "
+                              "only the SKU list",
+        "demo_forecast_cohort": cohort_before_membership_filter,
+        "membership_passed": len(forecasts), "membership_dropped": len(membership_dropped),
+        "membership_dropped_reasons": dict(Counter(
+            "no real forecast_result row" if status is None
+            else f"status={status}" if status != "ok"
+            else f"mase>={MASE_GATE:g}"
+            for _sku, status, _mase in membership_dropped)),
         "planned": len(rows), "skipped": len(skipped), "skipped_reasons": dict(Counter(r for _s, r in skipped)),
         "rows": [{"sku_id": r[2], "forecast": round(r[4], 2), "stock_on_hand": round(r[5], 2),
                   "sigma_d": round(r[6], 4), "safety_stock": round(r[7], 2), "target_stock": round(r[8], 2),

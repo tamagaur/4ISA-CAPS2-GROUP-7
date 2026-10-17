@@ -25,6 +25,12 @@ reader of the response (a person or a session) does not need the repo's docs.
   category_absent            Del Monte. The category has no row in a month
                              other categories reported. Cause unknown; not
                              read as zero sales.
+  returns_exceeded_sales     Unilever (category-trends). The category has
+                             sales rows that month, but every one's net
+                             amount is <= 0 (returns matched or exceeded
+                             sales) — distinct from no_sale, which means no
+                             row at all. Revenue shown as 0, same as no_sale,
+                             but the cause is different (B4, 2026-10-16).
 
 Demonstration-only reasons (GET /demo/series, behind DM_DEMO_ENABLED; origins
 real_copy / interpolated / bridged / backcast are kept strictly apart):
@@ -48,6 +54,7 @@ REASON_BLANK_CAPTURE = "blank_capture"
 REASON_OUTSIDE_LIFESPAN = "outside_product_lifespan"
 REASON_NOT_COLLECTED = "not_collected"
 REASON_CATEGORY_ABSENT = "category_absent"
+REASON_RETURNS_EXCEEDED_SALES = "returns_exceeded_sales"
 REASON_NO_DATA_BEFORE_2023 = "no_data_recorded_before_2023"
 REASON_INTERPOLATED = "interpolated"
 REASON_BRIDGED = "taxonomy_change_bridge"
@@ -69,6 +76,10 @@ REASON_TEXT: dict[str, str] = {
     REASON_CATEGORY_ABSENT: (
         "Del Monte: this category has no row in a month other categories reported. "
         "Cause unknown; not read as zero sales."
+    ),
+    REASON_RETURNS_EXCEEDED_SALES: (
+        "Unilever: this category has sales rows this month, but returns matched or exceeded sales in every one, "
+        "so net revenue is 0. Different from no_sale, which means no row at all."
     ),
     REASON_NO_DATA_BEFORE_2023: (
         "SSM's records begin in January 2023. These months are generated for visualisation only (a flat "

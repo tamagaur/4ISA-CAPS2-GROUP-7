@@ -34,7 +34,8 @@ from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 from backend.response_cache import cached
 from backend.series_gaps import (
-    REASON_CATEGORY_ABSENT, REASON_NO_SALE, REASON_NOT_COLLECTED, gap_note, month_range,
+    REASON_CATEGORY_ABSENT, REASON_NO_SALE, REASON_NOT_COLLECTED, REASON_RETURNS_EXCEEDED_SALES, gap_note,
+    month_range,
 )
 
 router = APIRouter(prefix="/category-trends", tags=["category-trends"])
@@ -44,11 +45,16 @@ DEL_MONTE_REGROUP_PERIOD = "2025-01"
 # {demand} is the Unilever demand relation for the request's data mode
 # (backend/data_mode.py) — the _Real view's own name in real mode.
 _QUERIES = {
+    # No WHERE filter (B4, 2026-10-16): a category-month where every row's net_amount is <= 0
+    # (returns matched or exceeded sales) must still show up here, with revenue 0, so it can be
+    # told apart from a month with no row at all. revenue = SUM(GREATEST(net_amount, 0)), the
+    # same number the old `WHERE net_amount > 0` filter produced (a row <= 0 contributes 0
+    # either way); `positive_rows` says whether any row was actually a net sale.
     "unilever": """
         SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS category, d.calendar_month AS period,
-               SUM(d.net_amount) AS revenue
+               SUM(GREATEST(d.net_amount, 0)) AS revenue,
+               COUNT(*) FILTER (WHERE d.net_amount > 0) AS positive_rows
         FROM {demand} d JOIN Product_Dimension pd ON pd.product_key = d.product_key
-        WHERE d.net_amount > 0
         GROUP BY 1, 2
     """,
     "delmonte": f"""
@@ -87,8 +93,13 @@ def trends_for(
             "series_start": _series_start(principal), "start_period": start_period, "end_period": period,
         }
     series: dict[str, dict[str, float]] = {}
+    # Unilever only (B4, 2026-10-16): a category-month with rows but no positive one
+    # (returns matched or exceeded sales) — distinct from no row at all, REASON_NO_SALE below.
+    returns_exceeded: dict[str, set[str]] = {}
     for r in rows:
         series.setdefault(r["category"], {})[r["period"]] = float(r["revenue"] or 0)
+        if principal == "unilever" and r["positive_rows"] == 0:
+            returns_exceeded.setdefault(r["category"], set()).add(r["period"])
 
     # Projection months continue the calendar from the last observed month.
     ahead, p = [], observed[-1]
@@ -110,6 +121,9 @@ def trends_for(
             if m not in by_period:
                 point["reason"] = absent_reason
                 reasons_used.add(absent_reason)
+            elif m in returns_exceeded.get(name, ()):
+                point["reason"] = REASON_RETURNS_EXCEEDED_SALES
+                reasons_used.add(REASON_RETURNS_EXCEEDED_SALES)
             history.append(point)
         categories.append({
             "category": name,

@@ -58,6 +58,8 @@ def main() -> int:
     try:
         from fastapi.testclient import TestClient
 
+        from analytics.config import long_read_db_url
+        from backend import deps
         from backend.auth_utils import create_access_token
         from backend.deps import get_current_user, get_token_payload
         from backend.main import app
@@ -67,6 +69,16 @@ def main() -> int:
         print("     pip install -r requirements.txt")
         print("   (requirements.txt pins starlette==0.41.3; a newer one breaks FastAPI 0.115.5)")
         return 2
+
+    # This script's own GETs land as one combined multi-statement read per route
+    # (backend/batch.py's prefetch), long enough that the :6543 pooler SUPABASE_DB_URL
+    # normally serves requests through has dropped it mid-query ("SSL SYSCALL error: EOF
+    # detected", three smoke runs in a row, 2026-10-16 -- a different route each time).
+    # analytics.config.long_read_db_url() exists for exactly this; point this process's
+    # engines at it (SUPABASE_DIRECT_URL, falling back to the pooler when unset) before
+    # the first request creates them. Scoped to this script only -- backend/deps.py's own
+    # default (the pooler, for every normal request) is unchanged.
+    deps._db_url = long_read_db_url
 
     headers = {
         "Authorization": "Bearer "

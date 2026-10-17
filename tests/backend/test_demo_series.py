@@ -94,9 +94,17 @@ def client(session):
     return TestClient(app)
 
 
-def get(c, path):
+def get(c, path, preview=False):
+    """preview=True adds X-Data-Mode: preview — required since 2026-10-16 (item 1 fix) for the two REAL
+    endpoints this file wires demo data into (/forecast, /recommendations): demo_data_enabled() checks the
+    caller's own opt-in as well as DM_DEMO_ENABLED, so a plain real-mode caller of a real endpoint never sees
+    generated data by accident. The dedicated /demo/* endpoints are unaffected — they stay gated on
+    DM_DEMO_ENABLED alone, since they are explicit demonstration-only resources, not a branch inside a real one."""
     tok = auth_utils.create_access_token(user_id=1, email="staff@ssmcapstone.com", role="admin", full_name="A")
-    return c.get(path, headers={"Authorization": f"Bearer {tok}"})
+    headers = {"Authorization": f"Bearer {tok}"}
+    if preview:
+        headers["X-Data-Mode"] = "preview"
+    return c.get(path, headers=headers)
 
 
 def session():
@@ -197,10 +205,21 @@ def test_forecast_for_del_monte_is_blocked_when_the_flag_is_off():
     assert b["forecast"] == [] and b["blocked_reason"] and "demonstration" not in b
 
 
+def test_forecast_does_not_leak_demo_data_to_a_caller_who_never_opted_into_preview(monkeypatch):
+    """2026-10-16 fix: DM_DEMO_ENABLED on the server used to be enough on its own to serve generated data from a
+    REAL endpoint (/forecast), with no way for an ordinary real-mode caller to know. Both server flag AND the
+    caller's own X-Data-Mode: preview opt-in are now required (backend.data_mode.demo_data_enabled)."""
+    monkeypatch.setenv("DM_DEMO_ENABLED", "1")
+    with client(session()) as c:
+        b = get(c, "/forecast/DM?principal=delmonte&category=BEVERAGE", preview=False).json()
+    assert "data_source" not in b and "demonstration" not in b
+    assert b["forecast"] == [] and b["blocked_reason"]
+
+
 def test_forecast_for_del_monte_serves_the_labelled_demo_series_and_ma3(monkeypatch):
     monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     with client(session()) as c:
-        b = get(c, "/forecast/DM?principal=delmonte&category=BEVERAGE").json()
+        b = get(c, "/forecast/DM?principal=delmonte&category=BEVERAGE", preview=True).json()
     assert b["data_source"] == "synthetic_demonstration" and b["demonstration"] is True
     assert b["forecast"][0]["forecast_value"] == 3418.82 and b["forecast"][0]["status"] == "ok"
     assert b["forecast"][0]["mape"] is None and b["forecast"][0]["confidence_lower"] is None
@@ -212,7 +231,7 @@ def test_forecast_for_del_monte_serves_the_labelled_demo_series_and_ma3(monkeypa
 def test_recommendations_for_del_monte_add_the_labelled_forecasts_and_still_no_plan(monkeypatch):
     monkeypatch.setenv("DM_DEMO_ENABLED", "1")
     with client(session()) as c:
-        b = get(c, "/recommendations?principal=delmonte").json()
+        b = get(c, "/recommendations?principal=delmonte", preview=True).json()
     assert b["items"] == [] and b["count"] == 0
     assert b["data_source"] == "synthetic_demonstration" and b["demonstration"] is True
     assert b["demo_forecasts"][0]["category"] == "BEVERAGE" and b["demo_forecasts"][0]["demonstration"] is True
@@ -227,7 +246,7 @@ def test_recommendations_for_del_monte_serves_the_order_plan_once_run_lp_has_run
     s.lp = [{"category_path": "BEVERAGE", "period": "2026-01", "forecast_quantity": 3418.82, "stock_on_hand": 500.0,
              "sigma_d": 12.5, "safety_stock": 16.0, "target_stock": 600.0, "order_qty": 100.0}]
     with client(s) as c:
-        b = get(c, "/recommendations?principal=delmonte").json()
+        b = get(c, "/recommendations?principal=delmonte", preview=True).json()
     assert b["demo_stock"][0]["quantity_on_hand"] == 500.0 and b["demo_stock"][0]["origin"] == "generated_months_of_cover"
     assert b["order_plan"]["available"] is True
     item = b["order_plan"]["items"][0]
