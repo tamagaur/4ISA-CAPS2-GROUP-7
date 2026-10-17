@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
+from backend import avatar
 
 
 class MeResponse(BaseModel):
@@ -17,6 +19,16 @@ class MeResponse(BaseModel):
     # Supabase Storage path (never image bytes — migration 0059/0060), and
     # whether this server can store one.
     avatar_path: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def avatar_url(self) -> str | None:
+        """The full public URL for avatar_path, same derivation as
+        UserOut.avatar_url (backend/avatar.py.public_url) -- null whenever
+        avatar_path is. Never stored, never hardcoded: built from
+        SUPABASE_URL at response time."""
+        return avatar.public_url(self.avatar_path)
+
     profile_pictures: bool = False
 
 

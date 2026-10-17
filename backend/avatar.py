@@ -97,6 +97,20 @@ def to_avatar_webp(data: bytes) -> bytes:
     return out.getvalue()
 
 
+def public_url(object_name: str | None) -> str | None:
+    """The browser-facing URL for `object_name` in the avatars bucket, or
+    None when there is no picture (object_name is None) or SUPABASE_URL
+    isn't set. Built from the environment, never hardcoded and never baked
+    into a frontend file -- the frontend only ever sees this already-
+    resolved URL, in UserOut.avatar_url / MeResponse.avatar_url."""
+    if object_name is None:
+        return None
+    url = os.environ.get("SUPABASE_URL")
+    if not url:
+        return None
+    return f"{url.rstrip('/')}/storage/v1/object/public/{AVATAR_BUCKET}/{object_name}"
+
+
 def new_object_name(user_id: int) -> str:
     """Server-generated object name — never any part of the client's
     filename, so a user can't path-traverse or collide another account's

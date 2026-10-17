@@ -193,7 +193,8 @@ def test_non_image_with_image_content_type_rejected(client, uploads):
     assert uploads == []
 
 
-def test_successful_upload_produces_128x128_webp(client, uploads, deletes, session, fake_users):
+def test_successful_upload_produces_128x128_webp(client, uploads, deletes, session, fake_users, monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://dsdxemtmbbmdtccwxzyk.supabase.co")
     resp = client.post(
         "/users/me/avatar",
         files={"file": ("photo.png", _valid_image_bytes(), "image/png")},
@@ -204,6 +205,11 @@ def test_successful_upload_produces_128x128_webp(client, uploads, deletes, sessi
     assert body["user_id"] == 2
     assert body["avatar_path"] is not None
     assert fake_users[1]["avatar_path"] == body["avatar_path"]
+    # avatar_url is additive: avatar_path stays a bare Storage path, and the
+    # full browser-facing URL is derived from it alongside, never replacing it.
+    assert body["avatar_url"] == (
+        f"https://dsdxemtmbbmdtccwxzyk.supabase.co/storage/v1/object/public/avatars/{body['avatar_path']}"
+    )
 
     assert len(uploads) == 1
     object_name, data = uploads[0]

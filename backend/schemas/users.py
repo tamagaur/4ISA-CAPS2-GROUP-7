@@ -9,7 +9,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
+
+from backend import avatar
 
 
 class UserOut(BaseModel):
@@ -24,6 +26,17 @@ class UserOut(BaseModel):
     # picture, so the frontend shows its initials fallback instead of a
     # placeholder image or an empty string (migration 0059).
     avatar_path: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def avatar_url(self) -> str | None:
+        """The full public URL for avatar_path (backend/avatar.py.public_url)
+        -- avatar_path alone is a bucket-relative path, not something a
+        frontend <img> can load. Null whenever avatar_path is. Derived, not
+        stored: never baked into a frontend file, always built from
+        SUPABASE_URL at response time."""
+        return avatar.public_url(self.avatar_path)
+
     # Two-step sign-in on (backend/mfa.py). Always false before migration 0035.
     mfa_enabled: bool = False
     # Latest sign-in, from user_session (backend/routers/users.py

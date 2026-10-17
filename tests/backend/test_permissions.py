@@ -459,7 +459,9 @@ def test_me_lists_the_effective_permissions():
         "permissions": sorted((set(PRESETS["staff"]) | {"audit_log.view"}) - {"lp.view"}),
         # The My profile page's fields (backend/profile.py): no picture set,
         # and this fake store has no picture column (migration 0059).
-        "avatar_path": None, "profile_pictures": False,
+        # avatar_url is a computed field derived from avatar_path (backend/
+        # avatar.py.public_url) -- null right along with it.
+        "avatar_path": None, "avatar_url": None, "profile_pictures": False,
     }
 
 
