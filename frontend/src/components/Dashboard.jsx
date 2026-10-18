@@ -33,7 +33,7 @@ import RefreshingNote from './RefreshingNote';
 import { DemoForecastList } from './DemoForecasts';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
-import { ArrowRight, AlertTriangle, CalendarX } from 'lucide-react';
+import { ArrowRight, AlertTriangle, BookOpen, CalendarX } from 'lucide-react';
 import EmptyState from './ui/EmptyState';
 import LoadError, { describeLoadError } from './ui/LoadError';
 import SlowLoadNotice from './ui/SlowLoadNotice';
@@ -680,7 +680,17 @@ const Dashboard = () => {
   // scrolls.
   const header = (
     <>
-      <PageHeader title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse">
+      <PageHeader
+        title="Inventory"
+        accent="pulse"
+        subtitle="Inventory and ordering overview — SSM Urdaneta warehouse"
+        actions={(
+          <Link className="btn btn-secondary" to="/data-dictionary">
+            <BookOpen size={15} aria-hidden="true" />
+            Reference Guide
+          </Link>
+        )}
+      >
         {/* The question the whole page answers, before any number (Sir
             Catubag, 2 Oct: a reader measures every card against it). */}
         <p className="dash-main-question">
