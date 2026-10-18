@@ -1,0 +1,118 @@
+.data-dictionary-page {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 var(--page-padding-x) 40px;
+}
+
+.data-dictionary-page .page-header {
+  margin-bottom: var(--space-5);
+}
+
+.dictionary-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  color: var(--color-info);
+}
+
+.dictionary-intro svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.dictionary-intro p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.dictionary-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.dictionary-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.dictionary-section {
+  scroll-margin-top: var(--space-4);
+}
+
+.dictionary-section-header {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dictionary-section-header h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-section);
+}
+
+.dictionary-section-header p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.dictionary-list {
+  margin: 0;
+}
+
+.dictionary-entry {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 2fr);
+  gap: var(--space-5);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dictionary-entry:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.dictionary-entry dt {
+  color: var(--color-text);
+  font-size: var(--text-body);
+  font-weight: 650;
+}
+
+.dictionary-entry dd {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.dictionary-entry dd p {
+  margin: 0;
+}
+
+.dictionary-entry dd p + p {
+  margin-top: var(--space-2);
+}
+
+.dictionary-entry dd strong {
+  color: var(--color-text);
+}
+
+@media (max-width: 760px) {
+  .data-dictionary-page {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .dictionary-entry {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}

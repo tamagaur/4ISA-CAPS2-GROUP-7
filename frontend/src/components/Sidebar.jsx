@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  List, 
+  BookOpen,
   Layers, 
+  Package,
+  Database,
   TrendingUp,
   RotateCcw,
-  Upload,
   LogOut,
   X,
   ClipboardList,
@@ -33,36 +34,42 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
-// Grouped by what a person comes to do (UI pass, 2026-10-08): the overview,
-// the analysis pages, the inventory pages, then administration. Routes and
-// the permission each one needs are unchanged.
+// Navigation groups follow the sidebar reference: dashboard first, then
+// inventory operations, analytics, and data governance. Routes and
+// permissions are unchanged.
 const navSections = [
   {
-    label: 'Overview',
+    label: null,
     items: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
     ],
   },
   {
-    label: 'Analytics',
+    label: 'Inventory Operations',
+    items: [
+      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
+      { name: 'SKU Management', icon: Package, path: '/sku-management' },
+      { name: 'ABC Classification', icon: Layers, path: '/abc' },
+    ],
+  },
+  {
+    label: 'Analytics & Forecasting',
     items: [
       { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
       { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
     ],
   },
   {
-    label: 'Inventory',
+    label: 'Data & Governance',
     items: [
-      { name: 'SKU Management', icon: List, path: '/sku-management' },
-      { name: 'ABC Classification', icon: Layers, path: '/abc' },
-      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
+      { name: 'Reference Guide', icon: BookOpen, path: '/data-dictionary' },
+      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
-      { name: 'Data Management', icon: Upload, path: '/upload' },
+      { name: 'Data Management', icon: Database, path: '/upload' },
       { name: 'User Management', icon: Users, path: '/users' },
     ],
   },
@@ -191,9 +198,11 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
               return (
                 <div className="sidebar-nav-section" key={section.label}>
-                  <div className="sidebar-modules-header">
-                    <span className="modules-title">{section.label.toUpperCase()}</span>
-                  </div>
+                  {section.label && (
+                    <div className="sidebar-modules-header">
+                      <span className="modules-title">{section.label.toUpperCase()}</span>
+                    </div>
+                  )}
                   {visibleItems.map((item) => (
                     <NavLink
                       key={item.name}

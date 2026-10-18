@@ -19,6 +19,7 @@ import './App.css';
 // around its <Outlet>, so the sidebar and top bar stay put while a page's
 // code arrives.
 const Dashboard = lazy(pageLoaders.dashboard);
+const DataDictionary = lazy(pageLoaders.dataDictionary);
 const SKUManagement = lazy(pageLoaders.skuManagement);
 const ABCClassification = lazy(pageLoaders.abc);
 const SKUForecast = lazy(pageLoaders.forecast);
@@ -37,6 +38,7 @@ const routeTitles = {
   '/forgot-password': 'SAN2 | Reset Password',
   '/set-password': 'SAN2 | Set Password',
   '/': 'SAN2 | Dashboard',
+  '/data-dictionary': 'SAN2 | Reference Guide',
   '/sku-management': 'SAN2 | SKU Management',
   '/abc': 'SAN2 | ABC Classification',
   '/forecast': 'SAN2 | SKU Forecast',
@@ -95,6 +97,7 @@ function App() {
           }
         >
           <Route index element={<HomeRoute />} />
+          <Route path="data-dictionary" element={guard(P.DASHBOARD_VIEW, <DataDictionary />)} />
           <Route path="sku-management" element={guard(P.SKU_VIEW, <SKUManagement />)} />
           <Route path="abc" element={guard(P.ABC_VIEW, <ABCClassification />)} />
           <Route path="forecast" element={guard(P.FORECAST_VIEW, <SKUForecast />)} />

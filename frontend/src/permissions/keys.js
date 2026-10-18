@@ -36,6 +36,7 @@ export const roleLabel = (role) => ROLES.find((r) => r.value === role)?.label ||
 // can't be hidden in one place and still reachable in another.
 export const PAGES = [
   { path: '/', label: 'Dashboard', permission: P.DASHBOARD_VIEW },
+  { path: '/data-dictionary', label: 'Reference Guide', permission: P.DASHBOARD_VIEW },
   { path: '/forecast', label: 'SKU Forecast', permission: P.FORECAST_VIEW },
   { path: '/category-trends', label: 'Category Trends', permission: P.CATEGORY_TRENDS_VIEW },
   { path: '/sku-management', label: 'SKU Management', permission: P.SKU_VIEW },
