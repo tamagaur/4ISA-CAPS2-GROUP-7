@@ -59,6 +59,7 @@ from analytics.forecasting.baseline import (
     sba_forecast,
 )
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
+from analytics.forecasting.calendar import company_totals
 from analytics.forecasting.global_model import GlobalForecaster, missing_months, with_missing, with_placeholder
 from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
 
@@ -334,6 +335,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "Forecast_Result, for whichever --principal matches (delmonte: category sales + "
                              "stock + MA3 forecast; unilever: a one-step MA3 forecast only, over real_copy "
                              "sales already in demo.*).")
+    parser.add_argument("--calendar-factor", action="store_true", default=False,
+                        help="Multiply each served forecast by the company calendar factor "
+                             "(analytics/forecasting/calendar.py). OFF by default: approved for build + dry run "
+                             "2026-10-19, not for the live forecast until Sir Catubag signs it off.")
     parser.add_argument("--write", action="store_true", default=False,
                         help="Additionally upsert Forecast_Result for status='ok' SKUs "
                              "(rule_method pick). OFF by default - this run is report-only. With --source demo: "
@@ -521,7 +526,7 @@ def main():
 
     # ---- optional DB write ----------------------------------------- #
     if args.write:
-        _write_forecast_result(cur, df)
+        _write_forecast_result(cur, df, calendar=args.calendar_factor)
         _keep_forecast_history(conn)
     else:
         print("\n(--write not passed: Forecast_Result untouched, this was report-only.)")
@@ -955,7 +960,7 @@ def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float |
     )
 
 
-def served_forecasts(df, demand_by_key, planning_month) -> dict:
+def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) -> dict:
     """{product_key: {...}} for every status='ok' SKU: the routed one-step
     forecast for `planning_month`, plus the SERVED model's holdout error.
 
@@ -968,6 +973,9 @@ def served_forecasts(df, demand_by_key, planning_month) -> dict:
     naive/ma3/sba static metrics in the CSV and in
     model_params.holdout_metrics_all_methods are unchanged.
 
+    `calendar_totals` (--calendar-factor): the served value AND its holdout
+    are calendar-adjusted, so the stored error describes what is served.
+
     No DB access. Metrics come from analytics.forecasting.diagnostic_metrics.
     """
     wanted = {int(k) for k in df["product_key"]}
@@ -977,9 +985,10 @@ def served_forecasts(df, demand_by_key, planning_month) -> dict:
     for _, r in df[df["status"] == "ok"].iterrows():
         p_key = int(r["product_key"])
         series = series_by_key[p_key]
-        routed = route(series, planning_month, forecaster)
+        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals)
         train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
-        scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"])
+        scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"],
+                                  calendar_totals=calendar_totals)
         a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()     # missing months are not scored
         out[p_key] = {
             **routed,
@@ -1028,7 +1037,7 @@ def _keep_forecast_history(conn) -> None:
         vacuum_marts(os.environ["SUPABASE_DB_URL"])
 
 
-def _write_forecast_result(cur, df):
+def _write_forecast_result(cur, df, calendar: bool = False):
     """--write path (atomic): upsert Forecast_Result for every real Tier A SKU.
 
       status='ok'                -> forecast_value = the router's one-step-ahead
@@ -1075,7 +1084,11 @@ def _write_forecast_result(cur, df):
                    f"(served per bin: {LIVE_MODEL}; benchmark/fallback {BENCHMARK_METHOD.upper()}). One transaction.")
 
     assert_real_rows(demand)
-    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date))
+    calendar_totals = company_totals(demand) if calendar else None
+    if calendar:
+        logger.warning("--calendar-factor: served values and their holdout are calendar-adjusted "
+                       "(analytics/forecasting/calendar.py; pending Sir Catubag's sign-off).")
+    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals)
 
     target_keys = [int(k) for k in df["product_key"]]
     conn = cur.connection
@@ -1160,6 +1173,11 @@ def _write_forecast_result(cur, df):
                     "components": {k: (None if v is None else round(v, 3)) for k, v in sv["components"].items()},
                     "backup_fired": sv["backup_fired"],
                     "backup_reason": sv["backup_reason"],
+                    # --calendar-factor only; absent = value not calendar-adjusted
+                    **({"calendar_factor": round(sv["calendar_factor"], 4),
+                        "calendar_years": sv["calendar_years"],
+                        "value_before_calendar": round(sv["value_before_calendar"], 3)}
+                       if "calendar_factor" in sv else {}),
                     "training_rows": sv["training_rows"],
                     "wape": _f(sv["holdout_wape"]),
                     "holdout_protocol": "rolling one-step over the 20% holdout months, served model held fixed",
