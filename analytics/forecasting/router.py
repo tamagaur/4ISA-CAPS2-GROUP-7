@@ -33,6 +33,7 @@ from __future__ import annotations
 import pandas as pd
 
 from analytics.forecasting import baseline
+from analytics.forecasting.calendar import calendar_factor
 from analytics.forecasting.global_model import GlobalForecaster, assert_real_history, from_first_sale
 from analytics.segmentation.bins import length_v2
 
@@ -64,12 +65,17 @@ def ma3_value(history: pd.Series) -> float:
 
 
 def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForecaster | None = None,
-          force_bin: str | None = None, allow_placeholder: bool = False) -> dict:
+          force_bin: str | None = None, allow_placeholder: bool = False,
+          calendar_totals: pd.Series | None = None) -> dict:
     """One-step-ahead forecast for `target_month`, reading only months before
     it. `force_bin` scores a fixed model over past months (holdout error of
     the model served today); leave it None to bin from the history.
     `allow_placeholder` lets placeholder (is_demo) months through for the
     what-if preview only; the live runner never passes it.
+    `calendar_totals` (calendar.company_totals) multiplies the final value,
+    after the guards, by the calendar factor for `target_month`; None = no
+    adjustment, the served behaviour until Sir Catubag signs it off.
+    `ma3_value` stays the unadjusted benchmark either way.
 
     Guard order, first hit wins, fallback is always MA3 with the reason kept:
       1. the challenger produced a number (XGBoost can have none: no positive
@@ -122,7 +128,12 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
             out.update(backup_fired=True, backup_reason=reason)
             method, value = "ma3", ma3
 
-    return {**out, "method": method, "value": max(0.0, float(value)) if method == "ma3" else float(value)}
+    value = max(0.0, float(value)) if method == "ma3" else float(value)
+    if calendar_totals is not None:
+        factor, years = calendar_factor(calendar_totals, target_month)
+        out.update(value_before_calendar=value, calendar_factor=factor, calendar_years=years)
+        value = max(0.0, value * factor)
+    return {**out, "method": method, "value": value}
 
 
 def _safe_xgb(forecaster: GlobalForecaster, series: pd.Series, target_month: pd.Timestamp):
@@ -135,8 +146,10 @@ def _safe_xgb(forecaster: GlobalForecaster, series: pd.Series, target_month: pd.
 
 
 def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | None = None,
-                     force_bin: str | None = None, allow_placeholder: bool = False) -> pd.DataFrame:
+                     force_bin: str | None = None, allow_placeholder: bool = False,
+                     calendar_totals: pd.Series | None = None) -> pd.DataFrame:
     """route() at each of `months`, one step ahead, refit at every origin.
+    `calendar_totals` as in route(): the holdout scores what would be served.
     Columns: month, actual, value (as served, guards applied), ma3 (the
     benchmark, floored at zero like a served MA3), method, backup_fired.
     A month whose actual is missing (blank quantity) is not scored: there is
@@ -145,7 +158,8 @@ def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | N
     for month in months:
         if pd.isna(series.loc[month]):
             continue
-        r = route(series, month, forecaster, force_bin=force_bin, allow_placeholder=allow_placeholder)
+        r = route(series, month, forecaster, force_bin=force_bin, allow_placeholder=allow_placeholder,
+                  calendar_totals=calendar_totals)
         if r["value"] is None:
             continue
         rows.append({"month": month, "actual": float(series.loc[month]), "value": r["value"],
