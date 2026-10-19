@@ -990,6 +990,8 @@ def test_portfolio_forecast_empty_when_nothing_passes_the_gate():
         "scope_label": "No forecasts for this scope currently beat the naive baseline (MASE < 1).",
         "mase_gate": 1.0,
         "insight": None,
+        # Nothing gated, so no calendar factor to report (2026-10-19).
+        "calendar_adjustment": {"applied": False, "signed_off": False, "products": 0, "of_products": 0},
     }
 
 

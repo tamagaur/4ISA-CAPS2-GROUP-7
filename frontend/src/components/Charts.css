@@ -2510,6 +2510,15 @@
   max-height: 500px;
 }
 
+/* Forecast demand (2026-10-19): the calendar adjustment inside the forecast,
+   said on the card's face — a quiet violet rule, the forecast's colour. */
+.chart-widget .chart-title-area p.chart-calendar-note {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--color-forecast, #8866E8);
+  color: var(--color-text-body);
+}
+
 /* Suggested orders (2026-10-19): how the order was worked out, in one line
    with the weights in it, and a product missing from the stock count. */
 .reorder-priorities-line {

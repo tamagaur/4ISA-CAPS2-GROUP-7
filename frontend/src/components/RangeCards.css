@@ -322,6 +322,36 @@
   visibility: hidden;
 }
 
+/* Which forecasts the error card scores (2026-10-19): the calendar-adjusted
+   run or the same months before the adjustment, their two headline misses
+   side by side, and the switch between them. A quiet violet rule, the
+   forecast's colour, as on the forecast card's own note. */
+.fc-basis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-forecast, #8866E8);
+  border-radius: 0 10px 10px 0;
+  background: var(--color-forecast-bg, #EEE9FC);
+}
+
+.fc-basis-note,
+.fc-basis-compare {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.fc-basis-compare strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
 /* The "Monthly miss" view's bars in the key: a short solid bar. */
 .fc-legend-bar {
   display: inline-block;

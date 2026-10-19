@@ -38,7 +38,10 @@ const PermissionsProvider = ({ children }) => {
         email: me?.email ?? null,
         fullName: me?.full_name ?? null,
         role,
-        avatar: me?.avatar_data_url ?? null,
+        // The picture's public URL in Supabase Storage (avatar_url, Kelvin
+        // 2026-10-18; migration 0060 retired avatar_data_url on 2026-10-19).
+        // The old field is kept as a fallback for a backend not yet updated.
+        avatar: me?.avatar_url ?? me?.avatar_data_url ?? null,
         profilePictures: Boolean(me?.profile_pictures),
       };
       // Unchanged access and details keep the same state, so a re-check

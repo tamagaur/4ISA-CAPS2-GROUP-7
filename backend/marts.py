@@ -956,6 +956,37 @@ def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, 
 # live forecast is (run_baseline_forecast.py --calendar-factor). The published, unadjusted run
 # stays stored and selectable under its own label.
 DEFAULT_BACKTEST_LABEL = "backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted"
+# A calendar-adjusted run is the at-the-time run with this suffix on its label
+# (scripts/backtest_forecast_run.py's at_the_time_calendar); its unadjusted twin is
+# the same label without it, so the card can show both from the run list alone.
+CALENDAR_ADJUSTED_SUFFIX = ", calendar-adjusted"
+
+
+def calendar_adjusted_state(run_labels: list[str]) -> str | None:
+    """'yes' when every run behind a range's figures is calendar-adjusted, 'partly' when
+    some are, 'no' when none, None with no runs (an empty range)."""
+    if not run_labels:
+        return None
+    adjusted = [label.endswith(CALENDAR_ADJUSTED_SUFFIX) for label in run_labels]
+    return "yes" if all(adjusted) else "partly" if any(adjusted) else "no"
+
+
+def unadjusted_twin_query(label: str) -> tuple[str, dict]:
+    """The stored run with `label` minus the calendar suffix (the same backtest, unadjusted)."""
+    return """
+        SELECT run_id, label FROM mart.forecast_run WHERE label = :label ORDER BY run_id DESC LIMIT 1
+    """, {"label": label[: -len(CALENDAR_ADJUSTED_SUFFIX)]}
+
+
+def accuracy_comparison(db: Session, summary: dict) -> dict | None:
+    """{run_id, label} of the unadjusted twin of the single calendar-adjusted run behind
+    `summary`, so the error card can show the same months before the adjustment; None when
+    the figures are not (all) from one adjusted run or no twin is stored."""
+    labels = summary.get("run_labels") or []
+    if len(labels) != 1 or calendar_adjusted_state(labels) != "yes":
+        return None
+    row = batch.first(db, *unadjusted_twin_query(labels[0]))
+    return {"run_id": int(row["run_id"]), "label": row["label"]} if row else None
 
 
 def accuracy_runs(db: Session) -> list[dict]:
@@ -1072,7 +1103,7 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
     `review_months` months or more in a row as of their last scored month in the range."""
     if not rows:
         return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
-                "run_labels": [], "products": 0, "product_months": 0, "by_month": [],
+                "run_labels": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
                 **accuracy_headlines(None, None),
                 "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
                 "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
@@ -1143,6 +1174,9 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
         "start_period": start, "end_period": end, "label": range_label(months[0], months[-1]), "months": months,
         "forecast_source": "/".join(sorted({r["forecast_source"] for r in rows})),
         "run_labels": sorted({r["run_label"] for r in rows}),
+        # Whether those runs' forecasts carry the company calendar factor (2026-10-19):
+        # 'yes' / 'partly' / 'no' (calendar_adjusted_state).
+        "calendar_adjusted": calendar_adjusted_state(sorted({r["run_label"] for r in rows})),
         "products": len(by_product), "product_months": len(rows),
         **{k: round(v, 2) for k, v in totals.items()},
         "direction": "over" if net > 0 else "under" if net < 0 else "exact",

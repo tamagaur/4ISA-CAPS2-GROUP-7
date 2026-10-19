@@ -33,6 +33,7 @@ import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { DemoForecastList } from './DemoForecasts';
 import { formatDate, formatMonth } from '../utils/formatDate';
+import { calendarFactorText, calendarSignoffText, calendarYearsText } from '../utils/calendarAdjustment';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { ArrowRight, AlertTriangle, CalendarX } from 'lucide-react';
 import EmptyState from './ui/EmptyState';
@@ -621,15 +622,18 @@ const Dashboard = () => {
   }, [requestKey, period, startPeriod, principal]);
 
   // Opens a range card's product list, fetched on demand for the same range.
-  const openRangeList = (kind) => {
+  // `runId`: the forecast run an error-card list comes from — the card's
+  // "Before the adjustment" view passes the unadjusted twin's (2026-10-19);
+  // null is the default (the run the card shows first).
+  const openRangeList = (kind, runId = null) => {
     setRangeList({ kind, rows: [], loading: true, error: null });
     const request = kind === 'idle'
       ? getIdleStock({ period, principal }).then((res) => res.items || [])
       : kind === 'category'
         // Category rows carry no product: the category is the row's name.
-        ? getForecastAccuracy({ level: 'category', period, startPeriod, principal })
+        ? getForecastAccuracy({ level: 'category', period, startPeriod, principal, run_id: runId })
           .then((res) => (res.rows || []).map((r) => ({ ...r, product_name: r.category_path })))
-        : getForecastAccuracy({ period, startPeriod, principal }).then((res) => res.over_forecast_runs?.items || []);
+        : getForecastAccuracy({ period, startPeriod, principal, run_id: runId }).then((res) => res.over_forecast_runs?.items || []);
     request
       .then((rows) => setRangeList((prev) => (prev?.kind === kind ? { kind, rows, loading: false, error: null } : prev)))
       .catch((err) => setRangeList((prev) => (prev?.kind === kind
@@ -934,6 +938,10 @@ const Dashboard = () => {
       + `when the range ends there. How forecasts did in ${periodLabel(startPeriod)} – ${periodLabel(period)}: `
       + '"How far off were the forecasts?" below.'
     : null;
+  // The company calendar factor inside the forecast (GET /dashboard's
+  // portfolio_forecast.calendar_adjustment, 2026-10-19): the forecast card,
+  // the error card and the order plan's cards all say it, from this one block.
+  const calendarAdj = portfolioForecast.calendar_adjustment?.applied ? portfolioForecast.calendar_adjustment : null;
   const portfolioSeries = (portfolioForecast.series || [])
     .filter((pt) => !(forecastBeyondRange && pt.period > period))
     .filter((pt) => !(portfolioRealOnly && isPlaceholderPeriod(pt.period, placeholder)))
@@ -943,6 +951,8 @@ const Dashboard = () => {
     forecast: pt.forecast,
     confidenceLower: pt.confidence_lower,
     confidenceUpper: pt.confidence_upper,
+    // The same month's forecast before the calendar factor (its own month only).
+    beforeAdjustment: calendarAdj && pt.period === calendarAdj.forecast_period ? calendarAdj.before_pieces : null,
   }));
 
   const reorderPreview = data.reorder_preview || {};
@@ -1241,6 +1251,14 @@ const Dashboard = () => {
   // since yesterday can be traced to a re-run (the LP ran on 19 Oct 2026
   // while the cards were being checked).
   const planRun = lp.lp_generated_at ? dayLabel(String(lp.lp_generated_at).slice(0, 10)) : null;
+  // The plan orders the same gated SKUs the forecast card sums, from their
+  // stored forecasts: when those carry the calendar factor and the plan is
+  // not older than them (lp.is_stale), its quantities are built on it.
+  const planCalendarNote = calendarAdj && !lpHidden && lp.cycle_date && !lp.is_stale
+    ? `The order quantities are built on the calendar-adjusted forecast (${calendarFactorText(calendarAdj)} for `
+      + `${periodLabel(calendarAdj.forecast_period)}, learned from ${calendarYearsText(calendarAdj) || 'earlier years'})`
+      + `${calendarSignoffText(calendarAdj.signed_off) ? `, ${calendarSignoffText(calendarAdj.signed_off)}` : ''}.`
+    : null;
   const planLabel = lpCycleLabel ? `${lpCycleLabel} plan${planRun ? ` · run ${planRun}` : ''}` : null;
   // Below safety stock: the count, the SKUs it was checked on, and the two
   // dates that meet in it (the plan's safety stock, the stock count).
@@ -1277,6 +1295,7 @@ const Dashboard = () => {
       + 'count is read as 0 on hand.',
     'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',
     planBasis.detail,
+    planCalendarNote,
   ];
   // Why the plan holds these products and not every top seller (GET
   // /dashboard's forecast block; Sir Catubag, 2 Oct 2026: "what happens to
@@ -1629,6 +1648,7 @@ const Dashboard = () => {
                 forecastNote={forecastNote}
                 piecesShare={piecesShare}
                 analog={forecastBeyondRange ? null : forecastAnalog}
+                calendar={forecastBeyondRange ? null : calendarAdj}
               />
               {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} />}
             </Slot>
@@ -1637,8 +1657,10 @@ const Dashboard = () => {
                 <ForecastErrorSummaryCard
                   accuracy={data.forecast_accuracy}
                   scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
-                  onOpenList={() => openRangeList('over')}
-                  onOpenCategories={() => openRangeList('category')}
+                  onOpenList={(runId) => openRangeList('over', runId)}
+                  onOpenCategories={(runId) => openRangeList('category', runId)}
+                  principal={principal}
+                  calendar={portfolioForecast.calendar_adjustment || null}
                 />
               </Slot>
             )}
@@ -1657,6 +1679,7 @@ const Dashboard = () => {
                     cycleLabel={lpCycleLabel}
                     runLabel={planRun ? `run ${planRun}` : null}
                     countLabel={countLabel}
+                    calendarNote={planCalendarNote}
                     inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
                   />
                 </Slot>

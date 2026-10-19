@@ -4,7 +4,7 @@
 // the products behind it are one click away (Technical Adviser, 2 Oct 2026:
 // detail behind every aggregate). The figures are GET /dashboard's (or the
 // range route's) as served; nothing here recomputes one.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import SectionLede from './ui/SectionLede';
 import { ArrowRight, X } from 'lucide-react';
 import {
@@ -18,6 +18,8 @@ import { ChartTable, ChartViewToggle } from './ChartTable';
 import { GRID_PROPS } from './ChartZoom';
 import { pesoTicks } from '../utils/pesoTicks';
 import { BAR_FADE_FLOOR, Fade, endDot } from './ui/ChartParts';
+import { getForecastAccuracy } from '../api/dashboard';
+import { CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarSignoffText } from '../utils/calendarAdjustment';
 import { CHART_COLORS, COLORS } from '../theme/colors';
 import { formatCompactPesos } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
@@ -342,8 +344,49 @@ const HoverShare = ({ value, sold, label }) => (
 );
 
 
-export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCategories }) => {
+// The error card's two bases (2026-10-19): the run the card shows first —
+// calendar-adjusted, as the live forecast is made — and the same backtest
+// without the adjustment (GET /dashboard's forecast_accuracy.compare_run),
+// so the adjustment's effect on the picked range is on the card.
+const FC_BASES = [['adjusted', 'Calendar-adjusted'], ['before', 'Before the adjustment']];
+
+// "closer" / "further off" / a mixed verdict, from the two headline misses
+// of the adjusted and the unadjusted run over the same months.
+const adjustmentVerdict = (adj, bef) => {
+  const pairs = [[adj.company_total?.value, bef.company_total?.value], [adj.typical_product_weighted?.value, bef.typical_product_weighted?.value]]
+    .filter(([a, b]) => a != null && b != null);
+  if (!pairs.length) return null;
+  const better = pairs.filter(([a, b]) => a < b).length;
+  const worse = pairs.filter(([a, b]) => a > b).length;
+  if (better === pairs.length) return 'The adjustment brought these months closer on both.';
+  if (worse === pairs.length) return 'The adjustment left these months further off on both.';
+  return 'Mixed: closer on one, further off on the other.';
+};
+
+export const ForecastErrorSummaryCard = ({
+  accuracy: served, scope, onOpenList, onOpenCategories,
+  // The page's principal, for fetching the unadjusted run; the forecast's
+  // calendar_adjustment (signed_off, method), for the card's note.
+  principal = null, calendar = null,
+}) => {
   const [view, setView] = useState('lines');
+  const [basis, setBasis] = useState('adjusted');
+  const [twin, setTwin] = useState(null); // { key, data } — the unadjusted run, same months
+  const twinRunId = served?.compare_run?.run_id ?? null;
+  const twinStart = served?.start_period ?? null;
+  const twinEnd = served?.end_period ?? null;
+  const twinKey = twinRunId != null ? `${twinRunId}|${twinStart}|${twinEnd}|${principal}` : null;
+  useEffect(() => {
+    if (!twinKey) return undefined;
+    let cancelled = false;
+    getForecastAccuracy({ period: twinEnd, startPeriod: twinStart, principal, run_id: twinRunId })
+      .then((data) => { if (!cancelled) setTwin({ key: twinKey, data }); })
+      .catch(() => { if (!cancelled) setTwin({ key: twinKey, data: null }); });
+    return () => { cancelled = true; };
+  }, [twinKey, twinRunId, twinStart, twinEnd, principal]);
+  const twinData = twin?.key === twinKey && twin.data && !twin.data.blocked_reason ? twin.data : null;
+  const showingBefore = basis === 'before' && Boolean(twinData);
+  const accuracy = showingBefore ? twinData : served;
   if (!accuracy) return null;
   if (accuracy.blocked_reason || !accuracy.products) {
     return (
@@ -431,6 +474,45 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
           )}
         </InfoTip>
       </p>
+
+      {/* Which forecasts are scored (2026-10-19): calendar-adjusted, as the
+          live forecast is made since Kelvin's 19 Oct run, and the same months
+          without the adjustment beside them, so the card says on its face
+          whether the method change helps THIS range — it does on Mar 2025 –
+          Feb 2026 and does not before 2025. */}
+      {served.calendar_adjusted && served.calendar_adjusted !== 'no' && (
+        <div className="fc-basis">
+          <p className="fc-basis-note">
+            {showingBefore
+              ? <>Showing the same months <strong>before the calendar adjustment</strong>, as the backtest was first published.</>
+              : served.calendar_adjusted === 'partly'
+                ? 'Some of these months are scored on calendar-adjusted forecasts and some are not.'
+                : <>Scored on <strong>calendar-adjusted</strong> forecasts, as the live forecast is made</>}
+            {!showingBefore && served.calendar_adjusted === 'yes'
+              && (calendarSignoffText(calendar?.signed_off) ? <> — {calendarSignoffText(calendar.signed_off)}.</> : '.')}
+            <InfoTip label="About the calendar adjustment">
+              <span className="fc-tip-line">{calendar?.method || CALENDAR_METHOD_FALLBACK}</span>
+              <span className="fc-tip-line">{CALENDAR_HISTORY_NOTE}</span>
+              {served.compare_run && (
+                <span className="fc-tip-line">
+                  Calendar-adjusted: {served.run_labels?.join('; ')}. Before the adjustment: {served.compare_run.label}.
+                </span>
+              )}
+            </InfoTip>
+          </p>
+          {twinData && (
+            <>
+              <p className="fc-basis-compare">
+                Same months, company total · typical product: calendar-adjusted <strong>{pct(served.company_total?.value)}</strong> ·{' '}
+                <strong>{pct(served.typical_product_weighted?.value)}</strong>; before the adjustment{' '}
+                <strong>{pct(twinData.company_total?.value)}</strong> · <strong>{pct(twinData.typical_product_weighted?.value)}</strong>.
+                {' '}{adjustmentVerdict(served, twinData)}
+              </p>
+              <ChartViewToggle view={basis} onChange={setBasis} options={FC_BASES} label="Forecasts scored: calendar-adjusted or before the adjustment" />
+            </>
+          )}
+        </div>
+      )}
 
       {/* 2. The evidence: forecast against actual, month by month. */}
       {months.length > 0 && (
@@ -615,7 +697,7 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
 
       {/* 4. The takeaway: the products to review, with their list. */}
       {runs.count > 0 && (
-        <button type="button" className="fc-action" onClick={onOpenList}>
+        <button type="button" className="fc-action" onClick={() => onOpenList(showingBefore ? twinRunId : null)}>
           <span>
             <strong>{runs.count.toLocaleString()} products</strong> had forecasts that were too high {runs.run_months} or
             more months in a row — check them before ordering
@@ -627,7 +709,7 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
           and total level"): the same scored rows summed per category, in
           pieces and pesos (GET /dashboard/accuracy?level=category). */}
       {onOpenCategories && (
-        <button type="button" className="fc-action fc-action-quiet" onClick={onOpenCategories}>
+        <button type="button" className="fc-action fc-action-quiet" onClick={() => onOpenCategories(showingBefore ? twinRunId : null)}>
           <span>See where the misses went, <strong>category by category</strong></span>
           <ArrowRight size={14} aria-hidden="true" />
         </button>

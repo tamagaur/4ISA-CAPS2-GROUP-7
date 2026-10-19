@@ -24,6 +24,9 @@ import { timelineMonths, yearEarlier } from '../utils/timeline';
 import { pesoTicks } from '../utils/pesoTicks';
 import MonthTick, { monthName } from './MonthTick';
 import { BAR_FADE_FLOOR, Callout, CalloutLine, CalloutNote, Callouts, Fade, endDot } from './ui/ChartParts';
+import {
+  CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarFactorText, calendarSignoffText, calendarYearsText,
+} from '../utils/calendarAdjustment';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
@@ -2009,7 +2012,7 @@ export const CategoryStockBarWidget = ({
 // actual pieces, a violet one for the forecast with its likely range under
 // it. The bridge point (the last actual month, given the actual as its own
 // "forecast" so the lines join, chartData below) shows actual only.
-const PortfolioForecastTooltip = ({ active, payload, label }) => {
+const PortfolioForecastTooltip = ({ active, payload, label, calendar = null }) => {
   if (!active || !payload || !payload.length) return null;
   const row = payload[0].payload;
   const when = plainPeriod(row.period ?? label);
@@ -2021,6 +2024,12 @@ const PortfolioForecastTooltip = ({ active, payload, label }) => {
       {row.actual != null && <Callout color={CHART_COLORS.salesSeries} period={when} value={pieces(row.actual)} name="Actual demand" />}
       {row.forecast != null && !bridged && (
         <Callout color={COLORS.forecast} period={when} value={pieces(row.forecast)} name="Forecast">
+          {calendar && row.beforeAdjustment != null && (
+            <CalloutLine>
+              Before the calendar adjustment: <strong>{Math.round(row.beforeAdjustment).toLocaleString()}</strong> pieces
+              {calendarFactorText(calendar) ? ` (${calendarFactorText(calendar)})` : ''}
+            </CalloutLine>
+          )}
           {band && (
             <CalloutLine>
               About 90% likely: <strong>
@@ -2142,6 +2151,9 @@ export const PortfolioForecastWidget = ({
   // The same month-to-month move a year earlier ({ from, to, pct }), for
   // the "why up 26%?" the insight invites: a seasonal step, or not.
   analog = null,
+  // The company calendar factor inside the forecast (GET /dashboard's
+  // portfolio_forecast.calendar_adjustment, applied only; 2026-10-19).
+  calendar = null,
 }) => {
   const hasData = series.length > 0;
   const tierACount = reliability?.total_count ?? null;
@@ -2257,7 +2269,20 @@ export const PortfolioForecastWidget = ({
     { key: 'forecast', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
     { key: 'confidenceLower', label: 'Approx. 90% range, low (pieces)', format: (v) => Math.round(v).toLocaleString() },
     { key: 'confidenceUpper', label: 'Approx. 90% range, high (pieces)', format: (v) => Math.round(v).toLocaleString() },
+    ...(calendar
+      ? [{ key: 'beforeAdjustment', label: 'Forecast before the calendar adjustment (pieces)', format: (v) => Math.round(v).toLocaleString() }]
+      : []),
   ];
+  // The forecast before the calendar adjustment against the last month of
+  // actual sales, as the insight compares the adjusted one ("+17.1% on Feb
+  // 2026"): only when that last month comes just before the forecast month.
+  const lastActualPoint = [...series].reverse().find((pt) => pt.actual != null) || null;
+  const calendarRise = calendar && lastActualPoint && lastActualPoint.actual > 0 && calendar.before_pieces != null
+    ? (() => {
+      const pct = ((calendar.before_pieces - lastActualPoint.actual) / lastActualPoint.actual) * 100;
+      return `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}% on ${formatMonth(lastActualPoint.period)}`;
+    })()
+    : null;
   // The months the card spans, for the subtitle: the picker's range plus
   // the forecast month after it.
   const seriesSpan = series.length
@@ -2297,6 +2322,26 @@ export const PortfolioForecastWidget = ({
               : ' · planned Class A SKUs'}
             {piecesShare && ` · ${piecesShare.pct.toFixed(0)}% of all pieces sold in ${piecesShare.period}`}
           </p>
+          {/* The calendar adjustment inside the forecast, on the card's face:
+              it is a method change awaiting the adviser's sign-off, so it is
+              said, not left in a "?" (2026-10-19). */}
+          {hasData && calendar && (
+            <p className="chart-insight chart-calendar-note">
+              {`The ${formatMonth(calendar.forecast_period)} forecast includes a calendar adjustment of `
+                + `${calendarFactorText(calendar)}, learned from ${calendarYearsText(calendar) || 'earlier years'}`}
+              {calendarSignoffText(calendar.signed_off) ? ` — ${calendarSignoffText(calendar.signed_off)}.` : '.'}
+              <InfoTip label="About the calendar adjustment">
+                <span className="chart-tip-line">{calendar.method || CALENDAR_METHOD_FALLBACK}</span>
+                <span className="chart-tip-line">
+                  {`${formatMonth(calendar.forecast_period)}: ${Math.round(calendar.before_pieces).toLocaleString()} pieces from the `
+                    + `models × ${calendar.factor != null ? calendar.factor.toFixed(4) : 'each product’s factor'} = `
+                    + `${Math.round(calendar.forecast_pieces).toLocaleString()} pieces, over ${calendar.products.toLocaleString()} `
+                    + `of the ${calendar.of_products.toLocaleString()} products summed here.`}
+                </span>
+                <span className="chart-tip-line">{CALENDAR_HISTORY_NOTE}</span>
+              </InfoTip>
+            </p>
+          )}
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
           {hasData && forecastNote && <p className="chart-insight">{forecastNote}</p>}
         </div>
@@ -2435,7 +2480,7 @@ export const PortfolioForecastWidget = ({
                     {sections.slice(1).map((sec) => (
                       <ReferenceLine key={`edge-${sec.key}`} x={sec.x1} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
                     ))}
-                    <Tooltip content={<PortfolioForecastTooltip />} />
+                    <Tooltip content={<PortfolioForecastTooltip calendar={calendar} />} />
                     {/* The forecast's uncertainty cone. */}
                     <Area type="linear" dataKey="confidenceBase" stackId="band" stroke="none" fill="transparent" activeDot={false} {...zoom.zoomAnim(0)} />
                     <Area type="linear" dataKey="confidenceBand" stackId="band" stroke="none" fill={COLORS.forecastBg} fillOpacity={0.9} activeDot={false} {...zoom.zoomAnim(0)} />
@@ -2490,6 +2535,11 @@ export const PortfolioForecastWidget = ({
                 unexplained. */}
             {analog && (
               <> A year earlier, {formatMonth(analog.to)} was {analog.pct >= 0 ? '+' : '−'}{Math.abs(analog.pct).toFixed(1)}% on {formatMonth(analog.from)}.</>
+            )}
+            {/* How much of the rise is the calendar adjustment: the same
+                forecast before it, against the same last month of sales. */}
+            {calendarRise && (
+              <> Before the calendar adjustment it would be {Math.round(calendar.before_pieces).toLocaleString()} pieces ({calendarRise}).</>
             )}
           </span>
         </p>
@@ -2571,6 +2621,9 @@ export const ReorderRecommendationWidget = ({
   cycleLabel = null,
   runLabel = null,
   countLabel = null,
+  // That the quantities are built on the calendar-adjusted forecast, and
+  // whether it awaits sign-off (Dashboard.jsx planCalendarNote, 2026-10-19).
+  calendarNote = null,
   // The plan's cost and capacity inputs are still placeholders (GET
   // /dashboard's policy_comparison.inputs_are_placeholders); the Reorder
   // page says so, and so does this card.
@@ -2656,8 +2709,10 @@ export const ReorderRecommendationWidget = ({
               {inputsArePlaceholders && (
                 <span className="chart-tip-line">Cost and capacity figures are placeholders until SSM confirms them.</span>
               )}
+              {calendarNote && <span className="chart-tip-line">{calendarNote}</span>}
             </InfoTip>
             {inputsArePlaceholders && ' Cost and capacity figures are placeholders until SSM confirms them.'}
+            {calendarNote && ` ${calendarNote}`}
           </p>
 
           <div className="reorder-mini-list">
