@@ -42,6 +42,7 @@ import './SKUForecast.css';
 import GapNote from './GapNote';
 import { DemoCategoryForecast } from './DemoForecasts';
 import { gapLabel } from '../utils/gapReasons';
+import { calendarSignoffText } from '../utils/calendarAdjustment';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -267,7 +268,8 @@ const SKUForecast = () => {
     const floorStart = { startMonth: 'Jan', startYear: String(FIRST_DATA_YEAR) };
     return Number(shared.endYear) >= FIRST_DATA_YEAR
       ? { ...shared, ...floorStart }
-      : { ...floorStart, endMonth: LATEST_DATA_PERIOD.month, endYear: LATEST_DATA_PERIOD.year };
+      : { ...floorStart, endMonth: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).month,
+        endYear: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).year };
   })();
   // The page follows the dashboard's range LIVE (Technical Adviser, 2 Oct
   // 2026: change the filter and the screen answers; one range across the
@@ -1764,6 +1766,19 @@ const SKUForecast = () => {
                             <dd>{servedModel.plain.season}</dd>
                           </div>
                         )}
+                        {/* The calendar adjustment as a sum (model_params,
+                            2026-10-19): the model's own number, the factor,
+                            the number served — and that it awaits sign-off. */}
+                        {servedModel.calendar?.before != null && storedForecast?.forecast_value != null && (
+                          <div className="forecast-howmade-item">
+                            <dt>Calendar adjustment</dt>
+                            <dd>
+                              {Math.round(servedModel.calendar.before).toLocaleString()} pieces from the model
+                              {' '}× {servedModel.calendar.factor.toFixed(4)} = {Math.round(storedForecast.forecast_value).toLocaleString()} pieces
+                              {calendarSignoffText(forecastResult?.calendar_signed_off) && ` · ${calendarSignoffText(forecastResult.calendar_signed_off)}`}
+                            </dd>
+                          </div>
+                        )}
                         {storedParams.bin && (
                           <div className="forecast-howmade-item">
                             <dt>History</dt>
@@ -1880,7 +1895,9 @@ const SKUForecast = () => {
                       <strong>Showing the stored {formatPeriod(derivedForecast.period)} forecast.</strong>{' '}
                       {servedModel.recomputable
                         ? `This SKU had fewer than ${MIN_SALES_MONTHS} months of sales up to ${formatPeriod(derivedForecast.earlierCutoff)}, so no forecast can be recomputed for a range ending there.`
-                        : servedModel.fallback
+                        : servedModel.calendar
+                          ? `This SKU's forecast includes the company calendar adjustment, which needs every product's sales and is worked out only in the forecasting pipeline, so it can't be recomputed in the browser for a range ending ${formatPeriod(derivedForecast.earlierCutoff)}.`
+                          : servedModel.fallback
                           ? `The pipeline fell back to the 3-month moving average for this SKU, and whether it would for an earlier end date can't be checked in the browser, so nothing is recomputed for a range ending ${formatPeriod(derivedForecast.earlierCutoff)}.`
                           : `This SKU's model${servedModel.label ? ` (${servedModel.label})` : ''} only runs in the forecasting pipeline, so its forecast can't be recomputed in the browser for a range ending ${formatPeriod(derivedForecast.earlierCutoff)}.`}
                       {' '}Extend the range to {formatPeriod(derivedForecast.basisPeriod)} to see it on the chart.

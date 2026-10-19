@@ -274,6 +274,7 @@ SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
     ("PATCH", "/auth/me"),  # your own name and picture (backend/profile.py, My profile)
     ("GET", "/data-mode"),  # the data-mode banner on every page
+    ("POST", "/users/me/avatar"),  # any signed-in account sets its OWN picture; no users.manage needed
     # Your own two-step sign-in (backend/routers/two_factor.py).
     ("GET", "/auth/mfa"), ("POST", "/auth/mfa/setup"), ("POST", "/auth/mfa/confirm"),
     ("POST", "/auth/mfa/recovery-codes"), ("POST", "/auth/mfa/disable"),
@@ -318,14 +319,16 @@ def _routes():
 
 
 # Method/path pairs the app serves: 37 = what a flat app.routes walk found under
-# fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02), plus the 9 two-step
-# sign-in routes (/auth/login/verify, /auth/login/setup[/confirm], /auth/mfa*,
-# /users/{user_id}/mfa/reset) merged in 2026-10-03, plus the seven GET /dashboard/*
-# range routes the data marts added (2026-10-04/05), plus GET /demo/series, /demo/index
-# and /demo/totals (kelvin-etl, 2026-10-15, behind DM_DEMO_ENABLED, default off),
-# plus PATCH /auth/me (the My profile page, 2026-10-16).
-# Change it when a route is added or removed.
-ROUTE_COUNT = 57
+# fastapi 0.115.5 at the UIFixes_Audrey merge (2026-10-02); 43 since the data marts
+# added six GET /dashboard/* range routes (2026-10-04); 44 since GET
+# /dashboard/class-changes (2026-10-05, DEC-37); 47 since GET /demo/series, /demo/index and /demo/totals
+# (2026-10-15, behind DM_DEMO_ENABLED, default off); 48 since POST /users/me/avatar (2026-10-17,
+# migration 0058); plus the 9 two-step sign-in routes (/auth/login/verify, /auth/login/setup[/confirm],
+# /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
+# page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /dashboard/stock-detail
+# (the lists behind the stock cards, 2026-10-19), counted when Main-BE's POST /users/me/avatar met it
+# in one merge. Change it when a route is added or removed.
+ROUTE_COUNT = 59
 
 
 def test_the_walk_finds_every_route():
@@ -457,8 +460,10 @@ def test_me_lists_the_effective_permissions():
         "user_id": 2, "email": "user2@ssmcapstone.com", "full_name": "User 2", "role": "staff",
         "permissions": sorted((set(PRESETS["staff"]) | {"audit_log.view"}) - {"lp.view"}),
         # The My profile page's fields (backend/profile.py): no picture set,
-        # and this fake store has no picture column (migration 0058).
-        "avatar_data_url": None, "profile_pictures": False,
+        # and this fake store has no picture column (migration 0059).
+        # avatar_url is a computed field derived from avatar_path (backend/
+        # avatar.py.public_url) -- null right along with it.
+        "avatar_path": None, "avatar_url": None, "profile_pictures": False,
     }
 
 

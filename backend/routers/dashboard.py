@@ -392,6 +392,7 @@ from analytics.classification.abc import abc_rules
 from analytics.params import abc_method_sql
 from analytics.params import (
     ALLOCATION_DEFAULT_PCT,
+    CALENDAR_FACTOR_SIGNED_OFF,
     COVER_KPI_HISTORY_MONTHS,
     DEAD_SKU_MONTHS,
     MASE_GATE,
@@ -1076,7 +1077,10 @@ def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
     fc_src, fc_params = forecast_source(mode)
     return f"""
                 SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
-                       fr.confidence_lower, fr.confidence_upper, pd.principal
+                       fr.confidence_lower, fr.confidence_upper, pd.principal,
+                       (fr.model_params->>'calendar_factor')::float AS calendar_factor,
+                       (fr.model_params->>'calendar_years')::int AS calendar_years,
+                       (fr.model_params->>'value_before_calendar')::float AS value_before_calendar
                 FROM {fc_src} fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date
@@ -1084,6 +1088,40 @@ def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
                   AND fr.mase < :mase_gate
                   {_principal_filter(scope)}
             """, {"forecast_date": forecast_date, "mase_gate": MASE_GATE, **fc_params}
+
+
+def calendar_adjustment(gated_rows: list) -> dict:
+    """The company calendar factor in the forecast the card sums (2026-10-19, Kelvin's
+    analytics/forecasting/calendar.py; run_baseline_forecast.py --calendar-factor): from each
+    gated row's own model_params, never recomputed here. `forecast_pieces` is the card's
+    forecast total, `before_pieces` the same rows before the factor (a row without one counts
+    at its value); `factor` when every adjusted row shares one factor, else the range.
+    `signed_off` is analytics.params.CALENDAR_FACTOR_SIGNED_OFF: the factor is a methodology
+    change awaiting the technical adviser's sign-off, and the card says so."""
+    adjusted = [r for r in gated_rows if r.get("calendar_factor") is not None and r.get("value_before_calendar") is not None]
+    base = {"applied": bool(adjusted), "signed_off": CALENDAR_FACTOR_SIGNED_OFF,
+            "products": len({r["product_key"] for r in adjusted}),
+            "of_products": len({r["product_key"] for r in gated_rows})}
+    if not adjusted:
+        return base
+    factors = sorted({round(float(r["calendar_factor"]), 4) for r in adjusted})
+    years = sorted({int(r["calendar_years"]) for r in adjusted if r.get("calendar_years") is not None})
+    forecast = sum(float(r["forecast_value"] or 0) for r in gated_rows)
+    before = sum(float(r["value_before_calendar"]) if r in adjusted else float(r["forecast_value"] or 0)
+                 for r in gated_rows)
+    d = adjusted[0]["forecast_date"]
+    return {
+        **base,
+        "forecast_period": f"{d.year:04d}-{d.month:02d}" if hasattr(d, "year") else str(d)[:7],
+        "factor": factors[0] if len(factors) == 1 else None,
+        "factor_min": factors[0], "factor_max": factors[-1],
+        "years": years[0] if len(years) == 1 else None, "years_min": years[0] if years else None,
+        "years_max": years[-1] if years else None,
+        "forecast_pieces": round(forecast, 2), "before_pieces": round(before, 2),
+        "method": ("Each forecast is multiplied by how that calendar month has sold against the 3 months "
+                   "before it in earlier years (company total, halfway toward no change); a month with no "
+                   "earlier year on record is left as it is."),
+    }
 
 
 def _scoped_forecast_count_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
@@ -2172,6 +2210,9 @@ def get_dashboard(
         # One sentence comparing the forecast bucket with the last actual
         # month — the card renders it verbatim (backend/chart_insights.py).
         "insight": portfolio_forecast_insight(portfolio_series),
+        # The calendar factor inside that forecast, and the total before it (2026-10-19).
+        # The LP plans exactly these gated SKUs, so it describes the order plan's forecast too.
+        "calendar_adjustment": calendar_adjustment(gated_rows),
     }
 
     # ---- reorder_preview -------------------------------------------------
@@ -2324,6 +2365,10 @@ def get_dashboard(
             marts.accuracy_rows(db, range_start, range_end), range_start, range_end, REVIEW_OVER_RUN_MONTHS,
         )
     forecast_accuracy["coverage"] = [] if scope == "delmonte" else ["unilever"]
+    # The same backtest without the calendar factor, when the figures above are the
+    # adjusted run's: the card shows both, so the adjustment's effect on THIS range is
+    # on screen (better on 2025-03..2026-02, worse before 2025: Kelvin, 2026-10-19).
+    forecast_accuracy["compare_run"] = marts.accuracy_comparison(db, forecast_accuracy)
 
     # ---- idle_stock ---------------------------------------------------------
     # Unilever only: Del Monte has no product-level real sales to show a product

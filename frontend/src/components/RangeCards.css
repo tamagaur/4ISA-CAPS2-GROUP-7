@@ -295,9 +295,91 @@
   color: var(--color-forecast);
 }
 
+/* The miss bands between the lines (2026-10-19): a tinted block, as the
+   plot draws them at 20%. */
+.fc-legend-band {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  opacity: 0.35;
+}
+
+/* Every view's key in one grid cell, only the current one visible: the cell
+   is as tall and as wide as the largest key (Lines, four entries), so the
+   header row holds its height and the toggle keeps its place whatever the
+   view. A hidden key is out of the accessibility tree too (visibility). */
+.fc-legend-stack {
+  display: grid;
+}
+
+.fc-legend-stack > .fc-legend {
+  grid-area: 1 / 1;
+  flex-wrap: wrap;
+}
+
+.fc-legend-stack > .fc-legend.is-reserved {
+  visibility: hidden;
+}
+
+/* Which forecasts the error card scores (2026-10-19): the calendar-adjusted
+   run or the same months before the adjustment, their two headline misses
+   side by side, and the switch between them. A quiet violet rule, the
+   forecast's colour, as on the forecast card's own note. */
+.fc-basis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-forecast, #8866E8);
+  border-radius: 0 10px 10px 0;
+  background: var(--color-forecast-bg, #EEE9FC);
+}
+
+.fc-basis-note,
+.fc-basis-compare {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.fc-basis-compare strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The "Monthly miss" view's bars in the key: a short solid bar. */
+.fc-legend-bar {
+  display: inline-block;
+  width: 10px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* Tall enough for the two-line month ticks and the axis title under them. */
 .fc-chart {
   width: 100%;
-  height: 240px;
+  height: 270px;
+}
+
+/* A miss total's share of the range's sales, under its pesos. */
+.fc-miss-share {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.fc-miss-share .info-tip {
+  margin-left: 0;
+}
+
+.fc-miss-share-trigger {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
 /* The Table view takes the chart's place at the chart's height. */
@@ -429,4 +511,12 @@
   .fc-miss-value {
     font-size: 22px;
   }
+}
+
+/* The top-seller changes' summary (2026-10-19): its counts and totals in
+   bold, so the sentence scans. */
+.range-change-summary strong {
+  font-weight: 700;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
 }

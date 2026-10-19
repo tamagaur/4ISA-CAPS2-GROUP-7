@@ -151,6 +151,25 @@ def abc_method_sql(alias: str = "") -> str:
 XGB_NTHREAD = 1
 
 # --------------------------------------------------------------------------- #
+# Calendar factor (analytics/forecasting/calendar.py)
+# --------------------------------------------------------------------------- #
+# TEAM: approved by Kelvin 2026-10-19 for build + dry run; NOT applied to the
+# live forecast until Sir Catubag signs off (a methodology change), so the
+# runner applies it only with --calendar-factor. SHRINK 0.5 = the "half"
+# variant: same overall gain as the full factor (median WAPE 0.318 -> 0.305 vs
+# 0.304 on MA3) with more products improved (121/59 vs 113/67), chosen because
+# only 1-2 earlier years back each month's factor. PRIOR_MONTHS 3 matches MA3's
+# window, the trailing level the factor corrects.
+CALENDAR_FACTOR_SHRINK = 0.5
+CALENDAR_FACTOR_PRIOR_MONTHS = 3
+# TEAM: whether Sir Catubag has signed the factor off (Kelvin's note above).
+# The live 2026-03 forecast was nonetheless written with --calendar-factor on
+# 2026-10-19 (Forecast_Result.model_params.calendar_factor on every 'ok' row),
+# so the dashboard says the forecast is adjusted AND that the adjustment awaits
+# his sign-off, from this flag. Set True when he approves it.
+CALENDAR_FACTOR_SIGNED_OFF = False
+
+# --------------------------------------------------------------------------- #
 # Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern
 # label (analytics/forecasting/decomposition.py)
 # --------------------------------------------------------------------------- #

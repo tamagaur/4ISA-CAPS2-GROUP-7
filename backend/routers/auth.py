@@ -66,7 +66,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend import account_links, audit, mailer, mfa
+from backend import account_links, audit, avatar, mailer, mfa
 from backend import profile as user_profile
 from backend.api_errors import ApiError
 from backend.auth_utils import (
@@ -518,7 +518,7 @@ def _me_response(db: Session, current_user: TokenPayload) -> MeResponse:
         full_name=current_user.full_name,
         role=current_user.role,
         permissions=sorted(permissions_for(db, current_user)),
-        avatar_data_url=user_profile.read_avatar(db, current_user.user_id),
+        avatar_path=user_profile.read_avatar_path(db, current_user.user_id),
         profile_pictures=user_profile.pictures_ready(db),
     )
 
@@ -530,29 +530,45 @@ def update_me(
     current_user: TokenPayload = Depends(get_current_user),
 ) -> MeResponse:
     """The signed-in person's own display name and picture (the My profile
-    page; backend/profile.py has the rules). Audited as "Edit Profile"."""
+    page; backend/profile.py has the rules). The picture runs through the
+    SAME validation, resize and Supabase Storage upload as POST
+    /users/me/avatar (backend/avatar.py) -- only the resulting object path
+    is ever stored, never the bytes. Audited as "Edit Profile"."""
     fields = body.model_dump(exclude_unset=True)
     if not fields:
         raise ApiError(422, "Nothing to change.", code="nothing_to_change")
     name = user_profile.clean_name(fields["full_name"]) if "full_name" in fields else None
     set_avatar = "avatar_data_url" in fields
-    avatar = None
-    if set_avatar and fields["avatar_data_url"] is not None:
-        avatar = user_profile.check_avatar(fields["avatar_data_url"])
-    user_profile.update(db, current_user.user_id, full_name=name, avatar=avatar, set_avatar=set_avatar)
+    object_name = None
+    old_avatar_path = None
+    if set_avatar:
+        if not user_profile.pictures_ready(db):
+            raise ApiError(503, user_profile.NOT_READY, code="profile_pictures_not_ready")
+        old_avatar_path = user_profile.read_avatar_path(db, current_user.user_id)
+        if fields["avatar_data_url"] is not None:
+            raw = user_profile.decode_avatar_data_url(fields["avatar_data_url"])
+            webp = avatar.to_avatar_webp(raw)
+            object_name = avatar.new_object_name(current_user.user_id)
+            avatar.upload(object_name, webp)
+    user_profile.update(db, current_user.user_id, full_name=name, avatar_path=object_name, set_avatar=set_avatar)
     changes = []
     if name is not None and name != current_user.full_name:
         changes.append(f"Display name: {current_user.full_name} -> {name}")
     if set_avatar:
-        changes.append("Picture changed" if avatar else "Picture removed")
+        changes.append("Picture changed" if object_name else "Picture removed")
     audit.record(db, "Edit Profile", "; ".join(changes) or "No change", actor=current_user)
     db.commit()
+    # Each upload gets a fresh random object name, so the old one is now an
+    # orphan in Storage -- deleted only after the new path is durably
+    # committed, same ordering as POST /users/me/avatar.
+    if set_avatar and old_avatar_path:
+        avatar.delete(old_avatar_path)
     me = _me_response(db, current_user)
     updates = {}
     if name is not None:
         updates["full_name"] = name
     if set_avatar:
-        updates["avatar_data_url"] = avatar
+        updates["avatar_path"] = object_name
     return me.model_copy(update=updates) if updates else me
 
 

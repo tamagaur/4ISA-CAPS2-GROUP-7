@@ -1,4 +1,4 @@
-// The arithmetic the dashboard's four KPI cards do on GET /dashboard's own
+// The arithmetic the dashboard's five KPI cards do on GET /dashboard's own
 // figures (HeroKpis.jsx): a ratio, a share, a split. Nothing here is a new
 // measurement, and every function answers null when the figure can't be
 // formed, so a card draws "—" or no bar rather than a made-up 0.
@@ -68,42 +68,91 @@ export function urgencyParts({ pending, critical = 0, urgent = 0, noData = 0 }) 
   ];
 }
 
-// Where sales should be by now, following last year's own month-by-month
-// pattern: the share of last year's sales the same months had brought in
-// (prior ÷ basis), applied to this year's target. Null unless the months
-// match and the basis is a whole year — then the card falls back to an even
-// pace and says so. (2026-10-18: ₱405.2M × ₱67.4M ÷ ₱393.4M = ₱69.4M by Feb.)
-export function expectedByNow({ target, priorYtd, basisSales, ytdMonths, priorMonths, basisMonths }) {
+// The year so far against the allocation (2026-10-18 redesign). "Expected"
+// follows last year's own pattern: the same months' sales a year earlier ×
+// the chosen level (Thea's decision A, 2026-10-18), so a slow first quarter
+// last year lowers it too; it is null unless both years have the same number
+// of months on record. `monthsLeft` is the calendar months after the latest
+// one; `perMonthNeeded` is what the rest of the year needs to reach the target.
+export function allocationPace({ ytdSales, ytdMonths, priorYtdSales, priorYtdMonths, pct, target, monthsLeft }) {
+  const ytd = num(ytdSales);
+  const months = num(ytdMonths);
+  if (ytd == null || months == null || months <= 0) return null;
+  const prior = num(priorYtdSales);
+  const level = num(pct);
   const t = num(target);
-  const p = num(priorYtd);
-  const b = num(basisSales);
-  const m = num(ytdMonths);
-  if (t == null || p == null || b == null || b <= 0 || p < 0 || t < 0) return null;
-  if (m == null || m <= 0 || m !== num(priorMonths) || num(basisMonths) !== 12) return null;
-  return t * (p / b);
+  const left = num(monthsLeft);
+  const expected = prior != null && prior > 0 && level != null && num(priorYtdMonths) === months
+    ? (prior * level) / 100 : null;
+  const reached = t != null && ytd >= t;
+  return {
+    expected,
+    gap: expected != null ? ytd - expected : null,
+    share: t != null && t > 0 ? ytd / t : null,
+    reached,
+    perMonthNeeded: t != null && !reached && left != null && left > 0 ? (t - ytd) / left : null,
+  };
 }
 
-// What each remaining month must bring in to reach the target: what is left
-// of the target, spread over the months left. 0 once the target is reached;
-// null when the year is complete or a figure is missing.
-export function neededPerMonth({ target, ytdSales, ytdMonths }) {
-  const t = num(target);
-  const s = num(ytdSales);
-  const m = num(ytdMonths);
-  if (t == null || s == null || m == null || m < 0 || m >= 12) return null;
-  return Math.max(t - s, 0) / (12 - m);
-}
-
-// The stock held beyond SSM's rule, in pesos: the share of the cover past
-// the rule's weeks, of the stock's value (value × (1 − policy ÷ weeks)). 0
-// when the cover is within the rule; null when a figure is missing.
-export function excessOverPolicy(stockValue, weeks, policyWeeks) {
-  const v = num(stockValue);
+// Stock cover against the policy, in weeks: the part the policy needs and
+// what is past it, or how far short it falls.
+export function coverSplit(weeks, policyWeeks) {
   const w = num(weeks);
   const p = num(policyWeeks);
-  if (v == null || w == null || p == null || v < 0 || w <= 0 || p <= 0) return null;
-  if (w <= p) return 0;
-  return v * (1 - p / w);
+  if (w == null || w < 0 || p == null || p <= 0) return null;
+  return { needed: Math.min(w, p), extra: Math.max(w - p, 0), short: Math.max(p - w, 0) };
+}
+
+// The cover ratio in words, for the pill beside the weeks: within 10% of the
+// policy is on target; past it, the nearest half ("About double the target"
+// at 2.07×). Above the target is a warning (trapped capital, the problem the
+// DSD exists for), below it a risk.
+export function coverVerdict(ratio) {
+  const r = num(ratio);
+  if (r == null || r < 0) return null;
+  if (r < 0.9) return { text: 'Below the target', tone: 'negative' };
+  if (r <= 1.1) return { text: 'On target', tone: 'positive' };
+  if (r < 1.25) return { text: 'A little above the target', tone: 'warning' };
+  const half = Math.round(r * 2) / 2;
+  const words = { 2: 'About double the target', 3: 'About triple the target' };
+  return { text: words[half] || `About ${half}× the target`, tone: 'warning' };
+}
+
+// Money in stock past the policy's weeks of cover (Stock cover card, "tied
+// up"): the share of the stock value beyond `policyWeeks`, i.e. stock − policy
+// weeks × average weekly sales, with weekly sales worked back as stock ÷ weeks.
+// No backend field holds it; it is the cover's own two figures rearranged, so
+// the card shows it as an estimate. Null at or below the policy, or without
+// both figures.
+export function excessAbovePolicy(stockValue, weeks, policyWeeks) {
+  const s = num(stockValue);
+  const w = num(weeks);
+  const p = num(policyWeeks);
+  if (s == null || w == null || p == null || s < 0 || w <= 0 || p <= 0 || w <= p) return null;
+  return (s * (w - p)) / w;
+}
+
+// Class A products: below safety stock, at or above it, and those the plan
+// can't check (no safety stock, or no stock count). Null when the counts
+// can't be split honestly.
+export function classAChecks({ all, checked, below }) {
+  const a = num(all);
+  const c = num(checked);
+  const b = num(below);
+  if (a == null || c == null || b == null || b < 0 || c < b || a < c) return null;
+  return { below: b, ok: c - b, unchecked: a - c };
+}
+
+// The colour of a change in stock depends on where cover stands: more stock
+// is bad when cover is already above the policy, good when it is below.
+// Without a cover figure (or a flat change) it is neutral.
+export function stockChangeTone(pct, coverRatio) {
+  const p = num(pct);
+  const r = num(coverRatio);
+  if (p == null || p === 0 || r == null) return 'neutral';
+  if (r > 1.1) return p > 0 ? 'negative' : 'positive';
+  if (r < 0.9) return p > 0 ? 'positive' : 'negative';
+  return 'neutral';
 }
 
 // A count in a few characters: 3,800,930 -> "3.8M", 356,287 -> "356.3K",

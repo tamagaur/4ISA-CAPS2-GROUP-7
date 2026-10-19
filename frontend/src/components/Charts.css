@@ -625,6 +625,9 @@
   line-height: 1.4;
 }
 
+/* The hover's boxes (one per series) moved to ui/ChartParts.css on
+   2026-10-19, once every chart on the dashboard took them up. */
+
 /* Legend key for a stock count flagged as unusual — the same muted slate
    dot the chart draws at that point (Charts.jsx stockDot): filled, so it
    stands apart from the lines without competing with them. */
@@ -1267,104 +1270,149 @@
 
 
 /* ── ABC classification: donut + legend, selected-tier card, share bars ─── */
-.abc-share-pair {
+/* ── Which products bring in most of the sales? (ABCDonutWidget, 2026-10-19,
+   after the mockup) ──────────────────────────────────────────────────────
+   Top to bottom: the finding (abc-finding), the ring with its legend beside
+   the at-risk count and the selected class (abc-overview), then the two
+   share bars (abc-share-pair). The card is a size container: the ring row
+   stacks by the card's own width (half a row on a wide screen, the whole
+   row below 1350px), not the window's. */
+.abc-card {
+  container-type: inline-size;
+}
+
+.abc-card .chart-widget-body.abc-body {
+  justify-content: flex-start;
+  gap: 18px;
+}
+
+/* The finding: the card's answer line, as the Forecast accuracy card's
+   (.fc-answer) — the sentence in the heading colour, its two numbers a
+   touch larger, the definition under it in muted text with Class A's list
+   on the end. No tint, no icon: on this page a tinted strip with an icon is
+   something to act on, and a finding is not (one meaning per pattern,
+   Technical Adviser, 2 Oct 2026). */
+.abc-finding {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
+  gap: 4px;
 }
 
-.abc-share-row {
-  display: grid;
-  grid-template-columns: 7.5rem 1fr;
-  grid-template-areas: "label track" "label values";
-  column-gap: 0.6rem;
-  row-gap: 0.15rem;
-  align-items: center;
-}
-
-.abc-share-label {
-  grid-area: label;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-body);
-}
-
-.abc-share-track {
-  grid-area: track;
+.abc-finding-answer {
   display: flex;
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--color-surface-sunken);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 2px;
+  margin: 0;
+  max-width: 70ch;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--color-text-heading);
 }
 
-.abc-share-track span {
-  height: 100%;
-}
-
-.abc-share-values {
-  grid-area: values;
-  font-size: 0.79rem;
-  color: var(--color-text-muted);
+.abc-finding-answer strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
-/* Donut + legend on the left, the selected tier's card on the right; the
-   card drops below the donut, full width, on phones (< 768px). */
-.abc-overview {
-  display: flex;
+.abc-finding-definition {
+  margin: 0;
+  max-width: 80ch;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* Class A's list, on its own line under the definition. */
+.abc-finding-link {
+  align-self: flex-start;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 28px;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.abc-finding-link:hover,
+.abc-finding-link:focus-visible {
+  text-decoration: underline;
+}
+
+.abc-finding-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Coverage, a withheld revenue share, a placeholder or synthetic month. */
+.abc-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: -8px;
+}
+
+.abc-notes .chart-placeholder-note {
+  margin: 0;
+}
+
+/* The ring and its legend at the left, the panels at the right, as tall
+   as each other. */
+.abc-overview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px 28px;
 }
 
 .abc-donut-col {
-  flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  gap: 20px;
+  min-width: 0;
 }
 
 .abc-donut {
   display: block;
+  flex: none;
   overflow: visible;
 }
 
-/* Unselected tiers step back so the selected one reads first. */
-/* The three plums at near full strength (deep, medium, light pink), the
-   selected class at full; the tier card beside the ring names the
-   selection, so no dark outline is drawn around it. */
+/* Unselected tiers step back so the selected one reads first; the panel
+   beside the ring names the selection, so no outline is drawn around it. */
 .abc-seg {
   cursor: pointer;
-  opacity: 0.8;
+  opacity: 0.82;
   transition: opacity 150ms ease-out;
 }
 
-.abc-seg.is-selected {
+.abc-seg.is-selected,
+.abc-seg:hover {
   opacity: 1;
 }
 
-/* One tier per line, letter then plain name ("A  Top sellers"): a row of
-   bare letters said nothing about what a tier is. */
-.abc-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.05rem;
-}
-
-.abc-legend-tier {
-  min-width: 0.7rem;
+/* A tier's share on its band: white on the deep and medium plums, the deep
+   plum on the pale one. Never in the pointer's way. */
+.abc-seg-label {
+  font-size: 13px;
   font-weight: 700;
+  fill: #fff;
+  pointer-events: none;
 }
 
-.abc-legend-name {
-  white-space: nowrap;
+.abc-seg-label.is-dark {
+  fill: #5A1E48;
 }
 
 /* The selected tier's share in the ring's hole. Drawn by the SVG, so the
@@ -1375,34 +1423,87 @@
 
 .abc-donut-centre-tier,
 .abc-donut-centre-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   fill: var(--color-text-muted);
 }
 
 .abc-donut-centre-value {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 700;
   fill: var(--color-text);
 }
 
+/* The legend: one tier per row, its name over its share of the products. */
+.abc-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .abc-legend-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.35rem;
-  border: 0;
-  border-radius: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: none;
   font: inherit;
-  font-size: 0.86rem;
-  color: var(--color-text-muted);
+  text-align: left;
+  color: var(--color-text-body);
   cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.abc-legend-btn .legend-color {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.abc-legend-btn:hover {
+  background: var(--color-surface-sunken);
 }
 
 .abc-legend-btn.is-selected {
-  font-weight: 700;
+  background: #FAF3F8;
+  border-color: #EBD3E4;
+}
+
+.abc-legend-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.abc-legend-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 0.97rem;
   color: var(--color-text);
+}
+
+.abc-legend-tier {
+  font-weight: 700;
+}
+
+.abc-legend-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.abc-legend-sub {
+  font-size: 0.84rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 /* Keyboard focus only: a clicked segment would otherwise keep the browser's
@@ -1417,47 +1518,120 @@
   outline-offset: 2px;
 }
 
-/* Fills everything right of the donut in both directions: as wide as the
-   ABC card allows and as tall as the donut + legend, content centred in it.
-   A size container, so its layout follows its own width (below), not the
-   window's — the ABC card is narrow on a 1366px laptop but full-width
-   below 1350px. */
-.abc-tier-card {
-  flex: 1 1 240px;
-  min-width: 240px;
-  align-self: stretch;
+/* The right-hand column: the at-risk count over the selected class. */
+.abc-side {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 16px 18px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.abc-panel {
+  padding: 14px 16px;
   border: 1px solid #EDF0F4;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #F9FAFB;
-  container-type: inline-size;
 }
 
-.abc-tier-card-body {
+.abc-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
+.abc-panel-text {
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.abc-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #C7402B;
+  cursor: pointer;
+}
+
+.abc-panel-link:hover,
+.abc-panel-link:focus-visible {
+  text-decoration: underline;
+}
+
+.abc-panel-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Below safety stock: red while any top seller is, green when none is. */
+.abc-atrisk {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  border-color: #F6D5CE;
+  background: #FFF6F4;
 }
 
-.abc-tier-card-stat {
+.abc-atrisk .abc-panel-title {
+  color: #C7402B;
+}
+
+.abc-atrisk-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #FCE4DF;
+  color: #D9472F;
+}
+
+.abc-atrisk-text {
+  min-width: 0;
+}
+
+.abc-atrisk.is-clear {
+  border-color: var(--color-success-bg-alt);
+  background: var(--color-success-bg);
+}
+
+.abc-atrisk.is-clear .abc-panel-title {
+  color: var(--color-success-text);
+}
+
+.abc-atrisk.is-clear .abc-atrisk-icon {
+  background: var(--color-success-bg-alt);
+  color: var(--color-success-deep);
+}
+
+/* The selected class: its count and revenue side by side, the period under
+   them, its list last. Takes the column's remaining height. */
+.abc-tier-card {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
-}
-
-.abc-tier-card-stat + .abc-tier-card-stat {
-  margin-top: 0.6rem;
 }
 
 .abc-tier-card-name {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  margin: 0 0 0.35rem;
-  font-size: 0.9rem;
-  font-weight: 600;
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 700;
   color: var(--color-text);
 }
 
@@ -1466,11 +1640,54 @@
   color: var(--color-text-muted);
 }
 
-.abc-tier-card-role {
-  margin: 0 0 0.65rem;
-  font-size: 0.84rem;
-  line-height: 1.4;
-  color: var(--color-text-body);
+.abc-tier-card-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1.1rem;
+}
+
+.abc-tier-card-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.abc-tier-card-stat + .abc-tier-card-stat {
+  padding-left: 1.1rem;
+  border-left: 1px solid #E4E7EC;
+}
+
+/* The count and the revenue at one size, as the mockup has them. A figure
+   never breaks across lines ("₱314.0 / M"): it steps down instead on a
+   narrower card (the container query below). */
+.abc-tier-card-skus,
+.abc-tier-card-revenue {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.abc-tier-card-revenue.is-unavailable {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: normal;
+}
+
+.abc-tier-card-note {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.abc-tier-card-period {
+  margin: 0.7rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
 }
 
 .abc-tier-card-link {
@@ -1478,11 +1695,16 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  margin-top: 0.75rem;
-  font-size: 0.82rem;
+  margin-top: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 0.84rem;
   font-weight: 600;
   color: var(--color-brand-primary);
   text-decoration: none;
+  cursor: pointer;
 }
 
 .abc-tier-card-link:hover,
@@ -1490,154 +1712,67 @@
   text-decoration: underline;
 }
 
-/* The class link as a button (opens the range's class list): no button
-   chrome, same look as the link. */
-button.abc-tier-card-link {
-  padding: 0;
-  border: none;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-/* The same link, as a button: opens the below-safety-stock list. Two links
-   stack with a smaller gap than the first one's top margin. */
-.abc-tier-card-atrisk {
-  display: inline;
-  padding: 0;
-  border: none;
-  background: none;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* The arrow stays on the sentence's last line instead of dropping below it. */
-.abc-tier-card-nowrap {
-  white-space: nowrap;
-}
-
-.abc-tier-card-atrisk svg {
-  display: inline;
-  vertical-align: -2px;
-}
-
-.abc-tier-card-atrisk + .abc-tier-card-link {
-  margin-top: 0.4rem;
-}
-
-.abc-tier-card-skus {
-  margin: 0;
-  font-size: 1.6rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--color-text);
-}
-
-.abc-tier-card-revenue {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--color-text);
-}
-
-.abc-tier-card-revenue.is-unavailable {
-  font-size: 0.95rem;
-  color: var(--color-text-muted);
-}
-
-.abc-tier-card-note {
-  margin: 0.1rem 0 0;
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-}
-
-/* The thin divider sits on the sentence, so it only appears with it. */
-.abc-tier-card-insight {
-  margin: 0.7rem 0 0;
-  padding-top: 0.7rem;
+/* The share bars: the label and the three shares on one line, the bar
+   under them. */
+.abc-share-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 2px;
+  padding-top: 16px;
   border-top: 1px solid var(--color-border);
-  font-size: 0.86rem;
-  line-height: 1.45;
-  color: var(--color-text-body);
 }
 
-.abc-tier-card-insight strong {
+.abc-share-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.abc-share-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.abc-share-label {
+  font-size: 0.86rem;
+  font-weight: 600;
   color: var(--color-text);
 }
 
-/* Medium card: SKUs and revenue side by side, the sentence underneath. */
-@container (min-width: 400px) {
-  .abc-tier-card-body {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 1.5rem;
-  }
-  .abc-tier-card-stat + .abc-tier-card-stat {
-    margin-top: 0;
-    padding-left: 1.5rem;
-    border-left: 1px solid var(--color-border);
-  }
-  .abc-tier-card-insight {
-    grid-column: 1 / -1;
-    font-size: 0.95rem;
-  }
-  .abc-tier-card-name {
-    margin-bottom: 0.6rem;
-    font-size: 0.98rem;
-  }
-  .abc-tier-card-skus {
-    font-size: 2.3rem;
-  }
-  .abc-tier-card-revenue:not(.is-unavailable) {
-    font-size: 1.5rem;
-  }
-  .abc-tier-card-revenue.is-unavailable {
-    font-size: 1rem;
-  }
-  .abc-tier-card-note {
-    margin-top: 0.25rem;
-    font-size: 0.9rem;
-  }
+.abc-share-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Wide card: SKUs | revenue | sentence in one row, equal columns, the
-   type scaled up so the row fills the panel's height as well as its width.
-   With no sentence (revenue unavailable) the two stats share the width. */
-@container (min-width: 620px) {
-  .abc-tier-card-name {
-    margin-bottom: 0.75rem;
-    font-size: 1rem;
-  }
-  .abc-tier-card-body {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-  }
-  .abc-tier-card-skus {
-    font-size: 2.6rem;
-  }
-  .abc-tier-card-revenue:not(.is-unavailable) {
-    font-size: 1.7rem;
-  }
-  .abc-tier-card-revenue.is-unavailable {
-    font-size: 1.1rem;
-  }
-  .abc-tier-card-note {
-    margin-top: 0.3rem;
-    font-size: 0.95rem;
-  }
-  .abc-tier-card-insight {
-    grid-column: auto;
-    display: flex;
-    align-items: center;
-    margin: 0;
-    padding: 0 0 0 1.5rem;
-    border-top: 0;
-    border-left: 1px solid var(--color-border);
-    font-size: 0.98rem;
-  }
+.abc-share-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.abc-share-value .legend-color {
+  width: 8px;
+  height: 8px;
+}
+
+.abc-share-track {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+
+.abc-share-track span {
+  height: 100%;
 }
 
 /* Portalled to <body> (see AbcHoverTooltip): fixed, above every card and
@@ -1645,40 +1780,47 @@ button.abc-tier-card-link {
 .abc-hover-tip {
   position: fixed;
   z-index: 2100;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 9px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
   font-family: var(--font-inter);
-  font-size: 0.86rem;
-  line-height: 1.35;
-  color: var(--color-text-body);
   white-space: nowrap;
 }
 
-.abc-hover-tip-title {
-  font-weight: 700;
-  color: var(--color-text);
+
+/* Half a row (two cards side by side): the selected class's figures a step
+   smaller, so "₱314.0M" sits beside its count on one line. */
+@container (max-width: 799px) {
+  .abc-tier-card-skus,
+  .abc-tier-card-revenue:not(.is-unavailable) {
+    font-size: 1.5rem;
+  }
 }
 
-@media (max-width: 767px) {
+/* A card too narrow for the ring row: the panels go under the ring. */
+@container (max-width: 639px) {
   .abc-overview {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* A phone: the legend under the ring. */
+@media (max-width: 480px) {
   .abc-donut-col {
-    align-self: flex-start;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
-  .abc-tier-card {
-    flex: none;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
+  .abc-finding-answer {
+    font-size: 15px;
+  }
+  .abc-tier-card-skus {
+    font-size: 1.6rem;
+  }
+  .abc-tier-card-revenue {
+    font-size: 1.25rem;
   }
 }
 
@@ -2208,27 +2350,6 @@ button.abc-tier-card-link {
   color: var(--color-dispatched);
 }
 
-/* ABC tier card: SKUs and revenue side by side from a narrower card (the
-   dashboard's half-row card is ~375px), as the mockup shows. */
-@container (min-width: 330px) and (max-width: 399px) {
-  .abc-tier-card-body {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 1.1rem;
-  }
-  .abc-tier-card-stat + .abc-tier-card-stat {
-    margin-top: 0;
-    padding-left: 1.1rem;
-    border-left: 1px solid #E4E7EC;
-  }
-  .abc-tier-card-skus {
-    font-size: 1.75rem;
-  }
-  .abc-tier-card-revenue:not(.is-unavailable) {
-    font-size: 1.35rem;
-  }
-}
-
 /* The line that says which months of the chart's sentence are synthetic. */
 .chart-widget .chart-title-area p.chart-insight-synthetic {
   font-weight: 600;
@@ -2280,9 +2401,16 @@ button.abc-tier-card-link {
   outline-offset: 2px;
 }
 
+/* A legend entry switched off: muted grey, its swatch greyed too (no
+   strikethrough, 2026-10-19). */
 .legend-toggle.is-off {
+  color: #98A2B3;
+}
+
+.legend-toggle.is-off .legend-color,
+.legend-toggle.is-off svg {
+  filter: grayscale(1);
   opacity: 0.45;
-  text-decoration: line-through;
 }
 
 /* Sales vs Inventory Value keeps one height whatever it shows: the two
@@ -2324,4 +2452,109 @@ button.abc-tier-card-link {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
+}
+
+/* A chart's "?" text, one short paragraph per line (Sales vs Inventory
+   Value, Sales per year; 2026-10-19). */
+.chart-tip-line {
+  display: block;
+}
+
+.chart-tip-line + .chart-tip-line {
+  margin-top: 6px;
+}
+
+/* Sales vs Inventory Value's header (2026-10-19): the view and chart/table
+   buttons keep the top-right corner whatever the subtitle; a long one (the
+   Weeks of stock view's) wraps under the title instead of pushing the
+   buttons down. On a narrow card the two still stack. */
+.chart-widget-svs .chart-header {
+  flex-wrap: nowrap;
+}
+
+.chart-widget-svs .chart-title-area {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chart-widget-svs .chart-header-controls {
+  flex: 0 0 auto;
+}
+
+.chart-widget-svs.is-narrow .chart-header {
+  flex-wrap: wrap;
+}
+
+/* Every subtitle the card can switch to, laid in one grid cell with only
+   the current one visible: the cell is as tall as the longest, at any
+   width, so changing the view never moves the card or the page below it
+   (2026-10-19; before this the Weeks of stock and Purchases subtitles,
+   wrapping under the title, made the card up to two lines taller). A
+   hidden one is out of the accessibility tree too (visibility). */
+.svs-lede-stack {
+  display: grid;
+}
+
+.svs-lede-stack > .section-lede {
+  grid-area: 1 / 1;
+}
+
+.svs-lede-stack > .section-lede.is-reserved {
+  visibility: hidden;
+}
+
+/* The table view is as tall as its rows, up to the chart's height (it
+   scrolls past that), so no empty band sits under the last row. */
+.yoy-body.is-table {
+  height: auto;
+  max-height: 500px;
+}
+
+/* Forecast demand (2026-10-19): the calendar adjustment inside the forecast,
+   said on the card's face — a quiet violet rule, the forecast's colour. */
+.chart-widget .chart-title-area p.chart-calendar-note {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--color-forecast, #8866E8);
+  color: var(--color-text-body);
+}
+
+/* Suggested orders (2026-10-19): how the order was worked out, in one line
+   with the weights in it, and a product missing from the stock count. */
+.reorder-priorities-line {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.reorder-priorities-line strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-mini-nocount {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Sales vs Inventory Value's legend keys (the timeline, 2026-10-19): a bar,
+   a hatched bar, an outlined bar or a dot, drawn as the plot draws them. */
+.svs-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+/* One plot, as tall as the two panels of the year overlay were together. */
+.chart-container-yoy.svs-plot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 300px;
 }

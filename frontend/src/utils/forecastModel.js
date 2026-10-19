@@ -90,12 +90,41 @@ export function describeServedModel(modelParams, status) {
       fallback: true,
     };
   }
-  return {
+  return withCalendar({
     kind: 'forecast',
     label: METHOD_LABELS[method] ?? null,
     plain: METHOD_PLAIN[method] ?? null,
     recomputable: method === 'ma3',
     fallback: false,
+  }, params);
+}
+
+// A served forecast multiplied by the company calendar factor (model_params
+// .calendar_factor, run_baseline_forecast.py --calendar-factor, 2026-10-19)
+// does know the time of year, whatever its model: `season` says so first,
+// then what the model does on its own; `short` says the number is adjusted.
+// The number is no longer the model's own, so it can't be recomputed in the
+// browser either (`recomputable`).
+function withCalendar(served, params) {
+  if (params.calendar_factor == null || !served.plain) return served;
+  const factor = Number(params.calendar_factor);
+  const years = params.calendar_years;
+  const pct = (factor - 1) * 100;
+  const adjust = `×${factor.toFixed(4)} (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%)`;
+  const own = served.plain.season
+    ? served.plain.season.charAt(0).toLowerCase() + served.plain.season.slice(1).replace(': ', ' — ')
+    : null;
+  return {
+    ...served,
+    recomputable: false,
+    calendar: { factor, years: years ?? null, before: params.value_before_calendar ?? null },
+    plain: {
+      ...served.plain,
+      short: `${served.plain.short}, adjusted for the month`,
+      season: `Yes, through the calendar adjustment: ${adjust}, how this month has sold against the 3 months before `
+        + `it${years != null ? ` in ${years} earlier ${years === 1 ? 'year' : 'years'}` : ''} (company total).`
+        + `${own ? ` The model on its own: ${own}.` : ''}`,
+    },
   };
 }
 

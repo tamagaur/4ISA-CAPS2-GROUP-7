@@ -16,17 +16,19 @@ const ProductName = ({ name, code, onOpen, openLabel, className = '' }) => {
   const title = label || sku || '—';
   return (
     <span className={`product-name ${className}`}>
+      {/* The full name on hover, for a list that clamps long names. */}
       {onOpen ? (
         <button
           type="button"
           className="product-name-title product-name-link"
           onClick={onOpen}
           aria-label={openLabel ? `${openLabel}: ${title}` : undefined}
+          title={title}
         >
           {title}
         </button>
       ) : (
-        <span className="product-name-title">{title}</span>
+        <span className="product-name-title" title={title}>{title}</span>
       )}
       {label && sku && <span className="product-name-code">{sku}</span>}
     </span>

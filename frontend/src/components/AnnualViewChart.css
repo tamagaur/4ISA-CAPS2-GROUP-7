@@ -27,6 +27,18 @@
   border-top: 1px dashed #C2410C;
 }
 
+/* The "to go" bar's swatch: a dashed, unfilled outline, as the bar is. */
+.annual-view-legend i.annual-view-legend-togo {
+  box-sizing: border-box;
+  border: 1.5px dashed #C2410C;
+  background: none;
+}
+
+/* The "All years" tag beside the title. */
+.annual-view h4 .basis-tag {
+  margin-left: 6px;
+}
+
 /* The swatch for a bar that counts synthetic months: the bars' own hatch. */
 .annual-view-legend-hatch {
   background: repeating-linear-gradient(45deg, #8FA3C4 0 3px, #D5DDEA 3px 6px);

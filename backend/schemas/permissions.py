@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
+from backend import avatar
 
 
 class MeResponse(BaseModel):
@@ -14,14 +16,29 @@ class MeResponse(BaseModel):
     role: str
     permissions: list[str]  # effective keys, sorted
     # The My profile page (backend/profile.py): the account's picture as a
-    # data URL, and whether this server can store one (migration 0058).
-    avatar_data_url: str | None = None
+    # Supabase Storage path (never image bytes — migration 0059/0060), and
+    # whether this server can store one.
+    avatar_path: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def avatar_url(self) -> str | None:
+        """The full public URL for avatar_path, same derivation as
+        UserOut.avatar_url (backend/avatar.py.public_url) -- null whenever
+        avatar_path is. Never stored, never hardcoded: built from
+        SUPABASE_URL at response time."""
+        return avatar.public_url(self.avatar_path)
+
     profile_pictures: bool = False
 
 
 class ProfileUpdate(BaseModel):
     """PATCH /auth/me body: a field left out is unchanged; avatar_data_url
-    null removes the picture. Anything else is refused (422)."""
+    null removes the picture. The picture is still sent as a data URL (same
+    shape the browser already produces) but is never stored as one — it is
+    decoded, validated, resized and put in Supabase Storage like POST
+    /users/me/avatar, and only its resulting path is kept (backend/profile.py
+    decode_avatar_data_url, backend/avatar.py). Anything else is refused (422)."""
     model_config = ConfigDict(extra="forbid")
 
     full_name: str | None = None

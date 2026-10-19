@@ -10,14 +10,20 @@
 // year. Bars that count synthetic months (generated to complete SSM's
 // history, not SSM's own figures) are hatched and say how many.
 //
-// The band is the dashboard's existing allocation estimate (the annual
-// card's "Estimated annual allocation target": the base year's sales x
-// 103-108%), read from the allocation block. It is not worked out here.
+// The band is SSM's targets (the base year's sales × 103–108%), read from
+// the allocation block, not worked out here. The dashed line is the target
+// picked on the Summary card (`selectedPct`, held by Dashboard.jsx), and the
+// year in progress gets a dashed, unfilled "to go" bar from its sales up to
+// that line (2026-10-19): the line's figure minus the year's sales.
+//
+// The full 5-year window always shows (2026-10-19): a year with no figure
+// is an empty slot labelled "No data recorded" and when SSM's records start;
+// with synthetic data on, its synthetic months make it a hatched bar.
 //
 // Fixed, like the allocation card: the date filter and the comparison
-// setting do not change it.
+// setting do not change it (the "All years" tag says so).
 import React from 'react';
-import SectionLede from './ui/SectionLede';
+import BasisTag from './BasisTag';
 import {
   Bar,
   BarChart,
@@ -27,6 +33,7 @@ import {
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
+  usePlotArea,
   Tooltip,
   XAxis,
   YAxis,
@@ -35,6 +42,7 @@ import { CHART_COLORS } from '../theme/colors';
 import { formatCompactPesos } from '../utils/formatters';
 import { GRID_PROPS } from './ChartZoom';
 import InfoTip from './InfoTip';
+import { BAR_FADE_FLOOR, Callout, CalloutLine, CalloutNote, Callouts, Fade } from './ui/ChartParts';
 import './AnnualViewChart.css';
 import { FIRST_DATA_YEAR } from '../dataCoverage';
 
@@ -43,6 +51,7 @@ import { FIRST_DATA_YEAR } from '../dataCoverage';
 const BAR_COLOR = { history: '#8FA3C4', base: CHART_COLORS.heroInventory, ytd: '#F28C28' };
 const BAND_COLOR = '#F28C28';
 const BAND_INK = '#C2410C';
+const AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthNumber = (period) => Number(String(period).slice(5, 7));
@@ -61,7 +70,7 @@ const monthsOnRecord = (y) => {
 const buildRows = (annual, allocation) => {
   const years = annual?.years || [];
   const latest = [...years].reverse().find((y) => y.sales != null)?.year;
-  return years.map((y) => {
+  const rows = years.map((y) => {
     const partial = y.months > 0 && y.months < 12;
     const role = allocation?.basis_year === y.year
       ? 'base'
@@ -77,17 +86,27 @@ const buildRows = (annual, allocation) => {
       role,
     };
   });
+  // Year over year (2026-10-19): a full year against the full year before
+  // it, under its label; never for a partial year, and never across a gap.
+  return rows.map((r, i) => {
+    const prev = rows[i - 1];
+    const full = (x) => x && x.value != null && x.months === 12;
+    const yoy = full(r) && full(prev) && prev.year === r.year - 1 && prev.value > 0
+      ? ((r.value - prev.value) / prev.value) * 100
+      : null;
+    return { ...r, yoy, yoyAgainst: yoy != null ? prev.key : null };
+  });
 };
 
 // The allocation card's own range (lowest to highest level), for a full
 // base year only: the API leaves `annual` null when the base year is partial.
-const buildBand = (allocation) => {
+const buildBand = (allocation, selectedPct = null) => {
   if (!allocation || allocation.blocked_reason) return null;
   const levels = (allocation.levels || []).filter((l) => l.annual != null);
   if (levels.length < 2) return null;
   const low = levels.reduce((a, b) => (b.annual < a.annual ? b : a));
   const high = levels.reduce((a, b) => (b.annual > a.annual ? b : a));
-  const line = levels.find((l) => l.pct === allocation.default_pct) || low;
+  const line = levels.find((l) => l.pct === (selectedPct ?? allocation.default_pct)) || low;
   return {
     low: low.annual,
     high: high.annual,
@@ -110,6 +129,7 @@ const niceStep = (top) => {
 };
 
 const hatchId = (role) => `annual-view-hatch-${role}`;
+const fadeId = (role) => `annual-view-fade-${role}`;
 
 // "All 12 months are synthetic" / "3 of 12 months are synthetic".
 const syntheticText = (row) => {
@@ -119,41 +139,51 @@ const syntheticText = (row) => {
   return `${row.synthetic} of ${row.months} months ${row.synthetic === 1 ? 'is' : 'are'} synthetic`;
 };
 
+// The hover, in the dashboard's shared boxes (ui/ChartParts): one box in
+// the bar's own colour — the year and its months on record, the pesos,
+// what they are — with the "to go" and base-year lines under it; a year
+// with nothing on record, or synthetic months, as a plain note.
 const AnnualTooltip = ({ active, payload, band }) => {
   const row = active && payload?.[0]?.payload;
   if (!row) return null;
+  const period = `FY ${row.year}${row.span ? ` · ${row.span}` : ''}`;
+  if (row.value == null) {
+    return (
+      <Callouts>
+        <CalloutNote>
+          {period}: {row.year < FIRST_DATA_YEAR
+            ? `no data recorded before ${FIRST_DATA_YEAR} — SSM\u2019s records start in January ${FIRST_DATA_YEAR}.`
+            : 'no sales on record.'}
+        </CalloutNote>
+      </Callouts>
+    );
+  }
   return (
-    <div className="chart-tooltip">
-      <p className="tooltip-label">
-        FY {row.year}{row.span ? ` · ${row.span}` : ''}
-      </p>
-      {row.value == null ? (
-        <p className="tooltip-item">
-          {row.year < FIRST_DATA_YEAR
-            ? `No data recorded before ${FIRST_DATA_YEAR}: SSM\u2019s records start in January ${FIRST_DATA_YEAR}`
-            : 'No sales on record'}
-        </p>
-      ) : (
-        <>
-          <p className="tooltip-item">{formatCompactPesos(row.value)} total sales</p>
-          <p className="tooltip-item annual-tooltip-note">
-            {row.months} of 12 months on record{row.partial ? ', not a full year' : ''}
-          </p>
-        </>
-      )}
-      {row.synthetic > 0 && (
-        <p className="tooltip-item annual-tooltip-synthetic">
-          {syntheticText(row)}, not SSM&apos;s own figures
-        </p>
-      )}
-      {row.role === 'base' && band && (
-        <p className="tooltip-item annual-tooltip-note">Base year of the {fy(band.year)} allocation target</p>
-      )}
-    </div>
+    <Callouts>
+      <Callout
+        color={BAR_COLOR[row.role]}
+        period={period}
+        value={formatCompactPesos(row.value)}
+        name={row.toGo != null ? 'Sales so far' : 'Total sales'}
+      >
+        <CalloutLine>{row.months} of 12 months on record{row.partial ? ', not a full year' : ''}</CalloutLine>
+        {row.yoy != null && (
+          <CalloutLine><strong>{row.yoy >= 0 ? '+' : '−'}{Math.abs(row.yoy).toFixed(1)}%</strong> on {row.yoyAgainst}</CalloutLine>
+        )}
+        {row.toGo != null && band && (
+          <CalloutLine><strong>{formatCompactPesos(row.toGo)}</strong> to go to the {formatCompactPesos(band.line)} target</CalloutLine>
+        )}
+        {row.role === 'base' && band && <CalloutLine>Base year of the {fy(band.year)} allocation target</CalloutLine>}
+      </Callout>
+      {row.synthetic > 0 && <CalloutNote>{syntheticText(row)}, not SSM&apos;s own figures.</CalloutNote>}
+    </Callouts>
   );
 };
 
-// The year, and under it the months on record when the year is not full.
+// The year, and under it the months on record when the year is not full,
+// or its change on the year before when it is (green up, red down).
+const YOY_UP = '#2A8551';
+const YOY_DOWN = '#D54848';
 const YearTick = ({ x, y, payload, rows }) => {
   const row = rows.find((r) => r.key === payload.value);
   return (
@@ -164,6 +194,11 @@ const YearTick = ({ x, y, payload, rows }) => {
       )}
       {row && row.value == null && (
         <text dy={25} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={11}>no data</text>
+      )}
+      {row?.yoy != null && (
+        <text dy={25} textAnchor="middle" fill={row.yoy >= 0 ? YOY_UP : YOY_DOWN} fontSize={11} fontWeight={600}>
+          {row.yoy >= 0 ? '+' : '−'}{Math.abs(row.yoy).toFixed(1)}%
+        </text>
       )}
     </g>
   );
@@ -189,14 +224,105 @@ const BarValue = ({ x, y, width, value }) => {
   );
 };
 
-const AnnualViewChart = ({ annual, allocation, note }) => {
-  const rows = buildRows(annual, allocation);
-  const hasData = rows.some((r) => r.value != null);
-  const band = hasData && rows.some((r) => r.role === 'base') ? buildBand(allocation) : null;
+// "₱340.1M" over "to go", in the middle of the dashed bar (empty space, so
+// it covers nothing), two lines so it stays inside the bar's width.
+const ToGoLabel = ({ x, y, width, height, value }) => {
+  if (value == null || !(height > 32)) return null;
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const text = { x: cx, textAnchor: 'middle', fill: BAND_INK, fontSize: 9.5, fontWeight: 600 };
+  return (
+    <g>
+      <text {...text} y={cy - 2}>{formatCompactPesos(value)}</text>
+      <text {...text} y={cy + 10}>to go</text>
+    </g>
+  );
+};
+
+// One label above the band, left-aligned: the target picked and the band's
+// range ("103% target · ₱405.2M · band 103–108%"), clear of the bars, the
+// band and the dashed "to go" bar (2026-10-19).
+const BandLabel = ({ viewBox, band }) => {
+  if (!viewBox || !band) return null;
+  return (
+    <text
+      x={viewBox.x + 2}
+      y={viewBox.y - 6}
+      textAnchor="start"
+      fill={BAND_INK}
+      fontSize={11}
+      fontWeight={600}
+      className="annual-view-band-label"
+    >
+      {band.linePct}% target · {formatCompactPesos(band.line)} · band {band.pcts}
+    </text>
+  );
+};
+
+// "No data recorded" / "SSM's records start Jan 2023", centred in the slot of
+// a year with no figure. The years are equal slots across the plot, so a
+// slot's centre is its place in the row; four short lines fit a narrow slot.
+const EmptyYearLabels = ({ rows, start }) => {
+  const plot = usePlotArea();
+  if (!plot || !rows.length) return null;
+  const slot = plot.width / rows.length;
+  const lines = [
+    ['No data', '#667085', 600, 10.5],
+    ['recorded', '#667085', 600, 10.5],
+    ["SSM's records", '#98A2B3', 400, 9.5],
+    [`start ${start}`, '#98A2B3', 400, 9.5],
+  ];
+  return (
+    <g className="annual-view-empty">
+      {rows.map((r, i) => (r.value != null ? null : (
+        <g key={r.key}>
+          {lines.map(([text, fill, weight, size], k) => (
+            <text
+              key={text}
+              x={plot.x + (i + 0.5) * slot}
+              y={plot.y + plot.height * 0.62 + k * 13 + (k >= 2 ? 4 : 0)}
+              textAnchor="middle"
+              fill={fill}
+              fontSize={size}
+              fontWeight={weight}
+            >
+              {text}
+            </text>
+          ))}
+        </g>
+      )))}
+    </g>
+  );
+};
+
+const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
+  const allRows = buildRows(annual, allocation);
+  const hasData = allRows.some((r) => r.value != null);
+  const band = hasData && allRows.some((r) => r.role === 'base') ? buildBand(allocation, selectedPct) : null;
+  // Every year of the window stays, an empty one as a labelled slot; with
+  // synthetic data on, the years it fills have a (hatched) figure. The year
+  // in progress gets its "to go" bar up to the selected target, when it is
+  // that target's year.
+  const rows = allRows
+    .map((r) => ({
+      ...r,
+      toGo: band && r.value != null && r.role === 'ytd' && r.year === band.year && band.line > r.value ? band.line - r.value : null,
+    }));
+  const hidden = allRows.filter((r) => r.value == null);
+  // When SSM's own records start for this principal: the first month of the
+  // earliest year with a real (not all-synthetic) month, else Jan of
+  // FIRST_DATA_YEAR (both principals start Jan 2023).
+  const firstReal = (annual?.years || [])
+    .filter((y) => y.sales != null && (y.synthetic_months?.length || 0) < y.months && y.first_month)
+    .map((y) => y.first_month)
+    .sort()[0];
+  const recordsStart = firstReal
+    ? `${MONTHS[monthNumber(firstReal) - 1]} ${firstReal.slice(0, 4)}`
+    : `Jan ${FIRST_DATA_YEAR}`;
+  const hasToGo = rows.some((r) => r.toGo != null);
   const ytd = rows.find((r) => r.role === 'ytd');
   const base = rows.find((r) => r.role === 'base');
   const synthetic = rows.filter((r) => r.synthetic > 0);
-  const noRecords = rows.filter((r) => r.value == null && r.year < FIRST_DATA_YEAR);
   const earlier = annual?.earlier_years || [];
 
   const top = Math.max(0, ...rows.map((r) => r.value ?? 0), band?.high ?? 0);
@@ -214,30 +340,39 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
         <div className="chart-title-area">
           <h4>
             <span>Sales <span className="title-accent">per year</span>{band ? `, against the ${fy(band.year)} target` : ''}</span>
-            <InfoTip label="About the Annual View" size={13}>
-              Each bar is one calendar year&apos;s total sales in pesos (January to December), added up from the
-              same monthly sales as the cards above. It does not change with the date filter. A year with fewer
-              than 12 months on record shows only the months it has; nothing is projected to a full year.
-              {band && (
-                <>
-                  {' '}The band is the estimated {fy(band.year)} allocation target shown on the annual card:
-                  FY {band.basisYear} sales × {band.pcts}, with the dashed line at {band.linePct}%. The percentage
-                  that applies is still a question for SSM, so the band is an assumption.
-                </>
-              )}
-              {earlier.length > 0 && (
-                <> Also on record, before these years: {earlier.map(fy).join(', ')}.</>
-              )}
-              {note && <> {note}.</>}
+            <InfoTip label="About Sales per year" size={13}>
+              <span className="chart-tip-line">
+                Each bar is one year&apos;s total sales (Jan–Dec). Years with missing months show only what&apos;s
+                recorded{ytd?.span ? `, so ${ytd.key} is ${ytd.span} only` : ''}.
+                {band && (
+                  <>
+                    {' '}The band is FY {band.basisYear} sales × SSM&apos;s targets ({band.pcts}); the dashed line is the
+                    target selected on the Summary card{hasToGo ? ', and the dashed bar is what is still to go to it' : ''}.
+                  </>
+                )}
+                {' '}This chart shows all years and doesn&apos;t follow the date filter.
+              </span>
+              <span className="chart-tip-line">
+                SSM&apos;s records start {recordsStart}
+                {hidden.length > 0 ? `, so ${hidden.map((r) => r.key).join(' and ')} ${hidden.length === 1 ? 'has' : 'have'} no data and ${hidden.length === 1 ? 'shows' : 'show'} as an empty slot` : ''};
+                {' '}earlier years appear as hatched bars only with synthetic data on.
+                {earlier.length > 0 && <> Also on record, before these years: {earlier.map(fy).join(', ')}.</>}
+              </span>
+              {note && <span className="chart-tip-line">{note}.</span>}
             </InfoTip>
+            <BasisTag label="All years" follows={false} />
           </h4>
-          <SectionLede>Each year at a glance, against the target</SectionLede>
         </div>
       </div>
 
       {!hasData ? (
         <p className="dashboard-empty-note">
-          {annual?.blocked_reason || 'Yearly sales totals are not available yet.'}
+          {/* No annual_sales at all is a backend older than this card
+              (2026-10-18: seen when the API had not been restarted or
+              redeployed), not missing data; it says so. */}
+          {annual == null
+            ? "The backend didn't send yearly totals. It may need a restart or redeploy."
+            : annual.blocked_reason || 'Yearly sales totals are not available yet.'}
         </p>
       ) : (
         <>
@@ -251,6 +386,9 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
                 {fy(band.year)} target band, {band.pcts} of {fy(band.basisYear)}
               </span>
             )}
+            {hasToGo && (
+              <span><i className="annual-view-legend-togo" />To go to the {band.linePct}% target</span>
+            )}
             {synthetic.length > 0 && (
               <span><i className="annual-view-legend-hatch" />Includes synthetic months</span>
             )}
@@ -261,18 +399,15 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
               {synthetic.map((r) => `${r.key} ${r.synthetic} of ${r.months}`).join(' · ')}
             </p>
           )}
-          {/* An empty year has no bar, so no tooltip: its reason is said here
-              (SSM's records start in Jan 2023; kelvin-etl's no_data_recorded_before_2023). */}
-          {noRecords.length > 0 && (
-            <p className="annual-view-gap">
-              {noRecords.map((r) => r.key).join(' and ')}: no data recorded. SSM&apos;s records start in January{' '}
-              {FIRST_DATA_YEAR}.
-            </p>
-          )}
           <div className="chart-container annual-view-plot">
             <ResponsiveContainer width="99%" height="100%">
               <BarChart data={rows} margin={{ top: 22, right: 12, left: 4, bottom: 4 }} barCategoryGap="28%">
                 <defs>
+                  {/* Every bar fades down to the floor the dashboard's other
+                      bars fade to; a synthetic year keeps its hatch. */}
+                  {Object.entries(BAR_COLOR).map(([role, color]) => (
+                    <Fade key={`fade-${role}`} id={fadeId(role)} color={color} to={BAR_FADE_FLOOR} />
+                  ))}
                   {Object.entries(BAR_COLOR).map(([role, color]) => (
                     <pattern key={role} id={hatchId(role)} width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                       <rect width="7" height="7" fill={color} />
@@ -281,13 +416,16 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
                   ))}
                 </defs>
                 <CartesianGrid {...GRID_PROPS} vertical={false} />
+                {/* Both axes say what they count (Sir Catubag, 2 Oct 2026),
+                    as every other chart on the page does. */}
                 <XAxis
                   dataKey="key"
                   tickLine={false}
                   axisLine={{ stroke: CHART_COLORS.gridline }}
                   interval={0}
-                  height={34}
+                  height={48}
                   tick={<YearTick rows={rows} />}
+                  label={{ value: 'Year', position: 'insideBottom', offset: 0, ...AXIS_TITLE }}
                 />
                 <YAxis
                   domain={[0, ceiling]}
@@ -295,8 +433,9 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
                   tickFormatter={(v) => formatCompactPesos(v)}
                   tickLine={false}
                   axisLine={false}
-                  width={58}
+                  width={64}
                   tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                  label={{ value: 'Pesos (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...AXIS_TITLE }}
                 />
                 <Tooltip content={<AnnualTooltip band={band} />} cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} />
                 {band && (
@@ -306,20 +445,37 @@ const AnnualViewChart = ({ annual, allocation, note }) => {
                     fill={BAND_COLOR}
                     fillOpacity={0.12}
                     stroke="none"
-                    label={{ value: `${fy(band.year)} target ${band.pcts}`, position: 'top', fill: BAND_INK, fontSize: 11, offset: 4, className: 'annual-view-band-label' }}
+                    label={<BandLabel band={band} />}
                   />
                 )}
-                {band && <ReferenceLine y={band.line} stroke={BAND_INK} strokeDasharray="5 4" />}
-                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={56} isAnimationActive={false}>
+                {band && (
+                  <ReferenceLine y={band.line} stroke={BAND_INK} strokeDasharray="5 4" />
+                )}
+                <Bar dataKey="value" stackId="year" radius={[6, 6, 0, 0]} maxBarSize={56} isAnimationActive={false}>
                   {rows.map((r) => (
                     <Cell
                       key={r.key}
-                      fill={r.synthetic > 0 ? `url(#${hatchId(r.role)})` : BAR_COLOR[r.role]}
+                      fill={r.synthetic > 0 ? `url(#${hatchId(r.role)})` : `url(#${fadeId(r.role)})`}
                       stroke={r.synthetic > 0 ? BAR_COLOR[r.role] : 'none'}
                     />
                   ))}
                   <LabelList dataKey="value" content={<BarValue />} />
                 </Bar>
+                {hidden.length > 0 && <EmptyYearLabels rows={rows} start={recordsStart} />}
+                {hasToGo && (
+                  <Bar
+                    dataKey="toGo"
+                    stackId="year"
+                    fill="none"
+                    stroke={BAND_INK}
+                    strokeWidth={1.5}
+                    strokeDasharray="5 3"
+                    maxBarSize={56}
+                    isAnimationActive={false}
+                  >
+                    <LabelList dataKey="toGo" content={<ToGoLabel />} />
+                  </Bar>
+                )}
               </BarChart>
             </ResponsiveContainer>
           </div>

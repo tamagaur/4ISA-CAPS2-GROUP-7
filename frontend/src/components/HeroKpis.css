@@ -1,27 +1,22 @@
-/* The dashboard's top row (HeroKpis.jsx, 2026-10-18 rebuild): one wide card
-   on the left spanning two rows, four cards in two rows on the right; white
-   cards with a light border, a large radius and a thin accent on top. The
-   wide card's monthly strip grows to fill its height, and the small cards
-   pin their footers to the bottom, so no card ends in blank space. */
+/* The dashboard's top row (HeroKpis.jsx, 2026-10-18 redesign after Thea's
+   mock-up): the annual card across the full width in three columns, then
+   the four KPI cards in one row of equal columns and equal height; white
+   cards with a light border, large radius and a thin accent on top; the two
+   operational cards tinted so they read as things to act on. */
 
 .hero-kpis {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
   margin-bottom: 28px;
 }
 
-@media (min-width: 1780px) {
-  .hero-kpis {
-    grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
-  }
-}
-
 .hero-kpis > :first-child {
-  grid-row: span 2;
+  grid-column: 1 / -1;
 }
 
+/* ── Card frame ──────────────────────────────────────────────────────── */
 .hero-card {
   --hero-accent: #16A34A;
   --hero-dot: #16A34A;
@@ -29,7 +24,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 20px 22px 18px;
+  padding: 20px 22px 16px;
   border: 1px solid #E7EBF0;
   border-radius: 18px;
   background: #FFFFFF;
@@ -37,7 +32,6 @@
   overflow: hidden;
 }
 
-/* The thin accent along the top. */
 .hero-card::before {
   content: '';
   position: absolute;
@@ -48,24 +42,26 @@
 
 .hero-card.is-green { --hero-accent: #16A34A; --hero-dot: #16A34A; }
 .hero-card.is-blue { --hero-accent: #2563EB; --hero-dot: #2563EB; }
-.hero-card.is-teal { --hero-accent: #0891B2; --hero-dot: #0891B2; }
+.hero-card.is-teal { --hero-accent: #0E7C86; --hero-dot: #0E7C86; }
 .hero-card.is-orange { --hero-accent: #F59E0B; --hero-dot: #F59E0B; }
 .hero-card.is-purple { --hero-accent: #8B5CF6; --hero-dot: #8B5CF6; }
 
+/* Below safety stock: white like the others since 2026-10-18; the orange
+   top bar marks it. */
+.hero-card.is-action.is-purple { background: #FAF8FF; border-color: #E9E2FB; }
+
 .hero-card-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 10px;
   margin-bottom: 8px;
 }
 
-/* The dot and the title stay together; the title wraps beside the dot. */
 .hero-card-name {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -83,9 +79,6 @@
 }
 
 .hero-card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   margin: 0;
   font-size: 12px;
   font-weight: 600;
@@ -94,30 +87,51 @@
   color: #475467;
 }
 
-.hero-card-basis {
-  margin-left: auto;
-  max-width: 100%;
-}
-
-.hero-card .hero-card-lede {
-  margin: 0 0 12px;
-}
-
-/* Text */
-.hero-label {
+/* The period tag and the "?", on the right of the title. */
+.hero-card-side {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: 4px;
-  margin: 0 0 4px;
-  font-size: 13px;
+  gap: 8px;
+}
+
+.hero-card-side .info-tip {
+  margin-left: 0;
+}
+
+.hero-card-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The date and source line at the bottom, under a rule. */
+.hero-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  /* The body grows to fill the card, so this sits at the bottom. */
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.hero-card.is-action.is-purple .hero-card-foot { border-color: #E9E2FB; }
+
+.hero-foot-note {
+  font-size: 12px;
+  line-height: 1.4;
   color: #667085;
 }
 
-.hero-label.is-caps {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+/* ── Text ────────────────────────────────────────────────────────────── */
+.hero-label {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #475467;
 }
 
 .hero-value {
@@ -131,11 +145,50 @@
   overflow-wrap: anywhere;
 }
 
+.hero-value-xl {
+  font-size: 36px;
+}
+
+/* The allocation is an estimate: a dotted underline, its rule on hover. */
+.hero-dotted {
+  border-bottom: 2px dotted #98A2B3;
+  cursor: help;
+}
+
+.hero-value .is-danger { color: #B42318; }
+.hero-value .is-watch { color: #93370D; }
+
 .hero-unit {
   margin-left: 6px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
+  letter-spacing: 0;
+  color: #475467;
+}
+
+.hero-value-tagged {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.hero-kpi-sub {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: #344054;
+}
+
+.hero-kpi-asof {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: #667085;
+}
+
+.hero-kpi-asof strong {
+  color: #182230;
 }
 
 .hero-note {
@@ -145,16 +198,35 @@
   color: #667085;
 }
 
-.hero-note strong {
+.hero-kpi-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid #D0D5DD;
+  border-radius: 5px;
+  background: #FFFFFF;
+  font-size: 11px;
+  font-weight: 600;
   color: #475467;
 }
 
-/* Pills (soft pastel) */
+/* A figure that includes synthetic months (generated, not SSM's files). */
+.hero-synthetic {
+  font-size: 12px;
+  font-weight: 600;
+  color: #B54708;
+}
+
+
+/* ── Pills ───────────────────────────────────────────────────────────── */
 .hero-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 12px;
+}
+
+.hero-pills:empty {
+  display: none;
 }
 
 .hero-pill {
@@ -163,7 +235,7 @@
   gap: 5px;
   max-width: 100%;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1.35;
@@ -171,153 +243,49 @@
 
 .hero-pill.is-positive { background: #E8F7EE; color: #1E7A47; }
 .hero-pill.is-negative { background: #FDECEC; color: #B42318; }
-.hero-pill.is-warning { background: #FFF4DD; color: #B54708; }
+.hero-pill.is-warning { background: #FFF4DD; color: #93370D; }
 .hero-pill.is-neutral { background: #EEF1F5; color: #475467; }
 .hero-pill.is-info { background: #E8F0FE; color: #1D4ED8; }
 
-/* ── Card 1 ─────────────────────────────────────────────────────────────── */
-/* The allocation's label and "SSM target" on one line; the figure and the
-   level buttons on the next, the buttons dropping under it where the card
-   is too narrow for both. */
-.hero-alloc-labels {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 16px;
-}
-
-.hero-alloc-labels .hero-label {
-  margin: 0;
-}
-
-.hero-alloc-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 16px;
-  margin-top: 2px;
-}
-
-.hero-alloc-value {
-  margin: 0;
-  font-size: 34px;
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-alloc-unit {
-  margin-left: 2px;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: #667085;
-}
-
-.hero-dotted {
-  border-bottom: 2px dotted #98A2B3;
-  cursor: help;
-}
-
-.hero-alloc-levels {
-  display: flex;
-  gap: 6px;
-}
-
-.hero-level {
-  height: 30px;
-  padding: 0 11px;
-  border: 1px solid #DDE2EA;
-  border-radius: 9px;
-  background: #FFFFFF;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #475467;
-  cursor: pointer;
-}
-
-.hero-level:hover {
-  border-color: #B9C3D3;
-}
-
-.hero-level.is-active {
-  border-color: #BFD4FB;
-  background: #E8F0FE;
-  color: #1D4ED8;
-}
-
-.hero-level:focus-visible,
-.hero-link:focus-visible,
-.hero-story-link:focus-visible {
-  outline: 2px solid var(--color-brand-primary, #E85C4A);
-  outline-offset: 2px;
-}
-
-.hero-rule {
-  height: 1px;
-  margin: 14px 0 12px;
-  background: #EDF0F4;
-}
-
-.hero-ytd-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-}
-
-.hero-ytd-value {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-ytd-note {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  font-size: 13px;
-  color: #667085;
-}
-
-/* The pace bar: sold, the shortfall to where sales should be, the marker. */
+/* ── Shared: bars, axes, legends ─────────────────────────────────────── */
 .hero-progress {
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
-.hero-progress-track {
+.hero-progress-track,
+.hero-meter-track,
+.hero-idle-track,
+.hero-checks-track {
   position: relative;
+  display: block;
   height: 10px;
   border-radius: 999px;
   background: #EEF1F5;
 }
 
-.hero-progress-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
-  background: #4C5FD5;
-}
-
-.hero-progress-short {
+.hero-progress-fill,
+.hero-progress-short,
+.hero-meter-needed,
+.hero-meter-extra,
+.hero-idle-slow {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: #E5533D;
-  border-radius: 0 999px 999px 0;
 }
 
-.hero-progress-pace {
+.hero-progress-fill {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background: #4F5BD5;
+}
+
+.hero-progress-short {
+  background: #D9665B;
+}
+
+/* "Should be by now" (and the stock-cover target): a tick across the bar. */
+.hero-progress-pace,
+.hero-meter-mark {
   position: absolute;
   top: -4px;
   bottom: -4px;
@@ -326,19 +294,21 @@
   border-left: 2px dashed #182230;
 }
 
-.hero-progress-ends {
+.hero-meter-mark {
+  border-left-style: solid;
+}
+
+.hero-progress-axis {
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
   font-size: 11.5px;
+  line-height: 1.4;
   color: #667085;
   font-variant-numeric: tabular-nums;
 }
 
-.hero-progress-legend,
-.hero-pace-legend,
-.hero-meter-legend,
-.hero-share-legend {
+.hero-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
@@ -346,705 +316,375 @@
   padding: 0;
   list-style: none;
   font-size: 12px;
-  line-height: 1.4;
   color: #475467;
 }
 
-.hero-progress-legend li,
-.hero-pace-legend li,
-.hero-meter-legend li,
-.hero-share-legend li {
+.hero-legend li {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
-.hero-progress-legend li::before,
-.hero-pace-legend li::before,
-.hero-meter-legend li::before,
-.hero-share-legend li::before {
-  content: '';
-  flex: none;
+.hero-swatch {
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: 2px;
   background: #D0D5DD;
 }
 
-.hero-progress-legend .is-sold::before { background: #4C5FD5; }
-.hero-progress-legend .is-short::before { background: #E5533D; }
-.hero-progress-legend .is-pace::before { width: 0; height: 12px; border-radius: 0; border-left: 2px dashed #182230; background: none; }
+.hero-swatch.is-sold { background: #4F5BD5; }
+.hero-swatch.is-short { background: #D9665B; }
+.hero-swatch.is-pace { width: 0; height: 12px; border-left: 2px dashed #182230; border-radius: 0; background: none; }
+.hero-swatch.is-needed,
+.hero-swatch.is-ok { background: #5FB3A1; }
+.hero-swatch.is-extra { background: #D9A23B; }
+.hero-swatch.is-gap { background: #EEF1F5; border: 1px solid #D0D5DD; }
+.hero-swatch.is-low { background: #C8453A; }
+.hero-swatch.is-unchecked { background: #EEF1F5; border: 1px solid #D0D5DD; }
 
-.hero-need {
-  margin: 10px 0 0;
-  font-size: 14px;
-  line-height: 1.45;
-  color: #182230;
+/* ── Card 1: annual sales and allocation ─────────────────────────────── */
+/* Two columns (Allocation | Progress so far), the second past a thin rule:
+   about 30% / 70% (2026-10-18). */
+.hero-annual-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 30fr) minmax(0, 70fr);
+  flex: 1 1 auto;
 }
 
-.hero-connector {
+.hero-annual-col {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 20px;
+}
+
+.hero-annual-col:first-child {
+  padding-left: 0;
+}
+
+.hero-annual-col:last-child {
+  padding-right: 0;
+}
+
+.hero-annual-col + .hero-annual-col {
+  border-left: 1px solid #EDF0F4;
+}
+
+/* "SSM target" and its buttons, under FY sales, pushed to the column's foot
+   (the grid stretches both columns to one height) so the Allocation and
+   Progress columns end level; never closer than 14px to the line above. */
+.hero-alloc-levels-box {
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+
+.hero-alloc-levels {
+  display: flex;
   gap: 8px;
-  margin: 12px 0 0;
-  padding: 9px 12px;
+}
+
+.hero-level {
+  min-width: 64px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #DDE2EA;
   border-radius: 10px;
-  background: #F4F6FA;
-  font-size: 12.5px;
-  line-height: 1.45;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #344054;
+  cursor: pointer;
+}
+
+.hero-level:hover {
+  border-color: #B9C3D3;
+}
+
+.hero-level.is-active {
+  border-color: #A8BDF5;
+  background: #E8EEFD;
+  color: #1D4ED8;
+}
+
+.hero-level:focus-visible,
+.hero-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+.hero-figure-aside {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
   color: #475467;
 }
 
-.hero-connector svg {
-  flex: none;
-  margin-top: 2px;
+.hero-sentence {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #182230;
+}
+
+.hero-latest-compare {
   color: #667085;
 }
 
-/* The monthly strip grows to take whatever height the two rows of small
-   cards leave, so the wide card never ends in blank space. */
-.hero-pace {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 120px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid #EDF0F4;
+/* The latest month with sales: the Progress column's last line, under
+   "Need about ₱X per month". No divider above it. */
+.hero-latest-line {
+  margin-top: 10px;
 }
 
-.hero-pace-head {
+/* Progress so far, shorter (2026-10-18): the year's sales with "16% of the
+   allocation · should be ₱X by now" on its right, and the "Behind by" chip
+   with "Need about ₱X per month" on one line; both wrap on a narrow card. */
+.hero-figure-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+}
+
+.hero-figure-row .hero-figure-aside {
+  margin: 0;
+}
+
+.hero-action-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 4px 12px;
-  margin-bottom: 8px;
+  gap: 8px 12px;
+  margin-top: 12px;
 }
 
-.hero-pace-head .hero-label {
-  margin: 0;
+.hero-action-row .hero-pills {
+  margin-top: 0;
 }
 
-.hero-pace-legend {
-  margin: 0;
-  font-size: 11.5px;
-}
-
-.hero-pace-legend .is-actual::before { background: #4C5FD5; }
-.hero-pace-legend .is-needed::before { background: rgba(76, 95, 213, 0.08); border: 1.5px dashed #8E9BE0; }
-.hero-pace-legend .is-none::before { background: repeating-linear-gradient(135deg, #D0D5DD 0 2px, #F2F4F7 2px 5px); }
-.hero-pace-legend .is-avg::before { width: 14px; height: 0; border-radius: 0; border-top: 2px dashed #98A2B3; background: none; }
-
-.hero-pace-plot {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 86px;
-}
-
-.hero-pace-bars {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  align-items: flex-end;
-  gap: 6px;
-  min-height: 66px;
-  border-bottom: 1px solid #E4E7EC;
-}
-
-.hero-pace-col {
-  display: flex;
-  flex: 1 1 0;
-  align-items: flex-end;
-  height: 100%;
+.hero-action-row .hero-sentence {
+  flex: 1 1 16rem;
   min-width: 0;
+  margin: 0;
 }
 
-.hero-pace-bar {
-  display: block;
-  width: 100%;
-  border-radius: 4px 4px 0 0;
-  background: #4C5FD5;
+/* The wide card has no footer; a smaller bottom padding leaves no empty
+   band under its columns. */
+.hero-card.hero-card-wide {
+  padding-bottom: 12px;
 }
 
-.hero-pace-col.is-needed .hero-pace-bar {
-  background: rgba(76, 95, 213, 0.08);
-  border: 1.5px dashed #8E9BE0;
-  border-bottom: 0;
+.hero-latest-line > p:first-child {
+  margin: 0;
+  font-size: 13px;
+  color: #475467;
 }
 
-.hero-pace-col.is-none {
-  background: repeating-linear-gradient(135deg, #F2F4F7 0 3px, transparent 3px 7px);
-}
-
-.hero-pace-avg {
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 1;
-  border-top: 2px dashed #98A2B3;
-  pointer-events: none;
-}
-
-.hero-pace-avg-label {
-  position: absolute;
-  right: 0;
-  bottom: 2px;
-  padding: 0 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 10.5px;
-  line-height: 1.3;
-  color: #667085;
+.hero-latest-line strong {
+  color: #182230;
   font-variant-numeric: tabular-nums;
 }
 
-.hero-pace-months {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
+/* ── Inventory value ─────────────────────────────────────────────────── */
+/* "Compared with": two plain columns, no box (2026-10-18). */
+.hero-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.hero-pace-months span {
-  flex: 1 1 0;
+.hero-compare-cell {
   min-width: 0;
-  text-align: center;
-  font-size: 10.5px;
-  line-height: 1.3;
+}
+
+.hero-compare-label {
+  margin: 0;
+  font-size: 12px;
+  color: #667085;
+}
+
+.hero-compare-value {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 3px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #182230;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-compare-value.is-negative { color: #B42318; }
+.hero-compare-value.is-positive { color: #1E7A47; }
+.hero-compare-value.is-missing { color: #98A2B3; }
+
+/* The small "n/a" beside a "—". */
+.hero-compare-na {
+  margin-left: 4px;
+  font-size: 11.5px;
+  font-weight: 400;
   color: #98A2B3;
 }
 
-.hero-foot-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #EDF0F4;
-  font-size: 13px;
-  color: #475467;
-}
 
-.hero-foot-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-}
-
-.hero-foot-row strong {
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-foot-row .hero-pill {
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
-.hero-foot-row .hero-note {
-  margin: 0;
-}
-
-/* ── The four KPI cards ─────────────────────────────────────────────────── */
-.hero-kpi {
-  padding: 18px 20px 16px;
-  container-type: inline-size;
-}
-
-.hero-kpi-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.hero-kpi-head .info-tip {
-  flex: none;
-  margin-left: 0;
-}
-
-.hero-kpi-body {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.hero-kpi-primary {
-  min-width: 0;
-}
-
-/* On a figure such as "10 of 91 checked" only the count takes the status colour. */
-.hero-value .is-danger { color: #B42318; }
-.hero-value .is-watch { color: #B54708; }
-
-.hero-kpi-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: #475467;
-}
-
-.hero-kpi-detail {
-  min-width: 0;
-  margin-top: 12px;
-}
-
-/* A figure with a pill beside it ("6.2 weeks", About double SSM's rule). */
-.hero-value-tagged {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-}
-
-.hero-value-tagged .hero-pill {
-  padding: 3px 9px;
-  font-size: 12px;
-}
-
-/* Two small comparison tiles. */
-.hero-tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.hero-tile {
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid #EDF0F4;
-  border-radius: 10px;
-}
-
-.hero-tile-label {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 11.5px;
-  color: #667085;
-}
-
-.hero-tile .hero-pill {
-  padding: 2px 8px;
-  font-size: 11.5px;
-  line-height: 1.3;
-}
-
-.hero-tile .hero-note,
-.hero-tile-none {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: #667085;
-}
-
-/* The money held beyond SSM's rule. */
-.hero-excess {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 1px 10px;
-  margin-top: 10px;
-  padding: 8px 12px;
-  border: 1px solid #F6E2BC;
-  border-radius: 10px;
-  background: #FFF6E6;
-}
-
-.hero-excess-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #8A5A0B;
-}
-
-.hero-excess-value {
-  grid-row: span 2;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-  text-align: right;
-  color: #B54708;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-excess-sub {
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: #8A5A0B;
-}
-
-/* Stock with no sale in the window, as a share of the stock. */
-.hero-idle {
-  margin-top: 10px;
+.hero-idle,
+.hero-checks {
+  margin-top: 14px;
 }
 
 .hero-idle-head {
   display: flex;
-  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 2px 10px;
-  font-size: 12.5px;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
   color: #475467;
 }
 
 .hero-idle-head strong {
   color: #182230;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
+/* All the stock in a light tint; the slow part at the right end. */
 .hero-idle-track {
-  display: flex;
-  gap: 2px;
   height: 8px;
-  margin-top: 6px;
   overflow: hidden;
-  border-radius: 999px;
-  background: #EEF1F5;
+  background: #A9B8EE;
 }
 
-.hero-idle-moving,
 .hero-idle-slow {
-  flex-basis: 0;
-  min-width: 4px;
+  right: 0;
+  background: #C8453A;
 }
 
-.hero-idle-moving { background: #B9C8F3; }
-.hero-idle-slow { background: #E5533D; }
-
-.hero-idle-axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 4px;
-  font-size: 11px;
-  color: #667085;
+/* ── Stock cover ─────────────────────────────────────────────────────── */
+.hero-meter {
+  margin-top: 14px;
 }
 
-/* The stock-cover meter: teal up to SSM's rule, amber past it. */
 .hero-meter-track {
-  position: relative;
-  height: 10px;
-  border-radius: 999px;
-  background: #EEF1F5;
+  overflow: visible;
 }
 
-.hero-meter-fill,
-.hero-meter-within {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
+.hero-meter-needed {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background: #5FB3A1;
 }
 
-.hero-meter-fill { background: #F0B35A; }
-.hero-meter-within { background: #5BB5A2; }
-.hero-meter-within.is-cut { border-radius: 999px 0 0 999px; }
-
-.hero-meter-mark {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  left: var(--hero-mark);
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: #182230;
+.hero-meter-extra {
+  border-radius: 0 999px 999px 0;
+  background: #D9A23B;
 }
 
 .hero-meter-axis {
   position: relative;
   display: flex;
   justify-content: space-between;
-  margin-top: 7px;
+  margin-top: 6px;
   font-size: 11.5px;
   line-height: 1.4;
   color: #667085;
   font-variant-numeric: tabular-nums;
 }
 
-/* Under the tick, kept clear of the "0" when the tick is near the start. */
 .hero-meter-policy {
   position: absolute;
   top: 0;
-  left: max(var(--hero-mark), 54px);
   transform: translateX(-50%);
   white-space: nowrap;
   font-weight: 600;
-  color: #475467;
+  color: #182230;
 }
 
-.hero-meter-legend .is-within::before { background: #5BB5A2; }
-.hero-meter-legend .is-beyond::before { background: #F0B35A; }
-
-.hero-story {
-  margin: 10px 0 0;
-  padding: 9px 12px;
+.hero-callout {
+  margin: 14px 0 0;
+  padding: 10px 12px;
   border-radius: 10px;
-  background: #F4F6FA;
-  font-size: 13px;
-  line-height: 1.45;
+  background: #F2F4F7;
+  font-size: 13.5px;
+  line-height: 1.5;
   color: #182230;
 }
 
-.hero-story-strong {
+.hero-callout .is-danger {
   color: #B42318;
 }
 
-.hero-story-link {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-weight: 700;
-  color: #B42318;
-  cursor: pointer;
-}
 
-.hero-story-link:hover {
-  text-decoration: underline;
-}
-
-.hero-confirm {
-  flex: 1 1 100%;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #475467;
-}
-
-.hero-confirm-head {
+/* ── Below safety stock ──────────────────────────────────────────────── */
+.hero-checks-track {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.hero-confirm ul {
-  margin: 6px 0 0;
-  padding-left: 16px;
-}
-
-.hero-confirm li + li {
-  margin-top: 4px;
-}
-
-.hero-kpi-tag {
-  display: inline-block;
-  padding: 1px 6px;
-  border: 1px solid #DDE2EA;
-  border-radius: 4px;
-  background: #FFFFFF;
-  font-size: 11px;
-  font-weight: 600;
-  color: #475467;
-}
-
-/* Class A: running low, OK, can't be checked. */
-.hero-classa-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 2px 10px;
-  margin-bottom: 6px;
-  font-size: 12.5px;
-  color: #475467;
-}
-
-.hero-classa-head strong {
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-share-track {
-  display: flex;
-  gap: 2px;
-  height: 8px;
   overflow: hidden;
-  border-radius: 999px;
   background: #EEF1F5;
 }
 
-.hero-share-seg {
-  flex-basis: 0;
-  flex-shrink: 1;
-  min-width: 4px;
+.hero-checks-seg {
+  height: 100%;
 }
 
-.hero-share-seg.is-low { background: #D9534F; }
-.hero-share-seg.is-ok { background: #5BB5A2; }
-.hero-share-seg.is-cant { background: repeating-linear-gradient(135deg, #D0D5DD 0 3px, #F2F4F7 3px 7px); }
+.hero-checks-seg.is-low { min-width: 4px; background: #C8453A; }
+.hero-checks-seg.is-ok { background: #5FB3A1; }
 
-.hero-share-legend {
-  margin-top: 8px;
+
+
+
+
+
+
+/* ── Pending reorders ────────────────────────────────────────────────── */
+.hero-urgency {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #E4E7EC;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #FFFFFF;
 }
 
-.hero-share-legend .is-low::before { background: #D9534F; }
-.hero-share-legend .is-ok::before { background: #5BB5A2; }
-.hero-share-legend .is-cant::before { background: repeating-linear-gradient(135deg, #D0D5DD 0 2px, #F2F4F7 2px 5px); }
-
-.hero-kpi-note {
-  margin: 8px 0 0;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: #F4F6FA;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #475467;
-}
-
-/* "Why N can't be checked": one row per reason, the count on the right. */
-.hero-why-title {
+.hero-urgency li {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 2px 10px;
-  margin-bottom: 4px;
-  font-weight: 600;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
   color: #344054;
 }
 
-/* A link inside a line of a card ("682 products ↗", "See them ↗"). */
-.hero-inline-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-weight: 600;
-  color: #1D4ED8;
-  cursor: pointer;
-}
-
-.hero-inline-link:hover {
-  text-decoration: underline;
-}
-
-.hero-inline-link:focus-visible {
-  outline: 2px solid var(--color-brand-primary, #E85C4A);
-  outline-offset: 2px;
-}
-
-/* A footer link on its own line, at the right. */
-.hero-link-end {
-  margin-left: auto;
-}
-
-@media (pointer: coarse) {
-  .hero-inline-link {
-    padding-block: 8px;
-    margin-block: -8px;
-  }
-}
-
-.hero-why ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.hero-why li {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 1px 0;
-}
-
-.hero-why strong {
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-/* The pending plan by urgency, most urgent first. */
-.hero-queue {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid #EDF0F4;
-  border-radius: 10px;
-  list-style: none;
-}
-
-.hero-queue li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 6px;
-  padding: 7px 10px;
+.hero-urgency li + li {
   border-top: 1px solid #EDF0F4;
+}
+
+.hero-urgency strong {
+  color: #182230;
+}
+
+.hero-urgency-act {
+  flex: none;
   font-size: 12.5px;
-  line-height: 1.4;
   color: #475467;
 }
 
-.hero-queue li:first-child {
-  border-top: 0;
+.hero-urgency .is-critical {
+  background: #FDECEC;
 }
 
-.hero-queue strong {
-  font-size: 14px;
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-queue-when {
-  margin-left: auto;
+.hero-urgency .is-critical strong,
+.hero-urgency .is-critical .hero-urgency-act {
   font-weight: 600;
-  white-space: nowrap;
+  color: #B42318;
 }
 
-.hero-queue li.is-critical { background: #FDECEC; }
-.hero-queue li.is-critical strong,
-.hero-queue li.is-critical .hero-queue-when { color: #B42318; }
-.hero-queue li.is-urgent strong { color: #B54708; }
-.hero-queue li.is-planned strong { color: #6941C6; }
-.hero-queue li.is-zero,
-.hero-queue li.is-zero strong,
-.hero-queue li.is-zero .hero-queue-when { color: #98A2B3; }
-.hero-queue li.is-zero { background: #FFFFFF; }
+.hero-urgency .is-urgent strong { color: #93370D; }
 
-/* The footer: the date on the left, the way to the detail on the right,
-   pinned to the card's bottom. */
-.hero-kpi-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 12px;
-  margin-top: auto;
-  padding-top: 12px;
-}
-
-.hero-kpi-body + .hero-kpi-foot {
-  margin-top: auto;
-}
-
-.hero-kpi-foot::before {
-  content: '';
-  flex: 1 1 100%;
-  height: 1px;
-  margin: 0 0 6px;
-  background: #EDF0F4;
-}
-
-.hero-kpi-foot-note {
-  font-size: 12px;
-  line-height: 1.4;
-  color: #667085;
-}
-
-.hero-links {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin-left: auto;
-}
-
+/* ── Links and tips ──────────────────────────────────────────────────── */
 .hero-link {
   display: inline-flex;
   align-items: center;
@@ -1057,7 +697,6 @@
   font-weight: 600;
   color: #1D4ED8;
   text-decoration: none;
-  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1065,7 +704,6 @@
   text-decoration: underline;
 }
 
-/* A card's "?" text, one short paragraph per line. */
 .hero-tip-line {
   display: block;
 }
@@ -1074,24 +712,181 @@
   margin-top: 6px;
 }
 
-/* A figure that includes synthetic months (generated, not SSM's files). */
-.hero-synthetic {
-  font-size: 12px;
+/* ── Section headers, worked-out numbers, links ──────────────────────── */
+/* One small muted header over each part of every card. */
+.hero-section-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: #B54708;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #98A2B3;
 }
 
-/* Tablet: the wide card on its own row, the four others two by two under it. */
+/* A part of a card after the first, under a thin rule. */
+.hero-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.hero-card.is-action.is-purple .hero-block { border-color: #E9E2FB; }
+
+/* A worked-out figure that opens its explanation (HoverValue): a dotted
+   underline and the help cursor; the pop-up opens on hover or tap. */
+.hero-hover {
+  text-decoration: underline dotted #98A2B3;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+.hero-hover:hover,
+.hero-hover[aria-expanded='true'] {
+  text-decoration-color: #475467;
+}
+
+/* A small inline count ("5 of the last 12", "OK 81"): no underline at rest,
+   the help cursor and a dotted underline on hover; the pop-up still opens. */
+.hero-hover.is-subtle {
+  text-decoration-color: transparent;
+}
+
+.hero-hover.is-subtle:hover,
+.hero-hover.is-subtle[aria-expanded='true'] {
+  text-decoration-color: #98A2B3;
+}
+
+/* The "Provisional" badge and its muted count, side by side in the footer. */
+.hero-foot-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A chip or badge as the trigger: no underline, the chip is the cue. */
+.hero-hover.is-plain {
+  text-decoration: none;
+}
+
+.hero-hover.is-plain:hover .hero-pill,
+.hero-hover.is-plain[aria-expanded='true'] .hero-pill {
+  filter: brightness(0.97);
+  box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08);
+}
+
+/* A whole bar as the trigger. */
+.hero-hover-wrap.is-block,
+.hero-hover.is-block {
+  display: block;
+  width: 100%;
+}
+
+.hero-tip-sum {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* A base figure that opens its detail: no underline at rest, underlined
+   with the pointer on hover. */
+.hero-num-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  text-decoration: none;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.hero-num-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+}
+
+.hero-num-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ── Row 2: tighter, so the four cards stay one height ───────────────── */
+.hero-kpis > .hero-card:not(.hero-card-wide) {
+  padding: 16px 18px 14px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-value {
+  font-size: 28px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-compare,
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-meter,
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-callout,
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-urgency {
+  margin-top: 10px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-callout {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-urgency li {
+  padding: 7px 10px;
+}
+
+/* The row is as tall as its tallest card, so the tall one is tightened
+   (2026-10-18) rather than the short ones stretched: Inventory value (two
+   comparison boxes and the slow-stock bar) set the height, leaving room
+   above the footers of Below safety stock and Pending reorders. */
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-block {
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-kpi-sub {
+  margin-top: 4px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-compare-value {
+  margin-top: 1px;
+  font-size: 15px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-idle-head {
+  margin-bottom: 4px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-card-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+/* ── Smaller screens ─────────────────────────────────────────────────── */
+/* Row 2 two by two. */
 @media (max-width: 1280px) {
   .hero-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .hero-kpis > :first-child {
-    grid-column: span 2;
-    grid-row: auto;
+}
+
+/* Row 1's three columns stack, each under a rule. */
+@media (max-width: 900px) {
+  .hero-annual-cols {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .hero-pace {
-    min-height: 150px;
+  .hero-annual-col {
+    padding: 0;
+  }
+  .hero-annual-col + .hero-annual-col {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-left: 0;
+    border-top: 1px solid #EDF0F4;
   }
 }
 
@@ -1100,21 +895,42 @@
   .hero-kpis {
     grid-template-columns: minmax(0, 1fr);
   }
-  .hero-kpis > :first-child {
-    grid-column: auto;
+  .hero-value {
+    font-size: 26px;
   }
-  .hero-tiles {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .hero-value,
-  .hero-ytd-value {
-    font-size: 28px;
-  }
-  .hero-alloc-value {
+  .hero-value-xl {
     font-size: 30px;
   }
-  .hero-pace-bars,
-  .hero-pace-months {
-    gap: 3px;
-  }
+}
+
+/* Stock cover: the money past SSM's rule, a small amber box under the bar
+   (2026-10-18), the warning tone of the dashboard's chips. */
+.hero-excess-row {
+  margin-top: 10px;
+}
+
+.hero-excess {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #FFF4DD;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #93370D;
+}
+
+.hero-excess strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-hover.is-plain:hover .hero-excess,
+.hero-hover.is-plain[aria-expanded='true'] .hero-excess {
+  box-shadow: 0 0 0 1px rgba(147, 55, 13, 0.18);
+}
+
+/* Two links side by side in a footer. */
+.hero-foot-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
 }

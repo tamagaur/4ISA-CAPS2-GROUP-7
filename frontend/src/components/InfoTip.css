@@ -52,3 +52,119 @@
 .info-tip-pop[hidden] {
   display: none;
 }
+
+/* A long note (2026-10-19): a card of its own instead of the bubble — the
+   page's surface and type, a title, a close button, its lines as
+   paragraphs — opened straight away on hover, or pinned by a tap, a click
+   or Enter. The wrapper is bare; its padding is a transparent bridge the
+   pointer crosses from the "?" to the card without leaving either (the
+   card is placed flush with the button, InfoTip.jsx). */
+.info-tip-pop.is-card {
+  max-width: min(460px, calc(100vw - 16px));
+  padding: 6px;
+  background: none;
+  box-shadow: none;
+  color: var(--color-text-body);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+.info-tip-card {
+  display: block;
+  padding: 0.85rem 1.1rem 1.05rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background-color: var(--color-surface);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.2);
+  animation: info-tip-rise 0.16s ease;
+}
+
+@keyframes info-tip-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.info-tip-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.info-tip-card-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text-heading);
+}
+
+.info-tip-card-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin: -2px -4px 0 0;
+  padding: 0.25rem;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.info-tip-card-close:hover {
+  color: var(--color-text-heading);
+  background-color: var(--color-surface-sunken);
+}
+
+.info-tip-card-close:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+/* A long note scrolls inside the card past this height. */
+.info-tip-card-body {
+  display: block;
+  max-height: min(60vh, 440px);
+  overflow-y: auto;
+}
+
+/* A note's lines (the cards' hero-tip-line, the charts' chart-tip-line:
+   block spans) are paragraphs here, with room between them. */
+.info-tip-card .info-tip-card-body > span {
+  display: block;
+}
+
+.info-tip-card .info-tip-card-body > span + span {
+  margin-top: 0.7rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .info-tip-card {
+    animation: none;
+  }
+}
+
+/* A text trigger (InfoTip's `trigger` prop): the text itself is the button,
+   with no button chrome; the caller's triggerClassName gives its cue. */
+.info-tip-trigger {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: help;
+}
+
+.info-tip-trigger:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+  border-radius: 3px;
+}

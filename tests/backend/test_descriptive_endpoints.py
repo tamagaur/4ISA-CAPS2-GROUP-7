@@ -160,7 +160,9 @@ def test_decomposition_unknown_or_non_unilever_is_404():
 
 def test_category_trends_project_growth_and_refuse_short_series():
     months = [f"{2024 + i // 12}-{i % 12 + 1:02d}" for i in range(24)]
-    unilever = [{"category": "COOKING AIDS", "period": m, "revenue": 1000 + 25 * i} for i, m in enumerate(months)]
+    # positive_rows (B4, 2026-10-16): every fixture month is a real net sale.
+    unilever = [{"category": "COOKING AIDS", "period": m, "revenue": 1000 + 25 * i, "positive_rows": 1}
+                for i, m in enumerate(months)]
     delmonte = [{"category": "CULINARY", "period": m, "revenue": 500.0} for m in ("2025-03", "2025-04", "2025-06")]
     session = FakeSession([
         ("FROM Unilever_SKU_Demand_Fact_Real d", unilever),
