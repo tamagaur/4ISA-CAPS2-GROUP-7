@@ -11,10 +11,14 @@ import Modal from './Modal';
 // Values are the exact rows the chart plots (the caller passes its own
 // already-assembled chart data), so the two views can never disagree.
 
-export function ChartViewToggle({ view, onChange, label = 'Chart or table view' }) {
+// `options` (2026-10-19): the views, as [key, text] pairs, for a chart with
+// more than one plot of the same rows (the forecast card's "Lines" and
+// "Monthly miss") — the default is the plain Chart / Table pair.
+const CHART_OR_TABLE = [['chart', 'Chart'], ['table', 'Table']];
+export function ChartViewToggle({ view, onChange, label = 'Chart or table view', options = CHART_OR_TABLE }) {
   return (
     <div className="chart-view-toggle" role="group" aria-label={label}>
-      {[['chart', 'Chart'], ['table', 'Table']].map(([key, text]) => (
+      {options.map(([key, text]) => (
         <button
           key={key}
           type="button"

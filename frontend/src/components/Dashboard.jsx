@@ -830,9 +830,10 @@ const Dashboard = () => {
     'Stock on hand at each product\'s last purchase price (the buying price), which is not SSM\'s true cost, so the '
       + 'value is an estimate. It is the stock count at the end of the selected range, not a total over the range, so '
       + 'it changes with the date filter.',
-    '"vs last count" compares with the previous stock count on record, skipping a count marked unusual. "vs a year '
-      + 'ago" compares with the count a year earlier, when the comparison beside the date picker is "Same months last '
-      + 'year". Red means the change moves cover further from the target.',
+    '"vs last count" compares with the previous stock count on record, skipping an earlier count marked unusual; '
+      + 'when this count is the unusual one, the comparison is still shown and says so. "vs a year ago" compares with '
+      + 'the count a year earlier, when the comparison beside the date picker is "Same months last year". Red means '
+      + 'the change moves cover further from the target.',
     '"Not sold in 6 months": stock of products with no sale in the 6 months up to the count, at the same price. '
       + 'Unilever only: Del Monte\'s sales are by category, so no product can be shown to have gone unsold.',
   ];
@@ -873,8 +874,8 @@ const Dashboard = () => {
   const sohPieces = kpis.soh_snapshot?.pieces ?? null;
   const piecesNote = kpis.soh_snapshot?.pieces_note || null;
   const inventorySubtitle = sohValue.value === '—' ? sohValue.contextLine
-    : sohPieces != null ? `${formatCompactCount(sohPieces)} pieces · at buying price (estimate)`
-      : piecesNote ? 'Pesos only (no pack size on file) · at buying price (estimate)' : 'At buying price (estimate)';
+    : sohPieces != null ? `${formatCompactCount(sohPieces)} pieces · at last purchase price`
+      : piecesNote ? 'Pesos only (no pack size on file) · at last purchase price' : 'At last purchase price';
   const inventorySubtitleTitle = sohValue.value === '—' ? undefined
     : sohPieces != null ? `${Math.round(sohPieces).toLocaleString()} pieces (cases × pack size + loose pieces)`
       : piecesNote || undefined;
@@ -1242,6 +1243,28 @@ const Dashboard = () => {
     'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',
     planBasis.detail,
   ];
+  // Why the plan holds these products and not every top seller (GET
+  // /dashboard's forecast block; Sir Catubag, 2 Oct 2026: "what happens to
+  // the rest?"): tested, passed, failed the reliability check, too new.
+  const fc = data.forecast || {};
+  const planScope = !lpHidden && fc.total_count != null && fc.evaluated_count != null && fc.unreliable_count != null
+    ? {
+      total: fc.total_count,
+      evaluated: fc.evaluated_count,
+      failed: fc.unreliable_count,
+      passed: fc.evaluated_count - fc.unreliable_count,
+      gate: fc.mase_gate ?? null,
+    }
+    : null;
+  // Critical reads a planned product missing from the opening count as 0 on
+  // hand; the Below safety stock card cannot check those. Said on the card
+  // only when the two counts differ by exactly that many.
+  const noCount = exposure.uncheckable?.no_stock_count;
+  const criticalNote = !lpHidden && !belowBlocked && noCount > 0 && reorderPreview.critical_count != null
+    && reorderPreview.critical_count - exposure.below_count === noCount
+    ? `${reorderPreview.critical_count} critical = the ${exposure.below_count} below safety stock + ${noCount} missing from `
+      + 'the stock count, which the plan reads as 0 on hand (the Below safety stock card cannot check those).'
+    : null;
 
   // Months in the range with no sales on record (Del Monte has many). Said
   // once, under the filters, so a short total is never read as a low year.
@@ -1291,11 +1314,24 @@ const Dashboard = () => {
   });
   // vs last count: kpis.soh_trend, the card's own counts. The backend passes
   // over a count the team judged unusual and says so (skipped / latest_unusual).
+  // When the LATEST count is the unusual one it sends no comparison at all;
+  // the card still shows one (the year-ago box beside it compares the same
+  // count), from the trend's own last two points, with the warning in its
+  // "?" (2026-10-19). "n/a" with no figure invited "why?" for a count that
+  // was on record.
   const sohTrend = kpis.soh_trend || null;
+  const sohPoints = (sohTrend?.points || []).filter((pt) => pt.value != null);
+  const sohLatest = sohPoints.length ? sohPoints[sohPoints.length - 1] : null;
+  const sohPrev = sohPoints.length >= 2 ? sohPoints[sohPoints.length - 2] : null;
   const lastCountCell = !sohTrend || ((sohTrend.delta_pct == null || !sohTrend.prev_period) && !sohTrend.latest_unusual)
     ? { reason: 'No earlier count on record' }
     : sohTrend.latest_unusual
-      ? { reason: 'This count is marked unusual, so it is not compared' }
+      ? (sohLatest && sohPrev && sohPrev.value > 0
+        ? {
+          ...changeCell(((sohLatest.value - sohPrev.value) / sohPrev.value) * 100, `${periodLabel(sohPrev.period)} count`, sohLatest.value, sohPrev.value),
+          note: `This count is marked "needs checking": ${sohTrend.latest_unusual}`,
+        }
+        : { reason: 'This count is marked unusual, so it is not compared' })
       : changeCell(
         sohTrend.delta_pct,
         `${periodLabel(sohTrend.prev_period)} count${(sohTrend.skipped || []).length > 0 ? ' (skips an unusual count)' : ''}`,
@@ -1457,6 +1493,8 @@ const Dashboard = () => {
                 kpis.soh_count_note,
               ].map((line) => line && `${capitalise(line)}${/[.!?]$/.test(line) ? '' : '.'}`) : []}
               tooltip={coverTooltip}
+              // The pesos beyond the rule, product by product (kpis.above_policy).
+              abovePolicy={kpis.above_policy || null}
             />
             <BelowSafetyCard
               below={belowBlocked ? null : exposure.below_count}
@@ -1470,6 +1508,8 @@ const Dashboard = () => {
               // count was taken from, so it opens the same SKUs.
               onOpen={canListAtRisk ? openAtRisk : null}
               abcTo={hasPermission(P.ABC_VIEW) ? '/abc' : null}
+              // Why the rest can't be checked, by reason (safety_stock_exposure.uncheckable).
+              uncheckable={exposure.uncheckable || null}
             />
             <PendingReordersCard
               count={lpHidden ? null : pendingCount}
@@ -1480,6 +1520,8 @@ const Dashboard = () => {
               tooltip={pendingTooltip}
               to="/reorder"
               criticalTo="/reorder?urgency=critical"
+              scope={planScope}
+              criticalNote={criticalNote}
             />
           </div>
 

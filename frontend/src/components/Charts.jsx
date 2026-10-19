@@ -20,7 +20,10 @@ import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import GapNote from './GapNote';
 import { gapLabel, originLabel } from '../utils/gapReasons';
-import { labelledMonths, showsYear, timelineMonths, yearEarlier } from '../utils/timeline';
+import { timelineMonths, yearEarlier } from '../utils/timeline';
+import { pesoTicks } from '../utils/pesoTicks';
+import MonthTick, { monthName } from './MonthTick';
+import { BAR_FADE_FLOOR, Callout, CalloutLine, CalloutNote, Callouts, Fade, endDot } from './ui/ChartParts';
 import './Charts.css';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
@@ -318,11 +321,9 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
 };
 
 // A period's year and month: '2026-02' -> 2026, 2.
-const yearOf = (period) => Number(String(period).slice(0, 4));
-const monthOf = (period) => Number(String(period).slice(5, 7));
 
 // No shade under the lines (2026-10-19): the axis floor sits above ₱0
-// (yoyFloor below), and a shade down to a raised floor suggested a size the
+// (utils/pesoTicks' yoyFloor), and a shade down to a raised floor suggested a size the
 // figures don't have. The lines alone carry the shape.
 // Weeks of stock (the "Weeks of stock" view): month-end stock ÷ that month's
 // average weekly sales, with monthly sales turned weekly by the backend's own
@@ -347,35 +348,8 @@ const fmtWeeksValue = (v) => `${Number(v).toFixed(1)} wks`;
 const PLOTTED_FIELDS = [
   'sales', 'stockOnHand', 'received', 'receivedEstimated', 'salesEstimated', 'stockEstimated', 'returns', 'returnsEstimated',
 ];
-// The plot's floor: 90% of the lowest visible value, rounded down to ₱5M,
-// never below zero. With every value between ₱10M and ₱40M a zero floor
-// spent half the card on empty space and flattened a ₱10M swing to a few
-// pixels. The tick labels name the floor, so nothing is hidden.
-const yoyFloor = (min) => Math.max(0, Math.floor((min * 0.9) / 5e6) * 5e6);
-// Explicit ticks, because Recharts' own "nice" ticks round the floor back
-// down to zero: with a ₱10M step, a ₱5M floor becomes ₱0 again. Steps of
-// ₱5M, or ₱10M once that would be more than eight ticks. Recomputed from
-// whatever is visible, so the scale follows the metric control.
-const pesoTicks = (values) => {
-  const present = values.filter((v) => v != null);
-  if (!present.length) return null;
-  // Small figures (returns run under ₱1M a month): ₱5M steps would lay them
-  // flat along zero, so the step shrinks to a round one that gives about
-  // five gridlines, from ₱0 (2026-10-19).
-  const top = Math.max(...present);
-  if (top < 10e6) {
-    const magnitude = 10 ** Math.floor(Math.log10(Math.max(top, 1) / 5));
-    const fine = ([1, 2, 2.5, 5, 10].find((f) => f * magnitude >= top / 5) || 10) * magnitude;
-    return Array.from({ length: Math.ceil(top / fine) + 1 }, (_, i) => i * fine);
-  }
-  const lo = yoyFloor(Math.min(...present));
-  const hi = Math.ceil(Math.max(...present) / 5e6) * 5e6;
-  const step = (hi - lo) / 5e6 > 8 ? 1e7 : 5e6;
-  const ticks = [];
-  for (let v = lo; v <= hi + 1; v += step) ticks.push(v);
-  if (ticks[ticks.length - 1] < hi) ticks.push(ticks[ticks.length - 1] + step);
-  return ticks;
-};
+// The ₱ axis's floor and ticks (a floor just under the lowest value, explicit
+// ticks): utils/pesoTicks.js, shared with the forecast card's chart.
 
 // Month ticks shrink on a narrow card so they still fit.
 const YOY_WIDE_PX = 700;
@@ -540,18 +514,10 @@ const weeksBand = (weeks, policy) => (weeks == null ? 'near'
     : weeks > policy + WEEKS_NEAR_BAND ? 'over' : 'near');
 const UNUSUAL_INK = 'var(--color-text-muted, #556070)';
 
-// A vertical fade in one colour, for the chart's <defs>: `from` opaque at
-// the top to `to` at the bottom. Every bar on the card wears one
-// (svs-bar-<key>, BAR_FADE), fading down the bar; the shade under a line
-// is another (svs-area-<series>), fading out at the axis floor.
-const Fade = ({ id, color, from = 1, to = 0 }) => (
-  <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stopColor={color} stopOpacity={from} />
-    <stop offset="100%" stopColor={color} stopOpacity={to} />
-  </linearGradient>
-);
+// Every bar on the card wears a fade (ui/ChartParts' Fade: svs-bar-<key>,
+// BAR_FADE), down to BAR_FADE_FLOOR; the shade under a line is another
+// (svs-area-<series>), fading out at the axis floor.
 const BAR_FADE = { sales: SVS_COLOR.sales, stock: SVS_COLOR.stock, ...WEEKS_COLOR };
-const BAR_FADE_FLOOR = 0.4;
 const barFill = (key) => `url(#svs-bar-${key})`;
 
 // Each view's subtitle. All of them are laid in the header's one cell
@@ -578,38 +544,32 @@ const PurchasesTooltip = ({ active, payload, boughtLabel, priorOf }) => {
   if (!row || (row.sales == null && row.bought == null)) return null;
   const prior = priorOf(row.period, 'sales');
   const change = row.sales != null && prior > 0 ? ((row.sales - prior) / prior) * 100 : null;
+  const when = plainPeriod(row.period);
   return (
-    <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(row.period)}</p>
+    <Callouts>
       {row.sales != null && (
-        <p className="chart-tooltip-row">
-          <span className="svs-swatch" style={{ background: SOLD_COLOR }} aria-hidden="true" />
-          Sold <strong>{formatCompactPesos(row.sales)}</strong>
-        </p>
+        <Callout color={SOLD_COLOR} period={when} value={formatCompactPesos(row.sales)} name="Sold">
+          {change != null && (
+            <CalloutLine>
+              {change >= 0 ? '+' : '−'}{Math.abs(change).toFixed(1)}% vs {plainPeriod(yearEarlier(row.period))}
+            </CalloutLine>
+          )}
+        </Callout>
       )}
       {row.bought != null && (
-        <p className="chart-tooltip-row">
-          <span className="svs-swatch" style={{ background: BOUGHT_COLOR }} aria-hidden="true" />
-          {boughtLabel} <strong>{formatCompactPesos(row.bought)}</strong>
-          {row.purch < 0 && ' (a negative estimate, shown as ₱0)'}
-        </p>
+        <Callout color={BOUGHT_COLOR} period={when} value={formatCompactPesos(row.bought)} name={boughtLabel}>
+          {row.purch < 0 && <CalloutLine>A negative estimate, shown as ₱0.</CalloutLine>}
+        </Callout>
       )}
       {row.net != null && (
-        <p className="chart-tooltip-row">
+        <CalloutNote>
           {row.net >= 0
-            ? <>Bought <strong>{formatCompactPesos(row.net)}</strong> more than sold → stock grew</>
-            : <>Sold <strong>{formatCompactPesos(-row.net)}</strong> more than bought → stock shrank</>}
-        </p>
+            ? <>Bought <strong>{formatCompactPesos(row.net)}</strong> more than sold → stock grew.</>
+            : <>Sold <strong>{formatCompactPesos(-row.net)}</strong> more than bought → stock shrank.</>}
+        </CalloutNote>
       )}
-      {change != null && (
-        <p className="chart-tooltip-row">
-          Sales {change >= 0 ? '+' : '−'}{Math.abs(change).toFixed(1)}% vs {plainPeriod(yearEarlier(row.period))}
-        </p>
-      )}
-      {row.purchFlag && (
-        <p className="chart-tooltip-placeholder chart-tooltip-note">Bought is estimated from a stock count that needs checking.</p>
-      )}
-    </div>
+      {row.purchFlag && <CalloutNote>Bought is estimated from a stock count that needs checking.</CalloutNote>}
+    </Callouts>
   );
 };
 
@@ -625,24 +585,9 @@ const zeroPesoTicks = (values) => {
   return ticks;
 };
 
-// A month tick: the month, and the year under every January and under the
-// first month. Months between labelled ones get no text on a long range.
-const MonthTick = ({ x, y, payload, first, labelled, compact }) => {
-  const period = payload?.value;
-  if (!period || !labelled.has(period)) return null;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text dy={12} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={compact ? 9.5 : 11}>
-        {AXIS_MONTHS[Number(period.slice(5, 7)) - 1]}
-      </text>
-      {showsYear(period, first) && (
-        <text dy={25} textAnchor="middle" fill="#475467" fontSize={compact ? 9.5 : 10.5} fontWeight={600}>
-          {period.slice(0, 4)}
-        </text>
-      )}
-    </g>
-  );
-};
+// The month axis is the dashboard's shared two-line tick (MonthTick.jsx:
+// the month over its year) since 2026-10-19; Recharts thins the ticks on a
+// long range (minTickGap).
 
 // A key in the legend, drawn the way the plot draws it.
 const SvsSwatch = ({ kind, color }) => {
@@ -706,18 +651,18 @@ const TimelineTooltip = ({ active, payload, metrics, priorOf, marks, colors }) =
       metric === 'stock' && pt.stockCountDay && `counted ${pt.stockCountDay}`,
     ].filter(Boolean);
     return (
-      <div key={metric} className="svs-callout" style={{ '--svs-callout': colors[metric] }}>
-        <span className="svs-callout-period">
+      <div key={metric} className="chart-callout" style={{ '--chart-callout': colors[metric] }}>
+        <span className="chart-callout-period">
           {plainPeriod(row.period)}
           {kind && ` · ${kind}`}
         </span>
-        <strong className="svs-callout-value">{svsFormat(metric, value)}</strong>
-        <span className="svs-callout-name">
+        <strong className="chart-callout-value">{svsFormat(metric, value)}</strong>
+        <span className="chart-callout-name">
           {SVS_NAMES[metric]}
           {asides.length > 0 && ` · ${asides.join(' · ')}`}
         </span>
         {prior != null && (
-          <span className="svs-callout-prior">
+          <span className="chart-callout-line">
             {plainPeriod(yearEarlier(row.period))}: <strong>{svsFormat(metric, prior)}</strong>
           </span>
         )}
@@ -728,7 +673,7 @@ const TimelineTooltip = ({ active, payload, metrics, priorOf, marks, colors }) =
   const gap = metrics.includes('sales') && row.sales == null && row.salesest == null && pt.salesReason;
   if (!boxes.length && !gap) return null;
   return (
-    <div className="chart-tooltip svs-tooltip">
+    <div className="chart-tooltip chart-callouts">
       {boxes}
       {unusual && <p className="chart-tooltip-placeholder chart-tooltip-note">Needs checking: {pt.stockUnusual}</p>}
       {gap && (
@@ -895,7 +840,6 @@ export const SalesVsStockWidget = ({
     return null;
   }, [allBy, real]);
 
-  const labelled = useMemo(() => new Set(labelledMonths(months)), [months]);
   const hasUnusual = (viewMetrics.includes('stock') || weeksView) && rows.some((r) => r.unusual && (weeksView ? r.weeks != null : r.stock != null));
   const hasPlaceholder = rows.some((r) => isPlaceholderPeriod(r.period, placeholder) || r.pt.salesSynthetic);
   const weeksUnusual = weeksView && rows.some((r) => r.unusual && r.weeks != null);
@@ -1176,8 +1120,9 @@ export const SalesVsStockWidget = ({
                   dataKey="period"
                   axisLine={false}
                   tickLine={false}
-                  interval={0}
-                  tick={<MonthTick first={months[0]} labelled={labelled} compact={!wide} />}
+                  tickFormatter={monthName}
+                  minTickGap={12}
+                  tick={<MonthTick fontSize={wide ? 11 : 9.5} fill={CHART_COLORS.axisLabel} />}
                   height={56}
                   label={xAxisTitle('Month')}
                 />
@@ -1563,9 +1508,14 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
       role="tooltip"
       style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
     >
-      <span className="abc-hover-tip-title">Class {facts.tier}</span>
-      <span>{facts.count.toLocaleString()} {facts.units} · {facts.skuPct.toFixed(0)}% of {facts.units}</span>
-      <span>{revenueLine}</span>
+      <Callout
+        color={abcTierColor(facts.tier)}
+        period={`Class ${facts.tier}${ABC_TIER_ROLE[facts.tier] ? ` · ${ABC_TIER_ROLE[facts.tier].name}` : ''}`}
+        value={`${facts.count.toLocaleString()} ${facts.units}`}
+        name={`${facts.skuPct.toFixed(0)}% of ${facts.units}`}
+      >
+        <CalloutLine>{revenueLine}</CalloutLine>
+      </Callout>
     </div>,
     document.body,
   );
@@ -2057,38 +2007,35 @@ export const CategoryStockBarWidget = ({
   );
 };
 
+// The hover, in the dashboard's shared boxes: a teal box for the month's
+// actual pieces, a violet one for the forecast with its likely range under
+// it. The bridge point (the last actual month, given the actual as its own
+// "forecast" so the lines join, chartData below) shows actual only.
 const PortfolioForecastTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   const row = payload[0].payload;
+  const when = plainPeriod(row.period ?? label);
+  const pieces = (v) => `${Math.round(v).toLocaleString()} pieces`;
+  const band = row.confidenceBase != null && row.confidenceBand != null && row.confidenceBand > 0;
+  const bridged = row.actual != null && row.forecast === row.actual;
   return (
-    <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(row.period ?? label)}</p>
-      {row.actual != null && (
-        <p className="chart-tooltip-row">
-          <span className="chart-tooltip-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
-          Actual demand: <strong>{Math.round(row.actual).toLocaleString()} pieces</strong>
-        </p>
+    <Callouts>
+      {row.actual != null && <Callout color={CHART_COLORS.salesSeries} period={when} value={pieces(row.actual)} name="Actual demand" />}
+      {row.forecast != null && !bridged && (
+        <Callout color={COLORS.forecast} period={when} value={pieces(row.forecast)} name="Forecast">
+          {band && (
+            <CalloutLine>
+              About 90% likely: <strong>
+                {Math.round(row.confidenceBase).toLocaleString()} – {Math.round(row.confidenceBase + row.confidenceBand).toLocaleString()}
+              </strong> pieces
+            </CalloutLine>
+          )}
+        </Callout>
       )}
-      {row.forecast != null && (
-        <p className="chart-tooltip-row">
-          <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
-          Forecast: <strong>{Math.round(row.forecast).toLocaleString()} pieces</strong>
-        </p>
+      {band && !bridged && (
+        <CalloutNote>Assumes each SKU&apos;s forecast misses independently; a shared seasonal swing would widen it.</CalloutNote>
       )}
-      {row.confidenceBase != null && row.confidenceBand != null && row.confidenceBand > 0 && (
-        <>
-          <p className="chart-tooltip-row">
-            <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecastBg }} aria-hidden="true" />
-            About 90% likely: <strong>
-              {Math.round(row.confidenceBase).toLocaleString()} – {Math.round(row.confidenceBase + row.confidenceBand).toLocaleString()} pieces
-            </strong>
-          </p>
-          <p className="chart-tooltip-placeholder chart-tooltip-note">
-            Assumes each SKU&apos;s forecast misses independently; a shared seasonal swing would widen it.
-          </p>
-        </>
-      )}
-    </div>
+    </Callouts>
   );
 };
 
@@ -2129,63 +2076,9 @@ const MONTH_LABEL_MIN_PX = 24;
 // instead of on top of each other.
 const SECTION_LABEL_MIN_SLOT_PX = 62;
 
-// The month axis, in two rows (Audrey, 2026-10-03): the month names, and
-// under them one bracket per year — a rule spanning that year's months with
-// the year in the middle of it ("──── 2025 ────") — so a month is read off
-// the top row and its year straight below, and where one year ends and the
-// next begins is the gap between two brackets.
-//
-// `slot` is the width of one month in px. Each tick draws its own month;
-// the first labelled month of a year also draws that year's bracket, from
-// the year's first month to its last (labelled or not).
-const YEAR_LABEL_WIDTH = 38;
-const MonthYearTick = ({ x, y, payload, rows, step, slot }) => {
-  const i = payload.value;
-  const row = rows[i];
-  if (!row) return null;
-  const year = yearOf(row.period);
-  const before = rows[i - step];
-  const startsYear = !before || yearOf(before.period) !== year;
-  const month = (
-    <text x={x} y={y + 14} textAnchor="middle" fontSize={slot * step < 26 ? 9.5 : 11} fill={CHART_COLORS.axisLabel}>
-      {AXIS_MONTHS[monthOf(row.period) - 1]}
-    </text>
-  );
-  if (!startsYear) return month;
-  const yearText = (cx) => (
-    <text x={cx} y={y + 36} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--color-text, #1a202c)">
-      {year}
-    </text>
-  );
-  // Before the plot is measured there is no slot width to span: the year
-  // sits under its first month.
-  if (!Number.isFinite(slot)) return <g>{month}{yearText(x)}</g>;
-  let first = i;
-  while (first > 0 && yearOf(rows[first - 1].period) === year) first -= 1;
-  let last = i;
-  while (last < rows.length - 1 && yearOf(rows[last + 1].period) === year) last += 1;
-  // Half a month either side of the year's months, less a gap so two
-  // brackets never touch; the axis's own ends stop just past the point.
-  const x1 = x + (first - i) * slot - (first === 0 ? 6 : slot / 2 - 4);
-  const x2 = x + (last - i) * slot + (last === rows.length - 1 ? 6 : slot / 2 - 4);
-  const cx = (x1 + x2) / 2;
-  const lineY = y + 32;
-  const hasRule = x2 - x1 > YEAR_LABEL_WIDTH + 16;
-  return (
-    <g>
-      {month}
-      {hasRule && (
-        <>
-          <line x1={x1} x2={cx - YEAR_LABEL_WIDTH / 2} y1={lineY} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
-          <line x1={cx + YEAR_LABEL_WIDTH / 2} x2={x2} y1={lineY} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
-          <line x1={x1} x2={x1} y1={lineY - 4} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
-          <line x1={x2} x2={x2} y1={lineY - 4} y2={lineY} stroke="var(--color-slate-400, #94a3b8)" strokeWidth={1} />
-        </>
-      )}
-      {yearText(cx)}
-    </g>
-  );
-};
+// The month axis: the dashboard's shared two-line tick (MonthTick.jsx, the
+// month over its year) since 2026-10-19; until then one bracket per year
+// under the month names, which no other chart drew.
 // The forecast plot's fixed frame, so one month's width can be worked out
 // from the container's: the y axis, and the chart's right margin.
 const PF_Y_AXIS_WIDTH = 60;
@@ -2295,6 +2188,10 @@ export const PortfolioForecastWidget = ({
   // The x axis is the month's position in the window (0, 1, 2 …), so a
   // section can end halfway between two months.
   const plotRows = useMemo(() => zoom.view.map((pt, i) => ({ ...pt, idx: i })), [zoom.view]);
+  // Each line's end, for its ringed dot: the last month with actual demand,
+  // and the forecast month (never the bridge point, which is an actual).
+  const lastActualIdx = plotRows.reduce((found, pt, i) => (pt.actual != null ? i : found), -1);
+  const lastForecastIdx = plotRows.reduce((found, pt, i) => (pt.forecast != null && pt.actual == null ? i : found), -1);
   const [plotRef, plotWidth] = useMeasuredWidth();
 
   // Past / Present / Future (FORECAST_SECTION_STYLE): the present is the
@@ -2478,7 +2375,13 @@ export const PortfolioForecastWidget = ({
                       axisLine={false}
                       tickLine={false}
                       interval={0}
-                      tick={<MonthYearTick rows={plotRows} step={tickStep} slot={slotPx} />}
+                      tick={(
+                        <MonthTick
+                          fontSize={slotPx * tickStep < 26 ? 9.5 : 11}
+                          fill={CHART_COLORS.axisLabel}
+                          period={(i) => plotRows[i]?.period}
+                        />
+                      )}
                       height={X_AXIS_TITLED_HEIGHT + 22}
                       label={xAxisTitle('Month')}
                     />
@@ -2531,10 +2434,10 @@ export const PortfolioForecastWidget = ({
                       dataKey="actual"
                       name="Actual demand"
                       stroke={CHART_COLORS.salesSeries}
-                      strokeWidth={2.5}
+                      strokeWidth={3}
                       strokeLinecap="round"
                       fill="url(#pf-fill-actual)"
-                      dot={false}
+                      dot={endDot(CHART_COLORS.salesSeries, lastActualIdx)}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       connectNulls={false}
                       {...zoom.zoomAnim(1)}
@@ -2546,7 +2449,8 @@ export const PortfolioForecastWidget = ({
                       stroke={COLORS.forecast}
                       strokeDasharray="5 3"
                       strokeWidth={2.5}
-                      dot={false}
+                      strokeLinecap="round"
+                      dot={endDot(COLORS.forecast, lastForecastIdx)}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       connectNulls={false}
                       label={forecastLabels}

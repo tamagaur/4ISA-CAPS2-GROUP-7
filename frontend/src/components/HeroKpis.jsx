@@ -408,8 +408,9 @@ const CompareCell = ({ label, cell, na = false }) => {
         <p className={`hero-compare-value is-${cell.tone || 'neutral'}`}>
           <HoverValue
             label={`How “${label}” is worked out`}
-            what={`(This count − the ${cell.sub || 'earlier count'}) ÷ the ${cell.sub || 'earlier count'}, both at buying price.`}
+            what={`(This count − the ${cell.sub || 'earlier count'}) ÷ the ${cell.sub || 'earlier count'}, both at last purchase price.`}
             sums={[cell.now != null && cell.then != null ? `(${fp(cell.now)} − ${fp(cell.then)}) ÷ ${fp(cell.then)} = ${cell.value}` : null]}
+            notes={[cell.note]}
           >
             {Arrow && <Arrow size={14} aria-hidden="true" />}
             {cell.value}
@@ -485,7 +486,7 @@ export const InventoryCard = ({
                       {' · '}
                       <HoverValue
                         label="How the slow-stock share is worked out"
-                        what="Stock with no sale in the period ÷ the whole stock value, both at buying price, on the same count."
+                        what="Stock with no sale in the period ÷ the whole stock value, both at last purchase price, on the same count."
                         sums={[`${fp(idle.value)} ÷ ${fp(idle.stock)} = ${formatPercent(idle.share)}`]}
                       >
                         {formatPercent(idle.share)}
@@ -530,6 +531,10 @@ export const InventoryCard = ({
 export const StockCoverCard = ({
   cover = null, reason = null, policyWeeks = null, salesWindow = null, runningLow = null, toConfirm = [],
   tooltip = null, onOpenLow = null,
+  // The pesos beyond the rule product by product (GET /dashboard's
+  // kpis.above_policy, 2026-10-19): { pesos, products, no_sale_products,
+  // policy_weeks }, or null when the backend has no figure.
+  abovePolicy = null,
 }) => {
   const ratio = cover ? policyRatio(cover.weeks, policyWeeks) : null;
   const scale = cover ? coverScale(cover.weeks, policyWeeks) : null;
@@ -540,9 +545,14 @@ export const StockCoverCard = ({
   // Average weekly sales is not sent; it is the cover's own two figures worked
   // back (stock ÷ weeks), so it is shown as "≈".
   const weekly = cover?.stockValue != null && cover.weeks > 0 ? cover.stockValue / cover.weeks : null;
-  // Money in stock past the policy's weeks (kpiMath.excessAbovePolicy): not
-  // sent by the backend, the cover's own figures rearranged, so "≈".
+  // Money in stock past the policy's weeks. The backend's figure when it
+  // sends one: product by product, each product's stock beyond the rule's
+  // weeks of its own sales, added up — the sum its stock-detail list is
+  // made of, so a reader can ask "which products?". Else the cover's own
+  // figures rearranged (kpiMath.excessAbovePolicy), an aggregate that nets
+  // products under the rule against those over it, so "≈" and lower.
   const excess = cover ? excessAbovePolicy(cover.stockValue, cover.weeks, policyWeeks) : null;
+  const perProduct = cover && abovePolicy?.pesos != null ? abovePolicy : null;
 
   // One sentence: the total against the target, and the top sellers the total
   // can hide (cover is an average over every product).
@@ -633,7 +643,32 @@ export const StockCoverCard = ({
       )}
       {cover && !split && policyWeeks != null && <p className="hero-note">Target: {policyWeeks} weeks</p>}
 
-      {excess != null && (
+      {perProduct ? (
+        <div className="hero-excess-row">
+          <HoverValue
+            label="How the money tied up is worked out"
+            plain
+            what={`Product by product: each product's stock value beyond ${perProduct.policy_weeks ?? policyWeeks} weeks of its own `
+              + `average weekly sales${salesWindow ? ` (${salesWindow})` : ''}, added up over the ${n(perProduct.products)} products `
+              + 'holding more than that.'}
+            notes={[
+              perProduct.no_sale_products > 0
+                ? `${n(perProduct.no_sale_products)} products had no sale in those months, so all of their stock counts as beyond the rule.`
+                : null,
+              excess != null
+                ? `The whole-stock shortcut (${fp(cover.stockValue)} × (${cover.weeks.toFixed(2)} − ${policyWeeks}) ÷ ${cover.weeks.toFixed(2)}) `
+                  + `gives ≈ ${fp(excess)}: it nets products under the rule against those over it, so it reads lower.`
+                : null,
+              'Stock is at last purchase price and sales at selling price, so the figure is approximate.',
+              cover.provisional || confirm.length > 0 ? `Provisional: ${confirm.join(' ')}` : null,
+            ]}
+          >
+            <span className="hero-excess">
+              Above SSM&apos;s {policyWeeks}-week rule: <strong>{fp(perProduct.pesos)}</strong> in {n(perProduct.products)} products
+            </span>
+          </HoverValue>
+        </div>
+      ) : excess != null && (
         <div className="hero-excess-row">
           <HoverValue
             label="How the money tied up is worked out"
@@ -642,7 +677,7 @@ export const StockCoverCard = ({
               + `stock − ${policyWeeks} weeks × average weekly sales (worked back as stock ÷ weeks).`}
             sums={[`${fp(cover.stockValue)} × (${cover.weeks.toFixed(2)} − ${policyWeeks}) ÷ ${cover.weeks.toFixed(2)} ≈ ${fp(excess)}`]}
             notes={[
-              'An estimate: stock is at buying price and sales at selling price, so the cover behind it is approximate.',
+              'An estimate: stock is at last purchase price and sales at selling price, so the cover behind it is approximate.',
               cover.provisional || confirm.length > 0 ? `Provisional: ${confirm.join(' ')}` : null,
             ]}
           >
@@ -661,14 +696,19 @@ export const StockCoverCard = ({
 // ── Below safety stock ────────────────────────────────────────────────────
 // `below` of the `checked` Class A products, of `total` in the plan; null
 // `below` (or nothing checked) is the blocked card, with `reason`. Why the
-// rest can't be checked is not sent yet (no safety stock / no stock count /
-// both), so those three counts are "—", in the "Can't check" pop-up. `abcTo`
-// links the Class A total to the ABC page (null without access).
-const UNCHECKED_REASONS = ['No safety stock in the plan', 'No stock count', 'Missing both'];
+// rest can't be checked, by reason (`uncheckable`: safety_stock_exposure's
+// no_safety_stock / no_stock_count / missing_both, 2026-10-19), is in the
+// "Can't check" pop-up; "—" when the backend sends no counts. `abcTo` links
+// the Class A total to the ABC page (null without access).
+const UNCHECKED_REASONS = [
+  ['no_safety_stock', 'No safety stock in the plan'],
+  ['no_stock_count', 'No stock count'],
+  ['missing_both', 'Missing both'],
+];
 
 export const BelowSafetyCard = ({
   below = null, checked = 0, total = null, severity = null, asOf = null, reason = null, tooltip = null,
-  onOpen = null, abcTo = null,
+  onOpen = null, abcTo = null, uncheckable = null,
 }) => {
   const share = below == null ? null : shareOf(below, checked);
   if (share == null) {
@@ -745,10 +785,12 @@ export const BelowSafetyCard = ({
                   subtle
                   what="All Class A products in the plan − checked."
                   sums={[`${n(total)} − ${n(checked)} = ${n(parts.unchecked)}`]}
-                  notes={[
-                    ...UNCHECKED_REASONS.map((r) => `${r}: — (not available yet)`),
-                    'The dashboard does not send the counts by reason yet.',
-                  ]}
+                  notes={uncheckable
+                    ? UNCHECKED_REASONS.map(([key, text]) => `${text}: ${n(uncheckable[key] ?? 0)}`)
+                    : [
+                      ...UNCHECKED_REASONS.map(([, text]) => `${text}: — (not available yet)`),
+                      'The dashboard does not send the counts by reason yet.',
+                    ]}
                 >
                   Can&apos;t check {n(parts.unchecked)}
                 </HoverValue>
@@ -778,6 +820,11 @@ const URGENCY_ROWS = {
 export const PendingReordersCard = ({
   count = null, reason = null, asOf = null, parts = null, orderQty = null, tooltip = null, to = '/reorder',
   criticalTo = null, valueReason = 'Waiting for SSM cost data',
+  // Why the plan holds these products of all the top sellers (2026-10-19):
+  // { total, evaluated, passed, failed, gate } from GET /dashboard's forecast
+  // block. `criticalNote` says why Critical can exceed the Below safety
+  // stock card's count. Either null leaves its line out.
+  scope = null, criticalNote = null,
 }) => {
   if (count == null) {
     return (
@@ -851,8 +898,25 @@ export const PendingReordersCard = ({
               );
             })}
           </ul>
+          {criticalNote && <p className="hero-note">{criticalNote}</p>}
         </div>
       ) : count === 0 ? <p className="hero-note">Nothing is awaiting a decision.</p> : null}
+
+      {scope && (
+        <p className="hero-note">
+          <HoverValue
+            label="Why only these products are planned"
+            subtle
+            what={`Of the ${n(scope.total)} top sellers, ${n(scope.evaluated)} had enough history to test. ${n(scope.passed)} passed `
+              + `the reliability check and are planned; ${n(scope.failed)} did not (their forecast was no better than last `
+              + `month's number${scope.gate != null ? `: MASE ${scope.gate} or more` : ''}); ${n(scope.total - scope.evaluated)} `
+              + `had too little history. The ${n(scope.total - scope.passed)} not planned stay on SSM's own rule.`}
+          >
+            Plans {n(scope.passed)} of {n(scope.total)} top sellers
+          </HoverValue>
+          {' · '}{n(scope.failed)} failed the reliability check, {n(scope.total - scope.evaluated)} too new to test
+        </p>
+      )}
     </KpiCard>
   );
 };

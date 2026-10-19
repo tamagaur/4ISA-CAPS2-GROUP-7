@@ -42,6 +42,7 @@ import { CHART_COLORS } from '../theme/colors';
 import { formatCompactPesos } from '../utils/formatters';
 import { GRID_PROPS } from './ChartZoom';
 import InfoTip from './InfoTip';
+import { BAR_FADE_FLOOR, Callout, CalloutLine, CalloutNote, Callouts, Fade } from './ui/ChartParts';
 import './AnnualViewChart.css';
 import { FIRST_DATA_YEAR } from '../dataCoverage';
 
@@ -117,6 +118,7 @@ const niceStep = (top) => {
 };
 
 const hatchId = (role) => `annual-view-hatch-${role}`;
+const fadeId = (role) => `annual-view-fade-${role}`;
 
 // "All 12 months are synthetic" / "3 of 12 months are synthetic".
 const syntheticText = (row) => {
@@ -126,41 +128,41 @@ const syntheticText = (row) => {
   return `${row.synthetic} of ${row.months} months ${row.synthetic === 1 ? 'is' : 'are'} synthetic`;
 };
 
+// The hover, in the dashboard's shared boxes (ui/ChartParts): one box in
+// the bar's own colour — the year and its months on record, the pesos,
+// what they are — with the "to go" and base-year lines under it; a year
+// with nothing on record, or synthetic months, as a plain note.
 const AnnualTooltip = ({ active, payload, band }) => {
   const row = active && payload?.[0]?.payload;
   if (!row) return null;
+  const period = `FY ${row.year}${row.span ? ` · ${row.span}` : ''}`;
+  if (row.value == null) {
+    return (
+      <Callouts>
+        <CalloutNote>
+          {period}: {row.year < FIRST_DATA_YEAR
+            ? `no data recorded before ${FIRST_DATA_YEAR} — SSM\u2019s records start in January ${FIRST_DATA_YEAR}.`
+            : 'no sales on record.'}
+        </CalloutNote>
+      </Callouts>
+    );
+  }
   return (
-    <div className="chart-tooltip">
-      <p className="tooltip-label">
-        FY {row.year}{row.span ? ` · ${row.span}` : ''}
-      </p>
-      {row.value == null ? (
-        <p className="tooltip-item">
-          {row.year < FIRST_DATA_YEAR
-            ? `No data recorded before ${FIRST_DATA_YEAR}: SSM\u2019s records start in January ${FIRST_DATA_YEAR}`
-            : 'No sales on record'}
-        </p>
-      ) : (
-        <>
-          <p className="tooltip-item">
-            {row.toGo != null
-              ? `${formatCompactPesos(row.value)} sold · ${formatCompactPesos(row.toGo)} to go to the ${formatCompactPesos(band.line)} target`
-              : `${formatCompactPesos(row.value)} total sales`}
-          </p>
-          <p className="tooltip-item annual-tooltip-note">
-            {row.months} of 12 months on record{row.partial ? ', not a full year' : ''}
-          </p>
-        </>
-      )}
-      {row.synthetic > 0 && (
-        <p className="tooltip-item annual-tooltip-synthetic">
-          {syntheticText(row)}, not SSM&apos;s own figures
-        </p>
-      )}
-      {row.role === 'base' && band && (
-        <p className="tooltip-item annual-tooltip-note">Base year of the {fy(band.year)} allocation target</p>
-      )}
-    </div>
+    <Callouts>
+      <Callout
+        color={BAR_COLOR[row.role]}
+        period={period}
+        value={formatCompactPesos(row.value)}
+        name={row.toGo != null ? 'Sales so far' : 'Total sales'}
+      >
+        <CalloutLine>{row.months} of 12 months on record{row.partial ? ', not a full year' : ''}</CalloutLine>
+        {row.toGo != null && band && (
+          <CalloutLine><strong>{formatCompactPesos(row.toGo)}</strong> to go to the {formatCompactPesos(band.line)} target</CalloutLine>
+        )}
+        {row.role === 'base' && band && <CalloutLine>Base year of the {fy(band.year)} allocation target</CalloutLine>}
+      </Callout>
+      {row.synthetic > 0 && <CalloutNote>{syntheticText(row)}, not SSM&apos;s own figures.</CalloutNote>}
+    </Callouts>
   );
 };
 
@@ -379,6 +381,11 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
             <ResponsiveContainer width="99%" height="100%">
               <BarChart data={rows} margin={{ top: 22, right: 12, left: 4, bottom: 4 }} barCategoryGap="28%">
                 <defs>
+                  {/* Every bar fades down to the floor the dashboard's other
+                      bars fade to; a synthetic year keeps its hatch. */}
+                  {Object.entries(BAR_COLOR).map(([role, color]) => (
+                    <Fade key={`fade-${role}`} id={fadeId(role)} color={color} to={BAR_FADE_FLOOR} />
+                  ))}
                   {Object.entries(BAR_COLOR).map(([role, color]) => (
                     <pattern key={role} id={hatchId(role)} width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                       <rect width="7" height="7" fill={color} />
@@ -422,7 +429,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                   {rows.map((r) => (
                     <Cell
                       key={r.key}
-                      fill={r.synthetic > 0 ? `url(#${hatchId(r.role)})` : BAR_COLOR[r.role]}
+                      fill={r.synthetic > 0 ? `url(#${hatchId(r.role)})` : `url(#${fadeId(r.role)})`}
                       stroke={r.synthetic > 0 ? BAR_COLOR[r.role] : 'none'}
                     />
                   ))}

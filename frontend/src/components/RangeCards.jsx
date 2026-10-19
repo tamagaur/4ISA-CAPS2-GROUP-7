@@ -8,13 +8,16 @@ import React, { useState } from 'react';
 import SectionLede from './ui/SectionLede';
 import { ArrowRight, X } from 'lucide-react';
 import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import Modal from './Modal';
 import ProductName from './ProductName';
 import InfoTip from './InfoTip';
 import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import { ChartTable, ChartViewToggle } from './ChartTable';
+import { GRID_PROPS } from './ChartZoom';
+import { pesoTicks } from '../utils/pesoTicks';
+import { BAR_FADE_FLOOR, Fade, endDot } from './ui/ChartParts';
 import { CHART_COLORS, COLORS } from '../theme/colors';
 import { formatCompactPesos } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
@@ -253,31 +256,88 @@ export const UNCHECKABLE_COLUMNS = [
 const wholePct = (share) => `${Math.round(share * 100)}%`;
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
 
+// The chart's colours: actual sales in the card's teal, the forecast in the
+// app's forecast violet; the miss between them in the same two (violet
+// where the forecast was too high, teal where too low), as the two miss
+// cards under the chart are.
+const FC_ACTUAL = CHART_COLORS.salesSeries;
+const FC_FORECAST = COLORS.forecast;
+const FC_AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
+
+// The hover (2026-10-19), the Sales vs Inventory Value chart's own boxes:
+// one per series — the month, the exact pesos, the series' name — and the
+// miss under them, in pesos and as a share of what sold.
 const ForecastVsActualTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   const up = row.variance >= 0;
+  const share = row.actual > 0 ? Math.abs((row.variance / row.actual) * 100).toFixed(1) : null;
   return (
-    <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatMonth(row.period)}</p>
-      <p className="chart-tooltip-row">
-        <span className="chart-tooltip-swatch" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />
-        Actual sales: <strong>{exactPesos(row.actual)}</strong>
-      </p>
-      <p className="chart-tooltip-row">
-        <span className="chart-tooltip-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
-        Forecast: <strong>{exactPesos(row.forecast)}</strong>
-      </p>
-      <p className="chart-tooltip-row">
-        Forecast {up ? 'above' : 'below'} sales by <strong>{formatCompactPesos(Math.abs(row.variance))}</strong>
-        {row.actual > 0 ? ` (${up ? '+' : '−'}${Math.abs((row.variance / row.actual) * 100).toFixed(1)}%)` : ''}
+    <div className="chart-tooltip chart-callouts">
+      <div className="chart-callout" style={{ '--chart-callout': FC_ACTUAL }}>
+        <span className="chart-callout-period">{formatMonth(row.period)}</span>
+        <strong className="chart-callout-value">{exactPesos(row.actual)}</strong>
+        <span className="chart-callout-name">Actual sales</span>
+      </div>
+      <div className="chart-callout" style={{ '--chart-callout': FC_FORECAST }}>
+        <span className="chart-callout-period">{formatMonth(row.period)}</span>
+        <strong className="chart-callout-value">{exactPesos(row.forecast)}</strong>
+        <span className="chart-callout-name">Forecast</span>
+      </div>
+      <p className="chart-tooltip-placeholder chart-tooltip-note">
+        Forecast too {up ? 'high' : 'low'} by <strong>{formatCompactPesos(Math.abs(row.variance))}</strong>
+        {share ? ` (${up ? '+' : '−'}${share}% of sales)` : ''} — risk of too {up ? 'much' : 'little'} stock.
       </p>
     </div>
   );
 };
 
+// The "Monthly miss" view's hover: the month's miss, signed, which way it
+// leans and its share of that month's sales, with the two figures behind it.
+const MonthlyMissTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  const up = row.variance >= 0;
+  const share = row.actual > 0 ? Math.abs((row.variance / row.actual) * 100).toFixed(1) : null;
+  return (
+    <div className="chart-tooltip chart-callouts">
+      <div className="chart-callout" style={{ '--chart-callout': up ? FC_FORECAST : FC_ACTUAL }}>
+        <span className="chart-callout-period">{formatMonth(row.period)}</span>
+        <strong className="chart-callout-value">{signedPesos(row.variance)}</strong>
+        <span className="chart-callout-name">Forecast too {up ? 'high' : 'low'}{share ? ` · ${share}% of sales` : ''}</span>
+        <span className="chart-callout-line">Forecast {exactPesos(row.forecast)} · sold {exactPesos(row.actual)}</span>
+      </div>
+      <p className="chart-tooltip-placeholder chart-tooltip-note">Risk of too {up ? 'much' : 'little'} stock that month.</p>
+    </div>
+  );
+};
+
+// The miss axis: the same step either side of zero, about two gridlines
+// each way, so a month too high and a month too low read on one scale.
+const missTicks = (values) => {
+  const top = Math.max(...values.map((v) => Math.abs(v ?? 0)), 1);
+  const magnitude = 10 ** Math.floor(Math.log10(top / 2));
+  const step = ([1, 2, 2.5, 5, 10].find((f) => f * magnitude >= top / 2) || 10) * magnitude;
+  const steps = Math.ceil(top / step);
+  return Array.from({ length: 2 * steps + 1 }, (_, i) => (i - steps) * step);
+};
+const missTick = (v) => (v < 0 ? `−${formatCompactPesos(v)}` : formatCompactPesos(v));
+
+// The chart's views: the two lines with the miss shaded between them, the
+// miss alone as one bar per month, and the rows (2026-10-19).
+const FC_VIEWS = [['lines', 'Lines'], ['bars', 'Monthly miss'], ['table', 'Table']];
+
+// A miss total as a share of the range's sales, its sum one hover away.
+const HoverShare = ({ value, sold, label }) => (
+  <InfoTip label={`How "${label}" compares with sales`} trigger={<>{wholePct(value / sold)} of sales</>} triggerClassName="fc-miss-share-trigger">
+    {formatCompactPesos(value)} ÷ {formatCompactPesos(sold)} sold over the range = {wholePct(value / sold)}. Both at the same
+    selling-price basis.
+  </InfoTip>
+);
+
+
 export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCategories }) => {
-  const [view, setView] = useState('chart');
+  const [view, setView] = useState('lines');
   if (!accuracy) return null;
   if (accuracy.blocked_reason || !accuracy.products) {
     return (
@@ -292,15 +352,33 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
   const months = [...(accuracy.by_month || [])]
     .filter((m) => m.actual_pesos != null && m.net_miss_pesos != null)
     .sort((a, b) => (a.period < b.period ? -1 : 1))
-    .map((m) => ({
-      period: m.period,
-      actual: m.actual_pesos,
-      forecast: m.actual_pesos + m.net_miss_pesos,
-      variance: m.net_miss_pesos,
-    }));
+    .map((m) => {
+      const actual = m.actual_pesos;
+      const forecast = m.actual_pesos + m.net_miss_pesos;
+      return {
+        period: m.period,
+        actual,
+        forecast,
+        variance: m.net_miss_pesos,
+        // The miss as a band between the two lines (a range area each way):
+        // from sales up to the forecast where it was too high, from the
+        // forecast up to sales where it was too low; flat (no band) otherwise.
+        tooHigh: [actual, Math.max(forecast, actual)],
+        tooLow: [Math.min(forecast, actual), actual],
+      };
+    });
+  // The ₱ axis starts just under the lowest value (utils/pesoTicks, the
+  // Sales vs Inventory Value chart's rule): from ₱0 both lines sat in the
+  // top third of the plot and a ₱10M swing read as a wobble.
+  const ticks = pesoTicks(months.flatMap((m) => [m.actual, m.forecast]));
+  const varianceTicks = months.length ? missTicks(months.map((m) => m.variance)) : null;
+  const lastIndex = months.length - 1;
   const over = accuracy.surplus_pesos ?? 0;
   const under = accuracy.shortage_pesos ?? 0;
   const missMax = Math.max(over, under, 1);
+  // Each total as a share of what sold over the range (actual_pesos, the
+  // same basis), so "₱60.4M" has a size: 20% of sales.
+  const soldTotal = accuracy.actual_pesos > 0 ? accuracy.actual_pesos : null;
   const tableColumns = [
     { key: 'period', label: 'Month', align: 'left', format: (v) => formatMonth(v) },
     { key: 'actual', label: 'Actual sales (₱)', format: exactPesos },
@@ -358,11 +436,23 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
               <p className="fc-chart-sub">Monthly comparison · pesos at {String(accuracy.pesos_basis || '').split(' (')[0]}</p>
             </div>
             <div className="fc-chart-tools">
-              <ul className="fc-legend" aria-label="Legend">
-                <li><span className="fc-legend-line" style={{ backgroundColor: CHART_COLORS.salesSeries }} aria-hidden="true" />Actual sales</li>
-                <li><span className="fc-legend-line is-forecast" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />Forecast</li>
-              </ul>
-              <ChartViewToggle view={view} onChange={setView} label="Forecast vs actual: chart or table" />
+              {/* Every view's key laid in one cell, the current one shown
+                  (the others keep their space, unseen): the header keeps the
+                  tallest key's height, so switching views never moves the
+                  card or the one beside it (2026-10-19). */}
+              <div className="fc-legend-stack">
+                <ul className={`fc-legend${view === 'lines' ? '' : ' is-reserved'}`} aria-label="Legend">
+                  <li><span className="fc-legend-line" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Actual sales</li>
+                  <li><span className="fc-legend-line is-forecast" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast</li>
+                  <li><span className="fc-legend-band" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast too high</li>
+                  <li><span className="fc-legend-band" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Forecast too low</li>
+                </ul>
+                <ul className={`fc-legend${view === 'bars' ? '' : ' is-reserved'}`} aria-label="Legend">
+                  <li><span className="fc-legend-bar" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast too high</li>
+                  <li><span className="fc-legend-bar" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Forecast too low</li>
+                </ul>
+              </div>
+              <ChartViewToggle view={view} onChange={setView} options={FC_VIEWS} label="Forecast vs actual: lines, monthly miss or table" />
             </div>
           </div>
           {view === 'table' ? (
@@ -371,15 +461,24 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
             <div className="fc-chart fc-chart-table">
               <ChartTable columns={tableColumns} rows={months} caption="Forecast and actual sales by month, in pesos" />
             </div>
-          ) : (
+          ) : view === 'bars' ? (
+            // The miss alone: one bar per month, forecast − actual, above
+            // zero where the forecast was too high (violet), below where it
+            // was too low (teal) — the same rows as the lines, folded.
             <div
               className="fc-chart"
               role="img"
-              aria-label={`Line chart of monthly actual sales and forecast in pesos, ${accuracy.label}. Use the Table view for the exact figures.`}
+              aria-label={`Bar chart of the monthly miss, forecast minus actual sales in pesos, ${accuracy.label}: `
+                + 'above zero the forecast was too high, below zero too low. Use the Table view for the exact figures.'}
             >
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={months} margin={{ top: 8, right: 24, left: 0, bottom: 0 }}>
-                  <CartesianGrid vertical={false} stroke={CHART_COLORS.gridline} />
+                <ComposedChart data={months} margin={{ top: 12, right: 16, left: 0, bottom: 4 }} barCategoryGap="28%">
+                  <defs>
+                    {/* Solid at the bar's tip, fading to the zero line, either side of it. */}
+                    <Fade id="fc-miss-high" color={FC_FORECAST} to={BAR_FADE_FLOOR} />
+                    <Fade id="fc-miss-low" color={FC_ACTUAL} to={BAR_FADE_FLOOR} flip />
+                  </defs>
+                  <CartesianGrid {...GRID_PROPS} />
                   <XAxis
                     dataKey="period"
                     tickFormatter={monthName}
@@ -387,27 +486,81 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
                     tickLine={false}
                     tick={<MonthTick fontSize={11} fill={CHART_COLORS.axisLabel} />}
                     minTickGap={12}
-                    height={30 + MONTH_TICK_EXTRA_HEIGHT}
+                    height={30 + MONTH_TICK_EXTRA_HEIGHT + 14}
+                    label={{ value: 'Month', position: 'insideBottom', offset: 0, ...FC_AXIS_TITLE }}
+                  />
+                  <YAxis
+                    tickFormatter={missTick}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
+                    width={64}
+                    domain={varianceTicks ? [varianceTicks[0], varianceTicks[varianceTicks.length - 1]] : ['auto', 'auto']}
+                    ticks={varianceTicks ?? undefined}
+                    label={{ value: 'Forecast − actual (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...FC_AXIS_TITLE }}
+                  />
+                  <Tooltip content={<MonthlyMissTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} />
+                  <ReferenceLine y={0} stroke="#98A2B3" />
+                  <Bar dataKey="variance" name="Forecast − actual" radius={3} maxBarSize={28} isAnimationActive={false}>
+                    {months.map((m) => <Cell key={m.period} fill={m.variance >= 0 ? 'url(#fc-miss-high)' : 'url(#fc-miss-low)'} />)}
+                  </Bar>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div
+              className="fc-chart"
+              role="img"
+              aria-label={`Line chart of monthly actual sales and forecast in pesos, ${accuracy.label}. Use the Table view for the exact figures.`}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={months} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
+                  {/* Horizontal gridlines only, as every chart on the page. */}
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis
+                    dataKey="period"
+                    tickFormatter={monthName}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={<MonthTick fontSize={11} fill={CHART_COLORS.axisLabel} />}
+                    minTickGap={12}
+                    height={30 + MONTH_TICK_EXTRA_HEIGHT + 14}
+                    label={{ value: 'Month', position: 'insideBottom', offset: 0, ...FC_AXIS_TITLE }}
                   />
                   <YAxis
                     tickFormatter={(v) => formatCompactPesos(v)}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fontSize: 11, fill: CHART_COLORS.axisLabel }}
-                    width={56}
-                    domain={[0, 'auto']}
+                    width={64}
+                    domain={ticks ? [ticks[0], ticks[ticks.length - 1]] : [0, 'auto']}
+                    ticks={ticks ?? undefined}
+                    label={{ value: 'Pesos (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...FC_AXIS_TITLE }}
                   />
                   <Tooltip content={<ForecastVsActualTooltip />} cursor={{ stroke: CHART_COLORS.gridline }} />
-                  <Line
-                    type="monotone" dataKey="actual" name="Actual sales" stroke={CHART_COLORS.salesSeries} strokeWidth={2.5}
-                    dot={{ r: 2.5, fill: CHART_COLORS.salesSeries, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false}
+                  {/* The miss, shaded between the lines: violet where the
+                      forecast was too high, teal where too low. Recharts
+                      draws an Area under every Line (its layer order). Neither
+                      adds to the hover (tooltipType none): the note does. */}
+                  <Area
+                    type="monotone" dataKey="tooHigh" name="Forecast too high" fill={FC_FORECAST} fillOpacity={0.2}
+                    stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
+                  />
+                  <Area
+                    type="monotone" dataKey="tooLow" name="Forecast too low" fill={FC_ACTUAL} fillOpacity={0.2}
+                    stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
                   />
                   <Line
-                    type="monotone" dataKey="forecast" name="Forecast" stroke={COLORS.forecast} strokeWidth={2.5}
-                    strokeDasharray="6 4" dot={{ r: 2.5, fill: COLORS.forecast, strokeWidth: 0 }} activeDot={{ r: 5 }}
-                    isAnimationActive={false}
+                    type="monotone" dataKey="actual" name="Actual sales" stroke={FC_ACTUAL} strokeWidth={3}
+                    strokeLinecap="round" dot={endDot(FC_ACTUAL, lastIndex)}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }} isAnimationActive={false}
                   />
-                </LineChart>
+                  <Line
+                    type="monotone" dataKey="forecast" name="Forecast" stroke={FC_FORECAST} strokeWidth={2.5}
+                    strokeLinecap="round" strokeDasharray="6 4" dot={endDot(FC_FORECAST, lastIndex)}
+                    activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }} isAnimationActive={false}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           )}
@@ -434,6 +587,11 @@ export const ForecastErrorSummaryCard = ({ accuracy, scope, onOpenList, onOpenCa
             <div className="fc-miss-card" key={b.key}>
               <span className="fc-miss-name">{b.label}</span>
               <span className="fc-miss-value">{formatCompactPesos(b.value)}</span>
+              {soldTotal && (
+                <span className="fc-miss-share">
+                  <HoverShare value={b.value} sold={soldTotal} label={b.label} />
+                </span>
+              )}
               <span className="fc-miss-note">{b.note}</span>
               {/* The two bars share one scale (the larger total), so their
                   lengths compare across the cards. */}
