@@ -138,3 +138,5 @@ reports/diagnostics/fit_diagnosis_*/classified.csv
 
 # Per-SKU forecast table (client data, hard rule 9) - now written to local/
 reports/baseline_forecast_per_sku.csv
+# Retired order rows saved by run_lp --retire-stale-pending: per-product order quantities (hard rule 9)
+reports/lp_runs/*.csv
