@@ -9,7 +9,7 @@ that module's docstring for why SARIMA was retired for this data.
 
 This run is REPORT-ONLY unless --write is passed (off by default):
   - always: prints the review tables below, writes
-    reports/baseline_forecast_per_sku.csv and reports/BASELINE_FORECAST_RUN.md
+    local/baseline_forecast_per_sku.csv (git-ignored) and reports/BASELINE_FORECAST_RUN.md
   - --write only: additionally upserts Forecast_Result. status='ok' SKUs are
     served by analytics.forecasting.router (short -> MA3, medium -> TSB,
     long -> average of the global XGBoost and MA3; MA3 recorded for every SKU
@@ -69,13 +69,21 @@ logger = logging.getLogger(__name__)
 METHODS = ("naive", "ma3", "sba")
 PRINCIPAL = "unilever"
 
-# The 38 real calendar months this data is expected to cover. Used for the
-# ETL-gap check - a month with zero demand rows across EVERY SKU is an ETL
-# gap, not zero demand. Re-confirmed live each run against the DB.
-EXPECTED_MONTHS = pd.period_range("2023-01", "2026-02", freq="M").astype(str).tolist()
+# First real month (no real data before 2023-01, either principal). The ETL-gap
+# check covers every month from here to the latest real demand month - a month
+# with zero demand rows across EVERY SKU is an ETL gap, not zero demand. The
+# end used to be hard-coded (2026-02) and had to be edited every new month.
+FIRST_REAL_MONTH = "2023-01"
+
+
+def expected_months(latest_demand_month: str) -> list[str]:
+    return pd.period_range(FIRST_REAL_MONTH, latest_demand_month, freq="M").astype(str).tolist()
+
 
 REPORTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "reports"))
-PER_SKU_CSV = os.path.join(REPORTS_DIR, "baseline_forecast_per_sku.csv")
+# Per-SKU table (sku codes with error in pieces): client data, so it lives in the
+# git-ignored local/ folder (hard rule 9), not reports/.
+PER_SKU_CSV = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "local", "baseline_forecast_per_sku.csv"))
 RUN_MD = os.path.join(REPORTS_DIR, "BASELINE_FORECAST_RUN.md")
 
 # Full-catalog class x method win counts (fixed evidence, printed so the
@@ -388,12 +396,13 @@ def main():
     print("ETL-GAP CHECK - demand rows present per expected calendar month (any SKU)")
     print("=" * 78)
     etl_gaps = []
-    for mth in EXPECTED_MONTHS:
+    expected = expected_months(latest_demand_month)
+    for mth in expected:
         ok = mth in months_present
         if not ok:
             etl_gaps.append(mth)
         print(f"  {mth}  {'PASS' if ok else 'FAIL  <-- ZERO ROWS ACROSS EVERY SKU - ETL GAP, NOT DEMAND'}")
-    extra = sorted(months_present - set(EXPECTED_MONTHS))
+    extra = sorted(months_present - set(expected))
     if extra:
         print(f"  NOTE: demand rows also exist outside the expected window: {extra}")
     if etl_gaps:
@@ -824,7 +833,7 @@ def _pre_acceptance(df, cur, abc_period):
 
 def _write_csv(df):
     out = df.drop(columns=[c for c in ("_per_method", "_series_mean") if c in df.columns])
-    os.makedirs(REPORTS_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(PER_SKU_CSV), exist_ok=True)
     out.to_csv(PER_SKU_CSV, index=False)
     print(f"\nWrote {PER_SKU_CSV}  ({len(out)} rows, every real Tier A SKU)")
 
