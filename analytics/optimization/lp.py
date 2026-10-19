@@ -152,6 +152,7 @@ def net_need(monthly_demand: float, target: float, stock_on_hand: float) -> floa
 
 
 FILL_LAYERS = ("demand", "safety_stock", "rest_of_target")
+HOLD_SLACK_REL = 1e-6   # solve_lp's retry only: CBC's own feasibility tolerance; 1e-6 of ~208,000 pieces = 0.2 piece
 
 
 def fill_layers(sku: SKUInput) -> tuple[float, float, float]:
@@ -281,9 +282,21 @@ def solve_lp(model: pulp.LpProblem) -> dict[str, float] | None:
     """
     stages = getattr(model, "stages", None) or [("objective", model.objective)]
     model.stage_values = {}  # type: ignore[attr-defined]
+    held: list[tuple[str, pulp.LpAffineExpression, float]] = []
     for n, (name, expression) in enumerate(stages):
         model.setObjective(expression)
         model.solve(pulp.PULP_CBC_CMD(msg=False))
+        if pulp.LpStatus[model.status] != "Optimal" and held:
+            # Q = 0 is always feasible, so an Infeasible stage after Optimal
+            # ones is the holds below being tighter than CBC's own round-off
+            # (2026-03 cycle, 2026-10-19: three Optimal fill stages, then the
+            # cover stage Infeasible, no plan written). Retry once with every
+            # hold loosened to HOLD_SLACK_REL; a run that solves first time is
+            # untouched.
+            for held_name, held_expr, held_value in held:
+                model.constraints[f"hold_{held_name}"] = (
+                    held_expr <= held_value + HOLD_SLACK_REL * max(1.0, abs(held_value)) + 1e-7)
+            model.solve(pulp.PULP_CBC_CMD(msg=False))
         if pulp.LpStatus[model.status] != "Optimal":
             return None
         value = float(pulp.value(expression) or 0.0)
@@ -293,6 +306,7 @@ def solve_lp(model: pulp.LpProblem) -> dict[str, float] | None:
             # round-off: the later stages lean on it (stage 3's costs pull the
             # order down), so a looser one shows up as orders just under need.
             model += (expression <= value + 1e-9 * max(1.0, abs(value)) + 1e-7, f"hold_{name}")
+            held.append((name, expression, value))
 
     sku_orders: dict[str, pulp.LpAffineExpression] = getattr(model, "sku_orders", {})
     return {sku_id: float(pulp.value(expr) or 0.0) for sku_id, expr in sku_orders.items()}
