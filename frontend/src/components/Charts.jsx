@@ -320,8 +320,6 @@ export const AllocationVarianceWidget = ({ rows = [], classACount }) => {
   );
 };
 
-// A period's year and month: '2026-02' -> 2026, 2.
-
 // No shade under the lines (2026-10-19): the axis floor sits above ₱0
 // (utils/pesoTicks' yoyFloor), and a shade down to a raised floor suggested a size the
 // figures don't have. The lines alone carry the shape.
@@ -2136,6 +2134,14 @@ export const PortfolioForecastWidget = ({
   // Why the forecast point is not drawn (a range ending before the latest
   // month: the one forecast is for the month after the latest sales).
   forecastNote = null,
+  // The summed SKUs' share of the latest month's pieces across every
+  // product ({ pct, period, all, theirs }, Dashboard.jsx), so this chart's
+  // "actual" is never mistaken for the summary card's: 965,554 pieces here
+  // against 1,766,710 there for the same month (2026-10-19).
+  piecesShare = null,
+  // The same month-to-month move a year earlier ({ from, to, pct }), for
+  // the "why up 26%?" the insight invites: a seasonal step, or not.
+  analog = null,
 }) => {
   const hasData = series.length > 0;
   const tierACount = reliability?.total_count ?? null;
@@ -2273,6 +2279,13 @@ export const PortfolioForecastWidget = ({
                   + `The other ${(tierACount - gatedSkuCount).toLocaleString()} are left out rather than summed on forecasts that failed `
                   + 'the check, and the plan gives them no order recommendation: their forecast did not pass, or the product '
                   + 'has too little history or no recent sales.'}
+                {piecesShare && (
+                  <span className="chart-tip-line">
+                    {`In ${piecesShare.period} these SKUs sold ${Math.round(piecesShare.theirs).toLocaleString()} of the `
+                      + `${Math.round(piecesShare.all).toLocaleString()} pieces sold across every product (${piecesShare.pct.toFixed(0)}%), `
+                      + 'so this chart is a part of the Summary card\'s pieces, not all of them.'}
+                  </span>
+                )}
               </InfoTip>
             ) : null}
           </h4>
@@ -2282,6 +2295,7 @@ export const PortfolioForecastWidget = ({
             {gatedSkuCount != null && tierACount
               ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs that beat a simple last-month guess`
               : ' · planned Class A SKUs'}
+            {piecesShare && ` · ${piecesShare.pct.toFixed(0)}% of all pieces sold in ${piecesShare.period}`}
           </p>
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
           {hasData && forecastNote && <p className="chart-insight">{forecastNote}</p>}
@@ -2469,7 +2483,15 @@ export const PortfolioForecastWidget = ({
       {insight?.text && (
         <p className="chart-insight portfolio-insight-strip">
           <Info size={15} aria-hidden="true" />
-          <span>{insight.text}</span>
+          <span>
+            {insight.text}
+            {/* The same step a year earlier, from the two series on the
+                page, so a rise reads as seasonal (or not) rather than
+                unexplained. */}
+            {analog && (
+              <> A year earlier, {formatMonth(analog.to)} was {analog.pct >= 0 ? '+' : '−'}{Math.abs(analog.pct).toFixed(1)}% on {formatMonth(analog.from)}.</>
+            )}
+          </span>
         </p>
       )}
     </div>
@@ -2529,30 +2551,25 @@ const LP_PRIORITY_ROWS = [
   },
 ];
 
-// Small "?" affordance — hover (or keyboard focus) reveals the blurb.
-// Pure CSS visibility off :hover/:focus-within, so there's no popover
-// dependency and nothing to position in JS.
-const PriorityInfo = ({ text }) => <InfoTip label="About this priority" size={12}>{text}</InfoTip>;
-
 // Compact dashboard-card version of the ReorderRecommendations page.
-// rows: [{ sku, product, urgency, orderQty }] — rendered below the
-// priority sliders as a scrollable list, in GET /dashboard's order.
-// weights: { cost, service_level, storage } fractions (0-1), from GET
-// /dashboard's reorder_preview.lp_weights — seeds the sliders' starting
-// position; LP_DEFAULT_PCT is the fallback when the API sends nothing.
+// rows: [{ sku, product, urgency, orderQty, stock, safetyStock, notInCount }]
+// — the list, in GET /dashboard's order. weights: { cost, service_level,
+// storage } fractions (0-1), from GET /dashboard's reorder_preview
+// .lp_weights, said in one line (they only matter when supply is short).
+// The urgency counts and the pieces to order are the Pending reorders
+// summary card's (2026-10-19); this card no longer repeats them.
 
 export const ReorderRecommendationWidget = ({
   rows = [],
-  criticalCount = 0,
-  urgentCount = 0,
-  totalOrderQty = 0,
   weights,
   emptyReason,
   // 'Mar 2026' — the LP plan these rows belong to (GET /dashboard's
-  // lp.cycle_date) — and 'counted 6 Apr 2026', the stock count the
-  // urgencies were judged against. Either may be null; the text then falls
-  // back to "current plan" / leaves the count out.
+  // lp.cycle_date) — 'run 19 Oct 2026', when that plan was generated
+  // (lp.lp_generated_at), and 'counted 6 Apr 2026', the stock count the
+  // urgencies were judged against. Any may be null; the text then falls
+  // back to "current plan" / leaves the part out.
   cycleLabel = null,
+  runLabel = null,
   countLabel = null,
   // The plan's cost and capacity inputs are still placeholders (GET
   // /dashboard's policy_comparison.inputs_are_placeholders); the Reorder
@@ -2597,7 +2614,8 @@ export const ReorderRecommendationWidget = ({
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
           <p>
-            Order quantities in pieces from the optimizer (LP) · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+            Order quantities in pieces from the order plan · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+            {runLabel ? ` · ${runLabel}` : ''}
             {countLabel ? ` · ${countLabel}` : ''}
           </p>
         </div>
@@ -2607,54 +2625,40 @@ export const ReorderRecommendationWidget = ({
         <p className="dashboard-empty-note">{emptyReason || 'No pending recommendations'}</p>
       ) : (
         <>
-          <div className="reorder-mini-summary">
-            {/* Only the two counts that carry real urgency get colored —
-                Critical in this dashboard's one reserved alert red, Urgent
-                in the same amber used for "watch this" elsewhere (e.g.
-                STOCK_STATUS_COLORS.deadStock). Total order qty stays
-                neutral: it's a quantity, not a severity, so coloring it
-                would imply a good/bad judgment that doesn't exist. */}
-            <div className="reorder-mini-chip">
-              <span className="reorder-mini-value" style={{ color: SEMANTIC.act }}>{criticalCount}</span>
-              <span className="reorder-mini-label">Critical products</span>
-            </div>
-            <div className="reorder-mini-chip">
-              <span className="reorder-mini-value" style={{ color: SEMANTIC.watch }}>{urgentCount}</span>
-              <span className="reorder-mini-label">Urgent products</span>
-            </div>
-            <div className="reorder-mini-chip">
-              <span className="reorder-mini-value">{totalOrderQty.toLocaleString()}</span>
-              <span className="reorder-mini-label">Pieces to order</span>
-            </div>
-          </div>
-
-          {/* The solver's weights, compact: a subheading, one line and three
-              thin bars — kept on the card, under the figures, above the list.
-              Read-only: GET /dashboard's reorder_preview.lp_weights docstring
-              is explicit that this is "read-only display... not an adjustable
-              control" (backend/routers/dashboard.py). */}
-          <div className="reorder-priorities reorder-priorities-compact">
-            <div className="reorder-priorities-header">
-              <span className="reorder-priorities-title">How the order was worked out</span>
-              <span className="reorder-priorities-caption">
-                Each product is ordered up to its target stock. These priorities only matter when the supplier
-                can&apos;t fill every order: they decide which products get less.
-                {inputsArePlaceholders && ' Cost and capacity figures are placeholders until SSM confirms them.'}
-              </span>
-            </div>
-            {LP_PRIORITY_ROWS.map((p) => (
-              <div className="reorder-priority-row" key={p.key}>
-                <div className="reorder-priority-row-top">
-                  <span className="reorder-priority-label">{p.label}</span>
-                  <PriorityInfo text={p.blurb} />
-                  <span className="reorder-priority-pct">{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</span>
-                </div>
-                <div className="reorder-priority-bar" role="img" aria-label={`${p.label}: ${solverPct[p.key] == null ? 'not available' : `${solverPct[p.key]}%`}`}>
-                  <span style={{ width: `${solverPct[p.key] ?? 0}%`, backgroundColor: CHART_COLORS.lpWeight }} />
-                </div>
-              </div>
+          {/* How the order was worked out, in one line (2026-10-19; it was a
+              heading and three weight bars that, by their own blurbs, only
+              decide anything when the supplier allocation runs short, and
+              storage decides nothing today). The weights and what each does
+              are behind the "?". Read-only: GET /dashboard's reorder_preview
+              .lp_weights docstring is explicit that this is "read-only
+              display... not an adjustable control". */}
+          <p className="reorder-priorities-line">
+            Each product is ordered up to its target stock. When the supplier can&apos;t fill every order, the
+            priorities decide which products get less:{' '}
+            {LP_PRIORITY_ROWS.map((p, i) => (
+              <React.Fragment key={p.key}>
+                {i > 0 && ' · '}
+                {p.label.toLowerCase()} <strong>{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</strong>
+              </React.Fragment>
             ))}
-          </div>
+            .
+            <InfoTip label="How the order was worked out">
+              <span className="chart-tip-line">
+                Each product is ordered up to its target stock, in layers: this month&apos;s demand, then safety stock,
+                then the rest of the target (SSM&apos;s 3-week rule). The priorities only matter when the supplier
+                allocation can&apos;t cover every order; then they decide which products come up short.
+              </span>
+              {LP_PRIORITY_ROWS.map((p) => (
+                <span key={p.key} className="chart-tip-line">
+                  <strong>{p.label} ({solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}).</strong> {p.blurb}
+                </span>
+              ))}
+              {inputsArePlaceholders && (
+                <span className="chart-tip-line">Cost and capacity figures are placeholders until SSM confirms them.</span>
+              )}
+            </InfoTip>
+            {inputsArePlaceholders && ' Cost and capacity figures are placeholders until SSM confirms them.'}
+          </p>
 
           <div className="reorder-mini-list">
             {/* Own class name, not "reorder-table": that one is the full
@@ -2665,6 +2669,7 @@ export const ReorderRecommendationWidget = ({
                 <tr>
                   <th>Product</th>
                   <th>Urgency</th>
+                  <th>Stock (pieces)</th>
                   <th>Order (pieces)</th>
                 </tr>
               </thead>
@@ -2686,15 +2691,28 @@ export const ReorderRecommendationWidget = ({
                       />
                     </td>
                     <td>
+                      {/* Why this urgency, on hover: the stock against the
+                          safety stock it is judged by (2026-10-19). */}
                       <span
                         className="urgency-badge-mini"
                         style={{
                           backgroundColor: URGENCY_STYLES[r.urgency]?.bg,
                           color: URGENCY_STYLES[r.urgency]?.color,
                         }}
+                        title={r.safetyStock != null
+                          ? `${r.urgency === 'CRITICAL' ? 'Below' : r.urgency === 'URGENT' ? 'Above' : 'Well above'} its safety stock of ${formatUnits(r.safetyStock)} pieces`
+                            + `${r.notInCount ? '; not in the stock count, so read as 0 on hand' : ''}`
+                          : undefined}
                       >
                         {r.urgency}
                       </span>
+                    </td>
+                    {/* The stock the urgency was judged on; a product missing
+                        from the opening count is read as 0 and says so. */}
+                    <td className="reorder-mini-qty">
+                      {r.notInCount
+                        ? <span className="reorder-mini-nocount" title="Not in the cycle's opening stock count; the plan reads it as 0 on hand">not in count</span>
+                        : r.stock != null ? formatUnits(r.stock) : '—'}
                     </td>
                     <td className="reorder-mini-qty">
                       {formatUnits(r.orderQty)}

@@ -168,7 +168,13 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
       lead={`Products on hand in the stock ${counted || 'count'} that sold nothing in ${window}.`}
     >
       <div className="range-stat-row">
-        <Stat label="Products" value={idle.products.toLocaleString()} sub={`${idle.never_sold.toLocaleString()} never sold`} />
+        {/* The finding first (2026-10-19): most of these products have never
+            sold at all, which is the question for SSM (why were they bought?). */}
+        <Stat
+          label="Never sold"
+          value={`${idle.never_sold.toLocaleString()} of ${idle.products.toLocaleString()}`}
+          sub={`products with no sale in the window; the other ${(idle.products - idle.never_sold).toLocaleString()} stopped selling`}
+        />
         <Stat
           label="Stock value"
           value={formatCompactPesos(idle.pesos)}

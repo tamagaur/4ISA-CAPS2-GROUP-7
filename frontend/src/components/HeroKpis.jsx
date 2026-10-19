@@ -346,6 +346,25 @@ export const AnnualSalesCard = ({
                       <strong>{fp(pace.perMonthNeeded)} per month</strong>
                     </HoverValue>
                     {' '}for the rest of the year to reach the allocation.
+                    {/* A yardstick for that figure (2026-10-19): last year's
+                        average month, from the allocation's own base year. */}
+                    {a.basis_sales > 0 && a.basis_months === 12 && (() => {
+                      const avg = a.basis_sales / 12;
+                      const diff = ((pace.perMonthNeeded - avg) / avg) * 100;
+                      return (
+                        <>
+                          {' '}That is{' '}
+                          <HoverValue
+                            label="Against last year's average month"
+                            what={`Last year's sales ÷ 12 months, against the amount needed per month.`}
+                            sums={[`${fp(a.basis_sales)} ÷ 12 = ${fp(avg)} per month; ${fp(pace.perMonthNeeded)} is ${Math.abs(diff).toFixed(0)}% ${diff >= 0 ? 'above' : 'below'} it`]}
+                          >
+                            <strong>{Math.abs(diff).toFixed(0)}% {diff >= 0 ? 'above' : 'below'}</strong>
+                          </HoverValue>
+                          {' '}last year&apos;s average month ({fp(avg)}).
+                        </>
+                      );
+                    })()}
                   </p>
                 )}
               </div>

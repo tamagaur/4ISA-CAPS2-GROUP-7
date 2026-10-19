@@ -51,6 +51,7 @@ import { FIRST_DATA_YEAR } from '../dataCoverage';
 const BAR_COLOR = { history: '#8FA3C4', base: CHART_COLORS.heroInventory, ytd: '#F28C28' };
 const BAND_COLOR = '#F28C28';
 const BAND_INK = '#C2410C';
+const AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthNumber = (period) => Number(String(period).slice(5, 7));
@@ -69,7 +70,7 @@ const monthsOnRecord = (y) => {
 const buildRows = (annual, allocation) => {
   const years = annual?.years || [];
   const latest = [...years].reverse().find((y) => y.sales != null)?.year;
-  return years.map((y) => {
+  const rows = years.map((y) => {
     const partial = y.months > 0 && y.months < 12;
     const role = allocation?.basis_year === y.year
       ? 'base'
@@ -84,6 +85,16 @@ const buildRows = (annual, allocation) => {
       synthetic: y.synthetic_months?.length || 0,
       role,
     };
+  });
+  // Year over year (2026-10-19): a full year against the full year before
+  // it, under its label; never for a partial year, and never across a gap.
+  return rows.map((r, i) => {
+    const prev = rows[i - 1];
+    const full = (x) => x && x.value != null && x.months === 12;
+    const yoy = full(r) && full(prev) && prev.year === r.year - 1 && prev.value > 0
+      ? ((r.value - prev.value) / prev.value) * 100
+      : null;
+    return { ...r, yoy, yoyAgainst: yoy != null ? prev.key : null };
   });
 };
 
@@ -156,6 +167,9 @@ const AnnualTooltip = ({ active, payload, band }) => {
         name={row.toGo != null ? 'Sales so far' : 'Total sales'}
       >
         <CalloutLine>{row.months} of 12 months on record{row.partial ? ', not a full year' : ''}</CalloutLine>
+        {row.yoy != null && (
+          <CalloutLine><strong>{row.yoy >= 0 ? '+' : '−'}{Math.abs(row.yoy).toFixed(1)}%</strong> on {row.yoyAgainst}</CalloutLine>
+        )}
         {row.toGo != null && band && (
           <CalloutLine><strong>{formatCompactPesos(row.toGo)}</strong> to go to the {formatCompactPesos(band.line)} target</CalloutLine>
         )}
@@ -166,7 +180,10 @@ const AnnualTooltip = ({ active, payload, band }) => {
   );
 };
 
-// The year, and under it the months on record when the year is not full.
+// The year, and under it the months on record when the year is not full,
+// or its change on the year before when it is (green up, red down).
+const YOY_UP = '#2A8551';
+const YOY_DOWN = '#D54848';
 const YearTick = ({ x, y, payload, rows }) => {
   const row = rows.find((r) => r.key === payload.value);
   return (
@@ -177,6 +194,11 @@ const YearTick = ({ x, y, payload, rows }) => {
       )}
       {row && row.value == null && (
         <text dy={25} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={11}>no data</text>
+      )}
+      {row?.yoy != null && (
+        <text dy={25} textAnchor="middle" fill={row.yoy >= 0 ? YOY_UP : YOY_DOWN} fontSize={11} fontWeight={600}>
+          {row.yoy >= 0 ? '+' : '−'}{Math.abs(row.yoy).toFixed(1)}%
+        </text>
       )}
     </g>
   );
@@ -394,13 +416,16 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                   ))}
                 </defs>
                 <CartesianGrid {...GRID_PROPS} vertical={false} />
+                {/* Both axes say what they count (Sir Catubag, 2 Oct 2026),
+                    as every other chart on the page does. */}
                 <XAxis
                   dataKey="key"
                   tickLine={false}
                   axisLine={{ stroke: CHART_COLORS.gridline }}
                   interval={0}
-                  height={34}
+                  height={48}
                   tick={<YearTick rows={rows} />}
+                  label={{ value: 'Year', position: 'insideBottom', offset: 0, ...AXIS_TITLE }}
                 />
                 <YAxis
                   domain={[0, ceiling]}
@@ -408,8 +433,9 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                   tickFormatter={(v) => formatCompactPesos(v)}
                   tickLine={false}
                   axisLine={false}
-                  width={58}
+                  width={64}
                   tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
+                  label={{ value: 'Pesos (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...AXIS_TITLE }}
                 />
                 <Tooltip content={<AnnualTooltip band={band} />} cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} />
                 {band && (

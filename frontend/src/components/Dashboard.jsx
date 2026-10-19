@@ -951,7 +951,38 @@ const Dashboard = () => {
     product: r.product_name,
     urgency: r.urgency,
     orderQty: r.q_i,
+    // Why that urgency: the stock it was judged on (0 when the product is
+    // missing from the opening count) against its safety stock.
+    stock: r.current_stock ?? null,
+    safetyStock: r.ss_i ?? null,
+    notInCount: Boolean(r.stock_not_in_count),
   }));
+  // The planned SKUs' share of the latest month's pieces: this card's own
+  // last actual against the Summary card's pieces for the same month.
+  const latestPortfolioActual = [...portfolioSeries].reverse().find((pt) => pt.actual != null) || null;
+  const salesSnap = kpis.sales_snapshot || null;
+  const piecesShare = latestPortfolioActual && salesSnap?.pieces > 0 && salesSnap.period === latestPortfolioActual.period
+    ? {
+      pct: (latestPortfolioActual.actual / salesSnap.pieces) * 100,
+      period: periodLabel(salesSnap.period),
+      all: salesSnap.pieces,
+      theirs: latestPortfolioActual.actual,
+    }
+    : null;
+  // The forecast month's step a year earlier (Mar 2025 on Feb 2025 for a
+  // Mar 2026 forecast), from this range's series and the comparison
+  // range's (the earlier year's February is in the latter): both actuals,
+  // or nothing.
+  const yearBefore = (p) => `${Number(p.slice(0, 4)) - 1}${p.slice(4)}`;
+  const forecastAnalog = (() => {
+    const to = portfolioForecast.insight?.forecast_period;
+    if (!to || !latestPortfolioActual) return null;
+    const pool = [...(prior?.data?.portfolio_forecast?.series || []), ...portfolioSeries];
+    const f = pool.find((pt) => pt.period === yearBefore(to) && pt.actual != null);
+    const b = pool.find((pt) => pt.period === yearBefore(latestPortfolioActual.period) && pt.actual != null);
+    if (!f || !b || !(b.actual > 0)) return null;
+    return { from: b.period, to: f.period, pct: ((f.actual - b.actual) / b.actual) * 100 };
+  })();
 
   // Hero-strip figures. Each reads the same backend field the widget
   // below it is drawn from, so a card and its chart can never disagree; a
@@ -1206,7 +1237,11 @@ const Dashboard = () => {
   const inventoryCover = hasStock && cover.value != null
     ? { weeks: Number(cover.value), provisional: coverProvisional, stockValue: cover.stock_value ?? null }
     : null;
-  const planLabel = lpCycleLabel ? `${lpCycleLabel} plan` : null;
+  // When the plan was generated (lp.lp_generated_at), so a figure that moved
+  // since yesterday can be traced to a re-run (the LP ran on 19 Oct 2026
+  // while the cards were being checked).
+  const planRun = lp.lp_generated_at ? dayLabel(String(lp.lp_generated_at).slice(0, 10)) : null;
+  const planLabel = lpCycleLabel ? `${lpCycleLabel} plan${planRun ? ` · run ${planRun}` : ''}` : null;
   // Below safety stock: the count, the SKUs it was checked on, and the two
   // dates that meet in it (the plan's safety stock, the stock count).
   const belowBlocked = belowSs.value === '—';
@@ -1592,6 +1627,8 @@ const Dashboard = () => {
                 reliability={forecastReliability}
                 insight={forecastBeyondRange ? null : portfolioForecast.insight}
                 forecastNote={forecastNote}
+                piecesShare={piecesShare}
+                analog={forecastBeyondRange ? null : forecastAnalog}
               />
               {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} />}
             </Slot>
@@ -1616,12 +1653,9 @@ const Dashboard = () => {
                 <Slot kind="Prescriptive" question={<>What should we <span className="title-accent">order now</span>?</>} hint={STORY.order} realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan}>
                   <ReorderRecommendationWidget
                     rows={reorderRows}
-                    cycle={lpCycleLabel}
-                    criticalCount={reorderPreview.critical_count ?? 0}
-                    urgentCount={reorderPreview.urgent_count ?? 0}
-                    totalOrderQty={reorderPreview.total_order_qty ?? 0}
                     weights={reorderPreview.lp_weights}
                     cycleLabel={lpCycleLabel}
+                    runLabel={planRun ? `run ${planRun}` : null}
                     countLabel={countLabel}
                     inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
                   />

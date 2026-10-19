@@ -2510,6 +2510,27 @@
   max-height: 500px;
 }
 
+/* Suggested orders (2026-10-19): how the order was worked out, in one line
+   with the weights in it, and a product missing from the stock count. */
+.reorder-priorities-line {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.reorder-priorities-line strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-mini-nocount {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 /* Sales vs Inventory Value's legend keys (the timeline, 2026-10-19): a bar,
    a hatched bar, an outlined bar or a dot, drawn as the plot draws them. */
 .svs-swatch {
