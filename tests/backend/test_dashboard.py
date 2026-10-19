@@ -428,12 +428,10 @@ class FakeSession:
         if "SELECT COUNT(*) FROM Forecast_Result fr" in sql:
             return FakeResult([self.scoped_forecast_count])
 
-        # backend/marts.principal_collected's "any real row in the range"
-        # check (Kelvin's B2 fix, 2026-10-16): these fixtures model a
-        # principal whose data was collected. Matched here so the suite runs
-        # again; the fixtures above predate it (2026-10-18).
         if "SELECT EXISTS" in sql and "mart.sales_mart" in sql and "AS present" in sql:
-            return FakeResult([{"present": True}])
+            # marts.pareto_blocked_reason (B3, 2026-10-16): any real sales row for the principal in
+            # the range, whatever its sign — the fixture's range_revenue is exactly those rows.
+            return FakeResult([{"present": bool(self.range_revenue.get(params["principal"]))}])
 
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -2097,10 +2095,11 @@ def test_sales_range_total_has_no_pieces_for_del_monte():
     assert cum["pieces"] is None
 
 
-def test_filled_and_generated_sales_are_retired_for_display_but_stock_fills_still_draw():
+def test_filled_and_generated_sales_and_stock_are_retired_for_display():
     """2026-10-15: the filled (synthetic_category_split, synthetic_v2_gap) and generated (synthetic_v2) SALES rows are
-    no longer served; schema demo is the single display source for generated data. A stock fill is a different
-    thing (DEC-31 receipts/stock rates) and is drawn as an estimate as before."""
+    no longer served; schema demo is the single display source for generated data. 2026-10-16 (rule 2, B1): stock
+    fills followed - every filled/generated inventory_mart row is the retired is_demo family, so
+    marts.estimated_stock_by_period returns {} and no stock estimate is drawn either."""
     periods = _periods()
     session = FakeSession(
         sales={periods[-1]: 500.0},
@@ -2113,7 +2112,7 @@ def test_filled_and_generated_sales_are_retired_for_display_but_stock_fills_stil
     gap, real = pts[periods[-2]], pts[periods[-1]]
     assert gap["sales"] is None and gap["sales_estimated"] is None and gap["sales_estimated_kind"] is None
     assert gap["provenance"]["sales_estimated"] is None
-    assert gap["stock_on_hand"] is None and gap["stock_on_hand_estimated"] == 1_000.0
+    assert gap["stock_on_hand"] is None and gap["stock_on_hand_estimated"] is None
     assert real["sales"] == 500.0 and real["sales_estimated"] is None
     assert body["kpis"]["sales_cumulative"]["value"] == 500.0, "an estimate never reaches a KPI"
     assert pts[periods[-3]]["sales_estimated"] is None, "generated rows are never drawn either"
@@ -2132,15 +2131,16 @@ def test_sales_estimates_under_all_are_retired_too():
     assert pts[periods[-2]]["sales_estimated"] is None
 
 
-def test_returns_are_served_and_unilevers_rate_fill_is_an_estimate():
-    """Coverage hole H4: Unilever's returns exist only as a rate fill; the
-    chart now carries them, labelled filled."""
+def test_unilevers_rate_filled_returns_are_never_drawn():
+    """Coverage hole H4 used to be closed by drawing Unilever's rate-filled returns as an estimate.
+    Retired 2026-10-16 (rule 2, B1): Unilever has no real returns at all, so that line was 100%
+    synthetic; marts.flow_by_period never estimates returns, real mode or preview."""
     current = _periods()[-1]
     session = FakeSession(returns={"unilever": {current: ("filled", 912_323.85, "synthetic_rate_transfer")}})
     pt = _get(session, "principal=unilever")["sales_vs_stock"][-1]
     assert pt["returns"] is None
-    assert pt["returns_estimated"] == pytest.approx(912_323.85)
-    assert pt["returns_estimated_kind"] == "filled"
+    assert pt["returns_estimated"] is None
+    assert pt["returns_estimated_kind"] is None
 
 
 def _accuracy_row(key, month, forecast, actual, run_length=1, price=10.0, limited=False, label="run"):

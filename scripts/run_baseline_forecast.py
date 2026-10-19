@@ -9,7 +9,7 @@ that module's docstring for why SARIMA was retired for this data.
 
 This run is REPORT-ONLY unless --write is passed (off by default):
   - always: prints the review tables below, writes
-    reports/baseline_forecast_per_sku.csv and reports/BASELINE_FORECAST_RUN.md
+    local/baseline_forecast_per_sku.csv (git-ignored) and reports/BASELINE_FORECAST_RUN.md
   - --write only: additionally upserts Forecast_Result. status='ok' SKUs are
     served by analytics.forecasting.router (short -> MA3, medium -> TSB,
     long -> average of the global XGBoost and MA3; MA3 recorded for every SKU
@@ -59,6 +59,7 @@ from analytics.forecasting.baseline import (
     sba_forecast,
 )
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
+from analytics.forecasting.calendar import company_totals
 from analytics.forecasting.global_model import GlobalForecaster, missing_months, with_missing, with_placeholder
 from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
 
@@ -68,13 +69,21 @@ logger = logging.getLogger(__name__)
 METHODS = ("naive", "ma3", "sba")
 PRINCIPAL = "unilever"
 
-# The 38 real calendar months this data is expected to cover. Used for the
-# ETL-gap check - a month with zero demand rows across EVERY SKU is an ETL
-# gap, not zero demand. Re-confirmed live each run against the DB.
-EXPECTED_MONTHS = pd.period_range("2023-01", "2026-02", freq="M").astype(str).tolist()
+# First real month (no real data before 2023-01, either principal). The ETL-gap
+# check covers every month from here to the latest real demand month - a month
+# with zero demand rows across EVERY SKU is an ETL gap, not zero demand. The
+# end used to be hard-coded (2026-02) and had to be edited every new month.
+FIRST_REAL_MONTH = "2023-01"
+
+
+def expected_months(latest_demand_month: str) -> list[str]:
+    return pd.period_range(FIRST_REAL_MONTH, latest_demand_month, freq="M").astype(str).tolist()
+
 
 REPORTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "reports"))
-PER_SKU_CSV = os.path.join(REPORTS_DIR, "baseline_forecast_per_sku.csv")
+# Per-SKU table (sku codes with error in pieces): client data, so it lives in the
+# git-ignored local/ folder (hard rule 9), not reports/.
+PER_SKU_CSV = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "local", "baseline_forecast_per_sku.csv"))
 RUN_MD = os.path.join(REPORTS_DIR, "BASELINE_FORECAST_RUN.md")
 
 # Full-catalog class x method win counts (fixed evidence, printed so the
@@ -334,6 +343,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "Forecast_Result, for whichever --principal matches (delmonte: category sales + "
                              "stock + MA3 forecast; unilever: a one-step MA3 forecast only, over real_copy "
                              "sales already in demo.*).")
+    parser.add_argument("--calendar-factor", action="store_true", default=False,
+                        help="Multiply each served forecast by the company calendar factor "
+                             "(analytics/forecasting/calendar.py). OFF by default: approved for build + dry run "
+                             "2026-10-19, not for the live forecast until Sir Catubag signs it off.")
     parser.add_argument("--write", action="store_true", default=False,
                         help="Additionally upsert Forecast_Result for status='ok' SKUs "
                              "(rule_method pick). OFF by default - this run is report-only. With --source demo: "
@@ -383,12 +396,13 @@ def main():
     print("ETL-GAP CHECK - demand rows present per expected calendar month (any SKU)")
     print("=" * 78)
     etl_gaps = []
-    for mth in EXPECTED_MONTHS:
+    expected = expected_months(latest_demand_month)
+    for mth in expected:
         ok = mth in months_present
         if not ok:
             etl_gaps.append(mth)
         print(f"  {mth}  {'PASS' if ok else 'FAIL  <-- ZERO ROWS ACROSS EVERY SKU - ETL GAP, NOT DEMAND'}")
-    extra = sorted(months_present - set(EXPECTED_MONTHS))
+    extra = sorted(months_present - set(expected))
     if extra:
         print(f"  NOTE: demand rows also exist outside the expected window: {extra}")
     if etl_gaps:
@@ -521,7 +535,7 @@ def main():
 
     # ---- optional DB write ----------------------------------------- #
     if args.write:
-        _write_forecast_result(cur, df)
+        _write_forecast_result(cur, df, calendar=args.calendar_factor)
         _keep_forecast_history(conn)
     else:
         print("\n(--write not passed: Forecast_Result untouched, this was report-only.)")
@@ -819,7 +833,7 @@ def _pre_acceptance(df, cur, abc_period):
 
 def _write_csv(df):
     out = df.drop(columns=[c for c in ("_per_method", "_series_mean") if c in df.columns])
-    os.makedirs(REPORTS_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(PER_SKU_CSV), exist_ok=True)
     out.to_csv(PER_SKU_CSV, index=False)
     print(f"\nWrote {PER_SKU_CSV}  ({len(out)} rows, every real Tier A SKU)")
 
@@ -955,7 +969,7 @@ def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float |
     )
 
 
-def served_forecasts(df, demand_by_key, planning_month) -> dict:
+def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) -> dict:
     """{product_key: {...}} for every status='ok' SKU: the routed one-step
     forecast for `planning_month`, plus the SERVED model's holdout error.
 
@@ -968,6 +982,9 @@ def served_forecasts(df, demand_by_key, planning_month) -> dict:
     naive/ma3/sba static metrics in the CSV and in
     model_params.holdout_metrics_all_methods are unchanged.
 
+    `calendar_totals` (--calendar-factor): the served value AND its holdout
+    are calendar-adjusted, so the stored error describes what is served.
+
     No DB access. Metrics come from analytics.forecasting.diagnostic_metrics.
     """
     wanted = {int(k) for k in df["product_key"]}
@@ -977,9 +994,10 @@ def served_forecasts(df, demand_by_key, planning_month) -> dict:
     for _, r in df[df["status"] == "ok"].iterrows():
         p_key = int(r["product_key"])
         series = series_by_key[p_key]
-        routed = route(series, planning_month, forecaster)
+        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals)
         train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
-        scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"])
+        scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"],
+                                  calendar_totals=calendar_totals)
         a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()     # missing months are not scored
         out[p_key] = {
             **routed,
@@ -1028,7 +1046,7 @@ def _keep_forecast_history(conn) -> None:
         vacuum_marts(os.environ["SUPABASE_DB_URL"])
 
 
-def _write_forecast_result(cur, df):
+def _write_forecast_result(cur, df, calendar: bool = False):
     """--write path (atomic): upsert Forecast_Result for every real Tier A SKU.
 
       status='ok'                -> forecast_value = the router's one-step-ahead
@@ -1075,7 +1093,11 @@ def _write_forecast_result(cur, df):
                    f"(served per bin: {LIVE_MODEL}; benchmark/fallback {BENCHMARK_METHOD.upper()}). One transaction.")
 
     assert_real_rows(demand)
-    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date))
+    calendar_totals = company_totals(demand) if calendar else None
+    if calendar:
+        logger.warning("--calendar-factor: served values and their holdout are calendar-adjusted "
+                       "(analytics/forecasting/calendar.py; pending Sir Catubag's sign-off).")
+    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals)
 
     target_keys = [int(k) for k in df["product_key"]]
     conn = cur.connection
@@ -1160,6 +1182,11 @@ def _write_forecast_result(cur, df):
                     "components": {k: (None if v is None else round(v, 3)) for k, v in sv["components"].items()},
                     "backup_fired": sv["backup_fired"],
                     "backup_reason": sv["backup_reason"],
+                    # --calendar-factor only; absent = value not calendar-adjusted
+                    **({"calendar_factor": round(sv["calendar_factor"], 4),
+                        "calendar_years": sv["calendar_years"],
+                        "value_before_calendar": round(sv["value_before_calendar"], 3)}
+                       if "calendar_factor" in sv else {}),
                     "training_rows": sv["training_rows"],
                     "wape": _f(sv["holdout_wape"]),
                     "holdout_protocol": "rolling one-step over the 20% holdout months, served model held fixed",

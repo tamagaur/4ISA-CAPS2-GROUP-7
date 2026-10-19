@@ -136,11 +136,17 @@ def test_pareto_counts_a_returns_heavy_month_as_zero():
 
 
 def test_pareto_ranks_del_monte_by_category_and_says_when_nothing_ranks():
-    session = FakeSession([("WITH rev AS", lambda p: [])])
+    """B3 (2026-10-16): rows present but none net-sold above zero -> 'took back'; no real row at
+    all -> not collected (Del Monte's taxonomy-break gap), a different cause."""
+    session = FakeSession([("WITH rev AS", lambda p: []), ("AS present", [{"present": True}])])
     body = get(session, "/dashboard/pareto?principal=delmonte&period=2025-12")
     dm = body["principals"][0]
     assert dm["grain"] == "category" and dm["ranked_count"] == 0
     assert "took back" in dm["blocked_reason"]
+
+    session = FakeSession([("WITH rev AS", lambda p: []), ("AS present", [{"present": False}])])
+    dm = get(session, "/dashboard/pareto?principal=delmonte&period=2025-12")["principals"][0]
+    assert dm["ranked_count"] == 0 and "were collected" in dm["blocked_reason"]
 
 
 def test_yoy_compares_the_same_months_a_year_earlier():

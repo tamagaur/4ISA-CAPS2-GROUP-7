@@ -951,9 +951,11 @@ def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, 
 # Forecast accuracy
 # ---------------------------------------------------------------------------
 
-# The backtest the error card shows by default: the at-the-time cohort, the figure the
-# team quotes (decision 2026-10-03; scripts/backtest_forecast_run.py).
-DEFAULT_BACKTEST_LABEL = "backtest 2023-10..2026-02, Tier A the month before each month"
+# The backtest the error card shows by default: the at-the-time cohort (decision 2026-10-03;
+# scripts/backtest_forecast_run.py), calendar-adjusted since 2026-10-19 (Kelvin) because the
+# live forecast is (run_baseline_forecast.py --calendar-factor). The published, unadjusted run
+# stays stored and selectable under its own label.
+DEFAULT_BACKTEST_LABEL = "backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted"
 
 
 def accuracy_runs(db: Session) -> list[dict]:

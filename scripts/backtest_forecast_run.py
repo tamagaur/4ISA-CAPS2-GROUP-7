@@ -94,6 +94,19 @@ RUNS = {
         "headline_file": HEADLINE_107_CURRENT,
         "abc_method": "single",  # pinned: this cohort IS the ABC-single 107, never re-based
     },
+    # at_the_time with the company calendar factor on (analytics/forecasting/calendar.py), the
+    # way the live forecast has been served since 2026-10-19 (run_baseline_forecast.py
+    # --calendar-factor). A new run, not a reproduction: there is no published reference to
+    # verify it against, so `reference` is None and verify() only records its headline. The
+    # factor for each test month reads only months before it.
+    "at_the_time_calendar": {
+        "label": "backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted",
+        "cohort": "Tier A (current basis) as of the month before each test month; XGBoost pool the same; "
+                  "served value x the company calendar factor",
+        "reference": None,
+        "abc_method": None,
+        "calendar": True,
+    },
 }
 
 
@@ -148,7 +161,14 @@ def read_inputs(db_url: str, abc_method: str):
     return series, money, read_tier_a(db_url, abc_method)
 
 
-def backtest(series: dict, products, months, forecaster) -> list[dict]:
+def company_totals_from_series(series: dict) -> pd.Series:
+    """The company total in pieces per month, from the same series the backtest scores: every
+    real Unilever product summed, a blank month skipped (the calendar factor's input,
+    analytics.forecasting.calendar.company_totals, without a second read)."""
+    return pd.concat(series.values(), axis=1).sum(axis=1, min_count=1).dropna().sort_index()
+
+
+def backtest(series: dict, products, months, forecaster, calendar_totals=None) -> list[dict]:
     """route() per product x month, as kelvin/model-audit common.backtest."""
     rows = []
     for k in products:
@@ -156,7 +176,7 @@ def backtest(series: dict, products, months, forecaster) -> list[dict]:
         for m in months:
             if m not in s.index or not m > s.index[0]:
                 continue
-            r = route(s, m, forecaster)
+            r = route(s, m, forecaster, calendar_totals=calendar_totals)
             if r["value"] is None:
                 continue
             rows.append({"product_key": k, "month": ym(m), "actual": float(s.loc[m]), "value": float(r["value"]),
@@ -165,14 +185,14 @@ def backtest(series: dict, products, months, forecaster) -> list[dict]:
     return rows
 
 
-def run_at_the_time(series, tier_by) -> pd.DataFrame:
+def run_at_the_time(series, tier_by, calendar_totals=None) -> pd.DataFrame:
     """Per test month T: the products Tier A at T-1, XGBoost trained on those products'
     rows before T (pool dict in ascending key order, the order the audit's feature table had)."""
     rows = []
     for t in WINDOW:
         keys = sorted(k for k in tier_by.get(ym(t - pd.offsets.MonthBegin(1)), set()) if k in series)
         fc = gm.GlobalForecaster({k: series[k] for k in keys})
-        rows += backtest(series, keys, [t], fc)
+        rows += backtest(series, keys, [t], fc, calendar_totals)
     return pd.DataFrame(rows)
 
 
@@ -224,6 +244,11 @@ def verify(name: str, spec: dict, bt: pd.DataFrame, money: pd.DataFrame, expect_
     ABC 'single'; a run on a different basis (at_the_time since 2026-10-11, t12m_new) is
     EXPECTED to differ, so the mismatch is only reported, never raised."""
     result = {"rows": len(bt), "products": int(bt.product_key.nunique())}
+    if spec["reference"] is None:
+        # A new run (at_the_time_calendar): nothing published to match, headline recorded only.
+        result.update(reference_rows="none (new run)", headline=headline(bt, money),
+                      headline_matches_committed="no published reference")
+        return result
     ref_path = spec["reference"]
     if os.path.exists(ref_path):
         ref = (pd.read_csv(ref_path, dtype={"month": str})[["product_key", "month", spec["ref_value"]]]
@@ -329,7 +354,9 @@ def main() -> int:
                   f"{len(tb[max(tb)])} products as of {max(tb)} ({time.time() - t0:.1f}s)")
         return tier_by_cache[method]
 
-    builders = {"at_the_time": run_at_the_time, "tier_a_2026_02": run_tier_a_2026_02}
+    totals = company_totals_from_series(series)
+    builders = {"at_the_time": run_at_the_time, "tier_a_2026_02": run_tier_a_2026_02,
+                "at_the_time_calendar": lambda s, tb: run_at_the_time(s, tb, calendar_totals=totals)}
     runs = {}
     for name, spec in RUNS.items():
         if args.only and name != args.only:
