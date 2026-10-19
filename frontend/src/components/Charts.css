@@ -2280,9 +2280,16 @@ button.abc-tier-card-link {
   outline-offset: 2px;
 }
 
+/* A legend entry switched off: muted grey, its swatch greyed too (no
+   strikethrough, 2026-10-19). */
 .legend-toggle.is-off {
+  color: #98A2B3;
+}
+
+.legend-toggle.is-off .legend-color,
+.legend-toggle.is-off svg {
+  filter: grayscale(1);
   opacity: 0.45;
-  text-decoration: line-through;
 }
 
 /* Sales vs Inventory Value keeps one height whatever it shows: the two
@@ -2324,4 +2331,61 @@ button.abc-tier-card-link {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
+}
+
+/* A chart's "?" text, one short paragraph per line (Sales vs Inventory
+   Value, Sales per year; 2026-10-19). */
+.chart-tip-line {
+  display: block;
+}
+
+.chart-tip-line + .chart-tip-line {
+  margin-top: 6px;
+}
+
+/* Sales vs Inventory Value's header (2026-10-19): the view and chart/table
+   buttons keep the top-right corner whatever the subtitle; a long one (the
+   Weeks of stock view's) wraps under the title instead of pushing the
+   buttons down. On a narrow card the two still stack. */
+.chart-widget-svs .chart-header {
+  flex-wrap: nowrap;
+}
+
+.chart-widget-svs .chart-title-area {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chart-widget-svs .chart-header-controls {
+  flex: 0 0 auto;
+}
+
+.chart-widget-svs.is-narrow .chart-header {
+  flex-wrap: wrap;
+}
+
+/* The table view is as tall as its rows, up to the chart's height (it
+   scrolls past that), so no empty band sits under the last row. */
+.yoy-body.is-table {
+  height: auto;
+  max-height: 500px;
+}
+
+/* Sales vs Inventory Value's legend keys (the timeline, 2026-10-19): a bar,
+   a hatched bar, an outlined bar or a dot, drawn as the plot draws them. */
+.svs-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+/* One plot, as tall as the two panels of the year overlay were together. */
+.chart-container-yoy.svs-plot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 300px;
 }

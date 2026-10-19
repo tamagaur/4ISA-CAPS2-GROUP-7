@@ -8,6 +8,11 @@
 // The popover is portalled to <body> and placed (position: fixed) from the
 // button's rectangle, so neither a table's scroll container nor an animated
 // card (a transform makes it the containing block) can clip or squeeze it.
+//
+// `trigger` (optional, 2026-10-18): what the button shows instead of the "?"
+// icon — a number or a chip that opens its own explanation (the Dashboard's
+// Summary cards). `triggerClassName` styles that button. Without `trigger`
+// nothing changes.
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HelpCircle } from 'lucide-react';
@@ -16,7 +21,7 @@ import './InfoTip.css';
 const GAP = 6;
 const MARGIN = 8;
 
-const InfoTip = ({ label, children, size = 13, className = '' }) => {
+const InfoTip = ({ label, children, size = 13, className = '', trigger = null, triggerClassName = '' }) => {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const id = useId();
@@ -69,14 +74,15 @@ const InfoTip = ({ label, children, size = 13, className = '' }) => {
       <button
         ref={btnRef}
         type="button"
-        className="info-tip-btn"
-        aria-label={label}
+        className={trigger ? `info-tip-trigger ${triggerClassName}` : 'info-tip-btn'}
+        // A trigger's own text names it (a number, a chip); the tip describes it.
+        aria-label={trigger ? undefined : label}
         aria-expanded={open}
         aria-describedby={id}
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         onBlur={() => setOpen(false)}
       >
-        <HelpCircle size={size} aria-hidden="true" />
+        {trigger ?? <HelpCircle size={size} aria-hidden="true" />}
       </button>
       {createPortal(
         <span

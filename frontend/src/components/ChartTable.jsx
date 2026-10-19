@@ -36,8 +36,9 @@ export function ChartViewToggle({ view, onChange, label = 'Chart or table view' 
 // lines instead of one long one (Audrey, 2026-10-16). `wrap` lets a
 // column of sentences fold onto several lines; every other cell stays on
 // one line, as wide as its figure. `note` makes a column of sentences (a
-// stock note) show the start of each on one line with "See more", which
-// opens the whole note in a small dialog (Audrey, 2026-10-16):
+// stock note) show its lead in full ("Needs checking"; the start of the
+// sentence when there is no lead) with "See more", which opens the whole
+// note in a small dialog (Audrey, 2026-10-16; lead only since 2026-10-19):
 //   note: { lead: 'Needs checking', title: (row) => 'Stock count, Feb 2026' }
 export function ChartTable({ columns, rows, caption }) {
   return (
@@ -81,8 +82,7 @@ function NoteCell({ text, lead, title }) {
   return (
     <span className="chart-note">
       <span className="chart-note-preview" title={text}>
-        {lead && <strong>{lead}: </strong>}
-        {text}
+        {lead ? <strong>{lead}</strong> : text}
       </span>
       <button type="button" className="chart-note-more" onClick={() => setOpen(true)}>
         See more

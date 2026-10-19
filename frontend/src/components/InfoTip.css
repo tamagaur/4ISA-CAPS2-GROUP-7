@@ -52,3 +52,23 @@
 .info-tip-pop[hidden] {
   display: none;
 }
+
+/* A text trigger (InfoTip's `trigger` prop): the text itself is the button,
+   with no button chrome; the caller's triggerClassName gives its cue. */
+.info-tip-trigger {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: help;
+}
+
+.info-tip-trigger:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+  border-radius: 3px;
+}

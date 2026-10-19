@@ -1,34 +1,22 @@
-/* The dashboard's top row (HeroKpis.jsx): one wide card on the left half,
-   four small cards in two rows on the right half; white cards with a light
-   border, large radius and a thin accent on top; the two operational cards
-   (the bottom pair) tinted so they read as things to act on. */
+/* The dashboard's top row (HeroKpis.jsx, 2026-10-18 redesign after Thea's
+   mock-up): the annual card across the full width in three columns, then
+   the four KPI cards in one row of equal columns and equal height; white
+   cards with a light border, large radius and a thin accent on top; the two
+   operational cards tinted so they read as things to act on. */
 
 .hero-kpis {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
   margin-bottom: 28px;
 }
 
-/* Half and half only where the small cards stay wide enough at a quarter of
-   the row to set their figures side by side; a laptop gives them more. */
-@media (min-width: 1780px) {
-  .hero-kpis {
-    grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* The wide card runs the height of both rows of small cards; where they
-   are taller than its own content, the room goes between its sections. */
 .hero-kpis > :first-child {
-  grid-row: span 2;
+  grid-column: 1 / -1;
 }
 
-.hero-card-wide {
-  justify-content: space-between;
-}
-
+/* ── Card frame ──────────────────────────────────────────────────────── */
 .hero-card {
   --hero-accent: #16A34A;
   --hero-dot: #16A34A;
@@ -36,7 +24,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 20px 22px 18px;
+  padding: 20px 22px 16px;
   border: 1px solid #E7EBF0;
   border-radius: 18px;
   background: #FFFFFF;
@@ -44,7 +32,6 @@
   overflow: hidden;
 }
 
-/* The thin accent along the top. */
 .hero-card::before {
   content: '';
   position: absolute;
@@ -55,29 +42,26 @@
 
 .hero-card.is-green { --hero-accent: #16A34A; --hero-dot: #16A34A; }
 .hero-card.is-blue { --hero-accent: #2563EB; --hero-dot: #2563EB; }
-.hero-card.is-teal { --hero-accent: #0891B2; --hero-dot: #0891B2; }
+.hero-card.is-teal { --hero-accent: #0E7C86; --hero-dot: #0E7C86; }
 .hero-card.is-orange { --hero-accent: #F59E0B; --hero-dot: #F59E0B; }
 .hero-card.is-purple { --hero-accent: #8B5CF6; --hero-dot: #8B5CF6; }
 
-/* Operational cards: a faint tint of their accent, so "act on this" stands
-   apart from the performance figures beside them. */
-.hero-card.is-action.is-orange { background: #FFFBF4; border-color: #F6E7CC; }
+/* Below safety stock: white like the others since 2026-10-18; the orange
+   top bar marks it. */
 .hero-card.is-action.is-purple { background: #FAF8FF; border-color: #E9E2FB; }
 
 .hero-card-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin-bottom: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-bottom: 8px;
 }
 
-/* The dot and the title stay together; the title wraps beside the dot. */
 .hero-card-name {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -95,9 +79,6 @@
 }
 
 .hero-card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   margin: 0;
   font-size: 12px;
   font-weight: 600;
@@ -106,31 +87,56 @@
   color: #475467;
 }
 
-.hero-card-basis {
-  margin-left: auto;
-  max-width: 100%;
+/* The period tag and the "?", on the right of the title. */
+.hero-card-side {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
 
-/* Text */
-.hero-label {
-  display: inline-flex;
+.hero-card-side .info-tip {
+  margin-left: 0;
+}
+
+.hero-card-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The date and source line at the bottom, under a rule. */
+.hero-card-foot {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin: 0 0 4px;
-  font-size: 13px;
+  justify-content: space-between;
+  gap: 6px 12px;
+  /* The body grows to fill the card, so this sits at the bottom. */
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.hero-card.is-action.is-purple .hero-card-foot { border-color: #E9E2FB; }
+
+.hero-foot-note {
+  font-size: 12px;
+  line-height: 1.4;
   color: #667085;
 }
 
-.hero-label.is-caps {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+/* ── Text ────────────────────────────────────────────────────────────── */
+.hero-label {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #475467;
 }
 
 .hero-value {
   margin: 0;
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
@@ -139,18 +145,50 @@
   overflow-wrap: anywhere;
 }
 
+.hero-value-xl {
+  font-size: 36px;
+}
+
+/* The allocation is an estimate: a dotted underline, its rule on hover. */
+.hero-dotted {
+  border-bottom: 2px dotted #98A2B3;
+  cursor: help;
+}
+
+.hero-value .is-danger { color: #B42318; }
+.hero-value .is-watch { color: #93370D; }
+
 .hero-unit {
   margin-left: 6px;
   font-size: 15px;
   font-weight: 500;
+  letter-spacing: 0;
+  color: #475467;
+}
+
+.hero-value-tagged {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.hero-kpi-sub {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: #344054;
+}
+
+.hero-kpi-asof {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: #667085;
 }
 
-.hero-value-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+.hero-kpi-asof strong {
+  color: #182230;
 }
 
 .hero-note {
@@ -160,12 +198,35 @@
   color: #667085;
 }
 
-/* Pills (soft pastel) */
+.hero-kpi-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid #D0D5DD;
+  border-radius: 5px;
+  background: #FFFFFF;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475467;
+}
+
+/* A figure that includes synthetic months (generated, not SSM's files). */
+.hero-synthetic {
+  font-size: 12px;
+  font-weight: 600;
+  color: #B54708;
+}
+
+
+/* ── Pills ───────────────────────────────────────────────────────────── */
 .hero-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 12px;
+}
+
+.hero-pills:empty {
+  display: none;
 }
 
 .hero-pill {
@@ -174,7 +235,7 @@
   gap: 5px;
   max-width: 100%;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1.35;
@@ -182,141 +243,158 @@
 
 .hero-pill.is-positive { background: #E8F7EE; color: #1E7A47; }
 .hero-pill.is-negative { background: #FDECEC; color: #B42318; }
-.hero-pill.is-warning { background: #FFF4DD; color: #B54708; }
+.hero-pill.is-warning { background: #FFF4DD; color: #93370D; }
 .hero-pill.is-neutral { background: #EEF1F5; color: #475467; }
 .hero-pill.is-info { background: #E8F0FE; color: #1D4ED8; }
 
-/* Card 1 */
-.hero-split {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px 24px;
-}
-
-.hero-split-col {
-  min-width: 0;
-}
-
-.hero-range-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid #EDF0F4;
-  font-size: 13px;
-  color: #475467;
-}
-
-.hero-range-row .hero-pill {
-  font-size: 12px;
-}
-
+/* ── Shared: bars, axes, legends ─────────────────────────────────────── */
 .hero-progress {
   margin-top: 14px;
 }
 
-.hero-progress-track {
+.hero-progress-track,
+.hero-meter-track,
+.hero-idle-track,
+.hero-checks-track {
   position: relative;
+  display: block;
   height: 10px;
   border-radius: 999px;
   background: #EEF1F5;
 }
 
-.hero-progress-fill {
+.hero-progress-fill,
+.hero-progress-short,
+.hero-meter-needed,
+.hero-meter-extra,
+.hero-idle-slow {
   position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
-  background: #7F9CC9;
+  top: 0;
+  bottom: 0;
 }
 
-.hero-progress-fill.is-short {
-  background: #94A9CF;
+.hero-progress-fill {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background: #4F5BD5;
 }
 
-/* Where sales would be by now at an even pace. */
-.hero-progress-pace {
+.hero-progress-short {
+  background: #D9665B;
+}
+
+/* "Should be by now" (and the stock-cover target): a tick across the bar. */
+.hero-progress-pace,
+.hero-meter-mark {
   position: absolute;
   top: -4px;
   bottom: -4px;
-  width: 2px;
+  width: 0;
   margin-left: -1px;
-  border-radius: 1px;
-  background: #182230;
+  border-left: 2px dashed #182230;
 }
 
-.hero-progress-labels {
+.hero-meter-mark {
+  border-left-style: solid;
+}
+
+.hero-progress-axis {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 4px 12px;
-  margin-top: 8px;
-  font-size: 12.5px;
-  color: #475467;
-}
-
-.hero-alloc {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid #EDF0F4;
-}
-
-.hero-alloc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 12px;
-}
-
-.hero-alloc-range {
-  font-size: 12.5px;
-  color: #475467;
-}
-
-.hero-alloc-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  margin-top: 4px;
-}
-
-.hero-alloc-value {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #182230;
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #667085;
   font-variant-numeric: tabular-nums;
 }
 
-.hero-alloc-basis {
-  font-size: 13px;
-  font-weight: 400;
-  color: #667085;
+.hero-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: #475467;
 }
+
+.hero-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hero-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #D0D5DD;
+}
+
+.hero-swatch.is-sold { background: #4F5BD5; }
+.hero-swatch.is-short { background: #D9665B; }
+.hero-swatch.is-pace { width: 0; height: 12px; border-left: 2px dashed #182230; border-radius: 0; background: none; }
+.hero-swatch.is-needed,
+.hero-swatch.is-ok { background: #5FB3A1; }
+.hero-swatch.is-extra { background: #D9A23B; }
+.hero-swatch.is-gap { background: #EEF1F5; border: 1px solid #D0D5DD; }
+.hero-swatch.is-low { background: #C8453A; }
+.hero-swatch.is-unchecked { background: #EEF1F5; border: 1px solid #D0D5DD; }
+
+/* ── Card 1: annual sales and allocation ─────────────────────────────── */
+/* Two columns (Allocation | Progress so far), the second past a thin rule:
+   about 30% / 70% (2026-10-18). */
+.hero-annual-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 30fr) minmax(0, 70fr);
+  flex: 1 1 auto;
+}
+
+.hero-annual-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 20px;
+}
+
+.hero-annual-col:first-child {
+  padding-left: 0;
+}
+
+.hero-annual-col:last-child {
+  padding-right: 0;
+}
+
+.hero-annual-col + .hero-annual-col {
+  border-left: 1px solid #EDF0F4;
+}
+
+/* "SSM target" and its buttons, under FY sales, pushed to the column's foot
+   (the grid stretches both columns to one height) so the Allocation and
+   Progress columns end level; never closer than 14px to the line above. */
+.hero-alloc-levels-box {
+  margin-top: auto;
+  padding-top: 14px;
+}
+
 
 .hero-alloc-levels {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .hero-level {
-  height: 30px;
-  padding: 0 12px;
+  min-width: 64px;
+  height: 40px;
+  padding: 0 14px;
   border: 1px solid #DDE2EA;
-  border-radius: 999px;
+  border-radius: 10px;
   background: #FFFFFF;
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #475467;
+  font-size: 14px;
+  font-weight: 500;
+  color: #344054;
   cursor: pointer;
 }
 
@@ -325,8 +403,8 @@
 }
 
 .hero-level.is-active {
-  border-color: #BFD4FB;
-  background: #E8F0FE;
+  border-color: #A8BDF5;
+  background: #E8EEFD;
   color: #1D4ED8;
 }
 
@@ -336,281 +414,277 @@
   outline-offset: 2px;
 }
 
-/* ── The four KPI cards (2026-10-11 redesign) ─────────────────────────────
-   One skeleton: head / body (primary figure, then what supports it) /
-   footer. Each card is its own size container, so a `split` card puts the
-   supporting figures beside the main one where the card itself is wide
-   enough, and under it where it is not, whatever the window's width. */
-.hero-kpi {
-  padding: 18px 20px 16px;
-  container-type: inline-size;
-}
-
-.hero-kpi-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.hero-kpi-head .info-tip {
-  flex: none;
-  margin-left: 0;
-}
-
-.hero-kpi-body {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.hero-kpi-primary {
-  min-width: 0;
-}
-
-/* On a figure such as "10 / 91" only the count takes the status colour. */
-.hero-value .is-danger { color: #B42318; }
-.hero-value .is-watch { color: #B54708; }
-
-.hero-kpi-sub {
-  margin: 6px 0 0;
-  font-size: 13.5px;
-  line-height: 1.4;
+.hero-figure-aside {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
   color: #475467;
 }
 
-/* The date the figure is for. */
-.hero-kpi-asof {
-  margin: 2px 0 0;
-  font-size: 12px;
-  line-height: 1.4;
+.hero-sentence {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #182230;
+}
+
+.hero-latest-compare {
   color: #667085;
 }
 
-.hero-kpi-detail {
-  min-width: 0;
-  margin-top: 12px;
-  border: 0 solid #EDF0F4;
+/* The latest month with sales: the Progress column's last line, under
+   "Need about ₱X per month". No divider above it. */
+.hero-latest-line {
+  margin-top: 10px;
 }
 
-.hero-kpi-detail > .hero-pills:first-child {
-  margin-top: 0;
+/* Progress so far, shorter (2026-10-18): the year's sales with "16% of the
+   allocation · should be ₱X by now" on its right, and the "Behind by" chip
+   with "Need about ₱X per month" on one line; both wrap on a narrow card. */
+.hero-figure-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
 }
 
-/* A split card's supporting figures: under a rule on a narrow card... */
-.hero-kpi.is-split .hero-kpi-detail {
-  padding-top: 12px;
-  border-top-width: 1px;
+.hero-figure-row .hero-figure-aside {
+  margin: 0;
 }
 
-.hero-card.is-action.is-orange .hero-kpi-detail { border-color: #F1E3C8; }
-.hero-card.is-action.is-purple .hero-kpi-detail { border-color: #E9E2FB; }
-
-/* ...and beside the main figure, past a vertical rule, on a wide one. */
-@container (min-width: 310px) {
-  .hero-kpi.is-split .hero-kpi-body {
-    flex-direction: row;
-    gap: 16px;
-  }
-  .hero-kpi.is-split .hero-kpi-primary {
-    flex: 1 1 0;
-  }
-  .hero-kpi.is-split .hero-kpi-detail {
-    flex: 1.2 1 0;
-    margin-top: 0;
-    padding: 2px 0 0 16px;
-    border-top-width: 0;
-    border-left-width: 1px;
-  }
-}
-
-/* A figure with a tag beside it ("6.2 weeks", Provisional). */
-.hero-value-tagged {
+.hero-action-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
-}
-
-.hero-value-tagged .hero-kpi-tag {
-  margin-left: 0;
-  letter-spacing: 0;
-}
-
-/* The stock-cover meter: 0 to the scale's end, a tick at the policy, the
-   fill solid up to the tick and lighter past it. */
-.hero-meter {
+  gap: 8px 12px;
   margin-top: 12px;
 }
 
+.hero-action-row .hero-pills {
+  margin-top: 0;
+}
+
+.hero-action-row .hero-sentence {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+}
+
+/* The wide card has no footer; a smaller bottom padding leaves no empty
+   band under its columns. */
+.hero-card.hero-card-wide {
+  padding-bottom: 12px;
+}
+
+.hero-latest-line > p:first-child {
+  margin: 0;
+  font-size: 13px;
+  color: #475467;
+}
+
+.hero-latest-line strong {
+  color: #182230;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Inventory value ─────────────────────────────────────────────────── */
+/* "Compared with": two plain columns, no box (2026-10-18). */
+.hero-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hero-compare-cell {
+  min-width: 0;
+}
+
+.hero-compare-label {
+  margin: 0;
+  font-size: 12px;
+  color: #667085;
+}
+
+.hero-compare-value {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 3px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #182230;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-compare-value.is-negative { color: #B42318; }
+.hero-compare-value.is-positive { color: #1E7A47; }
+.hero-compare-value.is-missing { color: #98A2B3; }
+
+/* The small "n/a" beside a "—". */
+.hero-compare-na {
+  margin-left: 4px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #98A2B3;
+}
+
+
+.hero-idle,
+.hero-checks {
+  margin-top: 14px;
+}
+
+.hero-idle-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #475467;
+}
+
+.hero-idle-head strong {
+  color: #182230;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* All the stock in a light tint; the slow part at the right end. */
+.hero-idle-track {
+  height: 8px;
+  overflow: hidden;
+  background: #A9B8EE;
+}
+
+.hero-idle-slow {
+  right: 0;
+  background: #C8453A;
+}
+
+/* ── Stock cover ─────────────────────────────────────────────────────── */
+.hero-meter {
+  margin-top: 14px;
+}
+
 .hero-meter-track {
-  position: relative;
-  height: 10px;
-  border-radius: 999px;
-  background: #EEF1F5;
+  overflow: visible;
 }
 
-.hero-meter-fill,
-.hero-meter-within {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
+.hero-meter-needed {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+  background: #5FB3A1;
 }
 
-.hero-meter-fill { background: #9BD3E3; }
-.hero-meter-within { background: var(--hero-accent); }
-.hero-meter-within.is-cut { border-radius: 999px 0 0 999px; }
-
-.hero-meter-mark {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  left: var(--hero-mark);
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: #182230;
+.hero-meter-extra {
+  border-radius: 0 999px 999px 0;
+  background: #D9A23B;
 }
 
 .hero-meter-axis {
   position: relative;
   display: flex;
   justify-content: space-between;
-  margin-top: 7px;
+  margin-top: 6px;
   font-size: 11.5px;
   line-height: 1.4;
   color: #667085;
   font-variant-numeric: tabular-nums;
 }
 
-/* Under the tick, kept clear of the "0" when the tick is near the start. */
 .hero-meter-policy {
   position: absolute;
   top: 0;
-  left: max(var(--hero-mark), 54px);
   transform: translateX(-50%);
   white-space: nowrap;
-  color: #475467;
-}
-
-.hero-kpi-figure {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: #182230;
-  font-variant-numeric: tabular-nums;
-}
-
-.hero-kpi-label {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: #475467;
-}
-
-.hero-kpi-tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #EEF1F5;
-  font-size: 11px;
   font-weight: 600;
-  color: #475467;
+  color: #182230;
 }
 
-/* One share of a whole, in the card's accent. */
-.hero-kpi-bar {
-  height: 8px;
-  margin-top: 10px;
+.hero-callout {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #F2F4F7;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #182230;
+}
+
+.hero-callout .is-danger {
+  color: #B42318;
+}
+
+
+/* ── Below safety stock ──────────────────────────────────────────────── */
+.hero-checks-track {
+  display: flex;
   overflow: hidden;
-  border-radius: 999px;
   background: #EEF1F5;
 }
 
-.hero-card.is-action.is-orange .hero-kpi-bar { background: #F3E8D3; }
-
-.hero-kpi-bar-fill {
-  display: block;
+.hero-checks-seg {
   height: 100%;
-  min-width: 4px;
-  border-radius: 999px;
-  background: var(--hero-accent);
 }
 
-/* A whole split into parts: each count over its name, in equal columns
-   (so nothing wraps mid-row on a narrow card), the segments below. */
-.hero-kpi-legend {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 8px;
-  margin: 0 0 10px;
+.hero-checks-seg.is-low { min-width: 4px; background: #C8453A; }
+.hero-checks-seg.is-ok { background: #5FB3A1; }
+
+
+
+
+
+
+
+/* ── Pending reorders ────────────────────────────────────────────────── */
+.hero-urgency {
+  margin: 14px 0 0;
   padding: 0;
   list-style: none;
+  border: 1px solid #E4E7EC;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #FFFFFF;
 }
 
-.hero-kpi-legend li {
+.hero-urgency li {
   display: flex;
-  flex-direction: column;
-  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #344054;
 }
 
-.hero-kpi-legend strong {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.25;
-  font-variant-numeric: tabular-nums;
+.hero-urgency li + li {
+  border-top: 1px solid #EDF0F4;
 }
 
-.hero-kpi-legend span {
-  font-size: 12px;
-  line-height: 1.4;
+.hero-urgency strong {
+  color: #182230;
+}
+
+.hero-urgency-act {
+  flex: none;
+  font-size: 12.5px;
   color: #475467;
 }
 
-.hero-kpi-legend .is-critical strong { color: #B42318; }
-.hero-kpi-legend .is-urgent strong { color: #B54708; }
-.hero-kpi-legend .is-planned strong { color: #6941C6; }
-.hero-kpi-legend .is-nodata strong { color: #475467; }
-
-.hero-share-track {
-  display: flex;
-  gap: 2px;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #EEF1F5;
+.hero-urgency .is-critical {
+  background: #FDECEC;
 }
 
-.hero-share-seg {
-  flex-basis: 0;
-  flex-shrink: 1;
-  min-width: 4px;
+.hero-urgency .is-critical strong,
+.hero-urgency .is-critical .hero-urgency-act {
+  font-weight: 600;
+  color: #B42318;
 }
 
-/* Segment colours: the page's alert red and amber for urgency, the card's
-   own purple for the rest, a neutral where the stock can't be read. */
-.hero-share-seg.is-critical { background: var(--badge-critical-fg, #B42318); }
-.hero-share-seg.is-urgent { background: #F59E0B; }
-.hero-share-seg.is-planned { background: #A78BFA; }
-.hero-share-seg.is-nodata { background: #D0D5DD; }
+.hero-urgency .is-urgent strong { color: #93370D; }
 
-.hero-kpi-foot {
-  display: flex;
-  align-items: flex-end;
-  padding-top: 12px;
-}
-
-.hero-kpi-foot-note {
-  font-size: 12px;
-  line-height: 1.4;
-  color: #667085;
-}
-
+/* ── Links and tips ──────────────────────────────────────────────────── */
 .hero-link {
   display: inline-flex;
   align-items: center;
@@ -619,7 +693,7 @@
   border: none;
   background: none;
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: #1D4ED8;
   text-decoration: none;
@@ -630,7 +704,6 @@
   text-decoration: underline;
 }
 
-/* A card's "?" text, one short paragraph per line. */
 .hero-tip-line {
   display: block;
 }
@@ -639,14 +712,181 @@
   margin-top: 6px;
 }
 
-/* Tablet: the wide card on its own row, the four others two by two under it. */
+/* ── Section headers, worked-out numbers, links ──────────────────────── */
+/* One small muted header over each part of every card. */
+.hero-section-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #98A2B3;
+}
+
+/* A part of a card after the first, under a thin rule. */
+.hero-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.hero-card.is-action.is-purple .hero-block { border-color: #E9E2FB; }
+
+/* A worked-out figure that opens its explanation (HoverValue): a dotted
+   underline and the help cursor; the pop-up opens on hover or tap. */
+.hero-hover {
+  text-decoration: underline dotted #98A2B3;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+.hero-hover:hover,
+.hero-hover[aria-expanded='true'] {
+  text-decoration-color: #475467;
+}
+
+/* A small inline count ("5 of the last 12", "OK 81"): no underline at rest,
+   the help cursor and a dotted underline on hover; the pop-up still opens. */
+.hero-hover.is-subtle {
+  text-decoration-color: transparent;
+}
+
+.hero-hover.is-subtle:hover,
+.hero-hover.is-subtle[aria-expanded='true'] {
+  text-decoration-color: #98A2B3;
+}
+
+/* The "Provisional" badge and its muted count, side by side in the footer. */
+.hero-foot-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A chip or badge as the trigger: no underline, the chip is the cue. */
+.hero-hover.is-plain {
+  text-decoration: none;
+}
+
+.hero-hover.is-plain:hover .hero-pill,
+.hero-hover.is-plain[aria-expanded='true'] .hero-pill {
+  filter: brightness(0.97);
+  box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08);
+}
+
+/* A whole bar as the trigger. */
+.hero-hover-wrap.is-block,
+.hero-hover.is-block {
+  display: block;
+  width: 100%;
+}
+
+.hero-tip-sum {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* A base figure that opens its detail: no underline at rest, underlined
+   with the pointer on hover. */
+.hero-num-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  text-decoration: none;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.hero-num-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+}
+
+.hero-num-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ── Row 2: tighter, so the four cards stay one height ───────────────── */
+.hero-kpis > .hero-card:not(.hero-card-wide) {
+  padding: 16px 18px 14px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-value {
+  font-size: 28px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-compare,
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-meter,
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-callout,
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-urgency {
+  margin-top: 10px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-callout {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-urgency li {
+  padding: 7px 10px;
+}
+
+/* The row is as tall as its tallest card, so the tall one is tightened
+   (2026-10-18) rather than the short ones stretched: Inventory value (two
+   comparison boxes and the slow-stock bar) set the height, leaving room
+   above the footers of Below safety stock and Pending reorders. */
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-block {
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-kpi-sub {
+  margin-top: 4px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-compare-value {
+  margin-top: 1px;
+  font-size: 15px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-idle-head {
+  margin-bottom: 4px;
+}
+
+.hero-kpis > .hero-card:not(.hero-card-wide) .hero-card-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+/* ── Smaller screens ─────────────────────────────────────────────────── */
+/* Row 2 two by two. */
 @media (max-width: 1280px) {
   .hero-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .hero-kpis > :first-child {
-    grid-column: span 2;
-    grid-row: auto;
+}
+
+/* Row 1's three columns stack, each under a rule. */
+@media (max-width: 900px) {
+  .hero-annual-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-annual-col {
+    padding: 0;
+  }
+  .hero-annual-col + .hero-annual-col {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-left: 0;
+    border-top: 1px solid #EDF0F4;
   }
 }
 
@@ -655,35 +895,42 @@
   .hero-kpis {
     grid-template-columns: minmax(0, 1fr);
   }
-  .hero-kpis > :first-child {
-    grid-column: auto;
-  }
-  .hero-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .hero-value {
-    font-size: 28px;
+    font-size: 26px;
+  }
+  .hero-value-xl {
+    font-size: 30px;
   }
 }
 
-/* A figure that includes synthetic months (generated, not SSM's files). */
-.hero-synthetic {
-  font-size: 12px;
-  font-weight: 600;
-  color: #B54708;
+/* Stock cover: the money past SSM's rule, a small amber box under the bar
+   (2026-10-18), the warning tone of the dashboard's chips. */
+.hero-excess-row {
+  margin-top: 10px;
 }
 
-/* A figure beside its sparkline never breaks mid-number ("₱27.9 / M" on a
-   narrow card, seen 2026-10-12): the number keeps its line and the
-   sparkline gives up width instead. */
-.hero-value-row .hero-value {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  overflow-wrap: normal;
+.hero-excess {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #FFF4DD;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #93370D;
 }
 
-.hero-value-row > :not(.hero-value) {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
+.hero-excess strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-hover.is-plain:hover .hero-excess,
+.hero-hover.is-plain[aria-expanded='true'] .hero-excess {
+  box-shadow: 0 0 0 1px rgba(147, 55, 13, 0.18);
+}
+
+/* Two links side by side in a footer. */
+.hero-foot-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
 }

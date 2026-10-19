@@ -344,9 +344,19 @@ const ReorderRecommendations = () => {
     return sorted.map((r) => ({ ...r, rank: r.priorityScore == null ? null : ++rank }));
   }, [cycleRows]);
 
-  const actNowRows = rankedRows.slice(0, ACT_NOW_COUNT);
-  const reviewLaterRows = rankedRows.slice(ACT_NOW_COUNT);
-  const visibleRows = showReviewLater ? rankedRows : actNowRows;
+  // ?urgency=critical (the Dashboard's "N critical" link): only the critical
+  // rows, still ranked and split as below; the chip above the table clears it.
+  const criticalOnly = searchParams.get('urgency') === 'critical';
+  const shownRows = criticalOnly ? rankedRows.filter((r) => r.urgency === 'CRITICAL') : rankedRows;
+  const clearUrgencyFilter = () => setSearchParams((prev) => {
+    const next = new URLSearchParams(prev);
+    next.delete('urgency');
+    return next;
+  }, { replace: true });
+
+  const actNowRows = shownRows.slice(0, ACT_NOW_COUNT);
+  const reviewLaterRows = shownRows.slice(ACT_NOW_COUNT);
+  const visibleRows = showReviewLater ? shownRows : actNowRows;
   // Rows flagged for review are left out: each is accepted from its own row.
   const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.needsReview);
 
@@ -944,6 +954,12 @@ const ReorderRecommendations = () => {
 
       {/* Table */}
       <SectionLede className="is-standalone">Every suggested order, most urgent first</SectionLede>
+      {criticalOnly && (
+        <div className="reorder-filter-chip" role="status">
+          <span>Critical only ({shownRows.length})</span>
+          <button type="button" onClick={clearUrgencyFilter} aria-label="Show every urgency">×</button>
+        </div>
+      )}
       <div className="data-table-card">
         <table className="data-table reorder-table">
           <thead>
@@ -1029,6 +1045,11 @@ const ReorderRecommendations = () => {
               </tr>
             )}
             {showReviewLater && reviewLaterRows.map(renderRow)}
+            {criticalOnly && cycleRows.length > 0 && shownRows.length === 0 && (
+              <tr className="table-empty-row">
+                <td colSpan={COLUMN_COUNT}>No critical orders in this cycle.</td>
+              </tr>
+            )}
             {cycleRows.length === 0 && (
               <tr className="table-empty-row">
                 <td colSpan={COLUMN_COUNT}>
