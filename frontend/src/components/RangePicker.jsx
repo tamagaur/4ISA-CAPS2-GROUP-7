@@ -20,7 +20,9 @@ const RangePicker = () => {
     endMonth: outlet.endMonth, endYear: outlet.endYear,
   };
   const preview = isPreviewMode(outlet.dataMode);
-  const quick = quickRanges(preview ? Number(PLACEHOLDER_START.year) : undefined);
+  // Relative to the latest month with data for the page's principal (the
+  // layout's latestPeriod, from GET /data-mode).
+  const quick = quickRanges(preview ? Number(PLACEHOLDER_START.year) : undefined, outlet.latestPeriod || undefined);
   const activeQuick = quick.find((q) => sameRange(q.range, applied)) || null;
   const appliedKey = rangeText(applied);
   // "Mar 25 – Feb 26" for a phone-width button.
@@ -90,7 +92,7 @@ const RangePicker = () => {
                     // Close on every pick, the active one included: it
                     // changes nothing, so the close-on-change effect below
                     // would leave the panel open over the page.
-                    onClick={() => { outlet.applyPreset(q.range); setOpen(false); }}
+                    onClick={() => { outlet.applyPreset(q.range, q.key); setOpen(false); }}
                   >
                     {q.label}
                     <span className="range-quick-sub">{rangeText(q.range)}</span>

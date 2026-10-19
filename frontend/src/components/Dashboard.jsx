@@ -521,6 +521,7 @@ const Dashboard = () => {
   const isAdmin = role === 'admin';
   const {
     startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR, handleResetToToday,
+    dataLatest: outletLatest,
   } = useOutletContext() || {};
   const preview = isPreviewMode(dataMode);
   const period = toPeriod(endMonth, endYear);
@@ -1047,7 +1048,9 @@ const Dashboard = () => {
   // as work awaiting a decision today (429 against the real 250).
   const pendingCount = data.recommendations?.product_count ?? 0;
   // Non-null only when the live data has moved past the hardcoded ceiling.
-  const coverageStale = staleCoverageNotice(data.latest_data_period);
+  // Only when the layout could not read "today" from GET /data-mode and fell
+  // back to dataCoverage.js's month while this payload knows a newer one.
+  const coverageStale = staleCoverageNotice(data.latest_data_period, outletLatest);
   // The cards connected (Technical Adviser, 2 Oct 2026): which products
   // matter (ABC card) -> which are at risk (the count below, and the list
   // behind it) -> what to order (Reorder Recs). The list is GET
@@ -1462,9 +1465,7 @@ const Dashboard = () => {
                 <strong>Newer sales data is available than this app shows.</strong>{' '}
                 Sales are loaded through {coverageStale.live}, but the date range still ends at{' '}
                 {coverageStale.pinned}, so the newest months don&apos;t appear on any page yet.
-                {isAdmin
-                  ? <> To fix it, update <code>LATEST_DATA_PERIOD</code> in <code>frontend/src/dataCoverage.js</code>.</>
-                  : ' Let an admin know.'}
+                {' '}Refresh the page; if this stays, the app could not read the latest month from the server{isAdmin ? ' (GET /data-mode)' : ''}.
               </span>
             </div>
           )}

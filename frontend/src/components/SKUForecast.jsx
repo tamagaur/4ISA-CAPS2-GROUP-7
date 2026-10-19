@@ -268,7 +268,8 @@ const SKUForecast = () => {
     const floorStart = { startMonth: 'Jan', startYear: String(FIRST_DATA_YEAR) };
     return Number(shared.endYear) >= FIRST_DATA_YEAR
       ? { ...shared, ...floorStart }
-      : { ...floorStart, endMonth: LATEST_DATA_PERIOD.month, endYear: LATEST_DATA_PERIOD.year };
+      : { ...floorStart, endMonth: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).month,
+        endYear: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).year };
   })();
   // The page follows the dashboard's range LIVE (Technical Adviser, 2 Oct
   // 2026: change the filter and the screen answers; one range across the

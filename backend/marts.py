@@ -64,6 +64,30 @@ COUNT_FILLED_AND_GENERATED = False
 # them would show invented sales as the actuals of a forecast month.
 _LAST_REAL_SALES_MONTH_SQL = "SELECT MAX(period) FROM mart.sales_month WHERE data_kind = 'real'"
 
+# Each principal's first and latest month of REAL sales, in one small grouped read
+# (2026-10-20): what "now" is for the date filter on every page (GET /data-mode's
+# coverage), instead of a month typed into frontend/src/dataCoverage.js by hand.
+REAL_COVERAGE_SQL = """
+    SELECT principal, MIN(period) AS first, MAX(period) AS latest
+    FROM mart.sales_month WHERE data_kind = 'real' GROUP BY principal
+"""
+
+
+def real_coverage(db: Session) -> dict:
+    """{first_data_period, latest_data_period, latest_data_period_by_principal}: real
+    sales only, 'YYYY-MM'. The overall latest is the later principal's (the date
+    picker spans both); each principal's own latest is where its default range ends
+    (Del Monte's sell-out stops at 2025-12, Unilever's demand at 2026-02 as of
+    2026-10-20). Unknown principals are left out; None when nothing is loaded."""
+    rows = [r for r in batch.rows(db, REAL_COVERAGE_SQL) if r["principal"] in ("unilever", "delmonte")]
+    latest = {r["principal"]: r["latest"] for r in rows if r["latest"]}
+    firsts = [r["first"] for r in rows if r["first"]]
+    return {
+        "first_data_period": min(firsts) if firsts else None,
+        "latest_data_period": max(latest.values()) if latest else None,
+        "latest_data_period_by_principal": latest,
+    }
+
 
 def _kind_filter(mode: str, alias: str = "") -> str:
     """Real rows, plus the demonstration back-cast months in preview when DM_DEMO_ENABLED is on. The older
