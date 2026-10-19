@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, LockKeyhole, Mail } from 'lucide-react';
+import { ArrowRight, Lock, LockKeyhole, Mail, Sparkles } from 'lucide-react';
 import {
   confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
 } from './auth';
@@ -161,21 +161,22 @@ const Login = () => {
     );
   };
 
-  // The look (2026-10-16, Audrey's twilight prototype): the evening
-  // warehouse yard, the logo top left and the frosted-glass card are
-  // AuthShell, shared with Forgot password and Set password; the card is
-  // CSS over real form fields, not a picture of one.
+  // The look (2026-10-19, Audrey's golden-hour redesign, after the
+  // 2026-10-16 twilight glass): the warehouse yard at sunset, the logo top
+  // left, the introduction on the left and the white card at the right are
+  // all AuthShell, shared with Forgot password and Set password, and stay
+  // up through the two-step screens. The card is CSS over real form
+  // fields, not a picture of one. "Welcome *Back*" carries the brand's
+  // red-to-orange and a small sparkle (Audrey: colour, and welcoming).
   return (
     <AuthShell>
       {mfa ? renderSecondStep() : (
             <>
-              <h2>
-                Welcome <span className="page-title-accent">back</span>
-                <svg className="login-title-spark" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 13V6M9.2 14.8l5-5M11 19h7" />
-                </svg>
+              <h2 className="login-welcome">
+                Welcome <span className="page-title-accent login-welcome-accent">Back</span>
+                <Sparkles className="login-welcome-spark" aria-hidden="true" />
               </h2>
-              <p className="subtitle">Sign in with your assigned account</p>
+              <p className="subtitle">Sign in to access the SAN2 Decision Support Dashboard</p>
 
               <form onSubmit={handleSubmit} className="login-form">
                 {notice && !error && (
@@ -187,49 +188,59 @@ const Login = () => {
                   </div>
                 )}
                 {error && <div className="error-message" role="alert">{error}</div>}
-                <div className="input-group">
-                  <Mail className="input-icon" aria-hidden="true" />
-                  <input
-                    type="email"
-                    placeholder="Email address"
-                    aria-label="Email address"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (!rememberTouched) setRemember(isDeviceRemembered(e.target.value));
-                    }}
-                    required
-                  />
+                {/* Visible labels (2026-10-19): the placeholder is a hint now,
+                    not the field's only name. */}
+                <div className="login-field">
+                  <label htmlFor="login-email">Email address</label>
+                  <div className="input-group">
+                    <Mail className="input-icon" aria-hidden="true" />
+                    <input
+                      id="login-email"
+                      type="email"
+                      placeholder="Enter your email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (!rememberTouched) setRemember(isDeviceRemembered(e.target.value));
+                      }}
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="input-group password-group">
-                  <LockKeyhole className="input-icon" aria-hidden="true" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Password"
-                    aria-label="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label="Toggle password visibility"
-                  >
-                    {showPassword ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                        <line x1="1" y1="1" x2="23" y2="23"></line>
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    )}
-                  </button>
+                <div className="login-field">
+                  <label htmlFor="login-password">Password</label>
+                  <div className="input-group password-group">
+                    <LockKeyhole className="input-icon" aria-hidden="true" />
+                    <input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="toggle-password"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                          <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="login-forgot-row login-options-row">

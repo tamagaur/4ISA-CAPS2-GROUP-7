@@ -1,40 +1,57 @@
-/* The sign-in page's look (2026-10-16, Audrey's twilight prototype): one
-   illustrated evening warehouse yard across the whole page, the brand row
-   top left, and a frosted-glass card on the right. Everything is scoped to
-   .login-page, which only Login.jsx sets, so Forgot password and Set
-   password, which share Login.css, keep their own look. The form's
-   classes (.input-group, .submit-btn, …) are Login.css's, restyled here,
-   so the two-step sign-in screens inside the same card follow along. */
+/* The signed-out screens' look (2026-10-19, Audrey's golden-hour redesign,
+   replacing the 2026-10-16 twilight glass): the warehouse yard at sunset
+   across the whole page, the SAN2 logo top left, the introduction on the
+   left (LoginHero.jsx, on every signed-out screen) and a white card on
+   the right.
+   Everything is scoped to .login-page, which AuthShell sets, so Sign in,
+   Forgot password and Set password share it; the form's classes
+   (.input-group, .submit-btn, …) are Login.css's, restyled here, so the
+   two-step sign-in screens inside the same card follow along. */
 .login-page {
-  --login-ink: #1B2550;
-  --login-muted: #56608A;
-  --login-link: #2F5DB8;
-  --login-coral-from: #FF6A62;
-  --login-coral-to: #FF8A4C;
-  /* The glass: the card's fill, the fields' fill, and the white edges. */
-  --login-glass: rgba(245, 247, 255, 0.68);
-  --login-glass-edge: rgba(255, 255, 255, 0.65);
-  --login-field: rgba(255, 255, 255, 0.58);
-  --login-field-edge: rgba(255, 255, 255, 0.85);
-  --login-brand-h: clamp(44px, 6vh, 58px);
+  --login-navy: #111A35;
+  --login-navy-2: #263454;
+  --login-red: #D6383D;
+  --login-orange: #FF7448;
+  /* The one accent word ("Stronger", the card's accent word, the icons):
+     between the red and the orange. */
+  --login-red-orange: #E8553F;
+  --login-body: #475467;
+  --login-muted: #667085;
+  --login-border: #D5DCE6;
+  --login-surface: #FFFFFF;
+  --login-warm: #FFF9F4;
+  /* The light orange tint behind the feature icons and the help panel. */
+  --login-tint: #FFF1EA;
+  --login-tint-edge: #FFDCCB;
+  --login-ring: rgba(255, 116, 72, 0.22);
+  --login-brand-h: clamp(46px, 6.4vh, 62px);
   position: relative;
   display: flex;
   flex-direction: column;
-  /* The yard, 1672 x 941, scaled to cover the page. The doors, forklift
-     and truck sit in its left two thirds, where nothing covers them; the
-     card stands over the trees and the far buildings. The colour behind
-     is the sky's, for the moment before the picture loads. */
-  background: #1C2260 url('/images/login-moonlit-yard.webp') center / cover no-repeat;
-  color: var(--login-ink);
+  /* The yard, 1672 x 941 (src/assets/login/warehouse-background.png, the
+     clean asset without the mock-up's text; the .webp beside it is the
+     same picture at a seventh of the weight, and browsers that know
+     image-set take it). Scaled to cover the page: the trucks, the dock
+     and the pallets sit in its left two thirds, where nothing covers
+     them; the card stands on the cream curve at the right. The colour
+     behind is the picture's own cream, for the moment before it loads. */
+  background-color: var(--login-warm);
+  background-image: url('./assets/login/warehouse-background.png');
+  background-image: image-set(
+    url('./assets/login/warehouse-background.webp') type('image/webp'),
+    url('./assets/login/warehouse-background.png') type('image/png')
+  );
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  color: var(--login-navy);
 }
 
-/* The logo, top left, with a soft shadow so it reads on the sky. (The
-   prototype's three feature labels beside it were taken out on
-   2026-10-16 at Audrey's request.) */
+/* The logo, top left. */
 .login-page .login-brand {
   position: absolute;
-  top: clamp(18px, 3.4vh, 34px);
-  left: clamp(18px, 3.4vw, 52px);
+  top: clamp(20px, 3.6vh, 36px);
+  left: clamp(24px, 4vw, 72px);
   z-index: 2;
 }
 
@@ -42,207 +59,374 @@
   display: block;
   height: var(--login-brand-h);
   width: auto;
-  filter: drop-shadow(0 1px 6px rgba(8, 12, 48, 0.55));
 }
 
-/* Where the card stands: the right of the page, centred in its height,
-   below the brand row. Grows past the page, and the page scrolls, when a
-   window is too short for the card. */
+/* Where everything stands: the introduction at the left, the card at the
+   right, below the brand row. The hero's margin-right: auto takes the
+   spare width, so the card keeps its place at the right. Grows past the
+   page, and the page scrolls, when a window is too short for the card. */
 .login-page .login-stage {
+  position: relative;
+  isolation: isolate;
   flex: 1 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: clamp(28px, 4vw, 64px);
   min-height: 100%;
   padding:
-    calc(clamp(18px, 3.4vh, 34px) + var(--login-brand-h) + 24px)
-    clamp(28px, 6vw, 108px)
+    calc(clamp(20px, 3.6vh, 36px) + var(--login-brand-h) + clamp(16px, 3vh, 36px))
+    clamp(28px, 4.5vw, 72px)
     clamp(24px, 4vh, 48px)
-    clamp(20px, 4vw, 56px);
+    clamp(24px, 4vw, 72px);
   box-sizing: border-box;
 }
 
-/* The glass card: a translucent lavender-white over the blurred yard,
-   a thin white edge, a soft shadow, and a glossy highlight along its
-   upper part (the ::before, kept under the content by the stacking
-   context). Where backdrop blur is not available the fill is near solid,
-   so the form stays readable. */
+/* ── The introduction (LoginHero.jsx) ─────────────────────────────── */
+
+/* The words, then the feature row under them. Level with the card's top
+   rather than its middle, as in the mock-up. (The mock-up's two floating
+   chart cards beside the words were taken out on 2026-10-19 at Audrey's
+   request.) */
+.login-page .login-hero {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-right: auto;
+  align-self: flex-start;
+  padding-top: clamp(6px, 1.6vh, 20px);
+}
+
+.login-page .login-intro {
+  max-width: 620px;
+}
+
+.login-page .login-eyebrow {
+  margin: 0 0 clamp(10px, 1.6vh, 16px);
+  color: var(--login-red-orange);
+  font-size: clamp(11px, 0.8vw, 13px);
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+}
+
+.login-page .login-headline {
+  margin: 0 0 clamp(14px, 2.2vh, 22px);
+  color: var(--login-navy);
+  font-size: clamp(34px, 3.2vw, 58px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+}
+
+.login-page .login-headline-accent {
+  color: var(--login-red-orange);
+}
+
+.login-page .login-lede {
+  max-width: 50ch;
+  margin: 0;
+  color: var(--login-body);
+  font-size: clamp(15px, 1.15vw, 19px);
+  line-height: 1.55;
+}
+
+.login-page .login-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 28px;
+  margin: clamp(18px, 3vh, 28px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.login-page .login-feature {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--login-navy-2);
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.login-page .login-feature-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--login-tint);
+  color: var(--login-red-orange);
+}
+
+.login-page .login-feature-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2;
+}
+
+/* ── Opening ───────────────────────────────────────────────────────── */
+
+/* Each time the page opens or is refreshed (Audrey, 2026-10-19): the
+   eyebrow, then the headline line by line, the description, the feature
+   row and the card rise into place one after the other, over the page's
+   own fade-in (Login.css, auth-page-in). Nothing moves for a viewer who
+   asks for reduced motion (below). */
+.login-page .login-headline-line {
+  display: block;
+}
+
+.login-page .login-eyebrow,
+.login-page .login-headline-line,
+.login-page .login-lede,
+.login-page .login-features,
+.login-page .login-card {
+  animation: login-rise 640ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.login-page .login-eyebrow { animation-delay: 80ms; }
+.login-page .login-headline-line:nth-child(1) { animation-delay: 160ms; }
+.login-page .login-headline-line:nth-child(2) { animation-delay: 240ms; }
+.login-page .login-headline-line:nth-child(3) { animation-delay: 320ms; }
+.login-page .login-lede { animation-delay: 420ms; }
+.login-page .login-features { animation-delay: 500ms; }
+.login-page .login-card { animation-delay: 260ms; }
+
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── The card ──────────────────────────────────────────────────────── */
+
 .login-page .login-card {
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  width: min(100%, clamp(400px, 34vw, 520px));
+  flex: none;
+  width: min(100%, clamp(400px, 32vw, 500px));
   max-width: none;
-  padding: clamp(26px, 4.4vh, 42px) clamp(26px, 3vw, 44px) clamp(20px, 3.2vh, 30px);
-  border: 1px solid var(--login-glass-edge);
-  border-radius: 28px;
-  background: var(--login-glass);
-  -webkit-backdrop-filter: blur(18px) saturate(135%);
-  backdrop-filter: blur(18px) saturate(135%);
+  padding: clamp(28px, 4.4vh, 44px) clamp(26px, 2.8vw, 44px) clamp(22px, 3.2vh, 32px);
+  border: 1px solid rgba(17, 26, 53, 0.06);
+  border-radius: 24px;
+  background: var(--login-surface);
   box-shadow:
-    0 20px 55px rgba(15, 25, 70, 0.22),
-    0 2px 10px rgba(15, 25, 70, 0.12),
-    0 0 0 6px rgba(255, 255, 255, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    0 28px 64px -28px rgba(17, 26, 53, 0.28),
+    0 2px 10px rgba(17, 26, 53, 0.06);
   box-sizing: border-box;
+  align-items: stretch;
+  text-align: left;
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .login-page .login-card {
-    background: rgba(246, 248, 255, 0.93);
+.login-page .login-card h2 {
+  margin: 0 0 6px;
+  color: var(--login-navy);
+  font-size: clamp(26px, 3.4vh, 32px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* The accent word of the other headings in this card ("Reset your
+   *password*", "Two-step *sign-in*"): the same letters as the heading,
+   in the accent colour, like "Stronger" on the left. */
+.login-page .login-card h2 .page-title-accent {
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
+  font-size: 1em;
+  color: var(--login-red-orange);
+}
+
+/* "Welcome *Back*" (Audrey, 2026-10-19: colour, and welcoming): the word
+   in the Sign In button's red-to-orange where a browser can clip a
+   background to text (solid red-orange, above, where it can't), a small
+   orange sparkle off its end, and a faint peach wash across the card's
+   top corner (the ::before, under the content). */
+@supports (-webkit-background-clip: text) or (background-clip: text) {
+  .login-page .login-card h2 .login-welcome-accent {
+    background: linear-gradient(90deg, var(--login-red) 0%, var(--login-orange) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
+}
+
+.login-page .login-welcome-spark {
+  width: 0.62em;
+  height: 0.62em;
+  margin: 0 0 0 0.16em;
+  vertical-align: top;
+  color: var(--login-orange);
+  fill: var(--login-tint-edge);
+  stroke-width: 2;
 }
 
 .login-page .login-card::before {
   content: '';
   position: absolute;
-  inset: 0 0 auto;
-  z-index: -1;
-  height: 48%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 100%);
+  top: 0;
+  right: 0;
+  width: 62%;
+  height: 46%;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 100% 0%, rgba(255, 116, 72, 0.16) 0%, rgba(255, 116, 72, 0) 62%);
   pointer-events: none;
 }
 
-.login-page .login-card-logo {
-  display: block;
-  height: clamp(44px, 6.2vh, 56px);
-  width: auto;
-  margin: 0 auto clamp(14px, 2.4vh, 22px);
-}
-
-.login-page .login-card h2 {
+.login-page .login-card > * {
   position: relative;
-  margin: 0 0 8px;
-  color: var(--login-ink);
-  font-size: clamp(32px, 4.8vh, 44px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-
-.login-page .login-card h2 .page-title-accent {
-  color: var(--color-brand-primary);
-  font-size: 1.12em;
-  font-weight: 600;
-}
-
-/* The three strokes off "back", as in the prototype: straight lines
-   fanning out from the word's top right (up, up-right, right). */
-.login-page .login-title-spark {
-  position: absolute;
-  width: 0.6em;
-  height: 0.6em;
-  margin: -0.46em 0 0 0.04em;
-  fill: none;
-  stroke: var(--color-brand-primary);
-  stroke-width: 2.4;
-  stroke-linecap: round;
 }
 
 .login-page .subtitle {
-  margin: 0 0 clamp(16px, 3vh, 28px);
+  margin: 0 0 clamp(18px, 3vh, 26px);
   color: var(--login-muted);
-  font-size: 16px;
+  font-size: 15.5px;
+  line-height: 1.5;
 }
 
 .login-page .login-form {
-  gap: clamp(12px, 1.8vh, 16px);
+  gap: clamp(14px, 2vh, 18px);
 }
 
-/* Fields: translucent white on the glass, an icon at the start, the eye
-   at the end; a blue ring when focused. */
+/* A field: its label above, the icon at the start, the eye at the end;
+   an orange ring when focused. */
+.login-page .login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Labels in small capitals ("EMAIL ADDRESS", "PASSWORD"; Audrey,
+   2026-10-19), spaced a little so the capitals read; the markup keeps the
+   ordinary casing for screen readers. */
+.login-page .login-field > label {
+  color: var(--login-navy);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .login-page .input-group input {
-  height: clamp(50px, 6.6vh, 58px);
-  padding: 0 18px 0 50px;
-  border: 1px solid var(--login-field-edge);
-  border-radius: 14px;
-  background-color: var(--login-field);
-  color: var(--login-ink);
-  font-size: 16px;
+  height: 52px;
+  padding: 0 16px 0 46px;
+  border: 1px solid var(--login-border);
+  border-radius: 12px;
+  background-color: var(--login-surface);
+  color: var(--login-navy);
+  font-size: 15.5px;
 }
 
 .login-page .input-group input:focus {
-  border-color: #4C7BD9;
-  background-color: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 0 0 3px rgba(76, 123, 217, 0.24);
+  border-color: var(--login-orange);
+  background-color: var(--login-surface);
+  box-shadow: 0 0 0 3px var(--login-ring);
 }
 
 .login-page .input-group input::placeholder {
-  color: #6A7497;
+  color: var(--login-muted);
 }
 
 .login-page .password-group input {
-  padding-right: 52px;
+  padding-right: 48px;
 }
 
 .login-page .input-icon {
   position: absolute;
   top: 50%;
-  left: 18px;
-  width: 20px;
-  height: 20px;
+  left: 16px;
+  width: 18px;
+  height: 18px;
   transform: translateY(-50%);
   color: var(--login-muted);
-  stroke-width: 1.8;
+  stroke-width: 1.9;
   pointer-events: none;
 }
 
 .login-page .toggle-password {
-  right: 16px;
+  right: 14px;
   color: var(--login-muted);
 }
 
+.login-page .toggle-password:hover {
+  color: var(--login-navy);
+}
+
 .login-page .toggle-password:focus-visible {
-  outline: 2px solid #4C7BD9;
+  outline: 2px solid var(--login-orange);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
 .login-page .toggle-password svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
+}
+
+/* A field with no icon (the password pages) keeps the usual padding. */
+.login-page .input-group:not(:has(.input-icon)) input {
+  padding-left: 16px;
 }
 
 .login-page .login-forgot-row {
   margin-top: -2px;
 }
 
-.login-page .login-forgot-row .auth-link {
-  color: var(--login-link);
-  font-size: 14.5px;
+/* Links: "Forgot password?" beside the remember box, and the way out of
+   a password page under its form. */
+.login-page .login-forgot-row .auth-link,
+.login-page .auth-links .auth-link {
+  color: var(--login-red);
+  font-size: 14px;
+  font-weight: 600;
   text-decoration: underline;
-  text-decoration-color: rgba(47, 93, 184, 0.45);
+  text-decoration-color: rgba(214, 56, 61, 0.35);
   text-underline-offset: 3px;
 }
 
-.login-page .login-forgot-row .auth-link:hover {
-  color: #1F4A9E;
+.login-page .login-forgot-row .auth-link:hover,
+.login-page .auth-links .auth-link:hover {
+  color: #B52E33;
   text-decoration-color: currentColor;
 }
 
-/* Sign In: coral to orange, white text, the arrow. Hover lifts it a
-   little with a warmer shadow; the submitting state (Login.css) dims it. */
+.login-page .login-forgot-row .auth-link:focus-visible,
+.login-page .auth-links .auth-link:focus-visible {
+  outline: 2px solid var(--login-orange);
+  outline-offset: 2px;
+}
+
+/* Sign In: red to orange, white text, the arrow. Hover lifts it a little
+   (Login.css) with a warmer shadow; the submitting state dims it. */
 .login-page .submit-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  height: clamp(52px, 7vh, 60px);
-  margin-top: 4px;
+  height: 52px;
+  margin-top: 6px;
   padding: 0 20px;
-  border-radius: 14px;
-  background: linear-gradient(90deg, var(--login-coral-from) 0%, var(--login-coral-to) 100%);
-  font-size: 18px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--login-red) 0%, var(--login-orange) 100%);
+  font-size: 16.5px;
   font-weight: 700;
-  box-shadow: 0 10px 24px -10px rgba(255, 106, 98, 0.55);
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 22px -10px rgba(214, 56, 61, 0.55);
 }
 
 .login-page .submit-btn:hover {
-  box-shadow: 0 14px 28px -10px rgba(255, 106, 98, 0.7);
+  box-shadow: 0 14px 26px -10px rgba(214, 56, 61, 0.65);
 }
 
 .login-page .submit-btn:focus-visible {
-  outline: 3px solid rgba(76, 123, 217, 0.55);
+  outline: 3px solid rgba(255, 116, 72, 0.5);
   outline-offset: 2px;
 }
 
@@ -251,30 +435,15 @@
 }
 
 .login-page .submit-btn-arrow {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   stroke-width: 2.4;
 }
 
-/* The password pages (Forgot password, Set password): their links under
-   the card in the same blue as "Forgot password?", the hint under a
-   field, the email in the subtitle, and a field with no icon keeps the
-   usual padding. */
+/* The password pages: the hint under a field, the email in the subtitle,
+   a notice standing in for the form. */
 .login-page .auth-links {
-  margin-top: clamp(16px, 2.8vh, 24px);
-}
-
-.login-page .auth-links .auth-link {
-  color: var(--login-link);
-  font-size: 14.5px;
-  text-decoration: underline;
-  text-decoration-color: rgba(47, 93, 184, 0.45);
-  text-underline-offset: 3px;
-}
-
-.login-page .auth-links .auth-link:hover {
-  color: #1F4A9E;
-  text-decoration-color: currentColor;
+  margin-top: clamp(16px, 2.8vh, 22px);
 }
 
 .login-page .auth-hint {
@@ -282,15 +451,11 @@
 }
 
 .login-page .subtitle strong {
-  color: var(--login-ink);
+  color: var(--login-navy);
 }
 
 .login-page .auth-card-message {
   margin-top: 4px;
-}
-
-.login-page .input-group:not(:has(.input-icon)) input {
-  padding-left: 18px;
 }
 
 /* "For authorized … staff only.", with a small lock. */
@@ -300,30 +465,38 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  margin: clamp(16px, 2.8vh, 24px) 0 0;
+  margin: clamp(14px, 2.4vh, 18px) 0 0;
   color: var(--login-muted);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .login-page .auth-notice-icon {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   stroke-width: 2;
 }
 
-/* "Having trouble?": a translucent panel with a headset in a coral
-   circle, inside the card. */
+/* A hairline, then "Having trouble?": a warm panel with a headset in a
+   white square, inside the card. */
+.login-page .login-divider {
+  width: 100%;
+  height: 1px;
+  margin: clamp(16px, 2.8vh, 22px) 0 0;
+  border: 0;
+  background: var(--login-border);
+}
+
 .login-page .login-help {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   width: 100%;
-  margin-top: clamp(14px, 2.4vh, 22px);
-  padding: 15px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.48);
+  margin-top: clamp(14px, 2.4vh, 18px);
+  padding: 14px 16px;
+  border: 1px solid var(--login-tint-edge);
+  border-radius: 14px;
+  background: var(--login-tint);
   box-sizing: border-box;
   text-align: left;
 }
@@ -332,16 +505,16 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: #FFE3DD;
-  color: #E8533F;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--login-surface);
+  color: var(--login-red-orange);
 }
 
 .login-page .login-help-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .login-page .login-help p {
@@ -349,40 +522,124 @@
   flex-direction: column;
   gap: 2px;
   margin: 0;
-  color: var(--login-muted);
-  font-size: 14.5px;
+  color: var(--login-body);
+  font-size: 14px;
 }
 
 .login-page .login-help strong {
-  color: var(--login-ink);
-  font-size: 15px;
+  color: var(--login-navy);
+  font-size: 14.5px;
 }
 
-/* The notices Login.css draws solid (session expired, a confirmation, an
-   error) sit on the glass a little translucent, in the same colours. */
-.login-page .session-expired-message,
-.login-page .auth-info-message {
-  background-color: rgba(239, 246, 255, 0.85);
+/* ── Smaller windows ───────────────────────────────────────────────── */
+
+/* Short windows (a laptop with the browser's own bars): a tighter rhythm
+   in the card and a smaller headline, so the whole card fits without a
+   scroll down to about 600px of height; below that the page scrolls. */
+@media (min-width: 1024px) and (max-height: 720px) {
+  .login-page .login-hero {
+    padding-top: 0;
+  }
+
+  .login-page .login-headline {
+    font-size: clamp(32px, 2.8vw, 46px);
+  }
+
+  .login-page .login-card {
+    padding: 24px 32px 20px;
+  }
+
+  .login-page .login-card h2 {
+    font-size: 26px;
+  }
+
+  .login-page .subtitle {
+    margin-bottom: 14px;
+    font-size: 14.5px;
+  }
+
+  .login-page .login-form {
+    gap: 12px;
+  }
+
+  .login-page .input-group input,
+  .login-page .submit-btn {
+    height: 48px;
+  }
+
+  .login-page .auth-notice {
+    margin-top: 10px;
+  }
+
+  .login-page .login-divider {
+    margin-top: 12px;
+  }
+
+  .login-page .login-help {
+    margin-top: 10px;
+    padding: 10px 14px;
+  }
 }
 
-.login-page .auth-success-message {
-  background-color: rgba(240, 253, 244, 0.85);
-}
-
-.login-page .error-message {
-  background-color: rgba(254, 242, 242, 0.88);
-}
-
-/* Tablets and narrow windows: the card in the middle, below the logo;
-   the yard framed on its warehouse. */
+/* Tablets and narrow windows: the introduction above the card, both
+   centred. The words now stand over the yard itself, so a warm veil over
+   the stage (the ::before, scrolling with the content) keeps the navy
+   readable while the picture shows through, most at the bottom. */
 @media (max-width: 1023px) {
   .login-page {
-    background-position: 42% 50%;
+    background-position: 35% 50%;
   }
 
   .login-page .login-stage {
+    flex-direction: column;
     justify-content: center;
+    gap: clamp(20px, 4vh, 32px);
     padding-right: clamp(20px, 4vw, 56px);
+    padding-left: clamp(20px, 4vw, 56px);
+  }
+
+  .login-page .login-stage::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 249, 244, 0.94) 0%,
+      rgba(255, 249, 244, 0.82) 55%,
+      rgba(255, 249, 244, 0.5) 100%
+    );
+    pointer-events: none;
+  }
+
+  .login-page .login-hero {
+    flex: none;
+    width: min(100%, 560px);
+    margin-right: 0;
+    align-self: center;
+    padding-top: 0;
+    text-align: center;
+  }
+
+  .login-page .login-intro {
+    max-width: none;
+  }
+
+  .login-page .login-headline {
+    font-size: clamp(32px, 5.6vw, 46px);
+  }
+
+  .login-page .login-lede {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .login-page .login-features {
+    justify-content: center;
+  }
+
+  .login-page .login-feature {
+    text-align: left;
   }
 
   .login-page .login-card {
@@ -390,12 +647,13 @@
   }
 }
 
-/* Phones: the form first. The logo sits in the flow above the card; the
-   card takes the width, and the page scrolls when it is taller than the
-   screen. */
-@media (max-width: 600px) {
+/* Phones: the form first. The logo sits in the flow above; the eyebrow and
+   headline stay, small; the description and the feature items step aside;
+   the card takes the width, and the page scrolls when it is taller than
+   the screen. */
+@media (max-width: 767px) {
   .login-page {
-    background-position: 38% 50%;
+    background-position: 30% 40%;
   }
 
   .login-page .login-brand {
@@ -410,24 +668,49 @@
   .login-page .login-stage {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 16px 16px 28px;
+    gap: 18px;
+    padding: 18px 16px 28px;
+  }
+
+  .login-page .login-eyebrow {
+    margin-bottom: 8px;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+  }
+
+  .login-page .login-headline {
+    margin-bottom: 0;
+    font-size: clamp(28px, 8vw, 34px);
+  }
+
+  .login-page .login-lede,
+  .login-page .login-features {
+    display: none;
   }
 
   .login-page .login-card {
     padding: 26px 20px 20px;
-    border-radius: 22px;
+    border-radius: 20px;
   }
 
   .login-page .login-card h2 {
-    font-size: 32px;
+    font-size: 26px;
   }
 
   .login-page .subtitle {
-    font-size: 15px;
+    font-size: 14.5px;
+  }
+
+  .login-page .input-group input {
+    height: 50px;
+  }
+
+  .login-page .submit-btn {
+    height: 50px;
   }
 
   .login-page .login-help {
-    padding: 14px 16px;
+    padding: 12px 14px;
   }
 }
 
@@ -436,5 +719,13 @@
   .login-page .input-group input,
   .login-page .toggle-password {
     transition: none;
+  }
+
+  .login-page .login-eyebrow,
+  .login-page .login-headline-line,
+  .login-page .login-lede,
+  .login-page .login-features,
+  .login-page .login-card {
+    animation: none;
   }
 }
