@@ -102,6 +102,108 @@ step 3 or step 4 wasn't done yet — several tests are gated on `data/raw/`
 or `staging/` actually existing. (This step previously said "109 passed",
 which pre-dated the backend and analytics suites.)
 
+## Adding a new month (live database)
+
+Written 2026-10-19 from the end-to-end ingestion audit. Steps 1-5 were run
+end to end on a scratch copy of public (`ssm_e2e_audit`) and loading the same
+month twice was shown to duplicate nothing. Steps 6-9 were run report-only
+against public (no `--write`); their write forms below are the documented
+ones, not exercised in that audit.
+
+**0. Migrations must be clear.** A public load refuses while any migration
+file is unapplied (`refusing: migrations pending on public`). Back up, then
+apply with `python -m scripts.run_canonical_load --schema public
+--target-public --schema-only`. As of 2026-10-19, 0059 and 0060 are pending
+on public, and 0060 drops `app.users.avatar_data_url`.
+
+**1. Put the files in `data/raw/`.** The month comes from the file NAME
+(plus up to three parent folder names), never from a date typed inside the
+workbook. The Del Monte "Actual as of" cell is not read at all. Keep the
+existing naming:
+
+| Data | Where | Name must contain |
+|---|---|---|
+| Del Monte sales register, returns, sell-out, purchases, inventory sign-off | `data/raw/Del Monte/MONTHLY REPORT - <MONTH> <YEAR>/` | month name + 4-digit year |
+| Unilever stock (SSIS) | `data/raw/SSIS/<YEAR>/SSIS <MONTH> <YEAR>.xlsx` | month name + 4-digit year (`SSIS FEBRUARY 202.xlsx` only works because its folder is `2026/`) |
+| Unilever SKU sales | `data/raw/Unilever/UnileverLaUnionSalesperSKU2023to2026.xls` | this exact name: SSM's updated multi-year file replaces it |
+
+**2. Back up the tables a load writes to** (read-only; verifies every file's row count):
+
+```bash
+python -m scripts.backup_tables sales_fact purchase_fact salesreturn_fact sellout_fact inventory_fact unilever_sku_demand_fact derived_receipt_fact sku_demand_fill etl_quarantine etl_coverage etl_load_event product_dimension customer_dimension schema_migrations
+python -m scripts.backup_tables --schema app audit_log
+```
+
+Restore: each `backups/tables_<time>/data/<table>.csv` is a `COPY ... WITH
+(FORMAT csv, HEADER)` export; `structure.json` has the columns, keys and
+indexes to recreate the table if needed.
+
+**3. Dry run** (writes only `etl_load_event` rows marked `dry_run`). One
+`--slice principal:table:YYYY-MM` per table and month:
+
+```bash
+python -m scripts.run_canonical_load --schema public --target-public --dry-run \
+  --slice delmonte:sales_fact:YYYY-MM --slice delmonte:salesreturn_fact:YYYY-MM \
+  --slice delmonte:sellout_fact:YYYY-MM --slice delmonte:purchase_fact:YYYY-MM \
+  --slice delmonte:inventory_fact:YYYY-MM \
+  --slice unilever:unilever_sku_demand_fact:YYYY-MM --slice unilever:inventory_fact:YYYY-MM
+```
+
+Read the slice summary: `real A->B (-x/+y)` per slice, refusals, and any
+`validation_warning` (e.g. a peso total far outside earlier months).
+
+**4. Sign off** - the one human step. The dry run prints the run key:
+
+```bash
+python -m analytics.etl.transform_signoff --transform-dir transform/slices/<run key> --decision approved --by "<name>"
+```
+
+**5. Load** - the step 3 command without `--dry-run`. It deletes and
+re-inserts each slice's real rows in one transaction (re-running the same
+month changes nothing, `-0/+0`), then runs the fill step and refreshes the
+marts.
+
+**6. ABC** (Tier A basis: `analytics.params.TIER_A_BASIS`):
+
+```bash
+python -m analytics.classification.orchestrate_abc --period YYYY-MM --schema public --method t12m_new --principal unilever
+python -m analytics.classification.orchestrate_abc --period YYYY-MM --schema public --method single --principal delmonte
+```
+
+**7. Forecast.** First move `EXPECTED_MONTHS` in
+`scripts/run_baseline_forecast.py` (hard-coded `2023-01..2026-02`) to end at the
+new month, or the missing-month check never looks at it. Then:
+
+```bash
+python scripts/run_baseline_forecast.py            # report only
+python scripts/run_baseline_forecast.py --write    # upsert Forecast_Result, refresh marts
+```
+
+**8. Safety stock, reorder point and the LP** (one script):
+
+```bash
+python scripts/run_lp.py --dry-run
+python scripts/run_lp.py --retire-stale-pending
+```
+
+**9. Accuracy backtest** (the dashboard's accuracy card). Move `WINDOW` in
+`scripts/backtest_forecast_run.py` (hard-coded to end 2026-02), then:
+
+```bash
+python -m scripts.backtest_forecast_run --write --mart-schema mart --target-public --replace
+```
+
+**10. Check the API:** `python scripts/smoke_api.py`.
+
+**Rehearsing on a scratch copy** (`python -m scripts.rehearse_fills --schema
+ssm_<name> --build`, then step 3-5 with `--schema ssm_<name>` and no
+`--target-public`): the build and every scratch load apply pending migrations
+to the scratch schema, but a migration that names `app.users` explicitly
+(0059, 0060) runs against the LIVE table. Do not build a scratch copy while
+such a migration is pending on public. The clone also copies no triggers;
+public has one (`trg_inventory_fact_count_month`, 0039). Drop the scratch
+schema afterwards.
+
 ## Troubleshooting
 
 **The dashboard breaks after you pull.** Run this first — read-only, about ten
