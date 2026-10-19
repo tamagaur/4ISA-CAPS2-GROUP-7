@@ -1,32 +1,17 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Check, Calendar, FlaskConical } from 'lucide-react';
+import { FlaskConical } from 'lucide-react';
 import { DEFAULT_PRINCIPAL, SELECTABLE_PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
 import Greeting from './ui/Greeting';
 import './Topbar.css';
 
+// The date range moved into each page's own RangePicker (2026-10-09); the
+// range props DashboardLayout still passes are not read here.
 const Topbar = ({
   toggleSidebar,
   isSidebarOpen = true,
   rightSlot,
-  startMonth,
-  startYear,
-  endMonth,
-  endYear,
-  pendingStartMonth,
-  setPendingStartMonth,
-  pendingStartYear,
-  setPendingStartYear,
-  pendingEndMonth,
-  setPendingEndMonth,
-  pendingEndYear,
-  setPendingEndYear,
-  isPending,
-  handleApplyPeriod,
-  handleResetToToday,
-  realWorldMonth = 'Aug',
-  realWorldYear = '2026',
   principal = DEFAULT_PRINCIPAL,
   setPrincipal = () => {},
   dataMode = DATA_MODES.REAL,
@@ -37,21 +22,17 @@ const Topbar = ({
 }) => {
   const preview = isPreviewMode(dataMode);
   const location = useLocation();
-  const isToday =
-    pendingStartMonth === realWorldMonth &&
-    pendingStartYear === realWorldYear &&
-    pendingEndMonth === realWorldMonth &&
-    pendingEndYear === realWorldYear;
-  const isForecastPage = location.pathname === '/forecast';
 
-  // The principal filter (and the synthetic-data switch beside it) only
-  // where a page has a per-principal view: the dashboard and the analysis
-  // and inventory pages. The admin pages (audit log, data upload, user
-  // management), the card preview and My profile show the same thing
-  // whichever principal is picked, so neither control appears there
-  // (Audrey, 2026-10-16).
-  const PAGES_WITHOUT_PRINCIPAL = ['/audit-log', '/upload', '/users', '/preview', '/profile'];
-  const showPrincipalFilter = !PAGES_WITHOUT_PRINCIPAL.includes(location.pathname);
+  // The principal filter (and the synthetic-data switch beside it) only on
+  // the pages whose data it filters (Audrey, 2026-10-16, again 2026-10-18):
+  // the dashboard, the analysis pages and the inventory pages, each of which
+  // reads `principal` to load its data. Everything else (Reference Guide,
+  // audit log, data upload, user management, the card preview, My profile)
+  // shows the same thing whichever principal is picked. A list of the pages
+  // that use it, not of those that don't, so a new page has no switch until
+  // it reads the principal.
+  const PAGES_WITH_PRINCIPAL = ['/', '/forecast', '/category-trends', '/abc', '/sku-management', '/reorder'];
+  const showPrincipalFilter = PAGES_WITH_PRINCIPAL.includes(location.pathname);
 
   return (
     <header className="topbar">

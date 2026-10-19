@@ -2,7 +2,44 @@
 // /dashboard's for Unilever, Mar 2025 – Feb 2026, read on 2026-10-11.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { coverScale, formatCompactCount, formatPercent, policyRatio, shareOf, urgencyParts } from './kpiMath.js';
+import {
+  coverScale, excessOverPolicy, expectedByNow, formatCompactCount, formatPercent, neededPerMonth, policyRatio,
+  shareOf, urgencyParts,
+} from './kpiMath.js';
+
+// GET /dashboard's allocation for Unilever, read 2026-10-18: FY 2025 sales
+// ₱393.4M over 12 months, Jan–Feb 2025 ₱67.4M, Jan–Feb 2026 ₱65.1M, the 103%
+// target ₱405.2M.
+const ALLOC = {
+  target: 405218729.91, priorYtd: 67383411.68, basisSales: 393416242.63,
+  ytdMonths: 2, priorMonths: 2, basisMonths: 12,
+};
+
+test('sales expected by now follow last year\'s own share of the year', () => {
+  assert.equal((expectedByNow(ALLOC) / 1e6).toFixed(1), '69.4');
+});
+
+test('expected by now is null without a like-for-like, whole-year basis', () => {
+  assert.equal(expectedByNow({ ...ALLOC, priorMonths: 1 }), null);
+  assert.equal(expectedByNow({ ...ALLOC, basisMonths: 6 }), null);
+  assert.equal(expectedByNow({ ...ALLOC, priorYtd: null }), null);
+  assert.equal(expectedByNow({ ...ALLOC, ytdMonths: 0 }), null);
+});
+
+test('what each remaining month needs is the gap over the months left', () => {
+  assert.equal((neededPerMonth({ target: ALLOC.target, ytdSales: 65080308.3, ytdMonths: 2 }) / 1e6).toFixed(1), '34.0');
+  assert.equal(neededPerMonth({ target: 100, ytdSales: 120, ytdMonths: 3 }), 0);
+  assert.equal(neededPerMonth({ target: 100, ytdSales: 100, ytdMonths: 12 }), null);
+  assert.equal(neededPerMonth({ target: null, ytdSales: 1, ytdMonths: 1 }), null);
+});
+
+test('stock beyond the rule is the share of the cover past it, of the stock value', () => {
+  assert.equal((excessOverPolicy(46576778.51, 6.21, 3) / 1e6).toFixed(1), '24.1');
+  assert.equal(excessOverPolicy(1000, 3, 3), 0);
+  assert.equal(excessOverPolicy(1000, 2, 3), 0);
+  assert.equal(excessOverPolicy(1000, null, 3), null);
+  assert.equal(excessOverPolicy(1000, 6, 0), null);
+});
 
 test('policy ratio is weeks of cover over the policy weeks', () => {
   assert.equal(policyRatio(6.21, 3).toFixed(1), '2.1');

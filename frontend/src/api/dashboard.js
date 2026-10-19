@@ -63,8 +63,14 @@ function getRange(route, args, failure) {
 
 // Every product idle at the range-end count (the dashboard carries the first 10).
 export function getIdleStock(args = {}) {
-  const { startPeriod, ...rest } = args; // the count is the range's end; no start
+  const { startPeriod: _start, ...rest } = args; // the count is the range's end; no start
   return getRange('idle-stock', rest, 'Failed to load the idle stock list');
+}
+
+// Every product in the stock count at the range's end, with its weekly sales, weeks of
+// cover and pesos above SSM's 3-week rule (2026-10-19): the lists behind the stock cards.
+export function getStockDetail(args = {}) {
+  return getRange('stock-detail', args, 'Failed to load the stock by product');
 }
 
 // Products that entered or left Class A against the same months a year before.

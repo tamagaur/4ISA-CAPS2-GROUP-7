@@ -209,6 +209,37 @@ export const IDLE_COLUMNS = [
   { key: 'last', label: 'Last sale', render: (r) => (r.never_sold ? 'Never sold' : r.last_sale_period ? formatMonth(r.last_sale_period) : '—') },
 ];
 
+// The lists behind the stock cards (GET /dashboard/stock-detail, 2026-10-19).
+// Weeks of cover is the product's stock over its own average weekly sales;
+// a product that sold nothing in those 12 months has no cover figure.
+const weeksText = (r) => (r.weeks_of_cover != null ? `${r.weeks_of_cover.toFixed(1)} wks`
+  : r.no_sale_in_window ? 'No sale in 12 months' : '—');
+const pesosText = (v) => (v == null ? '—' : formatCompactPesos(v));
+export const STOCK_VALUE_COLUMNS = [
+  { key: 'pieces', label: 'Stock (pieces)', render: (r) => (r.pieces == null ? '—' : formatUnits(r.pieces)) },
+  { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
+  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+];
+export const STOCK_COVER_COLUMNS = [
+  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+  { key: 'weekly', label: 'Weekly sales (₱)', sub: 'average, 12 months', render: (r) => pesosText(r.weekly_sales) },
+  { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
+];
+export const ABOVE_RULE_COLUMNS = [
+  { key: 'above', label: 'Above the rule (₱)', sub: 'beyond 3 weeks of its sales', render: (r) => pesosText(r.above_rule_pesos) },
+  { key: 'pesos', label: 'Stock value (₱)', render: (r) => pesosText(r.pesos) },
+  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+];
+const UNCHECKABLE_REASON = {
+  no_safety_stock: 'No safety stock in the plan',
+  no_stock_count: 'No stock count',
+  missing_both: 'Missing both',
+};
+export const UNCHECKABLE_COLUMNS = [
+  { key: 'reason', label: 'Why it can’t be checked', render: (r) => UNCHECKABLE_REASON[r.reason] || r.reason },
+  { key: 'stock', label: 'Stock (pieces)', render: (r) => (r.current_stock == null ? '—' : formatUnits(r.current_stock)) },
+];
+
 // Forecast against sales over the range (GET /dashboard forecast_accuracy),
 // for a client reader (2026-10-08): one plain answer, the monthly chart as
 // its evidence, where the misses went, and the products to review. Every

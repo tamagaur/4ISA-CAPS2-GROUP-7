@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { CalendarRange, ChevronDown, RotateCcw } from 'lucide-react';
 import DateFilter from './DateFilter';
-import { isPreviewMode } from '../dataMode';
+import { PLACEHOLDER_START, isPreviewMode } from '../dataMode';
 import { COMPARE_MODES, COMPARE_OPTIONS, quickRanges, rangeText, sameRange } from '../periodFilter';
 import './RangePicker.css';
 
@@ -20,7 +20,7 @@ const RangePicker = () => {
     endMonth: outlet.endMonth, endYear: outlet.endYear,
   };
   const preview = isPreviewMode(outlet.dataMode);
-  const quick = preview ? [] : quickRanges();
+  const quick = quickRanges(preview ? Number(PLACEHOLDER_START.year) : undefined);
   const activeQuick = quick.find((q) => sameRange(q.range, applied)) || null;
   const appliedKey = rangeText(applied);
   // "Mar 25 – Feb 26" for a phone-width button.
@@ -45,7 +45,7 @@ const RangePicker = () => {
   }, [open]);
   useEffect(() => { setOpen(false); }, [appliedKey]);
 
-  const isDefault = !preview && activeQuick?.key === 'last12' && outlet.compare === COMPARE_MODES.YEAR;
+  const isDefault = activeQuick?.key === 'last12' && outlet.compare === COMPARE_MODES.YEAR;
 
   return (
     <div className="range-picker" ref={rootRef}>

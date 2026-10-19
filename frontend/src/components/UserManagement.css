@@ -538,3 +538,17 @@
 .user-mgmt-table td {
   font-variant-numeric: tabular-nums;
 }
+
+/* "Invite expired" (2026-10-18): the invite link has stopped working, so
+   the person can't get in until it is resent. Red, to stand out from the
+   amber "Invite pending". */
+.user-mgmt-invite-expired {
+  background-color: #FDECEC;
+  color: #B42318;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px #F5B5B0;
+}
+
+.user-mgmt-invite-expired.badge-dot::before {
+  background-color: #D92D20;
+}

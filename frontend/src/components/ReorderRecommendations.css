@@ -631,3 +631,23 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* "Showing critical only: 16 SKUs below safety stock · Show all" — the
+   filter a dashboard link sets (?urgency=critical, 2026-10-19). */
+.reorder-filter-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #F5C2BD;
+  border-radius: 999px;
+  background: #FDECEC;
+  font-size: 13px;
+  color: #7A271A;
+}
+
+.reorder-filter-chip strong {
+  color: #B42318;
+}

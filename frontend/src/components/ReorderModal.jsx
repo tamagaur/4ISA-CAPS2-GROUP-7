@@ -83,7 +83,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
                 (worked out once on the row by ReorderRecommendations). */}
             <p className="reorder-modal-subtitle">
               Order <strong>{formatUnits(data.orderQty)}</strong> pieces
-              {data.cases?.order ? ` (${data.cases.order})` : ''} for the {plan}. Below is how the optimizer (LP)
+              {data.cases?.order ? ` (${data.cases.order})` : ''} for the {plan}. Below is how the order plan
               arrived at this suggestion.
             </p>
             {/* The product's own page: its sales history, the forecast and
@@ -171,7 +171,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               this credited the weights alone, and said the 3-week rule held
               "across the whole warehouse" — it sums the planned SKUs only. */}
           <p className="reorder-why-intro">
-            The LP orders each SKU up to its target stock, net of what is already on hand. Only when the supplier
+            The order plan orders each SKU up to its target stock, net of what is already on hand. Only when the supplier
             allocation can&apos;t cover every SKU does it cut, taking the rest of the target first, then safety stock,
             and this month&apos;s demand last. Which SKUs take the cut is decided
             {coverRuleDecides
@@ -225,7 +225,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               ? <>
                   {' '}SSM&apos;s {inputs.target_weeks ?? 3}-week rule asks that the stock left at month end of the SKUs
                   in this plan — not the whole warehouse — be worth at least {inputs.target_weeks ?? 3} weeks of their
-                  sales, at last purchase price; the LP keeps it where the allocation allows.
+                  sales, at last purchase price; the plan keeps it where the allocation allows.
                 </>
               : <> SSM&apos;s {inputs.target_weeks ?? 3}-week rule is built into each SKU&apos;s target stock as a floor.</>}
             {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}

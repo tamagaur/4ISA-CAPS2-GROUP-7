@@ -77,7 +77,7 @@ const navSections = [
 
 const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SERVER ONLINE', offline: 'SERVER OFFLINE' };
 
-const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
+const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
 
   // Real backend reachability, re-checked every minute. Pings /status, not
   // /health (same check): ad blockers' EasyPrivacy list blocks

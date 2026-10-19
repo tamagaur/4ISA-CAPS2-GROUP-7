@@ -97,14 +97,21 @@ const DEFAULT_MONTHS_BACK = 11;
 // says something about direction.
 const MIN_RANGE_MONTHS = 6;
 
-// Preview (src/dataMode.js) exists to show the whole span, so its default
-// range is all of it: the first placeholder month through "today".
-const getDefaultDateRange = (mode = DATA_MODES.REAL) => {
+// The same 12 months in both modes (Audrey, 2026-10-18): with synthetic data
+// on, the dashboard is the real-data dashboard plus the synthetic months, not
+// a five-year view that drops every comparison. The picker still reaches back
+// to Jan 2021 in that mode for anyone who wants the whole span.
+const getDefaultDateRange = () => {
   const today = getCurrentRealWorldPeriod();
-  const start = isPreviewMode(mode)
-    ? PLACEHOLDER_START
-    : subtractMonths(today.month, today.year, DEFAULT_MONTHS_BACK);
+  const start = subtractMonths(today.month, today.year, DEFAULT_MONTHS_BACK);
   return { startMonth: start.month, startYear: start.year, endMonth: today.month, endYear: today.year };
+};
+
+// Whether a range can be shown in a mode: real mode's picker starts in
+// January of FIRST_DATA_YEAR, synthetic mode's at PLACEHOLDER_START.
+const rangeFitsMode = (range, mode) => {
+  const first = isPreviewMode(mode) ? PLACEHOLDER_START : { month: 'Jan', year: String(FIRST_DATA_YEAR) };
+  return periodValue(range.startMonth, range.startYear) >= periodValue(first.month, first.year);
 };
 
 // Ranges and comparisons once kept in the browser (until 2026-10-09; the
@@ -175,7 +182,7 @@ const DashboardLayout = () => {
   // months, compared with the same months a year earlier. A range picked on
   // an earlier visit is no longer carried over, so every new visit starts on
   // the full-year, like-for-like view the Technical Adviser reads first.
-  const [initialRange] = useState(() => loadUrlRange(dataMode) || getDefaultDateRange(dataMode));
+  const [initialRange] = useState(() => loadUrlRange(dataMode) || getDefaultDateRange());
 
   // What every comparison on the page is against (src/periodFilter.js):
   // the same months a year earlier (default), the period just before, or
@@ -354,22 +361,24 @@ const DashboardLayout = () => {
   // a separate Save — and forgets the saved range, so the next visit opens
   // on the default too.
   const handleResetToToday = () => {
-    const range = getDefaultDateRange(dataMode);
+    const range = getDefaultDateRange();
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
     setCompareState(COMPARE_MODES.YEAR);
   };
 
-  // Flipping the mode switches to that mode's own range: the one saved for
-  // it, else its default — all of Jan 2021 – today with synthetic data, the
-  // usual 12 months in real mode (whose picker can't show 2021-22 at all).
-  // The principal stays: since the demonstration data (2026-10-15) both
-  // principals have synthetic months. Every cached response is dropped and
-  // the page remounts, like the Refresh button.
+  // Flipping the mode keeps the range and comparison on screen, so the same
+  // dashboard comes back with or without the synthetic months. Only a range
+  // that reaches into 2021-22, which real mode can't show, falls back to the
+  // 12-month default when synthetic data is turned off. The principal stays:
+  // since the demonstration data (2026-10-15) both principals have synthetic
+  // months. Every cached response is dropped and the page remounts, like the
+  // Refresh button.
   const handleDataModeChange = (next) => {
     if (next === dataMode) return;
     const mode = storeDataMode(next);
     setDataModeState(mode);
-    const range = getDefaultDateRange(mode);
+    const current = { startMonth, startYear, endMonth, endYear };
+    const range = rangeFitsMode(current, mode) ? current : getDefaultDateRange();
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
     invalidateCache();
     setRefreshKey((k) => k + 1);

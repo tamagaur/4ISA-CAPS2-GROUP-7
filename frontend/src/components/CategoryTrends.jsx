@@ -28,6 +28,8 @@ import InfoTip from './InfoTip';
 import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import PageHeader from './ui/PageHeader';
 import { LoadingStatus, SkeletonChart, SkeletonLine, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import './CategoryTrends.css';
 import GapNote from './GapNote';
 import { gapLabel } from '../utils/gapReasons';
@@ -448,15 +450,17 @@ const CategoryTrends = () => {
   // 12-month one would halve the history behind each trend.
   const period = periodToParam(endMonth, endYear) || undefined;
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
+  // Try again on a failed load re-runs the request.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setState((prev) => ({ ...prev, status: 'loading', error: null }));
     getCategoryTrends({ principal, period })
       .then((data) => { if (!cancelled) setState({ status: 'loaded', data, error: null }); })
-      .catch((err) => { if (!cancelled) setState((prev) => ({ ...prev, status: 'error', error: err.message })); });
+      .catch((err) => { if (!cancelled) setState((prev) => ({ ...prev, status: 'error', error: describeLoadError(err) })); });
     return () => { cancelled = true; };
-  }, [principal, period]);
+  }, [principal, period, attempt]);
 
   const data = state.data;
   return (
@@ -473,6 +477,7 @@ const CategoryTrends = () => {
         {state.status === 'loading' && !data && (
           <>
             <LoadingStatus>Loading category trends…</LoadingStatus>
+            <SlowLoadNotice />
             <section className="ct-card" aria-hidden="true">
               <div className="ct-card-header skeleton-page-header">
                 <SkeletonLine width="9rem" height="1.1rem" />
@@ -489,7 +494,9 @@ const CategoryTrends = () => {
           </>
         )}
         {state.status === 'loading' && data && <RefreshingNote>Updating {labelForPrincipal(principal)}…</RefreshingNote>}
-        {state.status === 'error' && <p className="ct-note" role="alert">Could not load category trends: {state.error}</p>}
+        {state.status === 'error' && (
+          <LoadError what="the category trends" message={state.error} onRetry={() => setAttempt((n) => n + 1)} />
+        )}
 
         {data && (data.principals || []).map((section) => (
           <PrincipalSection

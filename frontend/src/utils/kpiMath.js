@@ -68,6 +68,44 @@ export function urgencyParts({ pending, critical = 0, urgent = 0, noData = 0 }) 
   ];
 }
 
+// Where sales should be by now, following last year's own month-by-month
+// pattern: the share of last year's sales the same months had brought in
+// (prior ÷ basis), applied to this year's target. Null unless the months
+// match and the basis is a whole year — then the card falls back to an even
+// pace and says so. (2026-10-18: ₱405.2M × ₱67.4M ÷ ₱393.4M = ₱69.4M by Feb.)
+export function expectedByNow({ target, priorYtd, basisSales, ytdMonths, priorMonths, basisMonths }) {
+  const t = num(target);
+  const p = num(priorYtd);
+  const b = num(basisSales);
+  const m = num(ytdMonths);
+  if (t == null || p == null || b == null || b <= 0 || p < 0 || t < 0) return null;
+  if (m == null || m <= 0 || m !== num(priorMonths) || num(basisMonths) !== 12) return null;
+  return t * (p / b);
+}
+
+// What each remaining month must bring in to reach the target: what is left
+// of the target, spread over the months left. 0 once the target is reached;
+// null when the year is complete or a figure is missing.
+export function neededPerMonth({ target, ytdSales, ytdMonths }) {
+  const t = num(target);
+  const s = num(ytdSales);
+  const m = num(ytdMonths);
+  if (t == null || s == null || m == null || m < 0 || m >= 12) return null;
+  return Math.max(t - s, 0) / (12 - m);
+}
+
+// The stock held beyond SSM's rule, in pesos: the share of the cover past
+// the rule's weeks, of the stock's value (value × (1 − policy ÷ weeks)). 0
+// when the cover is within the rule; null when a figure is missing.
+export function excessOverPolicy(stockValue, weeks, policyWeeks) {
+  const v = num(stockValue);
+  const w = num(weeks);
+  const p = num(policyWeeks);
+  if (v == null || w == null || p == null || v < 0 || w <= 0 || p <= 0) return null;
+  if (w <= p) return 0;
+  return v * (1 - p / w);
+}
+
 // A count in a few characters: 3,800,930 -> "3.8M", 356,287 -> "356.3K",
 // 812 -> "812". The exact figure belongs in a tooltip beside it.
 export function formatCompactCount(value) {

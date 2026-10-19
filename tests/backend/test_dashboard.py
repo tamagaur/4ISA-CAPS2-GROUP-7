@@ -301,6 +301,12 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
 
+        # backend/marts.stock_detail_query (2026-10-19, kpis.above_policy): these
+        # fixtures carry no per-product stock, so no product rows.
+        if "WITH stock AS" in sql and "mart.inventory_mart_real" in sql:
+            self.stock_detail_params = dict(params)
+            return FakeResult(getattr(self, "stock_detail_rows", []))
+
         # backend/marts.status: no refresh log in these fixtures.
         if "to_regclass('mart.refresh_log')" in sql:
             return FakeResult([{"present": False}])
@@ -422,6 +428,13 @@ class FakeSession:
         if "SELECT COUNT(*) FROM Forecast_Result fr" in sql:
             return FakeResult([self.scoped_forecast_count])
 
+        # backend/marts.principal_collected's "any real row in the range"
+        # check (Kelvin's B2 fix, 2026-10-16): these fixtures model a
+        # principal whose data was collected. Matched here so the suite runs
+        # again; the fixtures above predate it (2026-10-18).
+        if "SELECT EXISTS" in sql and "mart.sales_mart" in sql and "AS present" in sql:
+            return FakeResult([{"present": True}])
+
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
     def close(self):
@@ -537,7 +550,7 @@ def test_kpis_safety_stock_rate_null_when_lp_recommendation_empty():
     assert kpis["safety_stock_rate"] is None
     # Shown on the card as is, so it says what is missing in a planner's
     # terms rather than naming the table (2026-09-29).
-    assert "safety stock in the LP's current cycle" in kpis["safety_stock_rate_blocked_reason"]
+    assert "safety stock in the current order plan" in kpis["safety_stock_rate_blocked_reason"]
 
 
 def test_kpis_safety_stock_rate_null_when_no_abc_classification_at_all():
@@ -900,7 +913,7 @@ def test_portfolio_forecast_scope_label_and_series():
     pf = resp.json()["portfolio_forecast"]
     assert pf["gated_sku_count"] == 2
     assert pf["scope_label"] == (
-        "Unilever (SKU-level forecasts that beat a naive baseline — MASE < 1, the LP's own gate)."
+        "Unilever (product forecasts that beat a simple last-month guess, the order plan's own check)."
     )
     by_period = {pt["period"]: pt for pt in pf["series"]}
     assert by_period["2024-01"]["actual"] == pytest.approx(90.0)
@@ -963,8 +976,8 @@ def test_portfolio_forecast_all_scope_says_which_principal_it_covers():
     with make_client(session) as c:
         resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.json()["portfolio_forecast"]["scope_label"] == (
-        "All principals — only Unilever has SKU-level forecasts that beat a naive "
-        "baseline (MASE < 1, the LP's own gate), so this matches the Unilever view."
+        "All principals — only Unilever has product forecasts that beat a simple "
+        "last-month guess (the order plan's own check), so this matches the Unilever view."
     )
 
 
@@ -1195,6 +1208,32 @@ def test_safety_stock_exposure_counts_below_and_sums_their_revenue_share():
     assert exp["blocked_reason"] is None
 
 
+def test_safety_stock_exposure_says_why_the_rest_cannot_be_checked():
+    """The Below safety stock card's "why N can't be checked" (2026-10-18):
+    every Class A row outside the comparison is counted once, by what it
+    lacks, so the three counts add up to tier_a_count - comparable_count."""
+    rows = [
+        _abc_row(1, "A", "2024-02", 0.30, current_stock=10, ss_i=50),     # checked
+        _abc_row(2, "A", "2024-02", 0.20, current_stock=80, ss_i=50),     # checked
+        _abc_row(3, "A", "2024-02", 0.10, current_stock=None, ss_i=50),   # no stock count
+        _abc_row(4, "A", "2024-02", 0.08, current_stock=None, ss_i=50),   # no stock count
+        _abc_row(5, "A", "2024-02", 0.06, current_stock=40, ss_i=None),   # no safety stock
+        _abc_row(6, "A", "2024-02", 0.04, current_stock=None, ss_i=None), # neither
+    ]
+    session = FakeSession(latest_abc_period="2024-02", abc_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    exp = resp.json()["safety_stock_exposure"]
+    assert exp["uncheckable"] == {"no_safety_stock": 1, "no_stock_count": 2, "missing_both": 1}
+    assert sum(exp["uncheckable"].values()) == exp["tier_a_count"] - exp["comparable_count"]
+    # The rows behind the counts (the list the card opens): each once, by reason,
+    # then the most revenue first.
+    items = exp["uncheckable_items"]
+    assert [(i["sku_id"], i["reason"]) for i in items] == [
+        ("SKU5", "no_safety_stock"), ("SKU3", "no_stock_count"), ("SKU4", "no_stock_count"), ("SKU6", "missing_both"),
+    ]
+
+
 def test_safety_stock_exposure_blocked_when_nothing_measurable():
     session = FakeSession(latest_abc_period="2024-02", abc_rows=[_abc_row(1, "A", "2024-02", 0.6)])
     with make_client(session) as c:
@@ -1203,6 +1242,7 @@ def test_safety_stock_exposure_blocked_when_nothing_measurable():
     assert exp["below_count"] is None
     assert exp["below_items"] == []
     assert exp["blocked_reason"]
+    assert exp["uncheckable"] is None
 
 
 def test_safety_stock_exposure_lists_the_products_behind_the_count():

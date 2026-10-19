@@ -25,6 +25,10 @@ class UserOut(BaseModel):
     # Latest sign-in, from user_session (backend/routers/users.py
     # USER_COLUMNS). None = never signed in.
     last_sign_in_at: datetime | None = None
+    # When the newest invite link expires (backend/routers/users.py
+    # USER_COLUMNS). Only for an invited account; the table shows
+    # "Invite expired" once it has passed. None = active, or no link on record.
+    invite_expires_at: datetime | None = None
 
 
 class UserUpdate(BaseModel):

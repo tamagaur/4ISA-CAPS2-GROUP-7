@@ -13,6 +13,8 @@ the `mart` schema (migration 0041, backend/marts.py).
                                   with their revenue change
     GET /dashboard/idle-stock     products in the count at the range's end with no sale in the
                                   6 sales months up to it
+    GET /dashboard/stock-detail   every product in the count at the range's end: stock value,
+                                  weekly sales, weeks of cover, pesos above SSM's 3-week rule
     GET /dashboard/product-sales  product x month sales, real and filled, each labelled (Del
                                   Monte's product split, DEC-31, is served here: hole H4)
     GET /dashboard/forecast-runs  the forecast history the accuracy figures come from
@@ -35,7 +37,8 @@ from backend.data_mode import PREVIEW, get_data_mode, preview_block
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
-from backend.routers.dashboard import _last_12_periods, _month_range, _resolve_sales_anchor
+from analytics.params import COVER_KPI_HISTORY_MONTHS, POLICY_COVER_WEEKS, WEEKS_PER_MONTH
+from backend.routers.dashboard import _last_12_periods, _latest_sales_period, _month_range, _resolve_sales_anchor
 from backend.series_gaps import gap_note
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -244,6 +247,39 @@ def get_idle_stock(
     end = _resolve_sales_anchor(db, period, "unilever")
     return {**marts.idle_stock(db, marts.stock_period_at_or_before(db, end, "unilever")),
             "window_rule_months": DEAD_SKU_MONTHS}
+
+
+def stock_detail_for(db: Session, scope: str, range_end: str | None, with_items: bool = True) -> dict:
+    """marts.stock_detail at the count GET /dashboard's stock cards read: the latest real
+    count on or before the range's end, over the 12 months of sales ending at that count
+    (or at the last month with sales before it) — kpis.weeks_of_cover's own window."""
+    count_period = marts.stock_period_at_or_before(db, range_end, scope)
+    coverage = marts.stock_coverage(db, count_period, scope)
+    if len(coverage) != 1:
+        return {"principal": scope, "count_period": count_period, "totals": None, "items": [],
+                "blocked_reason": "Pick one principal to list its products: their stock counts are separate."}
+    who = coverage[0]
+    latest = _latest_sales_period(db, who)
+    cover_end = min(latest, count_period) if latest and count_period else latest
+    window = _month_range(marts.month_add(cover_end, -(COVER_KPI_HISTORY_MONTHS - 1)), cover_end) if cover_end else []
+    return marts.stock_detail(db, who, count_period, window, POLICY_COVER_WEEKS, WEEKS_PER_MONTH, with_items)
+
+
+@router.get("/stock-detail")
+def get_stock_detail(
+    period: str | None = PeriodQuery,
+    start_period: str | None = StartQuery,
+    principal: str | None = PrincipalQuery,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+) -> dict:
+    """The products behind the Inventory value and Stock cover cards (2026-10-19): each
+    product in the stock count at the range's end with its stock value, its weekly sales,
+    its weeks of cover and the pesos it holds beyond SSM's 3-week rule. The totals are the
+    cards' own figures."""
+    scope = normalize_principal(principal) or "all"
+    _, end = resolve_range(db, period, start_period, scope)
+    return stock_detail_for(db, scope, end)
 
 
 @router.get("/product-sales")

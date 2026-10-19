@@ -1994,9 +1994,9 @@ export const CategoryStockBarWidget = ({
               cycle, grouped by each SKU's tier in the latest ABC run. */}
           {hasPending && (
             <p className="chart-placeholder-note tier-stock-pending-note">
-              Pending reorder recommendations in the {cycleLabel ? `${cycleLabel} plan` : 'LP\'s current plan'}, in SKUs:{' '}
+              Pending reorder recommendations in the {cycleLabel ? `${cycleLabel} plan` : 'current order plan'}, in SKUs:{' '}
               {data.map((row) => `${row.tier} ${(row.pendingReorderCount || 0).toLocaleString()}`).join(' · ')}.
-              {' '}The LP plans Class A
+              {' '}The order plan covers Class A
               {/* Only true while an older run's rows linger in the cycle —
                   the 2026-09-30 run retired them, leaving B and C at 0. */}
               {data.some((row) => row.tier !== 'A' && (row.pendingReorderCount || 0) > 0)
@@ -2324,7 +2324,7 @@ export const PortfolioForecastWidget = ({
             <span><span className="title-accent">Forecast</span> demand, top sellers</span> <span className="chart-unit">pieces</span>
             {gatedSkuCount != null && tierACount ? (
               <InfoTip label="Which SKUs are summed">
-                {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} Class A SKUs: `
+                {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} top sellers (Class A): `
                   + 'those whose forecasts beat a simple last-month guess (MASE below 1), the same check the reorder plan uses. '
                   + `The other ${(tierACount - gatedSkuCount).toLocaleString()} are left out rather than summed on forecasts that failed `
                   + 'the check, and the plan gives them no order recommendation: their forecast did not pass, or the product '
@@ -2336,8 +2336,8 @@ export const PortfolioForecastWidget = ({
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs that beat a simple last-month guess`
-              : ' · planned Class A SKUs'}
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} top sellers (Class A) that beat a simple last-month guess`
+              : ' · planned top sellers (Class A)'}
           </p>
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
           {hasData && forecastNote && <p className="chart-insight">{forecastNote}</p>}
@@ -2646,7 +2646,7 @@ export const ReorderRecommendationWidget = ({
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
           <p>
-            Order quantities in pieces from the optimizer (LP) · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+            Order quantities in pieces from the order plan · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
             {countLabel ? ` · ${countLabel}` : ''}
           </p>
         </div>
@@ -2828,10 +2828,10 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
     <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4>Stock target: LP vs SSM&apos;s 3-week policy</h4>
+          <h4>Stock target: the order plan vs SSM&apos;s 3-week rule</h4>
           <p>
             How much stock each policy would hold across the latest planning cycle, in pieces.
-            SSM&apos;s policy keeps three weeks of each SKU&apos;s own forecast in stock; the LP sets a
+            SSM&apos;s policy keeps three weeks of each SKU&apos;s own forecast in stock; the order plan sets a
             per-SKU target instead — the demand expected before the next delivery plus a safety buffer.
           </p>
         </div>
@@ -2848,7 +2848,7 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
             <p className="policy-headline">
               <span className="policy-headline-number">{Math.abs(c.target_vs_rule_pct).toFixed(1)}%</span>
               <span className="policy-headline-text">
-                {c.target_vs_rule_pct >= 0 ? 'less' : 'more'} stock under the LP&apos;s per-SKU targets than
+                {c.target_vs_rule_pct >= 0 ? 'less' : 'more'} stock under the plan&apos;s per-SKU targets than
                 SSM&apos;s {ruleWeeks}-week policy
                 {c.lp_target_weeks != null ? ` — ${Number(c.lp_target_weeks).toFixed(2)} weeks of sales against ${ruleWeeks}` : ''},
                 across {c.sku_count} SKUs
@@ -2908,7 +2908,7 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
           )}
           <p className="dashboard-chart-footnote">
             {c.sku_count} SKUs in the {formatMonth(c.cycle_date)} cycle with a forecast for that month, all in
-            pieces — the unit the LP solves in — so the policies compare without a peso conversion.
+            pieces — the unit the plan works in — so the policies compare without a peso conversion.
           </p>
           {/* The headline moves most with the safety stock's window and the
               placeholders behind it (analytics/optimization/lp_inputs.py),

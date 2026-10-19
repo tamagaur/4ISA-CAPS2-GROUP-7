@@ -7,15 +7,15 @@
 // security row reads GET /auth/mfa, as the sidebar's line does, and opens
 // the same two-step sign-in dialog.
 //
-// The picture never leaves the browser at full size: the person frames it
-// (sizes and moves it in the square: slider and drag, Audrey 2026-10-16),
-// it is drawn at AVATAR_PX here (canvas), then sent as a small JPEG data
+// The picture never leaves the browser at full size: the person crops,
+// zooms, turns and flips it in AvatarEditor (a dialog, Audrey 2026-10-18),
+// which draws it at AVATAR_PX (canvas); it is sent as a small JPEG data
 // URL, which the server keeps on the account row (migration 0058). On a server
 // without that migration (/auth/me says profile_pictures: false) the
 // button is disabled and says why; the name still saves.
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Camera, Crown, Info, Mail, MapPin, Maximize2, ShieldAlert, ShieldCheck, Trash2, UserRound,
+  Camera, Crop, Crown, Info, Mail, MapPin, ShieldAlert, ShieldCheck, Trash2, UserRound,
 } from 'lucide-react';
 import { usePermissions } from '../permissions/context';
 import { getCurrentUser } from '../auth';
@@ -23,6 +23,7 @@ import { updateProfile } from '../api/profile';
 import { getMfaStatus, MFA_STATUS_EVENT } from '../api/mfa';
 import { useToast } from './ToastProvider';
 import AccountSecurityModal from './AccountSecurityModal';
+import AvatarEditor from './AvatarEditor';
 import './ProfilePage.css';
 
 const AVATAR_PX = 192;
@@ -59,29 +60,6 @@ async function dataUrlToBitmap(dataUrl) {
   const blob = await (await fetch(dataUrl)).blob();
   return createImageBitmap(blob);
 }
-
-// How the picture sits in the square: `zoom` 1 fills the square with the
-// picture's shorter side (3 shows a third of it); `ox`/`oy` (-1..1) slide
-// it as far as the zoom leaves room, 0 being centred. drawFramed() paints
-// the framed picture at AVATAR_PX on white (a transparent PNG would
-// otherwise come out on black).
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 3;
-const NUDGE = 0.1;
-const clamp1 = (v) => Math.max(-1, Math.min(1, v));
-const frameOf = ({ bitmap, zoom }) => {
-  const scale = (AVATAR_PX / Math.min(bitmap.width, bitmap.height)) * zoom;
-  const dw = bitmap.width * scale;
-  const dh = bitmap.height * scale;
-  return { dw, dh, slackX: Math.max(0, dw - AVATAR_PX), slackY: Math.max(0, dh - AVATAR_PX) };
-};
-const drawFramed = (canvas, picture) => {
-  const { dw, dh, slackX, slackY } = frameOf(picture);
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, AVATAR_PX, AVATAR_PX);
-  ctx.drawImage(picture.bitmap, (-(1 + picture.ox) * slackX) / 2, (-(1 + picture.oy) * slackY) / 2, dw, dh);
-};
 
 // What the security row says for each two-step sign-in state (GET
 // /auth/mfa): on, off, paused on the server, or not loaded.
@@ -129,57 +107,35 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const fileRef = useRef(null);
 
-  // The picture being framed ({ bitmap, zoom, ox, oy }) or null. While one
-  // is open the preview is a canvas the person drags, with a size slider,
-  // and `avatar` is drawn again from it on every change, so Save sends
-  // exactly what the preview shows.
-  const [picture, setPicture] = useState(null);
-  const pictureRef = useRef(null);
-  pictureRef.current = picture;
-  const canvasRef = useRef(null);
-  const dragRef = useRef(null);
-  const openPicture = (bitmap) => {
-    pictureRef.current?.bitmap.close();
-    setPicture({ bitmap, zoom: MIN_ZOOM, ox: 0, oy: 0 });
+  // The picture being adjusted: the bitmap (the chosen file at full size,
+  // or the saved picture) and the editor's last settings for it, so
+  // Adjust reopens where the person left off. `editing` opens the dialog.
+  const [source, setSource] = useState(null);
+  const sourceRef = useRef(null);
+  sourceRef.current = source;
+  const [editing, setEditing] = useState(false);
+  const dropSource = () => {
+    sourceRef.current?.bitmap.close();
+    setSource(null);
+    setEditing(false);
+  };
+  useEffect(() => () => sourceRef.current?.bitmap.close(), []);
+  const openEditor = (bitmap, settings = null) => {
+    if (sourceRef.current && sourceRef.current.bitmap !== bitmap) sourceRef.current.bitmap.close();
+    setSource({ bitmap, settings, fresh: !settings });
+    setEditing(true);
+  };
+  const applyEdit = ({ dataUrl, settings }) => {
+    setSource((src) => (src ? { ...src, settings, fresh: false } : src));
+    setAvatar(dataUrl);
     setAvatarTouched(true);
+    setEditing(false);
   };
-  const closePicture = () => {
-    pictureRef.current?.bitmap.close();
-    setPicture(null);
-  };
-  useEffect(() => () => pictureRef.current?.bitmap.close(), []);
-  useEffect(() => {
-    if (!picture || !canvasRef.current) return;
-    drawFramed(canvasRef.current, picture);
-    setAvatar(canvasRef.current.toDataURL('image/jpeg', 0.86));
-  }, [picture]);
-  const movePicture = (change) => setPicture((p) => (p ? { ...p, ...change(p) } : p));
-  const onPointerDown = (e) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { x: e.clientX, y: e.clientY, ox: picture.ox, oy: picture.oy };
-  };
-  const onPointerMove = (e) => {
-    const start = dragRef.current;
-    if (!start) return;
-    // Screen pixels to canvas pixels, then to the share of the room the
-    // zoom leaves; dragging right shows more of the left.
-    const perPx = AVATAR_PX / e.currentTarget.getBoundingClientRect().width;
-    const dx = (e.clientX - start.x) * perPx;
-    const dy = (e.clientY - start.y) * perPx;
-    movePicture((p) => {
-      const { slackX, slackY } = frameOf(p);
-      return {
-        ox: slackX ? clamp1(start.ox - (2 * dx) / slackX) : 0,
-        oy: slackY ? clamp1(start.oy - (2 * dy) / slackY) : 0,
-      };
-    });
-  };
-  const endDrag = () => { dragRef.current = null; };
-  const onCanvasKey = (e) => {
-    const step = { ArrowLeft: [NUDGE, 0], ArrowRight: [-NUDGE, 0], ArrowUp: [0, NUDGE], ArrowDown: [0, -NUDGE] }[e.key];
-    if (!step) return;
-    e.preventDefault();
-    movePicture((p) => ({ ox: clamp1(p.ox + step[0]), oy: clamp1(p.oy + step[1]) }));
+  // Cancel on a picture just chosen drops it; on Adjust it keeps the
+  // picture as it was.
+  const cancelEdit = () => {
+    if (source?.fresh) dropSource();
+    else setEditing(false);
   };
 
   // A fresh /auth/me (a save, or a re-check) resets what hasn't been
@@ -221,25 +177,30 @@ export default function ProfilePage() {
     if (!file) return;
     setError('');
     try {
-      openPicture(await fileToBitmap(file));
+      openEditor(await fileToBitmap(file));
     } catch (err) {
       setError(err.message);
     }
   };
 
-  // Frame the picture that is already there (saved, or just chosen).
+  // Adjust the picture that is there: the chosen file at full size while it
+  // is at hand, else the saved picture.
   const adjustPicture = async () => {
     if (!avatar) return;
     setError('');
+    if (source && !source.fresh) {
+      setEditing(true);
+      return;
+    }
     try {
-      openPicture(await dataUrlToBitmap(avatar));
+      openEditor(await dataUrlToBitmap(avatar));
     } catch {
       setError("Couldn't open the picture to adjust it.");
     }
   };
 
   const removePicture = () => {
-    closePicture();
+    dropSource();
     setAvatar(null);
     setAvatarTouched(true);
     setError('');
@@ -247,7 +208,7 @@ export default function ProfilePage() {
 
   // Back to what was last loaded or saved.
   const cancel = () => {
-    closePicture();
+    dropSource();
     setName(savedName);
     setAvatar(savedAvatar);
     setAvatarTouched(false);
@@ -265,7 +226,6 @@ export default function ProfilePage() {
     try {
       await updateProfile(body);
       await refresh();
-      closePicture();
       setAvatarTouched(false);
       toast.success('Profile saved');
     } catch (err) {
@@ -315,26 +275,7 @@ export default function ProfilePage() {
               <p>This will be shown in the sidebar and throughout the dashboard.</p>
             </div>
             <div className="profile-section-body profile-picture">
-              {picture ? (
-                <div className="profile-avatar is-preview is-framing">
-                  <canvas
-                    ref={canvasRef}
-                    width={AVATAR_PX}
-                    height={AVATAR_PX}
-                    className="profile-avatar-canvas"
-                    tabIndex={0}
-                    role="img"
-                    aria-label="Your picture in its frame. Drag it, or use the arrow keys, to move it."
-                    onPointerDown={onPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={endDrag}
-                    onPointerCancel={endDrag}
-                    onKeyDown={onCanvasKey}
-                  />
-                </div>
-              ) : (
-                <Avatar src={avatar} name={cleanName || savedName} className="is-preview" />
-              )}
+              <Avatar src={avatar} name={cleanName || savedName} className="is-preview" />
               <div className="profile-picture-controls">
                 <div className="profile-picture-buttons">
                   <button
@@ -346,9 +287,9 @@ export default function ProfilePage() {
                     <Camera size={16} aria-hidden="true" />
                     {avatar ? 'Change picture' : 'Choose a picture'}
                   </button>
-                  {picturesAvailable && avatar && !picture && (
+                  {picturesAvailable && avatar && (
                     <button type="button" className="btn btn-secondary" onClick={adjustPicture}>
-                      <Maximize2 size={16} aria-hidden="true" />
+                      <Crop size={16} aria-hidden="true" />
                       Adjust
                     </button>
                   )}
@@ -359,35 +300,11 @@ export default function ProfilePage() {
                     </button>
                   )}
                 </div>
-                {picture ? (
-                  <div className="profile-framing">
-                    <span className="profile-framing-label">Size</span>
-                    <input
-                      type="range"
-                      min={MIN_ZOOM}
-                      max={MAX_ZOOM}
-                      step={0.01}
-                      value={picture.zoom}
-                      onChange={(e) => movePicture(() => ({ zoom: Number(e.target.value) }))}
-                      aria-label="Picture size in the frame"
-                    />
-                    <span className="profile-framing-value">{Math.round(picture.zoom * 100)}%</span>
-                    <button
-                      type="button"
-                      className="profile-framing-reset"
-                      onClick={() => movePicture(() => ({ zoom: MIN_ZOOM, ox: 0, oy: 0 }))}
-                    >
-                      Reset
-                    </button>
-                    <span className="profile-framing-hint">Drag the picture to move it.</span>
-                  </div>
-                ) : (
-                  <p className="profile-help">
-                    {picturesAvailable
-                      ? `PNG, JPEG or WebP. You can size and move it in its frame; it is saved as a ${AVATAR_PX} px square.`
-                      : "Picture uploads aren't available on this server yet; your initials are shown instead."}
-                  </p>
-                )}
+                <p className="profile-help">
+                  {picturesAvailable
+                    ? `PNG, JPEG or WebP. Crop, zoom, rotate or flip it before saving; it is saved as a ${AVATAR_PX} px square.`
+                    : "Picture uploads aren't available on this server yet; your initials are shown instead."}
+                </p>
                 <input
                   ref={fileRef}
                   type="file"
@@ -522,6 +439,14 @@ export default function ProfilePage() {
         </aside>
       </div>
 
+      <AvatarEditor
+        isOpen={editing}
+        bitmap={source?.bitmap ?? null}
+        initial={source?.settings ?? null}
+        outputPx={AVATAR_PX}
+        onCancel={cancelEdit}
+        onApply={applyEdit}
+      />
       <AccountSecurityModal isOpen={showSecurity} onClose={() => setShowSecurity(false)} onStatusChange={setMfa} />
     </div>
   );
