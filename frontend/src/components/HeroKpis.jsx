@@ -86,12 +86,10 @@ const NumLink = ({ to = null, onClick = null, title, children }) => {
 // A small header over each part of a card.
 const SectionHead = ({ children }) => <p className="hero-section-head">{children}</p>;
 
-// A card's "?" text: short paragraphs, the definition first.
-const TipText = ({ lines }) => (
-  <>
-    {lines.filter(Boolean).map((line) => <span key={line} className="hero-tip-line">{line}</span>)}
-  </>
-);
+// A card's "?" text: short paragraphs, the definition first. Elements, not
+// a component, so InfoTip can measure the text and open a long one in its
+// dialog (2026-10-19).
+const tipLines = (lines) => lines.filter(Boolean).map((line) => <span key={line} className="hero-tip-line">{line}</span>);
 
 // The card frame: top accent, coloured dot, title; on the right the period
 // basis tag (when given, as a plain label: its explanation joins the card's
@@ -111,7 +109,7 @@ export const KpiCard = ({
         <span className="hero-card-side">
           {basis && <BasisTag label={basis.label} follows={basis.follows} />}
           {lines.length > 0 && (
-            <InfoTip label={`About ${title}`} size={14}><TipText lines={lines} /></InfoTip>
+            <InfoTip label={`About ${title}`} size={14}>{tipLines(lines)}</InfoTip>
           )}
         </span>
       </header>

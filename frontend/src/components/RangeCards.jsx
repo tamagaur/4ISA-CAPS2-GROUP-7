@@ -6,7 +6,7 @@
 // range route's) as served; nothing here recomputes one.
 import React, { useState } from 'react';
 import SectionLede from './ui/SectionLede';
-import { ArrowDownRight, ArrowRight, ArrowUpRight, X } from 'lucide-react';
+import { ArrowRight, X } from 'lucide-react';
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -464,16 +464,23 @@ export const OVER_RUN_COLUMNS = [
 
 // Products that entered or left Class A (GET /dashboard/class-changes): the
 // range against the same months a year before, ranked on one revenue rule.
-const LIST_PREVIEW = 6;
+// How many each side names before "See all" opens the rest, in place.
+const LIST_PREVIEW = 5;
 
-const ChangeList = ({ title, icon, items, onOpen }) => {
+// One side (2026-10-19, after the mockup): a tinted header band — green for
+// the ones that joined, red for the ones that left — then the products in
+// the payload's own order, each with its change in revenue at the right.
+// The full list scrolls inside the panel, so the card keeps its height.
+const ChangeList = ({ title, tone, items, noun, onOpen }) => {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? items : items.slice(0, LIST_PREVIEW);
   return (
-    <div className="pending-change-list">
-      <span className="pending-card-label">{icon} {title} ({items.length})</span>
+    <section className={`pending-change-list is-${tone}`} aria-label={`${title} (${items.length})`}>
+      <h5 className="pending-change-head">
+        {title} <span className="pending-change-count">({items.length})</span>
+      </h5>
       {items.length === 0 ? <p className="pending-change-empty">None</p> : (
-        <ul>
+        <ul className={showAll ? 'is-expanded' : undefined}>
           {shown.map((item) => (
             <li key={item.sku_id || item.product_key || item.product_name}>
               <ProductName
@@ -492,11 +499,11 @@ const ChangeList = ({ title, icon, items, onOpen }) => {
         </ul>
       )}
       {items.length > LIST_PREVIEW && (
-        <button type="button" className="range-card-action" onClick={() => setShowAll((v) => !v)}>
-          {showAll ? 'Show fewer' : `Show all ${items.length}`}
+        <button type="button" className="range-card-action pending-change-more" onClick={() => setShowAll((v) => !v)}>
+          {showAll ? 'Show fewer' : `See all ${items.length} ${noun}`} <ArrowRight size={13} aria-hidden="true" />
         </button>
       )}
-    </div>
+    </section>
   );
 };
 
@@ -517,44 +524,49 @@ export const ClassChanges = ({ changes, onOpen }) => {
   const multi = changes.principals.length > 1;
   return (
     <CardShell
-      title={<span><span className="title-accent">Changes</span> in the top sellers</span>}
+      title="Changes in the top sellers"
       lede="Where changes happened"
-      lead={`${changes.label} against ${changes.compare_label}: products that entered or left the top sellers, `
-        + 'with the change in each one’s revenue between the two periods.'}
+      lead={`${changes.label}, compared with ${changes.compare_label}. `
+        + 'The amount beside each product is the change in its revenue between the two periods.'}
     >
-      {changes.principals.map((p) => (
-        <div key={p.principal} className="range-change-block">
-          {multi && <span className="pending-card-label">{names[p.principal] || p.principal}</span>}
-          {p.blocked_reason ? <p className="range-blocked">{p.blocked_reason}</p> : (
-            <>
-              {crossesRegroup(changes, p) && (
-                <p className="range-regroup-note">
-                  <strong>Del Monte regrouped its product categories in Jan 2025</strong>, so this comparison sets the
-                  old sub-category names against the new ones: most categories below entered or left because they
-                  were renamed, not because their sales changed.
+      {changes.principals.map((p) => {
+        const noun = p.grain === 'sku' ? 'products' : 'categories';
+        return (
+          <div key={p.principal} className="range-change-block">
+            {multi && <span className="pending-card-label">{names[p.principal] || p.principal}</span>}
+            {p.blocked_reason ? <p className="range-blocked">{p.blocked_reason}</p> : (
+              <>
+                {crossesRegroup(changes, p) && (
+                  <p className="range-regroup-note">
+                    <strong>Del Monte regrouped its product categories in Jan 2025</strong>, so this comparison sets the
+                    old sub-category names against the new ones: most categories below entered or left because they
+                    were renamed, not because their sales changed.
+                  </p>
+                )}
+                {/* The counts and totals in bold, so the sentence scans. */}
+                <p className="range-note range-change-summary">
+                  Top sellers: <strong>{p.compare_class_a_count.toLocaleString()}</strong> {noun} a year
+                  earlier, <strong>{p.class_a_count.toLocaleString()}</strong> now
+                  (<strong>{p.stayed_count.toLocaleString()}</strong> stayed).{' '}
+                  {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
+                  {(p.entered || []).length > 0
+                    ? <>The ones that joined sold <strong>{formatCompactPesos(p.entered_compare_revenue)}</strong> a year earlier and <strong>{formatCompactPesos(p.entered_revenue)}</strong> now. </>
+                    : 'None joined. '}
+                  {(p.left || []).length > 0
+                    ? <>The ones that left sold <strong>{formatCompactPesos(p.left_compare_revenue)}</strong> a year earlier and <strong>{formatCompactPesos(p.left_revenue)}</strong> now. </>
+                    : 'None left. '}
+                  Pesos at {p.pesos_basis}.
                 </p>
-              )}
-              <p className="range-note">
-                Top sellers: {p.compare_class_a_count.toLocaleString()} {p.grain === 'sku' ? 'products' : 'categories'} a year
-                earlier, {p.class_a_count.toLocaleString()} now ({p.stayed_count.toLocaleString()} stayed).{' '}
-                {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
-                {(p.entered || []).length > 0
-                  ? `The ones that joined sold ${formatCompactPesos(p.entered_compare_revenue)} a year earlier and ${formatCompactPesos(p.entered_revenue)} now. `
-                  : 'None joined. '}
-                {(p.left || []).length > 0
-                  ? `The ones that left sold ${formatCompactPesos(p.left_compare_revenue)} a year earlier and ${formatCompactPesos(p.left_revenue)} now. `
-                  : 'None left. '}
-                Pesos at {p.pesos_basis}.
-              </p>
-              <div className="pending-change-grid">
-                <ChangeList title="Joined the top sellers" icon={<ArrowUpRight size={12} aria-hidden="true" />} items={byChange(p.entered || [])} onOpen={onOpen} />
-                <ChangeList title="Left the top sellers" icon={<ArrowDownRight size={12} aria-hidden="true" />} items={byChange(p.left || [])} onOpen={onOpen} />
-              </div>
-              <p className="range-source">{p.revenue_rule}</p>
-            </>
-          )}
-        </div>
-      ))}
+                <div className="pending-change-grid">
+                  <ChangeList title="Joined the top sellers" tone="up" items={byChange(p.entered || [])} noun={noun} onOpen={onOpen} />
+                  <ChangeList title="Left the top sellers" tone="down" items={byChange(p.left || [])} noun={noun} onOpen={onOpen} />
+                </div>
+                <p className="range-source">{p.revenue_rule}</p>
+              </>
+            )}
+          </div>
+        );
+      })}
     </CardShell>
   );
 };

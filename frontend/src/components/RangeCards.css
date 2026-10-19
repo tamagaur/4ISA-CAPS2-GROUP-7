@@ -430,3 +430,11 @@
     font-size: 22px;
   }
 }
+
+/* The top-seller changes' summary (2026-10-19): its counts and totals in
+   bold, so the sentence scans. */
+.range-change-summary strong {
+  font-weight: 700;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}

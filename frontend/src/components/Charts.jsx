@@ -5,9 +5,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Area, ReferenceLine, ReferenceArea, usePlotArea, useYAxisScale
+  Area, ReferenceLine, ReferenceArea
 } from 'recharts';
-import { ArrowRight, CheckCircle2, Info } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Info } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
@@ -492,7 +492,8 @@ const WEEKS_LABEL = 'Weeks of stock';
 //   Sales,
 //   Inventory,
 //   Returns       one line each, on an axis that starts just under the lowest
-//                 value (yoyFloor), with no shade under it;
+//                 value (yoyFloor), shaded underneath in its own colour (the
+//                 shade fades out at the axis floor, 2026-10-19);
 //   Weeks of stock one bar per month, blue under SSM's rule and orange over
 //                 it, a dashed line at the rule, and a month whose stock count
 //                 needs checking outlined instead of filled;
@@ -506,9 +507,15 @@ const WEEKS_LABEL = 'Weeks of stock';
 // the date bar's "Compare with" fetches (`compare`), which only feeds this.
 // A month with no figure is a gap, never a 0; an estimate or a synthetic
 // month is drawn apart (a hatched bar, a dotted line) and named in the
-// legend; a stock count GET /dashboard flags keeps its grey marker. The
-// latest value of each series sits at the right of the plot, beside the
-// line's end (EndMarks).
+// legend; a stock count GET /dashboard flags keeps its grey marker. Each
+// series ends in a dot, and its latest value is read by hovering or tapping
+// that month (the end-of-line labels that held a 122px margin at the right
+// of the plot are gone, 2026-10-19). Every bar wears its colour fading down
+// the bar and every line is shaded underneath, so the inventory line reads
+// over the combo view's bars and a lone line is not a bare stroke.
+// Switching views never moves the card: every view's subtitle is laid in
+// one cell (the header keeps the tallest one's height), and the notes
+// under the plot share the body's fixed height with it.
 //
 // `data` is [{ period, sales, stockOnHand, received, … }] (Dashboard.jsx's
 // chartPoints), all in pesos. `insight` is GET /dashboard's
@@ -526,11 +533,37 @@ const SVS_COLOR = {
 const WEEKS_UNDER = '#2563EB';
 const WEEKS_OVER = '#E8710A';
 const WEEKS_NEAR = '#98A2B3';
+const WEEKS_COLOR = { under: WEEKS_UNDER, over: WEEKS_OVER, near: WEEKS_NEAR };
 const WEEKS_NEAR_BAND = 0.5;
-const weeksColor = (weeks, policy) => (weeks == null ? WEEKS_NEAR
-  : weeks < policy - WEEKS_NEAR_BAND ? WEEKS_UNDER
-    : weeks > policy + WEEKS_NEAR_BAND ? WEEKS_OVER : WEEKS_NEAR);
+const weeksBand = (weeks, policy) => (weeks == null ? 'near'
+  : weeks < policy - WEEKS_NEAR_BAND ? 'under'
+    : weeks > policy + WEEKS_NEAR_BAND ? 'over' : 'near');
 const UNUSUAL_INK = 'var(--color-text-muted, #556070)';
+
+// A vertical fade in one colour, for the chart's <defs>: `from` opaque at
+// the top to `to` at the bottom. Every bar on the card wears one
+// (svs-bar-<key>, BAR_FADE), fading down the bar; the shade under a line
+// is another (svs-area-<series>), fading out at the axis floor.
+const Fade = ({ id, color, from = 1, to = 0 }) => (
+  <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stopColor={color} stopOpacity={from} />
+    <stop offset="100%" stopColor={color} stopOpacity={to} />
+  </linearGradient>
+);
+const BAR_FADE = { sales: SVS_COLOR.sales, stock: SVS_COLOR.stock, ...WEEKS_COLOR };
+const BAR_FADE_FLOOR = 0.4;
+const barFill = (key) => `url(#svs-bar-${key})`;
+
+// Each view's subtitle. All of them are laid in the header's one cell
+// (svs-lede-stack), the current one shown, so the header keeps the
+// tallest one's height and switching views never moves the card.
+const SVS_LEDES = {
+  timeline: 'Monthly sales and stock value, month by month',
+  table: 'Monthly sales, stock and purchases.',
+  purchases: 'Sold vs bought each month. When the navy bar is taller, more stock came in than went out.',
+  weeks: 'How many weeks the stock would last each month. Above the line = stock piling up faster than sales.',
+  returns: 'Returns, month by month',
+};
 
 // Sold vs bought (the Purchases view): sold in the card's sales teal, bought
 // navy, the same meaning on every view.
@@ -592,37 +625,6 @@ const zeroPesoTicks = (values) => {
   return ticks;
 };
 
-// The latest value of each series, at the right of the plot at its own
-// height (END_MARK_ROOM is the chart's right margin, kept for them), nudged
-// apart when two would touch. A series that ends at the last month already
-// ends at its label, so it gets no dot of its own; one that ends earlier
-// gets a dot in its colour to tie the two.
-const END_MARK_ROOM = 122;
-const END_MARK_GAP = 28;
-const EndMarks = ({ marks }) => {
-  const plot = usePlotArea();
-  const yScale = useYAxisScale();
-  if (!marks?.length || !plot || !yScale) return null;
-  const placed = marks
-    .map((m) => ({ ...m, y: yScale(m.value) }))
-    .filter((m) => Number.isFinite(m.y))
-    .sort((a, b) => a.y - b.y);
-  for (let i = 1; i < placed.length; i += 1) {
-    if (placed[i].y - placed[i - 1].y < END_MARK_GAP) placed[i].y = placed[i - 1].y + END_MARK_GAP;
-  }
-  return (
-    <g className="chart-end-label">
-      {placed.map((m) => (
-        <g key={m.key} transform={`translate(${plot.x + plot.width + 8},${m.y})`}>
-          {!m.atEdge && <circle cx={4} cy={0} r={3.5} fill={m.color} />}
-          <text x={m.atEdge ? 2 : 11} y={4} fill="var(--color-text, #1a202c)" fontSize={11} fontWeight={600}>{m.text}</text>
-          {m.note && <text x={m.atEdge ? 2 : 11} y={17} fill="var(--color-text-muted, #667085)" fontSize={10}>{m.note}</text>}
-        </g>
-      ))}
-    </g>
-  );
-};
-
 // A month tick: the month, and the year under every January and under the
 // first month. Months between labelled ones get no text on a long range.
 const MonthTick = ({ x, y, payload, first, labelled, compact }) => {
@@ -666,22 +668,26 @@ const SvsSwatch = ({ kind, color }) => {
       ? { background: 'transparent', boxShadow: `inset 0 0 0 1.5px ${color}` }
       : kind === 'dot'
         ? { background: color, borderRadius: '50%' }
-        : { background: color };
+        // A bar, fading down the way the plot's bars do.
+        : { background: `linear-gradient(${color}, color-mix(in srgb, ${color} ${BAR_FADE_FLOOR * 100}%, var(--color-surface, #fff)))` };
   return <span className="svs-swatch" style={style} aria-hidden="true" />;
 };
 
-const SVS_NAMES = { sales: 'Sales', stock: 'Inventory value', returns: 'Returns', weeks: WEEKS_LABEL };
+const SVS_NAMES = { sales: 'Monthly sales', stock: 'Inventory value', returns: 'Returns', weeks: WEEKS_LABEL };
 const svsFormat = (metric, v) => (metric === 'weeks' ? fmtWeeksValue(v) : formatExactPesos(v));
 
-// The hover: the month's own value for each series in the view, then the same
-// month a year earlier when the page has it. Its notes: the day the stock was
-// counted, why a count needs checking, the peak or low sales month, why a
-// month has no sales figure, and what an estimate is.
+// The hover (2026-10-19): one box per series in the view, in the series'
+// tint — the month, its value large, the series' name — and under it the
+// same month a year earlier when the page has it. This is also where a
+// series' latest value is read, at its end dot, now that nothing is written
+// beside the plot. Its notes: the day the stock was counted, why a count
+// needs checking, the peak or low sales month, why a month has no sales
+// figure, and what an estimate is.
 const TimelineTooltip = ({ active, payload, metrics, priorOf, marks, colors }) => {
   const row = active && payload?.[0]?.payload;
   if (!row) return null;
   const pt = row.pt || {};
-  const lines = metrics.map((metric) => {
+  const boxes = metrics.map((metric) => {
     const est = { sales: 'salesest', stock: 'stockest', returns: 'retest' }[metric];
     const own = row[metric];
     const estimated = own == null && est && row[est] != null;
@@ -695,28 +701,41 @@ const TimelineTooltip = ({ active, payload, metrics, priorOf, marks, colors }) =
       stock: ESTIMATE_KIND_TEXT[pt.stockEstimatedKind] || 'estimated',
       returns: ESTIMATE_KIND_TEXT[pt.returnsEstimatedKind] || 'estimated',
     }[metric] : null;
+    const asides = [
+      metric === 'sales' && marks[row.period],
+      metric === 'stock' && pt.stockCountDay && `counted ${pt.stockCountDay}`,
+    ].filter(Boolean);
     return (
-      <p key={metric} className="chart-tooltip-row">
-        <span className="svs-swatch" style={{ background: colors[metric] }} aria-hidden="true" />
-        <span>
-          {SVS_NAMES[metric]} — {plainPeriod(row.period)}: <strong>{svsFormat(metric, value)}</strong>
-          {kind && ` (${kind})`}
-          {metric === 'sales' && marks[row.period] && ` · ${marks[row.period]}`}
-          {prior != null && <> · {plainPeriod(yearEarlier(row.period))}: <strong>{svsFormat(metric, prior)}</strong></>}
-          {metric === 'stock' && pt.stockCountDay && ` · counted ${pt.stockCountDay}`}
+      <div key={metric} className="svs-callout" style={{ '--svs-callout': colors[metric] }}>
+        <span className="svs-callout-period">
+          {plainPeriod(row.period)}
+          {kind && ` · ${kind}`}
         </span>
-      </p>
+        <strong className="svs-callout-value">{svsFormat(metric, value)}</strong>
+        <span className="svs-callout-name">
+          {SVS_NAMES[metric]}
+          {asides.length > 0 && ` · ${asides.join(' · ')}`}
+        </span>
+        {prior != null && (
+          <span className="svs-callout-prior">
+            {plainPeriod(yearEarlier(row.period))}: <strong>{svsFormat(metric, prior)}</strong>
+          </span>
+        )}
+      </div>
     );
   }).filter(Boolean);
   const unusual = metrics.some((m) => m === 'stock' || m === 'weeks') && pt.stockUnusual;
   const gap = metrics.includes('sales') && row.sales == null && row.salesest == null && pt.salesReason;
-  if (!lines.length && !gap) return null;
+  if (!boxes.length && !gap) return null;
   return (
-    <div className="chart-tooltip">
-      <p style={{ fontWeight: 700, margin: '0 0 0.25rem 0' }}>{formatAxisPeriod(row.period)}</p>
-      {lines}
+    <div className="chart-tooltip svs-tooltip">
+      {boxes}
       {unusual && <p className="chart-tooltip-placeholder chart-tooltip-note">Needs checking: {pt.stockUnusual}</p>}
-      {gap && <p className="chart-tooltip-placeholder chart-tooltip-note">No sales figure: {gapLabel(pt.salesReason).toLowerCase()}</p>}
+      {gap && (
+        <p className="chart-tooltip-placeholder chart-tooltip-note">
+          {plainPeriod(row.period)} — no sales figure: {gapLabel(pt.salesReason).toLowerCase()}
+        </p>
+      )}
     </div>
   );
 };
@@ -744,7 +763,7 @@ export const SalesVsStockWidget = ({
   const widgetRef = useRef(null);
   const widgetWidth = useElementWidth(widgetRef);
   const wide = widgetWidth >= YOY_WIDE_PX;
-  // A phone: the axes drop their rotated titles and the end labels.
+  // A phone: the axes drop their rotated titles.
   const phone = widgetWidth > 0 && widgetWidth < YOY_PHONE_PX;
 
   // A month is SSM's own figure unless it is a placeholder or synthetic one.
@@ -826,6 +845,15 @@ export const SalesVsStockWidget = ({
   const weeksView = metricView === 'weeks';
   const comboView = metricView === 'both';
   const purchasesView = metricView === 'purchases' && (hasReceived || hasEstimated);
+  // The subtitle: this view's, laid over the ones the card can switch to.
+  const ledeKey = view === 'table' ? 'table' : purchasesView ? 'purchases' : weeksView ? 'weeks'
+    : metricView === 'returns' ? 'returns' : 'timeline';
+  const ledeKeys = [
+    'timeline', 'table',
+    ...(hasReceived || hasEstimated ? ['purchases'] : []),
+    ...(hasWeeks ? ['weeks'] : []),
+    ...(hasReturns ? ['returns'] : []),
+  ];
   const boughtLabel = hasReceived ? 'Bought' : 'Bought (estimated)';
   // The months whose "bought" bar is outlined, named under the chart.
   const flaggedBought = rows.filter((r) => r.purchFlag).map((r) => plainPeriod(r.period));
@@ -846,20 +874,13 @@ export const SalesVsStockWidget = ({
     return pesoTicks(values(keys));
   }, [rows, weeksView, comboView, purchasesView, metricView, policyWeeks]);
 
-  // The latest value of each series in the view, and the peak/low months.
-  const last = months[months.length - 1];
-  const endMarks = useMemo(() => viewMetrics.map((metric) => {
-    const r = [...rows].reverse().find((x) => x[metric] != null);
-    if (!r) return null;
-    return {
-      key: metric,
-      value: r[metric],
-      color: metric === 'weeks' ? weeksColor(r.weeks, policyWeeks) : SVS_COLOR[metric],
-      text: `${AXIS_MONTHS[Number(r.period.slice(5, 7)) - 1]} '${r.period.slice(2, 4)} · ${metric === 'weeks' ? fmtWeeksValue(r[metric]) : formatCompactPesos(r[metric])}`,
-      note: (metric === 'stock' || metric === 'weeks') && r.unusual ? 'needs checking' : null,
-      atEdge: r.period === last,
-    };
-  }).filter(Boolean), [rows, viewMetrics.join(), policyWeeks, last]);
+  // The last month with a figure on each series (its end dot; -1 for none),
+  // and the peak/low months.
+  const endIndex = useMemo(() => Object.fromEntries(['sales', 'stock', 'returns', 'weeks'].map((key) => {
+    let i = rows.length - 1;
+    while (i >= 0 && rows[i][key] == null) i -= 1;
+    return [key, i];
+  })), [rows]);
   const marks = useMemo(() => Object.fromEntries(
     [insight?.peak, insight?.low].filter(Boolean).map((m) => [m.period, m.label]),
   ), [insight]);
@@ -913,9 +934,13 @@ export const SalesVsStockWidget = ({
     return items;
   })();
 
-  // A line's markers: a stock count that needs checking (grey), and a month
-  // with no neighbour on its line, which has no line to draw (Del Monte's
-  // single months).
+  // A line's markers: a stock count that needs checking (grey), the series'
+  // end (a ringed dot in its colour, where its latest value is read), and a
+  // month with no neighbour on its line, which has no line to draw (Del
+  // Monte's single months).
+  const endDot = (key, color, cx, cy) => (
+    <circle key={`e-${key}`} cx={cx} cy={cy} r={4.5} fill={color} stroke="var(--color-surface, #fff)" strokeWidth={2} />
+  );
   const lineDot = (key, color) => (props) => {
     const { cx, cy, index } = props;
     const r = rows[index];
@@ -923,9 +948,35 @@ export const SalesVsStockWidget = ({
     if (key === 'stock' && r.unusual) {
       return <circle key={`u-${index}`} cx={cx} cy={cy} r={4.5} fill={UNUSUAL_INK} stroke="var(--color-surface, #fff)" strokeWidth={1.5} />;
     }
+    if (index === endIndex[key]) return endDot(key, color, cx, cy);
     if (rows[index - 1]?.[key] != null || rows[index + 1]?.[key] != null) return null;
     return <circle key={`l-${index}`} cx={cx} cy={cy} r={3.5} fill={color} />;
   };
+  // The same end dot on top of a bar series' last bar (Recharts hands a
+  // bar's label its rectangle as `viewBox`).
+  const barEndDot = (key, color) => ({ viewBox, index }) => (
+    viewBox && index === endIndex[key] ? endDot(key, color, viewBox.x + viewBox.width / 2, viewBox.y) : null
+  );
+  // The shade under a line: the series' colour fading out at the axis
+  // floor. Recharts draws an Area under every Bar (its layer order), so on
+  // the combo view it shows between the bars and never tints them. It adds
+  // nothing to the hover (tooltipType none): the line does.
+  const shade = (key) => (
+    <Area
+      key={`${key}-shade`}
+      dataKey={key}
+      name={`${key}shade`}
+      type="monotone"
+      fill={`url(#svs-area-${key})`}
+      stroke="none"
+      dot={false}
+      activeDot={false}
+      connectNulls={false}
+      isAnimationActive={false}
+      tooltipType="none"
+      legendType="none"
+    />
+  );
   const line = (key, color, { estimate = false } = {}) => (
     <Line
       key={key}
@@ -933,7 +984,7 @@ export const SalesVsStockWidget = ({
       dataKey={estimate ? `${key}Line` : key}
       name={key}
       stroke={color}
-      strokeWidth={estimate ? 2 : 2.5}
+      strokeWidth={estimate ? 2 : 3}
       strokeLinecap="round"
       strokeDasharray={estimate ? ESTIMATED_DASH : undefined}
       strokeOpacity={estimate ? ESTIMATED_OPACITY : 1}
@@ -1008,7 +1059,6 @@ export const SalesVsStockWidget = ({
     weeksOfStock: real(pt) ? weeksOfStock(pt.stockOnHand, pt.sales) : null,
   })), [data, real]);
 
-  const showEnd = endMarks.length > 0 && !phone;
   const synthetic = rows.some((r) => r.pt.salesEstimatedKind === 'demonstration' || r.pt.salesSynthetic);
 
   return (
@@ -1038,15 +1088,11 @@ export const SalesVsStockWidget = ({
               </span>
             </InfoTip>
           </h4>
-          <SectionLede>
-            {view === 'table'
-              ? 'Monthly sales, stock and purchases.'
-              : purchasesView
-              ? 'Sold vs bought each month. When the navy bar is taller, more stock came in than went out.'
-              : weeksView ? 'How many weeks the stock would last each month. Above the line = stock piling up faster than sales.'
-                : metricView === 'returns' ? 'Returns, month by month'
-                  : 'Monthly sales and stock value, month by month'}
-          </SectionLede>
+          <div className="svs-lede-stack">
+            {ledeKeys.map((key) => (
+              <SectionLede key={key} className={key === ledeKey ? '' : 'is-reserved'}>{SVS_LEDES[key]}</SectionLede>
+            ))}
+          </div>
           {/* GET /dashboard's vat_note — only under All principals, where the
               combined pesos mix Unilever's VAT-inclusive amounts with Del
               Monte's VAT-exclusive ones. */}
@@ -1108,10 +1154,16 @@ export const SalesVsStockWidget = ({
             <ResponsiveContainer width="99%" height="100%">
               <ComposedChart
                 data={rows}
-                margin={{ top: 20, right: showEnd ? END_MARK_ROOM : 16, left: 0, bottom: 10 }}
+                margin={{ top: 20, right: 16, left: 0, bottom: 10 }}
                 barCategoryGap={months.length > 24 ? '12%' : '28%'}
               >
                 <defs>
+                  {Object.entries(BAR_FADE).map(([key, color]) => (
+                    <Fade key={key} id={`svs-bar-${key}`} color={color} to={BAR_FADE_FLOOR} />
+                  ))}
+                  {Object.entries(SVS_COLOR).map(([key, color]) => (
+                    <Fade key={key} id={`svs-area-${key}`} color={color} from={0.22} />
+                  ))}
                   <pattern id="svs-hatch-sales" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                     <rect width="6" height="6" fill={SVS_COLOR.sales} fillOpacity="0.35" />
                     <rect width="2.5" height="6" fill={SVS_COLOR.sales} />
@@ -1153,7 +1205,7 @@ export const SalesVsStockWidget = ({
                     ifOverflow="extendDomain"
                     label={{
                       value: `SSM's ${policyWeeks}-week rule`,
-                      position: showEnd ? 'right' : 'insideTopRight',
+                      position: 'insideTopRight',
                       offset: 8,
                       fill: '#344054',
                       fontSize: 11,
@@ -1162,17 +1214,29 @@ export const SalesVsStockWidget = ({
                   />
                 )}
                 {purchasesView && (
-                  <Bar dataKey="sales" name="sold" fill={SOLD_COLOR} radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
+                  <Bar dataKey="sales" name="sold" fill={barFill('sales')} radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
                 )}
                 {purchasesView && (
                   <Bar dataKey="bought" name="bought" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false}>
                     {rows.map((r) => (r.purchFlag
                       ? <Cell key={r.period} fill="#fff" fillOpacity={0} stroke={BOUGHT_COLOR} strokeWidth={1.75} strokeDasharray="4 3" />
-                      : <Cell key={r.period} fill={BOUGHT_COLOR} />))}
+                      : <Cell key={r.period} fill={barFill('stock')} />))}
                   </Bar>
                 )}
+                {viewMetrics.includes('sales') && !comboView && shade('sales')}
+                {viewMetrics.includes('stock') && shade('stock')}
+                {viewMetrics.includes('returns') && shade('returns')}
                 {comboView && (
-                  <Bar dataKey="sales" name="sales" stackId="sales" fill={SVS_COLOR.sales} radius={[3, 3, 0, 0]} maxBarSize={26} isAnimationActive={false} />
+                  <Bar
+                    dataKey="sales"
+                    name="sales"
+                    stackId="sales"
+                    fill={barFill('sales')}
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={26}
+                    isAnimationActive={false}
+                    label={barEndDot('sales', SVS_COLOR.sales)}
+                  />
                 )}
                 {comboView && has('salesest') && (
                   <Bar
@@ -1190,10 +1254,10 @@ export const SalesVsStockWidget = ({
                 {weeksView && (
                   <Bar dataKey="weeks" name="weeks" radius={[3, 3, 0, 0]} maxBarSize={26} isAnimationActive={false}>
                     {rows.map((r) => {
-                      const color = weeksColor(r.weeks, policyWeeks);
+                      const band = weeksBand(r.weeks, policyWeeks);
                       return r.unusual
-                        ? <Cell key={r.period} fill="#fff" fillOpacity={0} stroke={color} strokeWidth={1.75} />
-                        : <Cell key={r.period} fill={color} />;
+                        ? <Cell key={r.period} fill="#fff" fillOpacity={0} stroke={WEEKS_COLOR[band]} strokeWidth={1.75} />
+                        : <Cell key={r.period} fill={barFill(band)} />;
                     })}
                   </Bar>
                 )}
@@ -1203,29 +1267,31 @@ export const SalesVsStockWidget = ({
                 {viewMetrics.includes('stock') && has('stockest') && line('stockest', SVS_COLOR.stock, { estimate: true })}
                 {viewMetrics.includes('returns') && line('returns', SVS_COLOR.returns)}
                 {viewMetrics.includes('returns') && has('retest') && line('retest', SVS_COLOR.returns, { estimate: true })}
-                {showEnd && <EndMarks marks={endMarks} />}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          {/* The notes sit inside the body, whose height is fixed (.yoy-body):
+              the plot gives way to them, so a note one view has and another
+              does not never moves the card. With synthetic data on, they are
+              about SSM's own figures: say what the hatched bars and dotted
+              lines are first. */}
+          {!purchasesView && synthetic && (
+            <p className="gap-note" role="note">
+              <strong>Synthetic.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
+              dotted lines), because synthetic data is on. The solid bars and lines are SSM&apos;s own data, and the notes
+              below are about them.
+            </p>
+          )}
+          {purchasesView && flaggedBought.length > 0 && (
+            <p className="gap-note" role="note">
+              {flaggedBought.join(' and ')} &ldquo;bought&rdquo; {flaggedBought.length === 1 ? 'is' : 'are'} outlined:{' '}
+              {flaggedBought.length === 1 ? 'it comes' : 'they come'} from the stock count that needs checking.
+            </p>
+          )}
+          {/* What the empty months mean (GET /dashboard's gap_note). */}
+          <GapNote note={gapNote} />
         </div>
       )}
-      {/* With synthetic data on, the notes below are about SSM's own figures:
-          say what the hatched bars and dotted lines are first. */}
-      {hasData && view === 'chart' && !purchasesView && synthetic && (
-        <p className="gap-note" role="note">
-          <strong>Synthetic.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
-          dotted lines), because synthetic data is on. The solid bars and lines are SSM&apos;s own data, and the notes
-          below are about them.
-        </p>
-      )}
-      {hasData && view === 'chart' && purchasesView && flaggedBought.length > 0 && (
-        <p className="gap-note" role="note">
-          {flaggedBought.join(' and ')} &ldquo;bought&rdquo; {flaggedBought.length === 1 ? 'is' : 'are'} outlined:{' '}
-          {flaggedBought.length === 1 ? 'it comes' : 'they come'} from the stock count that needs checking.
-        </p>
-      )}
-      {/* What the empty months mean (GET /dashboard's gap_note). */}
-      {hasData && view === 'chart' && <GapNote note={gapNote} />}
     </div>
   );
 };
@@ -1246,18 +1312,20 @@ const ABC_TIER_ROLE = {
 // Del Monte is ranked by product category (it has no SKU-level sales) and
 // nothing of Del Monte's is forecast or reordered, so the roles above would
 // be false for it.
-const DEL_MONTE_TIER_ROLE =
-  'Ranked by category sell-out. Del Monte has no SKU-level sales, so no class here is forecast or reordered.';
+const DEL_MONTE_TIER_ROLE = 'Del Monte has no SKU-level sales, so no class here is forecast or reordered.';
 
 // The ring is plain SVG so each segment can be a real keyboard button. Same
 // layout the Recharts ring had: it starts at 3 o'clock, runs
-// counter-clockwise, with 2° gaps between tiers. The outer radius stops 2px
-// short of the box, which leaves room for the selected tier's 2px stroke and
-// keeps the ring's left edge on the card title's left edge.
-const ABC_DONUT_SIZE = 180;
-const ABC_RING_OUTER = 88;
-const ABC_RING_INNER = 62;
-const ABC_PAD_ANGLE = 2;
+// counter-clockwise, with a hairline gap between tiers (the mockup's ring
+// has none to speak of; the three plums tell the tiers apart). The outer
+// radius stops 2px short of the box, which leaves room for the selected
+// tier's 2px stroke. A tier at least ABC_LABEL_MIN_SWEEP degrees wide
+// carries its share on its band (2026-10-19).
+const ABC_DONUT_SIZE = 200;
+const ABC_RING_OUTER = 98;
+const ABC_RING_INNER = 66;
+const ABC_PAD_ANGLE = 1;
+const ABC_LABEL_MIN_SWEEP = 16;
 // Each principal's tier shares add up to 100% of that principal's revenue.
 // Further off than this and they were summed across principals, so they are
 // not a share of any revenue this card could name.
@@ -1265,10 +1333,14 @@ const ABC_SHARE_SUM_TOLERANCE = 2;
 const ABC_TOOLTIP_GAP = 12;
 const ABC_VIEWPORT_MARGIN = 4;
 
-const abcPoint = (radius, degrees) => {
+const abcXY = (radius, degrees) => {
   const angle = (degrees * Math.PI) / 180;
   const centre = ABC_DONUT_SIZE / 2;
-  return `${(centre + radius * Math.cos(angle)).toFixed(2)} ${(centre - radius * Math.sin(angle)).toFixed(2)}`;
+  return { x: centre + radius * Math.cos(angle), y: centre - radius * Math.sin(angle) };
+};
+const abcPoint = (radius, degrees) => {
+  const { x, y } = abcXY(radius, degrees);
+  return `${x.toFixed(2)} ${y.toFixed(2)}`;
 };
 
 const abcArc = (start, end) => {
@@ -1283,7 +1355,8 @@ const abcArc = (start, end) => {
 };
 
 // One arc per tier, sized by its revenue share exactly as the Recharts Pie
-// sized it (shares relative to their own sum, minus the gaps).
+// sized it (shares relative to their own sum, minus the gaps), with the spot
+// for its label at the middle of its band when the band is wide enough.
 const abcSegments = (data) => {
   const values = data.map((d) => (Number.isFinite(d.sharePct) && d.sharePct > 0 ? d.sharePct : 0));
   const sum = values.reduce((acc, v) => acc + v, 0);
@@ -1291,72 +1364,138 @@ const abcSegments = (data) => {
   let angle = 0;
   return data.map((d, i) => {
     const sweep = sum > 0 ? (values[i] / sum) * available : 0;
-    const segment = { tier: d.tier, path: sweep > 0 ? abcArc(angle, angle + sweep) : null };
+    const segment = {
+      tier: d.tier,
+      value: values[i],
+      path: sweep > 0 ? abcArc(angle, angle + sweep) : null,
+      label: sweep >= ABC_LABEL_MIN_SWEEP ? abcXY((ABC_RING_OUTER + ABC_RING_INNER) / 2, angle + sweep / 2) : null,
+    };
     if (sweep > 0) angle += sweep + ABC_PAD_ANGLE;
     return segment;
   });
 };
 
-// The selected tier, SKUs first and revenue second. `facts` come from the
-// same abc_mix rows the ring and the share bars draw. A revenue figure that
-// can't be trusted (no total, or shares that don't add up to ~100%) reads
-// "Revenue not available", and the sentence is left out rather than stated
-// on numbers that aren't real.
-const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
-  const x = facts.skuPct.toFixed(0);
-  const role = ABC_TIER_ROLE[facts.tier];
-  const roleText = facts.units === 'categories' ? DEL_MONTE_TIER_ROLE : role?.role;
+// Where a class's list opens: on the dashboard, from the range's own
+// ranking (ClassProductsModal), when the ring ranks the selected range, so
+// its count is this count; else the ABC page, which ranks one month too.
+const ClassListLink = ({ facts, onOpenClass, className, label = undefined, children }) => (
+  facts.rangeBased && onOpenClass
+    ? <button type="button" className={className} onClick={() => onOpenClass(facts.tier)} aria-label={label}>{children}</button>
+    : <Link to={`/abc?class=${facts.tier}`} className={className} aria-label={label}>{children}</Link>
+);
+
+// The finding, first (2026-10-19): what Class A is worth against its size,
+// with the period it was ranked over, from the same abc_mix rows the ring
+// draws, never a figure of its own. Without a trustworthy revenue share it
+// states the count instead, and the widget puts the reason (blocked_reason)
+// under it. Under the finding, the definition of an important product on
+// the card's face (Technical Adviser, 2 Oct 2026): the ABC run's own
+// cut-off (abc_rules) and its period, never restated here, and Class A's
+// list. What the system does with Class A is the hint above the card; the
+// "?" has the full rule and each class's role.
+//
+// A plain answer line, as the Forecast accuracy card's (RangeCards.css
+// .fc-answer), not a tinted strip: on this page a tinted strip with an icon
+// is something to act on (the review action, a synthetic-data note), and a
+// finding is not.
+const AbcInsight = ({ facts, total, units, rules, onOpenClass, tip }) => {
+  const pctOf = facts.skuPct.toFixed(0);
+  const when = facts.month ? `, ${facts.month}` : '';
+  const noun = units === 'categories' ? 'the categories' : 'the top sellers';
+  const rule = rules
+    ? `Class A = ${noun} that together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue (the ABC rule)`
+    : `Class A = ${noun} ranked highest by revenue`;
+  const definition = `${rule}${facts.month ? `, ranked over ${facts.month}` : ''}.`;
   return (
-    <div className="abc-tier-card" aria-live="polite">
+    <div className="abc-finding">
+      <p className="abc-finding-answer">
+        <span>
+          {facts.revenuePct != null
+            ? <>Class A drives <strong>{facts.revenuePct.toFixed(0)}%</strong> of revenue from just <strong>{pctOf}%</strong> of {units}{when}.</>
+            : <>Class A is <strong>{facts.count.toLocaleString()}</strong> of the {total.toLocaleString()} {units} ranked (<strong>{pctOf}%</strong>){when}.</>}
+        </span>
+        {tip}
+      </p>
+      <p className="abc-finding-definition">
+        {definition}
+        {units === 'categories' && ` ${DEL_MONTE_TIER_ROLE}`}
+      </p>
+      <ClassListLink facts={facts} onOpenClass={onOpenClass} className="abc-finding-link">
+        See the {facts.count.toLocaleString()} {units} <ArrowRight size={13} aria-hidden="true" />
+      </ClassListLink>
+    </div>
+  );
+};
+
+// The next step of the story, beside the ring: of the top sellers, how many
+// are below their safety stock, and the list (Dashboard's
+// AtRiskProductsModal). `atRisk` is the dashboard's safety_stock_exposure;
+// absent for an account without the reorder plan, or when nothing is
+// measurable. Red while any is below, green when none is.
+const AbcAtRisk = ({ atRisk }) => {
+  const clear = atRisk.below === 0;
+  const below = atRisk.below.toLocaleString();
+  const measurable = atRisk.measurable.toLocaleString();
+  return (
+    <div className={`abc-panel abc-atrisk${clear ? ' is-clear' : ''}`} role="status">
+      <span className="abc-atrisk-icon" aria-hidden="true">
+        {clear ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+      </span>
+      <div className="abc-atrisk-text">
+        <p className="abc-panel-title">
+          {clear
+            ? 'No top sellers below safety stock'
+            : `${below} top seller${atRisk.below === 1 ? '' : 's'} below safety stock`}
+        </p>
+        <p className="abc-panel-text">
+          {clear
+            ? `All ${measurable} we could check have enough stock until the next delivery.`
+            : `${below} of the ${measurable} we could check could run out before the next delivery arrives.`}
+        </p>
+        {!clear && (
+          <button type="button" className="abc-panel-link" onClick={atRisk.onOpen}>
+            Review at-risk products <ArrowRight size={13} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// The selected tier: its count and its revenue side by side, the period
+// they are from, and its list. `facts` come from the same abc_mix rows the
+// ring and the share bars draw. A revenue figure that can't be trusted (no
+// total, or shares that don't add up to ~100%) reads "Revenue not
+// available" rather than a number that isn't real. What each class is FOR
+// is behind the card's "?" (AbcInsight's tip).
+const AbcTierCard = ({ facts, onOpenClass = null }) => {
+  const role = ABC_TIER_ROLE[facts.tier];
+  return (
+    <div className="abc-panel abc-tier-card" aria-live="polite">
       <p className="abc-tier-card-name">
         <span className="legend-color" style={{ backgroundColor: abcTierColor(facts.tier) }} aria-hidden="true" />
         Class {facts.tier}{role && <span className="abc-tier-card-alias">· {role.name}</span>}
       </p>
-      {/* What the tier is FOR, before any number: the one line that says
-          why a reader should care which tier a SKU is in. */}
-      {roleText && <p className="abc-tier-card-role">{roleText}</p>}
-      {/* Stacked when the card is narrow; side by side as it widens (see
-          the container queries in Charts.css). Reading order stays SKUs,
-          then revenue, then the sentence at every width. */}
       <div className="abc-tier-card-body">
         <div className="abc-tier-card-stat">
-          <p className="abc-tier-card-skus">{facts.count.toLocaleString()} {facts.units}</p>
-          <p className="abc-tier-card-note">{x}% of all {facts.units}</p>
+          <p className="abc-tier-card-skus">{facts.count.toLocaleString()}</p>
+          <p className="abc-tier-card-note">{facts.units}</p>
         </div>
         <div className="abc-tier-card-stat">
           <p className={`abc-tier-card-revenue${facts.amount == null ? ' is-unavailable' : ''}`}>
             {facts.amount != null ? formatCompactPesos(facts.amount) : 'Revenue not available'}
           </p>
-          {/* The period the class's pesos were earned in (abc_revenue); its
-              share of revenue is the figure in the ring's centre. */}
-          {facts.amount != null && <p className="abc-tier-card-note">revenue{facts.month ? `, ${facts.month}` : ''}</p>}
+          {facts.amount != null && <p className="abc-tier-card-note">revenue</p>}
         </div>
       </div>
-      {/* The next step of the story, on the class it is about: of these
-          important products, how many are below safety stock — and the
-          list (Dashboard's AtRiskProductsModal). `atRisk` is the
-          dashboard's safety_stock_exposure; absent for an account without
-          the reorder plan, or when nothing is measurable. */}
-      {facts.tier === 'A' && atRisk && (
-        <button type="button" className="abc-tier-card-link abc-tier-card-atrisk" onClick={atRisk.onOpen}>
-          {atRisk.below.toLocaleString()} of the {atRisk.measurable.toLocaleString()} we could check are running below
-          their safety stock — <span className="abc-tier-card-nowrap">see which <ArrowRight size={12} aria-hidden="true" /></span>
-        </button>
-      )}
+      {/* The period the class's pesos were earned in (abc_revenue); its
+          share of revenue is the figure in the ring's centre. */}
+      {facts.month && <p className="abc-tier-card-period">{facts.month}</p>}
       {/* "Which ones?" — the products behind this class's count, one click
-          away. When the ring ranks the selected range, the list opens on the
-          dashboard from that same ranking (ClassProductsModal), so its count
-          is this count. A payload ranked on one month keeps the ABC page
-          link, which ranks one month too. */}
-      {facts.rangeBased && onOpenClass ? (
-        <button type="button" className="abc-tier-card-link" onClick={() => onOpenClass(facts.tier)}>
-          See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
-        </button>
-      ) : (
-        <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
-          See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
-        </Link>
-      )}
+          away. */}
+      <ClassListLink facts={facts} onOpenClass={onOpenClass} className="abc-tier-card-link">
+        See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
+      </ClassListLink>
     </div>
   );
 };
@@ -1513,48 +1652,53 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     if (e.pointerType === 'mouse') setHover({ tier, x: e.clientX, y: e.clientY });
   };
 
-  return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
-      <div className="chart-header">
-        <div className="chart-title-area">
-          <h4>
-            <span>Top, middle and low <span className="title-accent">sellers</span> (A, B, C)</span>
-            {/* The cut-offs are GET /dashboard's abc_rules (the ABC run's own
-                constants), never restated here. How a class is decided sits
-                behind the "?" (UI pass, 2026-10-08); the line below keeps the
-                definition of an important product and the ranking's period
-                (3 Oct 2026 analysis). */}
-            {rules && (
-              <InfoTip label="How classes are decided">
-                {`${unitsTitle} are ranked by revenue${rankedMonth ? ` over ${rankedMonth}` : ''}`
-                  + `${revenue?.label || !rankedMonth ? '' : ' (a single month)'}. Class A is the top sellers that `
-                  + `together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue, B the next `
-                  + `${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, C the last `
-                  + `${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`}
-                {/* With only a handful of categories a tier can't land on its
-                    cut-off (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
-                {units === 'categories' && ' With only a few categories, a class cannot land exactly on its cut-off.'}
-              </InfoTip>
-            )}
-          </h4>
-          <SectionLede>Who carries the sales</SectionLede>
-          <p>
-            {rules
-              ? `Class A = the top sellers that together make ${Math.round(rules.tier_a_cutoff * 100)}% of revenue`
-                + `${rankedMonth ? `, ${rankedMonth}` : ''}. Click a class for details.`
-              : `${unitsTitle} are ranked by revenue${rankedMonth ? `, ${rankedMonth}` : ''}. Click a class for details.`}
-          </p>
-          {coverage && <p className="chart-placeholder-note">{coverage}</p>}
-          {!sharesAddUp && revenue?.blocked_reason && <p className="chart-placeholder-note">{revenue.blocked_reason}</p>}
-          {note && <p className="chart-placeholder-note">{note}</p>}
-          {syntheticNote && <p className="chart-placeholder-note">{syntheticNote}</p>}
-        </div>
-      </div>
+  // The cut-offs are GET /dashboard's abc_rules (the ABC run's own
+  // constants), never restated here. How a class is decided, and what each
+  // class is for (ABC_TIER_ROLE), sit behind the "?" in the finding.
+  const tip = rules ? (
+    <InfoTip label="How classes are decided">
+      <span className="chart-tip-line">
+        {`${unitsTitle} are ranked by revenue${rankedMonth ? ` over ${rankedMonth}` : ''}`
+          + `${revenue?.label || !rankedMonth ? '' : ' (a single month)'}. Class A is the top sellers that `
+          + `together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue, B the next `
+          + `${Math.round((rules.tier_b_cutoff - rules.tier_a_cutoff) * 100)}%, C the last `
+          + `${Math.round((1 - rules.tier_b_cutoff) * 100)}%.`}
+      </span>
+      {/* With only a handful of categories a tier can't land on its cut-off
+          (Del Monte 2025-12: A 71%, B 18%, C 11%). */}
+      {units === 'categories'
+        ? <span className="chart-tip-line">With only a few categories, a class cannot land exactly on its cut-off.</span>
+        : ['A', 'B', 'C'].map((t) => (
+          <span key={t} className="chart-tip-line">
+            Class {t} ({ABC_TIER_ROLE[t].name.toLowerCase()}): {ABC_TIER_ROLE[t].role}
+          </span>
+        ))}
+    </InfoTip>
+  ) : null;
+  const tierA = data.find((d) => d.tier === 'A');
+  const notes = [
+    coverage,
+    !sharesAddUp ? revenue?.blocked_reason : null,
+    note,
+    syntheticNote,
+  ].filter(Boolean);
 
+  // The card, top to bottom (2026-10-19, after the mockup): the finding,
+  // then the ring and its legend beside the at-risk count and the selected
+  // class, then the share bars. No title of its own: the dashboard's
+  // question above it names the card.
+  return (
+    <div className={`chart-widget abc-card${hasData ? '' : ' chart-widget-empty'}`}>
       {!hasData ? (
         <p className="dashboard-empty-note">{emptyReason || 'No ABC classification available'}</p>
       ) : (
-        <div className="chart-widget-body">
+        <div className="chart-widget-body abc-body">
+          {tierA && <AbcInsight facts={factsFor(tierA)} total={total} units={units} rules={rules} onOpenClass={onOpenClass} tip={tip} />}
+          {notes.length > 0 && (
+            <div className="abc-notes">
+              {notes.map((text) => <p key={text} className="chart-placeholder-note">{text}</p>)}
+            </div>
+          )}
           <div className="abc-overview">
             <div className="abc-donut-col">
               <svg
@@ -1583,25 +1727,43 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                     onPointerLeave={() => setHover(null)}
                   />
                 ))}
+                {/* Each tier's share on its band, where the band is wide
+                    enough; the pale plum takes dark text. Not the selected
+                    tier's: its share is the figure in the centre. */}
+                {segments.map((s) => s.label && s.tier !== selected.tier && (
+                  <text
+                    key={`label-${s.tier}`}
+                    x={s.label.x}
+                    y={s.label.y}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    className={`abc-seg-label${s.tier === 'C' ? ' is-dark' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {s.value.toFixed(0)}%
+                  </text>
+                ))}
                 {/* The selected tier's headline number, where the eye lands
                     first. Revenue share when it can be trusted, else the SKU
-                    count (the tier card beside it says why). */}
+                    count (the notes above say why). */}
                 {selectedFacts && (
                   <g className="abc-donut-centre" aria-hidden="true">
-                    <text x={centre} y={centre - 18} textAnchor="middle" className="abc-donut-centre-tier">
+                    <text x={centre} y={centre - 20} textAnchor="middle" className="abc-donut-centre-tier">
                       Class {selectedFacts.tier}
                     </text>
-                    <text x={centre} y={centre + 9} textAnchor="middle" className="abc-donut-centre-value">
+                    <text x={centre} y={centre + 10} textAnchor="middle" className="abc-donut-centre-value">
                       {selectedFacts.revenuePct != null
                         ? `${selectedFacts.revenuePct.toFixed(0)}%`
                         : selectedFacts.count.toLocaleString()}
                     </text>
-                    <text x={centre} y={centre + 27} textAnchor="middle" className="abc-donut-centre-label">
+                    <text x={centre} y={centre + 30} textAnchor="middle" className="abc-donut-centre-label">
                       {selectedFacts.revenuePct != null ? 'of revenue' : units}
                     </text>
                   </g>
                 )}
               </svg>
+              {/* One tier per row: its name, and its share of the products.
+                  Picks the tier the panel beside the ring describes. */}
               <ul className="abc-legend">
                 {data.map((d) => (
                   <li key={d.tier}>
@@ -1609,18 +1771,26 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                       type="button"
                       className={`abc-legend-btn${d.tier === selected.tier ? ' is-selected' : ''}`}
                       aria-pressed={d.tier === selected.tier}
-                      aria-label={`Class ${d.tier}${ABC_TIER_ROLE[d.tier] ? `, ${ABC_TIER_ROLE[d.tier].name}` : ''}`}
+                      aria-label={`Class ${d.tier}${ABC_TIER_ROLE[d.tier] ? `, ${ABC_TIER_ROLE[d.tier].name}` : ''}: ${skuSharePct(d).toFixed(0)}% of ${units}`}
                       onClick={() => setSelectedTier(d.tier)}
                     >
                       <span className="legend-color" style={{ backgroundColor: abcTierColor(d.tier) }} aria-hidden="true" />
-                      <span className="abc-legend-tier">{d.tier}</span>
-                      {ABC_TIER_ROLE[d.tier] && <span className="abc-legend-name">{ABC_TIER_ROLE[d.tier].name}</span>}
+                      <span className="abc-legend-text">
+                        <span className="abc-legend-head">
+                          <span className="abc-legend-tier">{d.tier}</span>
+                          {ABC_TIER_ROLE[d.tier] && <span className="abc-legend-name">{ABC_TIER_ROLE[d.tier].name}</span>}
+                        </span>
+                        <span className="abc-legend-sub">{skuSharePct(d).toFixed(0)}% of {units}</span>
+                      </span>
                     </button>
                   </li>
                 ))}
               </ul>
             </div>
-            <AbcTierCard facts={factsFor(selected)} atRisk={atRisk} onOpenClass={onOpenClass} />
+            <div className="abc-side">
+              {atRisk && <AbcAtRisk atRisk={atRisk} />}
+              <AbcTierCard facts={factsFor(selected)} onOpenClass={onOpenClass} />
+            </div>
           </div>
           <div
             className="abc-share-pair"
@@ -1629,7 +1799,17 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
           >
             {sharePairs.map((pair) => (
               <div className="abc-share-row" key={pair.key}>
-                <span className="abc-share-label">{pair.label}</span>
+                <div className="abc-share-head">
+                  <span className="abc-share-label">{pair.label}</span>
+                  <span className="abc-share-values">
+                    {data.map((d) => (
+                      <span key={d.tier} className="abc-share-value">
+                        <span className="legend-color" style={{ backgroundColor: abcTierColor(d.tier) }} aria-hidden="true" />
+                        {d.tier} {pair.value(d).toFixed(0)}%
+                      </span>
+                    ))}
+                  </span>
+                </div>
                 <div className="abc-share-track">
                   {data.map((d) => {
                     const v = pair.value(d);
@@ -1642,9 +1822,6 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                     );
                   })}
                 </div>
-                <span className="abc-share-values">
-                  {data.map((d) => `${d.tier} ${pair.value(d).toFixed(0)}%`).join(' · ')}
-                </span>
               </div>
             ))}
           </div>

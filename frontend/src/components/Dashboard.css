@@ -913,9 +913,9 @@
     padding-left: 14px;
   }
 
-  /* The top-seller changes show their first three products a side; "Show
-     all" opens the rest, as before. */
-  .dashboard .pending-change-list li:nth-child(n + 4) {
+  /* The top-seller changes show their first three products a side; "See
+     all" opens the rest (ul.is-expanded), as before. */
+  .dashboard .pending-change-list ul:not(.is-expanded) li:nth-child(n + 4) {
     display: none;
   }
 
