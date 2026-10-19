@@ -31,11 +31,22 @@
 --           constraint), then CREATE OR REPLACE VIEW public.users as in 0059 (with
 --           avatar_data_url restored). The dropped column's data cannot be restored.
 
+-- ORDER (fixed 2026-10-19, before this file ever applied anywhere): the view goes first. As
+-- first written, the column was dropped while public.users still selected it, and Postgres
+-- refused ("view users depends on column avatar_data_url"); CREATE OR REPLACE VIEW cannot
+-- remove a column from a view either. So: drop the view, drop the column, create the view
+-- again. Nothing else depends on public.users (checked on live, pg_depend, 2026-10-19). A
+-- re-created view loses 0048's REVOKE, and Supabase's default privileges would hand it to the
+-- API roles, so the REVOKE is repeated here.
+DROP VIEW public.users;
+
 ALTER TABLE app.users DROP COLUMN IF EXISTS avatar_data_url;
 
-CREATE OR REPLACE VIEW public.users WITH (security_invoker = true) AS
+CREATE VIEW public.users WITH (security_invoker = true) AS
     SELECT user_id, email, password_hash, role, created_at, full_name, avatar_path
       FROM app.users;
+
+REVOKE ALL ON public.users FROM anon, authenticated, service_role;
 
 COMMENT ON VIEW public.users IS
     'Compatibility view onto app.users (0048, DEC-39 group 1; avatar_path added by 0059; '
