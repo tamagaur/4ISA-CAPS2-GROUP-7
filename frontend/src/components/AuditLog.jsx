@@ -3,6 +3,8 @@ import SectionLede from './ui/SectionLede';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDate, formatDateTime } from '../utils/formatDate';
 import { LoadingStatus, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import PageHeader from './ui/PageHeader';
 import './AuditLog.css';
 
@@ -87,18 +89,21 @@ const UserBadge = ({ name, email }) => {
 // `meta` keeps the rest of the response (GET /audit-log/users' sign-in span).
 const useSection = (load) => {
   const [state, setState] = useState({ loading: true, error: null, items: [], meta: {} });
+  // Try again re-runs this section's request only.
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    setState((prev) => ({ ...prev, loading: true, error: null }));
     load()
       .then((res) => {
         if (!cancelled) setState({ loading: false, error: null, items: res.items || [], meta: res || {} });
       })
       .catch((err) => {
-        if (!cancelled) setState({ loading: false, error: err.message || 'Failed to load', items: [], meta: {} });
+        if (!cancelled) setState({ loading: false, error: describeLoadError(err), items: [], meta: {} });
       });
     return () => { cancelled = true; };
-  }, [load]);
-  return state;
+  }, [load, attempt]);
+  return { ...state, retry: () => setAttempt((n) => n + 1) };
 };
 
 const loadUsers = () => getAuditUserSummary();
@@ -106,18 +111,19 @@ const loadChanges = () => getAuditLog({ excludeActions: SIGN_IN_ACTIONS, limit: 
 
 // While loading, the section's table as a skeleton in the same wrapper, sized
 // to that table's own column count.
-const SectionStatus = ({ loading, error, label, columns, rows = 4 }) => {
+const SectionStatus = ({ loading, error, label, columns, rows = 4, onRetry }) => {
   if (loading) {
     return (
       <>
         <LoadingStatus>Loading {label}…</LoadingStatus>
+        <SlowLoadNotice />
         <div className="audit-table-wrapper">
           <SkeletonTable rows={rows} columns={columns} />
         </div>
       </>
     );
   }
-  if (error) return <p className="audit-section-status audit-section-error">Couldn&apos;t load this section: {error}</p>;
+  if (error) return <LoadError what={label} message={error} onRetry={onRetry} />;
   return null;
 };
 
@@ -159,7 +165,7 @@ const AuditLog = () => {
             on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
             4 hours without activity. Older sign-ins have no measured length.
           </p>
-          <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} />
+          <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} onRetry={users.retry} />
           {!users.loading && !users.error && (
             <div className="audit-table-wrapper">
               <table className="audit-table audit-table-stack">
@@ -228,7 +234,7 @@ const AuditLog = () => {
           <p className="audit-section-note">
             SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
           </p>
-          <SectionStatus loading={changes.loading} error={changes.error} label="recent changes" columns={4} rows={6} />
+          <SectionStatus loading={changes.loading} error={changes.error} label="recent changes" columns={4} rows={6} onRetry={changes.retry} />
           {!changes.loading && !changes.error && (
             <div className="audit-table-wrapper">
               <table className="audit-table audit-table-stack">

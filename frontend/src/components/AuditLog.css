@@ -48,7 +48,7 @@
 
 /* Sections: "Sign-ins by user" and "Recent changes". Each is a size
    container, so its table switches to stacked cards based on the room the
-   section actually has — the sidebar takes 250px above 900px and none
+   section actually has — the sidebar takes 264px above 900px and none
    below, so the viewport width alone would pick the wrong layout. */
 .audit-section {
   container: audit-section / inline-size;

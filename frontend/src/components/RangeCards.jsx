@@ -209,6 +209,37 @@ export const IDLE_COLUMNS = [
   { key: 'last', label: 'Last sale', render: (r) => (r.never_sold ? 'Never sold' : r.last_sale_period ? formatMonth(r.last_sale_period) : '—') },
 ];
 
+// The lists behind the stock cards (GET /dashboard/stock-detail, 2026-10-19).
+// Weeks of cover is the product's stock over its own average weekly sales;
+// a product that sold nothing in those 12 months has no cover figure.
+const weeksText = (r) => (r.weeks_of_cover != null ? `${r.weeks_of_cover.toFixed(1)} wks`
+  : r.no_sale_in_window ? 'No sale in 12 months' : '—');
+const pesosText = (v) => (v == null ? '—' : formatCompactPesos(v));
+export const STOCK_VALUE_COLUMNS = [
+  { key: 'pieces', label: 'Stock (pieces)', render: (r) => (r.pieces == null ? '—' : formatUnits(r.pieces)) },
+  { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
+  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+];
+export const STOCK_COVER_COLUMNS = [
+  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+  { key: 'weekly', label: 'Weekly sales (₱)', sub: 'average, 12 months', render: (r) => pesosText(r.weekly_sales) },
+  { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
+];
+export const ABOVE_RULE_COLUMNS = [
+  { key: 'above', label: 'Above the rule (₱)', sub: 'beyond 3 weeks of its sales', render: (r) => pesosText(r.above_rule_pesos) },
+  { key: 'pesos', label: 'Stock value (₱)', render: (r) => pesosText(r.pesos) },
+  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+];
+const UNCHECKABLE_REASON = {
+  no_safety_stock: 'No safety stock in the plan',
+  no_stock_count: 'No stock count',
+  missing_both: 'Missing both',
+};
+export const UNCHECKABLE_COLUMNS = [
+  { key: 'reason', label: 'Why it can’t be checked', render: (r) => UNCHECKABLE_REASON[r.reason] || r.reason },
+  { key: 'stock', label: 'Stock (pieces)', render: (r) => (r.current_stock == null ? '—' : formatUnits(r.current_stock)) },
+];
+
 // Forecast against sales over the range (GET /dashboard forecast_accuracy),
 // for a client reader (2026-10-08): one plain answer, the monthly chart as
 // its evidence, where the misses went, and the products to review. Every
@@ -518,6 +549,21 @@ const crossesRegroup = (changes, p) => p.principal === 'delmonte'
 
 const byChange = (items) => [...items].sort((a, b) => Math.abs(b.change_pesos ?? 0) - Math.abs(a.change_pesos ?? 0));
 
+// One side's totals: both figures when the backend has them. A figure it
+// withholds (null, with its *_revenue_reason — a Del Monte range with
+// nothing collected, since 2026-10-16) is named for what it is, never a ₱0
+// that reads as a real zero.
+const REASON_TEXT = { not_collected: 'not collected' };
+const whyNone = (reason) => REASON_TEXT[reason] || reason || 'no figure';
+const sideSentence = (who, before, beforeReason, now, nowReason) => {
+  const b = before != null ? <strong>{formatCompactPesos(before)}</strong> : null;
+  const n = now != null ? <strong>{formatCompactPesos(now)}</strong> : null;
+  if (b && n) return <>The ones that {who} sold {b} a year earlier and {n} now. </>;
+  if (n) return <>The ones that {who} sold {n} now; a year earlier their sales were {whyNone(beforeReason)}. </>;
+  if (b) return <>The ones that {who} sold {b} a year earlier; their sales now are {whyNone(nowReason)}. </>;
+  return <>The ones that {who} have no sales figure on either side ({whyNone(nowReason)}). </>;
+};
+
 export const ClassChanges = ({ changes, onOpen }) => {
   if (!changes?.principals?.length) return null;
   const names = { unilever: 'Unilever', delmonte: 'Del Monte' };
@@ -550,10 +596,10 @@ export const ClassChanges = ({ changes, onOpen }) => {
                   (<strong>{p.stayed_count.toLocaleString()}</strong> stayed).{' '}
                   {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
                   {(p.entered || []).length > 0
-                    ? <>The ones that joined sold <strong>{formatCompactPesos(p.entered_compare_revenue)}</strong> a year earlier and <strong>{formatCompactPesos(p.entered_revenue)}</strong> now. </>
+                    ? sideSentence('joined', p.entered_compare_revenue, p.entered_compare_revenue_reason, p.entered_revenue, p.entered_revenue_reason)
                     : 'None joined. '}
                   {(p.left || []).length > 0
-                    ? <>The ones that left sold <strong>{formatCompactPesos(p.left_compare_revenue)}</strong> a year earlier and <strong>{formatCompactPesos(p.left_revenue)}</strong> now. </>
+                    ? sideSentence('left', p.left_compare_revenue, p.left_compare_revenue_reason, p.left_revenue, p.left_revenue_reason)
                     : 'None left. '}
                   Pesos at {p.pesos_basis}.
                 </p>

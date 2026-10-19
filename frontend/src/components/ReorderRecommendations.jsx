@@ -25,6 +25,8 @@ import { ReviewBadge } from './PendingCards';
 import { formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 // The cycle selector reuses DateFilter's control styles without the component.
 import './DateFilter.css';
 // .dash-stale-note — the LP freshness notice, defined once with the
@@ -69,7 +71,15 @@ const REVIEW_REASON_TEXT = {
 };
 
 // Accept needs no typed reason; this is the one recorded for it.
-const ACCEPT_REASON = 'Accepted the LP-recommended order quantity as-is.';
+const ACCEPT_REASON = 'Accepted the order plan\u2019s quantity as-is.';
+
+// The three urgencies a link can filter to (?urgency=critical): the
+// dashboard's own words for each (backend/stock_status.py's rule).
+const URGENCY_LABEL = {
+  CRITICAL: { title: 'Critical', what: 'below safety stock' },
+  URGENT: { title: 'Urgent', what: 'below target stock' },
+  PLANNED: { title: 'Planned', what: 'at or above target stock' },
+};
 
 const COVER_BASIS_NOTE =
   'Stock at last purchase price (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
@@ -153,6 +163,8 @@ const ReorderRecommendations = () => {
   const [rawItems, setRawItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Try again on a failed load re-runs the request below.
+  const [attempt, setAttempt] = useState(0);
   // Which LP cycle this list is, how many undecided rows from earlier runs
   // were withheld, and whether the run predates its own forecasts
   // (backend/lp_cycle.py). The list is the CURRENT cycle only — a leftover
@@ -226,7 +238,7 @@ const ReorderRecommendations = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err.message || 'Failed to load reorder recommendations');
+        setError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -234,7 +246,7 @@ const ReorderRecommendations = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal]);
+  }, [principal, attempt]);
 
   // GET /recommendations has no brand field; this was hardcoded 'Unilever'
   // (the principal) on every row. Real brand comes from the product master,
@@ -344,19 +356,21 @@ const ReorderRecommendations = () => {
     return sorted.map((r) => ({ ...r, rank: r.priorityScore == null ? null : ++rank }));
   }, [cycleRows]);
 
-  // ?urgency=critical (the Dashboard's "N critical" link): only the critical
-  // rows, still ranked and split as below; the chip above the table clears it.
-  const criticalOnly = searchParams.get('urgency') === 'critical';
-  const shownRows = criticalOnly ? rankedRows.filter((r) => r.urgency === 'CRITICAL') : rankedRows;
-  const clearUrgencyFilter = () => setSearchParams((prev) => {
+  // ?urgency=critical (the dashboard's "Review the N critical", 2026-10-19):
+  // only that urgency, every row of it in one list, with a chip to clear it.
+  // The Act-now count above the table is unaffected.
+  const urgencyParam = (searchParams.get('urgency') || '').toUpperCase();
+  const urgencyFilter = URGENCY_LABEL[urgencyParam] ? urgencyParam : null;
+  const clearUrgency = () => setSearchParams((prev) => {
     const next = new URLSearchParams(prev);
     next.delete('urgency');
     return next;
   }, { replace: true });
-
-  const actNowRows = shownRows.slice(0, ACT_NOW_COUNT);
-  const reviewLaterRows = shownRows.slice(ACT_NOW_COUNT);
-  const visibleRows = showReviewLater ? shownRows : actNowRows;
+  const topRows = rankedRows.slice(0, ACT_NOW_COUNT);
+  const filteredRows = urgencyFilter ? rankedRows.filter((r) => r.urgency === urgencyFilter) : null;
+  const actNowRows = filteredRows ?? topRows;
+  const reviewLaterRows = filteredRows ? [] : rankedRows.slice(ACT_NOW_COUNT);
+  const visibleRows = filteredRows ?? (showReviewLater ? rankedRows : actNowRows);
   // Rows flagged for review are left out: each is accepted from its own row.
   const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.needsReview);
 
@@ -389,7 +403,7 @@ const ReorderRecommendations = () => {
     }, { replace: true });
   }, [localData, searchParams, setSearchParams]);
 
-  const actNowPending = actNowRows.filter((r) => !r.actionStatus).length;
+  const actNowPending = topRows.filter((r) => !r.actionStatus).length;
   // Rows the backend could not rank (no stock figure or no revenue share)
   // have an UNKNOWN risk, not a lower one, so the card counts them apart.
   const reviewLaterUnranked = reviewLaterRows.filter((r) => r.priorityScore == null).length;
@@ -538,7 +552,6 @@ const ReorderRecommendations = () => {
       ));
       if (rethrow) throw err;
       if (!silent) {
-        setError(err.message || 'Failed to update recommendation');
         toast.error(err.message || 'Failed to update recommendation');
       }
       return false;
@@ -871,13 +884,13 @@ const ReorderRecommendations = () => {
           <span className="reorder-how-title">How this was optimized</span>
           <SectionLede>How the order sizes were chosen</SectionLede>
           <p className="reorder-table-note">
-            The LP orders each SKU up to its target stock, net of what is on hand. Only when the supplier allocation
+            The order plan orders each SKU up to its target stock, net of what is on hand. Only when the supplier allocation
             can&apos;t cover every SKU does it cut some orders, and then
             {lpInputs.cover_rule === 'per-sku'
-              ? <> the LP&apos;s cost and service weights decide which SKUs come up short.</>
+              ? <> the plan&apos;s cost and service weights decide which SKUs come up short.</>
               : <>
                   {' '}SSM&apos;s {lpInputs.target_weeks ?? 3}-week stock rule (counted over the SKUs in this plan, not the
-                  whole warehouse) and the LP&apos;s cost and service weights decide which SKUs come up short.
+                  whole warehouse) and the plan&apos;s cost and service weights decide which SKUs come up short.
                 </>}
             {lpInputs.storage_cost_per_unit != null && (
               <>
@@ -924,9 +937,18 @@ const ReorderRecommendations = () => {
 
       <div className="reorder-table-toolbar">
         {planFacts && <p className="reorder-table-note reorder-plan-facts">{planFacts}</p>}
+        {urgencyFilter && (
+          <p className="reorder-filter-chip" role="status">
+            <span>
+              Showing <strong>{URGENCY_LABEL[urgencyFilter].title.toLowerCase()}</strong> only:{' '}
+              {visibleRows.length} {visibleRows.length === 1 ? 'SKU' : 'SKUs'} {URGENCY_LABEL[urgencyFilter].what}
+            </span>
+            <button type="button" className="link-button" onClick={clearUrgency}>Show all</button>
+          </p>
+        )}
         {meta?.whatIf && (
           <p className="chart-placeholder-note">
-            Preview: these recommendations are a what-if run of the LP on the five-year history, 2021–22 placeholder
+            Preview: these recommendations are a what-if run of the order plan on the five-year history, 2021–22 placeholder
             months included. They are never saved, so they can&apos;t be accepted or dismissed.
           </p>
         )}
@@ -954,12 +976,6 @@ const ReorderRecommendations = () => {
 
       {/* Table */}
       <SectionLede className="is-standalone">Every suggested order, most urgent first</SectionLede>
-      {criticalOnly && (
-        <div className="reorder-filter-chip" role="status">
-          <span>Critical only ({shownRows.length})</span>
-          <button type="button" onClick={clearUrgencyFilter} aria-label="Show every urgency">×</button>
-        </div>
-      )}
       <div className="data-table-card">
         <table className="data-table reorder-table">
           <thead>
@@ -1009,9 +1025,9 @@ const ReorderRecommendations = () => {
               <th className="table-num col-fit">
                 Suggested qty (pieces)
                 <InfoTip label="About suggested quantity">
-                  What to order, in pieces, worked out by the optimizer (an LP, or linear-programming model): forecast +
+                  What to order, in pieces, worked out by the order plan (an optimisation model; the Reference Guide explains it): forecast +
                   target stock − opening stock, less any cut made to fit the supplier allocation. The line under it is
-                  the rough case count; the LP doesn&apos;t round to whole cases.
+                  the rough case count; the plan doesn&apos;t round to whole cases.
                 </InfoTip>
                 <span className="reorder-th-period">{planLabel}</span>
               </th>
@@ -1023,7 +1039,9 @@ const ReorderRecommendations = () => {
             {actNowRows.length > 0 && (
               <tr className="reorder-group-row reorder-group-act">
                 <td colSpan={COLUMN_COUNT}>
-                  Act now — top {Math.min(ACT_NOW_COUNT, actNowRows.length)} SKUs by revenue at risk
+                  {urgencyFilter
+                    ? `${URGENCY_LABEL[urgencyFilter].title} — ${actNowRows.length} ${actNowRows.length === 1 ? 'SKU' : 'SKUs'} ${URGENCY_LABEL[urgencyFilter].what}, by revenue at risk`
+                    : `Act now — top ${Math.min(ACT_NOW_COUNT, actNowRows.length)} SKUs by revenue at risk`}
                 </td>
               </tr>
             )}
@@ -1045,21 +1063,16 @@ const ReorderRecommendations = () => {
               </tr>
             )}
             {showReviewLater && reviewLaterRows.map(renderRow)}
-            {criticalOnly && cycleRows.length > 0 && shownRows.length === 0 && (
-              <tr className="table-empty-row">
-                <td colSpan={COLUMN_COUNT}>No critical orders in this cycle.</td>
-              </tr>
-            )}
             {cycleRows.length === 0 && (
               <tr className="table-empty-row">
                 <td colSpan={COLUMN_COUNT}>
                   {principal === 'delmonte'
-                    ? 'The LP does not plan Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
+                    ? 'The order plan does not cover Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
                       + (isPreviewMode(dataMode) && meta?.demoOrderPlan?.reason
                         ? ` The synthetic data has no order plan either: ${meta.demoOrderPlan.reason}.` : '')
                     : meta?.cycleDate
                       ? 'No pending recommendations for this planning cycle.'
-                      : 'No LP run has produced pending recommendations for this scope yet.'}
+                      : 'No run of the order plan has produced pending recommendations for this scope yet.'}
                 </td>
               </tr>
             )}
@@ -1122,7 +1135,7 @@ const ReorderRecommendations = () => {
         <PageHeader
           title="Reorder"
           accent="recommendations"
-          subtitle="Order quantities in pieces from the optimizer (an LP) for the Class A SKUs whose forecasts beat a simple last-month guess. One run per planning cycle, for the month after the latest sales data."
+          subtitle="Order quantities in pieces from the order plan, for the top sellers (Class A) whose forecasts beat a simple last-month guess. One run per planning cycle, for the month after the latest sales data."
           actions={cycles.length > 0 && (
               <div className="dashboard-date-controls">
                 <span className="date-single-label">Planning cycle</span>
@@ -1159,7 +1172,7 @@ const ReorderRecommendations = () => {
               <span>
                 <strong>
                   {meta.freshness.stale_row_count < meta.freshness.row_count ? 'Some of these quantities are' : 'These quantities are'}
-                  {' '}from an older LP run.
+                  {' '}from an older run of the order plan.
                 </strong> {meta.freshness.reason}
               </span>
             </div>
@@ -1193,6 +1206,7 @@ const ReorderRecommendations = () => {
         {loading && (
           <>
             <LoadingStatus>Loading recommendations…</LoadingStatus>
+            <SlowLoadNotice />
             {activeTab === 'RECOMMENDATIONS' ? (
               <>
                 <div className="kpi-strip reorder-summary-grid">
@@ -1212,7 +1226,9 @@ const ReorderRecommendations = () => {
             )}
           </>
         )}
-        {error && <p className="reorder-page-subtitle">Error: {error}</p>}
+        {error && !loading && (
+          <LoadError what="the reorder recommendations" message={error} onRetry={() => setAttempt((n) => n + 1)} />
+        )}
         {!loading && !error && (activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab())}
       </div>
 
@@ -1267,7 +1283,7 @@ const ReorderRecommendations = () => {
                 {pendingAccept.cases?.order ? ` (${pendingAccept.cases.order})` : ''} of{' '}
                 <strong>{pendingAccept.product}</strong> ({formatSKU(pendingAccept.sku)}) for the{' '}
                 {pendingAccept.planningCycleDate ? `${formatMonth(pendingAccept.planningCycleDate)} plan` : 'current plan'},
-                as recommended by the LP optimizer.
+                as suggested by the order plan.
               </p>
               {pendingAccept.needsReview && (
                 <p className="reorder-accept-body">
@@ -1317,7 +1333,7 @@ const ReorderRecommendations = () => {
                 This accepts every pending recommendation currently shown
                 {showReviewLater ? ' (Act now and Review later)' : ' in the Act-now list'} for the{' '}
                 <strong>{formatMonth(selectedCycle)}</strong> cycle — <strong>{bulkQty.toLocaleString()}</strong> pieces
-                across <strong>{pendingBulk.rows.length}</strong> SKUs, at the LP-recommended quantities. Each one is
+                across <strong>{pendingBulk.rows.length}</strong> SKUs, at the order plan&apos;s quantities. Each one is
                 logged individually.
               </p>
               <div className="reorder-accept-actions">

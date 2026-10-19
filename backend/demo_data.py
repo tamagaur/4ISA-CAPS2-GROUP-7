@@ -305,11 +305,27 @@ def index(db: Session, principal: str) -> dict:
     return label(payload)
 
 
+TARGET_VS_RULE_BLOCKED_REASON = (
+    "Del Monte's demonstration target stock (analytics/demo/prescriptive.py) has no allocation or warehouse "
+    "ceiling to pull it below SSM's 3-week rule (DEC-31: no confirmed Del Monte allocation/warehouse data), so "
+    "it floors at the SAME 3-week constant the rule itself uses (analytics.params.POLICY_COVER_WEEKS) and can "
+    "only ever read equal to or above the rule, never below it -- it cannot show the one thing this comparison "
+    "exists to show (stock the rule traps that the LP would free). A genuinely different target would need "
+    "the ceiling data SSM has not given us. Reading 0% here would misstate that as a real finding rather than "
+    "a structural gap, so this comparison is withheld; safety_stock_vs_rule_pct below is NOT floor-bound (it is "
+    "driven only by each category's own demand variability) and is the genuine comparison this card can make."
+)
+
+
 def policy_comparison(db: Session) -> dict:
     """The Del Monte demonstration version of GET /policy-comparison / dashboard.py's policy_comparison band:
-    the demo order plan's target/safety stock (demo.dm_category_lp) against SSM's own 3-week rule, in units —
-    same formula (POLICY_WEEKS x forecast / AVG_WEEKS_PER_MONTH), same 'target vs rule' framing as the real one.
-    Pesos are left out: the demo order plan's categories have no confirmed quantity unit either (DEC-31)."""
+    the demo order plan's target/safety stock (demo.dm_category_lp) against SSM's own 3-week rule, in units.
+    target_vs_rule_pct is withheld (TARGET_VS_RULE_BLOCKED_REASON, Kelvin 2026-10-16): target_stock floors at
+    the same 3-week constant the rule uses, so it always compares the rule against itself. safety_stock_vs_rule_pct
+    takes its place as the headline: safety stock is never floor-bound, so it is a genuinely independent number
+    (the same split the real card makes between its floor-bound 'peak' and its safety-stock-based 'average',
+    backend/routers/policy_comparison.py). Pesos are left out: the demo order plan's categories have no
+    confirmed quantity unit either (DEC-31)."""
     run = latest_run(db, "delmonte")
     if run is None:
         return {"available": False, "reason": "no Del Monte demonstration run exists"}
@@ -329,7 +345,9 @@ def policy_comparison(db: Session) -> dict:
         "category_count": len(rows),
         "lp_target_stock_units": round(target_units, 2), "lp_safety_stock_units": round(lp_units, 2),
         "rule_stock_units": round(rule_units, 2),
-        "target_vs_rule_pct": round((rule_units - target_units) / rule_units * 100, 1) if rule_units > 0 else None,
+        "target_vs_rule_pct": None,
+        "target_vs_rule_blocked_reason": TARGET_VS_RULE_BLOCKED_REASON,
+        "safety_stock_vs_rule_pct": round((rule_units - lp_units) / rule_units * 100, 1) if rule_units > 0 else None,
         "categories_above_rule": sum(1 for r in rows if float(r["target_stock"]) >
                                      POLICY_WEEKS * float(r["forecast_quantity"]) / AVG_WEEKS_PER_MONTH),
         "rule_weeks": POLICY_WEEKS,

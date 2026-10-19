@@ -78,7 +78,7 @@ const OverrideReasonModal = ({ isOpen, item, onCancel, onConfirm }) => {
 
           <div className="override-modal-body">
             <p className="override-modal-copy">
-              You're dismissing the LP-optimized order of <strong>{formatUnits(item.orderQty)} pieces</strong>
+              You're dismissing the order plan's suggested order of <strong>{formatUnits(item.orderQty)} pieces</strong>
               {item.planningCycleDate ? ` for the ${formatMonth(item.planningCycleDate)} plan` : ''}.
               This deviation is recorded in the decision log against your account so the reasoning is available for review.
             </p>

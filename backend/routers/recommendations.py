@@ -182,7 +182,6 @@ from analytics.params import abc_method_sql
 from sqlalchemy.orm import Session
 
 from backend import audit, demo_data
-from backend.demo_flag import demo_enabled
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import (
@@ -196,7 +195,9 @@ from backend.principals import (
     principal_clause,
 )
 from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
-from backend.data_mode import PREVIEW, REAL, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block
+from backend.data_mode import (
+    PREVIEW, REAL, demo_data_enabled, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block,
+)
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, freshness_from, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
 from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
@@ -605,7 +606,7 @@ def get_recommendations(
     # lp_recommendation currently holds 430 Unilever rows and ZERO Del
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
     # honestly returns an empty list until the LP is run for Del Monte.
-    if demo_enabled() and normalize_principal(principal) == "delmonte":
+    if demo_data_enabled(mode) and normalize_principal(principal) == "delmonte":
         # Behind DM_DEMO_ENABLED: the labelled demonstration forecasts, stock and order plan (schema demo;
         # backend/demo_data.py; migration 0056). order_plan.available is False until the demo order plan has
         # actually been run (scripts.run_lp --source demo --principal delmonte --write).
@@ -625,7 +626,7 @@ def get_recommendations(
             newest = max((c["cycle"] for c in served.stock_counts if c.get("cycle")), default=None)
             labels = label_context(db, opening_period(newest) if newest else None,
                                    latest_abc_period(db, principal), principal)
-            return _attach_demo_unilever(served.model_copy(update=labels), db, principal)
+            return _attach_demo_unilever(served.model_copy(update=labels), db, principal, mode)
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)
     select_sql, lp_params = select_one(mode, present)
@@ -672,7 +673,7 @@ def get_recommendations(
                 superseded_count=0, freshness=freshness, lp_model=lp_model_info(),  # no cycle: defaults
                 stock_counts=[],
                 **labels,
-            ), db, mode), db, principal)
+            ), db, mode), db, principal, mode)
         cycles, cycle_clause = [current], CURRENT_CYCLE_CLAUSE
     else:
         # Each cycle against its own opening count, so the audit view runs
@@ -723,7 +724,7 @@ def get_recommendations(
         stock_counts=counts,
         **labels,
         tier_a_periods=tier_a_periods(abc_periods_shown),
-    ), db, mode), db, principal)
+    ), db, mode), db, principal, mode)
 
 
 # The planning mart is built on migration 0042's table and columns.
@@ -781,12 +782,14 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
     )
 
 
-def _attach_demo_unilever(result, db: Session, principal: str | None):
+def _attach_demo_unilever(result, db: Session, principal: str | None, mode: str):
     """Adds the Unilever demonstration order plan (demo forecast, REAL stock; backend/demo_data.py,
     migration 0057) beside the real items, for principal 'unilever', None or 'all' — it never replaces them:
-    Unilever's real recommendations are good and stay exactly as they are. Off when DM_DEMO_ENABLED is off, or
-    for a Del Monte-only request (which already gets its own demo block, see the delmonte branch above)."""
-    if not (demo_enabled() and normalize_principal(principal) in (None, "all", "unilever")):
+    Unilever's real recommendations are good and stay exactly as they are. Off when DM_DEMO_ENABLED is off, the
+    caller is not in preview (X-Data-Mode: preview — demo_data_enabled, same gate every other branch into schema
+    `demo` uses), or for a Del Monte-only request (which already gets its own demo block, see the delmonte
+    branch above)."""
+    if not (demo_data_enabled(mode) and normalize_principal(principal) in (None, "all", "unilever")):
         return result
     extra = {"demo_unilever": demo_data.unilever_order_plan(db)}
     if isinstance(result, JSONResponse):

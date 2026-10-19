@@ -64,6 +64,8 @@ class FakeSession:
             "status": "invited" if user["password_hash"] is None else "active",
             # USER_COLUMNS reads it from user_session; None = never signed in.
             "last_sign_in_at": user.get("last_sign_in_at"),
+            # USER_COLUMNS reads it from auth_token; invited accounts only.
+            "invite_expires_at": user.get("invite_expires_at") if user["password_hash"] is None else None,
         }
 
     def _find(self, user_id):
@@ -217,6 +219,18 @@ def test_the_list_shows_each_last_sign_in(client, fake_users):
     fake_users[0]["last_sign_in_at"] = "2026-10-02T13:05:11+00:00"
     body = client.get("/users", headers=admin_headers()).json()
     assert [u["last_sign_in_at"] for u in body] == ["2026-10-02T13:05:11Z", None, None]
+
+
+def test_the_list_shows_when_an_invite_expires(client, fake_users):
+    """The table turns an invite red once its link has expired, so the list
+    carries the newest invite's expiry for accounts still without a password."""
+    from backend.routers.users import USER_COLUMNS
+    assert "t.purpose = 'invite'" in USER_COLUMNS
+    assert "CASE WHEN password_hash IS NULL THEN (SELECT max(t.expires_at) FROM auth_token t" in USER_COLUMNS
+    fake_users[2]["invite_expires_at"] = "2026-10-17T09:30:00+00:00"
+    fake_users[0]["invite_expires_at"] = "2026-10-17T09:30:00+00:00"  # active: never reported
+    body = client.get("/users", headers=admin_headers()).json()
+    assert [u["invite_expires_at"] for u in body] == [None, None, "2026-10-17T09:30:00Z"]
 
 
 # --- PATCH /users/{user_id} -------------------------------------------------

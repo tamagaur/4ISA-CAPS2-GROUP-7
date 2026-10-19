@@ -261,6 +261,19 @@ def predictive_preview(mode: str) -> bool:
     return mode == PREVIEW and preview_outputs() is not None
 
 
+def demo_data_enabled(mode: str) -> bool:
+    """True when a REAL endpoint that also branches into schema `demo` (GET /forecast/{sku_id},
+    GET /recommendations, GET /dashboard) may serve that branch for this request: the server switch
+    (DM_DEMO_ENABLED) AND the caller's own opt-in (X-Data-Mode: preview), the same pair every other
+    preview-gated read here and in backend/marts.py checks (mode == PREVIEW and demo_enabled()). Without
+    this, demo_enabled() alone would serve generated data to every caller of a real endpoint, not only
+    those who asked for preview (found live 2026-10-16: /forecast/{sku_id} served a generated Unilever
+    forecast with no preview header and no demonstration-aware caller).
+    backend/routers/demo.py's dedicated /demo/* endpoints are NOT this: they are explicit demonstration-only
+    resources reached by their own path, not a branch inside a real one, so they keep demo_enabled() alone."""
+    return mode == PREVIEW and demo_enabled()
+
+
 def _nullable(values) -> list:
     return [None if v is None or (isinstance(v, float) and np.isnan(v)) else v for v in values]
 

@@ -378,6 +378,7 @@ from backend import batch, marts
 from backend.data_mode import (
     PREVIEW,
     REAL,
+    demo_data_enabled,
     forecast_source,
     get_data_mode,
     lp_source,
@@ -427,7 +428,6 @@ from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
 from backend.stock_units import STOCK_COUNTS_SQL, opening_period, stock_counts
 from backend.response_cache import cached
 from backend import demo_data
-from backend.demo_flag import demo_enabled
 from backend.series_gaps import (
     REASON_NO_DATA_BEFORE_2023, REASON_NOT_COLLECTED, gap_note as series_gap_note,
 )
@@ -1617,6 +1617,11 @@ def get_dashboard(
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     ss_rows: list = []
     comparable: list = []
+    # Why the Class A rows outside `comparable` can't be checked (2026-10-18,
+    # for the Below safety stock card): no safety stock in the plan, no stock
+    # count, or neither. Null when nothing could be compared at all.
+    uncheckable = None
+    uncheckable_items: list = []
     if abc_period is not None:
         # current_stock is PIECES (mart.inventory_mart, the same cases x pack
         # size + loose rule as backend/stock_units.py), the unit of ss_i. ss_i,
@@ -1636,6 +1641,26 @@ def get_dashboard(
             r for r in ss_rows
             if r["current_stock"] is not None and r["ss_i"] is not None
         ]
+        if not count_before_plan:
+            def _why(r):
+                if r["ss_i"] is None and r["current_stock"] is None:
+                    return "missing_both"
+                return "no_safety_stock" if r["ss_i"] is None else "no_stock_count" if r["current_stock"] is None else None
+            unchecked_rows = [(r, _why(r)) for r in ss_rows if _why(r)]
+            uncheckable = {
+                "no_safety_stock": sum(1 for _, w in unchecked_rows if w == "no_safety_stock"),
+                "no_stock_count": sum(1 for _, w in unchecked_rows if w == "no_stock_count"),
+                "missing_both": sum(1 for _, w in unchecked_rows if w == "missing_both"),
+            }
+            # The rows themselves, for the list behind the counts: by reason, then the
+            # most revenue first.
+            reason_order = {"no_safety_stock": 0, "no_stock_count": 1, "missing_both": 2}
+            uncheckable_items = [
+                {"sku_id": r.get("sku_id"), "product_name": r.get("product_name"), "reason": w,
+                 "current_stock": round(float(r["current_stock"]), 2) if r["current_stock"] is not None else None,
+                 "revenue_share": float(r["revenue_share"]) if r.get("revenue_share") is not None else None}
+                for r, w in sorted(unchecked_rows, key=lambda rw: (reason_order[rw[1]], -float(rw[0].get("revenue_share") or 0)))
+            ]
         if comparable:
             at_or_above = sum(1 for r in comparable if float(r["current_stock"]) >= float(r["ss_i"]))
             safety_stock_rate = round(at_or_above / len(comparable), 4)
@@ -1651,15 +1676,15 @@ def get_dashboard(
             # table names. The LP has never planned Del Monte (no SKU-level
             # sales to forecast), which is the usual reason under that filter.
             safety_stock_rate_blocked_reason = (
-                "The LP does not plan Del Monte, so it has no safety stock to compare against."
+                "The order plan does not cover Del Monte, so it has no safety stock to compare against."
                 if scope == "delmonte"
-                else "No Category A SKU has both a stock record and a safety stock in the LP's current cycle."
+                else "No top seller (Class A) has both a stock record and a safety stock in the current order plan."
             )
     if mode == PREVIEW and period is not None and abc_period is None:
         window = placeholder_window(db)
         if window and period >= window["start"]:
             safety_stock_rate_blocked_reason = (
-                f"{period} is a placeholder month. Safety stock belongs to the LP's current planning "
+                f"{period} is a placeholder month. Safety stock belongs to the current order plan's "
                 f"cycle, not to a past month — pick an end month from {window['first_real_month']} on."
             )
 
@@ -1722,6 +1747,8 @@ def get_dashboard(
     # True when the range ends before the plan's count: the figures are the
     # current plan's, not the range's (the card says it does not follow it).
     safety_stock_exposure["pinned_to_plan"] = bool(ss_pinned_to_plan)
+    safety_stock_exposure["uncheckable"] = uncheckable if safety_stock_exposure["below_count"] is not None else None
+    safety_stock_exposure["uncheckable_items"] = uncheckable_items if safety_stock_exposure["below_count"] is not None else []
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
@@ -1810,6 +1837,17 @@ def get_dashboard(
     # weeks_of_cover_range_end is the same object, under the name it had first.
     weeks_of_cover = cover_at(inventory_period)
     weeks_of_cover_range_end = weeks_of_cover
+    # The pesos held beyond SSM's 3-week rule, product by product (2026-10-19): the sum the
+    # card shows and GET /dashboard/stock-detail lists, from the one function both call.
+    # Imported here: backend.routers.dashboard_range imports this module.
+    from backend.routers.dashboard_range import stock_detail_for
+    _detail = stock_detail_for(db, scope, range_end, with_items=False)
+    above_policy = (
+        {"pesos": _detail["totals"]["above_rule_pesos"], "products": _detail["totals"]["above_rule_products"],
+         "no_sale_products": _detail["totals"]["no_sale_products"], "policy_weeks": _detail["policy_weeks"],
+         "count_period": _detail["count_period"], "sales_window": _detail["sales_window"]}
+        if _detail.get("totals") and _detail["totals"]["above_rule_pesos"] is not None else None
+    )
 
     # ---- sales_vs_stock series -------------------------------------------
 
@@ -2050,12 +2088,12 @@ def get_dashboard(
         if scope == "all" and len(covered) == 1:
             only = names.get(covered[0], covered[0])
             scope_label = (
-                f"All principals — only {only} has SKU-level forecasts that beat a naive "
-                f"baseline (MASE < 1, the LP's own gate), so this matches the {only} view."
+                f"All principals — only {only} has product forecasts that beat a simple "
+                f"last-month guess (the order plan's own check), so this matches the {only} view."
             )
         else:
             who = "All principals" if scope == "all" else names.get(scope, scope)
-            scope_label = f"{who} (SKU-level forecasts that beat a naive baseline — MASE < 1, the LP's own gate)."
+            scope_label = f"{who} (product forecasts that beat a simple last-month guess, the order plan's own check)."
     elif scoped_forecast_count == 0:
         scope_label = (
             "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "
@@ -2368,6 +2406,9 @@ def get_dashboard(
             # card's own count, the range's end (DEC-36, 2026-10-04).
             "weeks_of_cover": weeks_of_cover,
             "weeks_of_cover_range_end": weeks_of_cover_range_end,
+            # {pesos, products, no_sale_products, policy_weeks, count_period,
+            # sales_window}: stock beyond each product's own 3 weeks of sales.
+            "above_policy": above_policy,
         },
         # Non-null only under 'all': the combined pesos mix Unilever's
         # VAT-inclusive amounts with Del Monte's VAT-exclusive ones, and
@@ -2446,7 +2487,7 @@ def get_dashboard(
         payload["gap_note"] = note
     # The labelled Del Monte demonstration, behind DM_DEMO_ENABLED (default off). Its own block, with its own
     # data_source: the rest of this payload is real and stays labelled as it was.
-    if demo_enabled() and scope in ("all", "delmonte"):
+    if demo_data_enabled(mode) and scope in ("all", "delmonte"):
         payload["demonstration"] = demo_data.label({
             "principal": "delmonte",
             "index": demo_data.index(db, "delmonte")["series"],

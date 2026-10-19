@@ -19,6 +19,8 @@ import { ChartTable, ChartViewToggle } from './ChartTable';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChart, SkeletonLine } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
 import { getForecastAccuracy } from '../api/dashboard';
@@ -301,6 +303,9 @@ const SKUForecast = () => {
   const [tierAPeriods, setTierAPeriods] = useState({});
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
+  // Try again on a failed load re-runs that request (the list, the forecast).
+  const [listAttempt, setListAttempt] = useState(0);
+  const [forecastAttempt, setForecastAttempt] = useState(0);
 
   useEffect(() => {
     // Del Monte's ABC rows are product categories, not SKUs — there is
@@ -322,13 +327,13 @@ const SKUForecast = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setListError(err.message || 'Failed to load SKU list');
+        setListError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setListLoading(false);
       });
     return () => { cancelled = true; };
-  }, [principal]);
+  }, [principal, listAttempt]);
 
   // GET /abc has no brand field; this used to print 'Unilever' (the
   // principal) as every SKU's brand. Real brand comes from the product
@@ -623,13 +628,13 @@ const SKUForecast = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setForecastError(err.message || 'Failed to load forecast');
+        setForecastError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setForecastLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedSKU, principal]);
+  }, [selectedSKU, principal, forecastAttempt]);
 
   // Combine real trailing actuals + real forecast horizon into one chart
   // series. It now dynamically fills missing months between the first and last
@@ -1033,7 +1038,7 @@ const SKUForecast = () => {
         <PageHeader
           title="Demand"
           accent="forecast"
-          subtitle="Next month's demand for each Class A SKU, from its own sales history; the model used depends on how many months of sales it has."
+          subtitle="Next month's demand for each top seller (Class A), from its own sales history; the model used depends on how many months of sales it has."
           actions={(
             <>
               {/* The range only trims the chart, and Del Monte has none. */}
@@ -1300,6 +1305,7 @@ const SKUForecast = () => {
         {!isDelMonte && listLoading && (
           <>
             <LoadingStatus>Loading SKU list…</LoadingStatus>
+            <SlowLoadNotice />
             <div className="forecast-empty-state" aria-hidden="true">
               <SkeletonLine className="skeleton-circle" width="56px" height="56px" />
               <SkeletonLine width="18rem" height="1rem" />
@@ -1307,7 +1313,9 @@ const SKUForecast = () => {
             </div>
           </>
         )}
-        {!isDelMonte && listError && <p className="forecast-subtitle">Error: {listError}</p>}
+        {!isDelMonte && listError && !listLoading && (
+          <LoadError what="the SKU list" message={listError} onRetry={() => setListAttempt((n) => n + 1)} />
+        )}
 
         {/* The page's resting state until the user picks a SKU — nothing is
             auto-selected, so this is what a fresh visit (or a refresh)
@@ -1415,6 +1423,7 @@ const SKUForecast = () => {
               {isForecastColdLoad && (
                 <>
                   <LoadingStatus>Loading forecast…</LoadingStatus>
+                  <SlowLoadNotice />
                   <div className="forecast-accuracy-row" aria-hidden="true">
                     {[0, 1, 2, 3].map((k) => (
                       <div className="forecast-stat-block" key={k}>
@@ -1432,7 +1441,13 @@ const SKUForecast = () => {
                 </>
               )}
               {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.name}…</RefreshingNote>}
-              {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
+              {forecastError && !forecastLoading && (
+                <LoadError
+                  what={`the forecast for ${selectedSKU.name}`}
+                  message={forecastError}
+                  onRetry={() => setForecastAttempt((n) => n + 1)}
+                />
+              )}
 
               {/* A null result (GET /forecast 404 -> getForecast null) gets a
                   message, never a blank card: every block below needs a
@@ -1456,7 +1471,7 @@ const SKUForecast = () => {
                     ? forecastResult.blocked_reason
                     : selectedSKU.cat === 'A'
                     ? `No forecast has been generated for ${selectedSKU.name} (${selectedSKU.code}) yet.`
-                    : `Forecasts are only produced for Class A SKUs.${selectedSKU.cat ? ` ${selectedSKU.name} (${selectedSKU.code}) is Class ${selectedSKU.cat}.` : ''}`}
+                    : `Forecasts are only made for top sellers (Class A).${selectedSKU.cat ? ` ${selectedSKU.name} (${selectedSKU.code}) is Class ${selectedSKU.cat}.` : ''}`}
                 </p>
               )}
 
@@ -1604,7 +1619,7 @@ const SKUForecast = () => {
                           ? (servedModel?.plain?.short ?? servedModel?.label ?? '')
                           : storedForecast
                             ? 'no sales in the selected range'
-                            : selectedSKU.cat === 'A' ? 'no forecast yet' : 'Class A SKUs only'}
+                            : selectedSKU.cat === 'A' ? 'no forecast yet' : 'top sellers (Class A) only'}
                       </span>
                     </div>
 

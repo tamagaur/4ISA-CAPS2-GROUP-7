@@ -32,6 +32,8 @@ import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
@@ -305,6 +307,8 @@ const ABCClassification = () => {
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Try again on a failed load re-runs the request below.
+  const [attempt, setAttempt] = useState(0);
   const [classificationPeriod, setClassificationPeriod] = useState(null);
   // Preview mode only (src/dataMode.js): the payload's placeholder window.
   // A run for one of those months is computed on request from placeholder
@@ -430,7 +434,7 @@ const ABCClassification = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err.message || 'Failed to load ABC classification data');
+        setError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -438,7 +442,7 @@ const ABCClassification = () => {
     return () => {
       cancelled = true;
     };
-  }, [requestedPeriod, principal]);
+  }, [requestedPeriod, principal, attempt]);
 
   // GET /abc has no brand field; this was hardcoded 'Unilever' (the
   // principal) on every row. Real brand comes from the product master.
@@ -966,6 +970,7 @@ const ABCClassification = () => {
         <div className="abc-content">
           {header}
           <LoadingStatus>Loading ABC classification data…</LoadingStatus>
+          <SlowLoadNotice />
           <ABCSkeleton />
         </div>
       </div>
@@ -981,7 +986,7 @@ const ABCClassification = () => {
       <div className="abc-page">
         <div className="abc-content">
           {header}
-          <p className="abc-page-subtitle" role="alert">Failed to load ABC classification data: {error}</p>
+          <LoadError what="the ABC classification" message={error} onRetry={() => setAttempt((n) => n + 1)} />
         </div>
       </div>
     );
@@ -1002,7 +1007,8 @@ const ABCClassification = () => {
 
         {error && (
           <p className="abc-page-subtitle" role="alert">
-            Could not update: {error}. Showing the last classification that loaded.
+            Could not update: {error} Showing the last classification that loaded.{' '}
+            <button type="button" className="link-button" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
           </p>
         )}
 
@@ -1137,9 +1143,9 @@ const ABCClassification = () => {
                         </>
                       ) : (
                         <>
-                          Each SKU&apos;s stock, in pieces, against its own target stock from the LP&apos;s current plan.
+                          Each SKU&apos;s stock, in pieces, against its own target stock from the current order plan.
                           <InfoTip label="What this measures">
-                            The plan covers only Class A SKUs whose forecast passed the accuracy check; every other SKU
+                            The plan covers only top sellers (Class A) whose forecast passed the accuracy check; every other SKU
                             shows No target stock, and the ? beside it says why. Not the warehouse&apos;s Active/Inactive
                             flag, which is what the Dashboard&apos;s warehouse-status chart shows.
                           </InfoTip>
@@ -1628,7 +1634,7 @@ const ABCClassification = () => {
                     Revenue share (%)
                     {periodLabel && <span className="abc-th-sub">of {periodLabel} revenue</span>}
                   </th>
-                  <th className="col-fit" title="Stock, in pieces, against the LP's target stock for the SKU">
+                  <th className="col-fit" title="Stock, in pieces, against the SKU's target stock in the order plan">
                     {lpHidden ? 'Stock status' : 'Cover vs target'}
                     {coverHeaderText && <span className="abc-th-sub">{coverHeaderText}</span>}
                   </th>

@@ -18,6 +18,8 @@ import { labelForPrincipal } from '../principals';
 import Pagination from './Pagination';
 import ProductName from './ProductName';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import TierBasisLabel, { currentPeriodFor, isStaleTier, latestPeriod } from './TierBasisLabel';
 import './SKUManagement.css';
 
@@ -76,7 +78,7 @@ const SKUManagement = () => {
         setTierAPeriods(res.tier_a_periods || {});
       })
       .catch((err) => {
-        setError(err.message || 'Failed to load SKUs');
+        setError(describeLoadError(err));
       })
       .finally(() => setLoading(false));
   };
@@ -498,6 +500,7 @@ const SKUManagement = () => {
         {loading && (
           <>
             <LoadingStatus>Loading SKUs…</LoadingStatus>
+            <SlowLoadNotice />
             <div className="sku-filters-row" aria-hidden="true">
               <SkeletonLine width="100%" height="2.25rem" />
             </div>
@@ -506,7 +509,7 @@ const SKUManagement = () => {
             </div>
           </>
         )}
-        {error && <p className="sku-page-subtitle">Error: {error}</p>}
+        {error && !loading && <LoadError what="the product list" message={error} onRetry={loadSKUs} />}
 
         {!loading && !error && (
           <>
@@ -722,7 +725,7 @@ const SKUManagement = () => {
                       Stock (pieces)
                       {stockCountText && <span className="sku-th-sub">{stockCountText}</span>}
                     </th>
-                    <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">
+                    <th className="table-num col-fit" title="The stock level the order plan orders up to: demand expected before the next delivery, plus safety stock">
                       Target stock (pieces)
                       {planCycle && <span className="sku-th-sub">{formatMonth(planCycle)} plan</span>}
                     </th>

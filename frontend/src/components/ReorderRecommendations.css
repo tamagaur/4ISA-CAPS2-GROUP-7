@@ -632,43 +632,22 @@
   }
 }
 
-/* "Critical only ×" — the ?urgency=critical filter from the Dashboard. */
+/* "Showing critical only: 16 SKUs below safety stock · Show all" — the
+   filter a dashboard link sets (?urgency=critical, 2026-10-19). */
 .reorder-filter-chip {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin: 0 0 10px;
-  padding: 3px 4px 3px 10px;
-  border: 1px solid #F5C2C0;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #F5C2BD;
   border-radius: 999px;
   background: #FDECEC;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  color: #7A271A;
+}
+
+.reorder-filter-chip strong {
   color: #B42318;
-}
-
-.reorder-filter-chip button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  font: inherit;
-  font-size: 15px;
-  line-height: 1;
-  color: inherit;
-  cursor: pointer;
-}
-
-.reorder-filter-chip button:hover {
-  background: rgba(180, 35, 24, 0.1);
-}
-
-.reorder-filter-chip button:focus-visible {
-  outline: 2px solid var(--color-brand-primary, #E85C4A);
-  outline-offset: 1px;
 }

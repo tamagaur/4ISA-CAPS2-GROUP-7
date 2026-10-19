@@ -70,7 +70,9 @@ export function comparisonRange(range, compare, floor = { month: 'Jan', year: St
 // The quick ranges. Each is at least six months, the picker's own minimum,
 // and inside the data (Jan 2023 to the latest month). A whole calendar year
 // is offered only once all twelve of its months are in the data.
-export function quickRanges() {
+// `firstYear`: the earliest whole year offered (synthetic mode reaches back
+// to 2021; real data starts in FIRST_DATA_YEAR).
+export function quickRanges(firstYear = FIRST_DATA_YEAR) {
   const latest = ordinal(LATEST_DATA_PERIOD.month, LATEST_DATA_PERIOD.year);
   const lastN = (n) => {
     const start = fromOrdinal(latest - n + 1);
@@ -81,7 +83,7 @@ export function quickRanges() {
     { key: 'last12', label: 'Last 12 months', range: lastN(12) },
     { key: 'last24', label: 'Last 24 months', range: lastN(24) },
   ];
-  for (let y = Number(LATEST_DATA_PERIOD.year); y >= FIRST_DATA_YEAR; y -= 1) {
+  for (let y = Number(LATEST_DATA_PERIOD.year); y >= firstYear; y -= 1) {
     if (ordinal('Dec', y) <= latest) {
       ranges.push({ key: `y${y}`, label: String(y), range: { startMonth: 'Jan', startYear: String(y), endMonth: 'Dec', endYear: String(y) } });
     }

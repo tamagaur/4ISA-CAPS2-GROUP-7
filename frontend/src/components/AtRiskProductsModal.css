@@ -273,6 +273,16 @@
     flex: 1;
     justify-content: center;
   }
+
+  /* Headings on one or two lines at phone width: the grey second line
+     ("at last purchase price") is said in the note under the table. */
+  .at-risk-th-sub {
+    display: none;
+  }
+
+  .at-risk-table th:not(.at-risk-col-product) {
+    min-width: 6.5rem;
+  }
 }
 
 /* The class list's year-over-year column: up green, down red (soft tones). */

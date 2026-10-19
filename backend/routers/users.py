@@ -44,10 +44,18 @@ router = APIRouter(prefix="/users", tags=["users"])
 # (migration 0023; older sign-ins backfilled from the audit log with their
 # user_id). Read there rather than copied onto users, so there is no second
 # copy to keep in step and no migration. NULL = never signed in.
+#
+# invite_expires_at (2026-10-18, Audrey: show "Invite expired" in the table):
+# when the account's newest invite link stops working, from auth_token
+# (migration 0031). Only for an account still without a password; NULL for an
+# active one, or an invited one that has no link on record. Issuing a new link
+# retires the old ones, so the newest expiry is the one that counts.
 USER_COLUMNS = (
     "user_id, email, full_name, role, created_at, "
     "CASE WHEN password_hash IS NULL THEN 'invited' ELSE 'active' END AS status, "
-    "(SELECT max(s.started_at) FROM user_session s WHERE s.user_id = users.user_id) AS last_sign_in_at"
+    "(SELECT max(s.started_at) FROM user_session s WHERE s.user_id = users.user_id) AS last_sign_in_at, "
+    "CASE WHEN password_hash IS NULL THEN (SELECT max(t.expires_at) FROM auth_token t "
+    "WHERE t.user_id = users.user_id AND t.purpose = 'invite') END AS invite_expires_at"
 )
 _FIELD_LABELS = {"email": "email", "full_name": "name", "role": "role"}
 

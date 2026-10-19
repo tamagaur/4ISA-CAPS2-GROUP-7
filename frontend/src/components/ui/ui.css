@@ -694,3 +694,87 @@
   color: #C74E3D;
   -webkit-text-fill-color: transparent;
 }
+
+/* A button that reads as a link inside a sentence ("… Try again"). */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-info, #1D4ED8);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+/* Fingers, not a mouse (2026-10-18): the small controls every page shares
+   get a touch area of about 32px or more on touch screens only. The "?"
+   icons and the "Change filters" link keep their look; an invisible margin
+   around them takes the tap. (The dashboard's own rule, Dashboard.css, did
+   this for that page alone.) */
+@media (pointer: coarse) {
+  .info-tip-btn {
+    position: relative;
+  }
+
+  .info-tip-btn::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+
+  .period-strip-link {
+    display: inline-block;
+    padding-block: 8px;
+    margin-block: -8px;
+  }
+
+  .chart-view-toggle button {
+    min-height: 32px;
+  }
+
+  .segmented-item {
+    min-height: 36px;
+  }
+
+  .filter-select,
+  .sku-filter-select-wrapper select,
+  .abc-filter-select-wrapper select {
+    min-height: 36px;
+  }
+
+  /* ABC: the breakdown's Brand / Category and Month / 12 months, and the
+     class filter; every table's page buttons. */
+  .abcb-toggle button,
+  .abc-cat-toggle-btn,
+  .table-pagination-btn,
+  .table-pagination-row input,
+  .table-pagination-size select,
+  .page-jump-input,
+  .page-jump-btn {
+    min-height: 36px;
+  }
+
+  /* Links set in a line of text (a product's name, the dashboard's story
+     line, a card's "682 products"): the line keeps its look, the tap area
+     grows. */
+  button.product-name-link,
+  button.hero-story-link,
+  button.hero-inline-link {
+    padding-block: 9px;
+    margin-block: -9px;
+  }
+
+  /* A checkbox is tapped through its label. */
+  .abc-current-run-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+  }
+}
