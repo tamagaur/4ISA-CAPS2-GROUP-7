@@ -15,6 +15,7 @@ import { P } from '../permissions/keys';
 import { formatUnits, exactUnits } from '../utils/formatNumber';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
+import { createLatestOnly } from '../utils/latestOnly';
 import Pagination from './Pagination';
 import ProductName from './ProductName';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
@@ -65,24 +66,39 @@ const SKUManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Every load is tagged with the next number in this counter, and only the response
+  // whose tag is still the latest may touch state. A principal switch (or a reload after
+  // an edit) therefore makes every older in-flight response unusable however late it
+  // lands (FE-2: the previous principal's SKUs used to overwrite the new list). The effect
+  // cleanup bumps the counter too, so a response arriving after unmount is dropped.
+  const latestLoad = useRef(createLatestOnly());
+
   const loadSKUs = () => {
+    const tag = latestLoad.current.start();
+    const isCurrent = () => latestLoad.current.isCurrent(tag);
     setLoading(true);
     setError(null);
     return getSKUs({ principal })
       .then((res) => {
+        if (!isCurrent()) return;
         setRawItems(res.items || []);
         setStockCountDates(res.stock_count_dates || {});
         setPlanCycle(res.planning_cycle_date ?? null);
         setTierAPeriods(res.tier_a_periods || {});
       })
       .catch((err) => {
+        if (!isCurrent()) return;
         setError(err.message || 'Failed to load SKUs');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isCurrent()) setLoading(false);
+      });
   };
 
   useEffect(() => {
     loadSKUs();
+    const gate = latestLoad.current;
+    return () => gate.invalidate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [principal]);
 

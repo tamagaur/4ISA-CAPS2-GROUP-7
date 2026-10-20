@@ -23,6 +23,7 @@ import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
 import { staleCoverageNotice } from '../dataCoverage';
 import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import { PLACEHOLDER_START, isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { FIRST_DATA_YEAR } from '../dataCoverage';
 import { COMPARE_MODES, comparisonRange } from '../periodFilter';
@@ -508,7 +509,8 @@ const DashSectionNav = ({ active, enabled }) => {
 };
 
 const Dashboard = () => {
-  const isAdmin = usePermissions().role === 'admin';
+  const { role: userRole, hasPermission } = usePermissions();
+  const isAdmin = userRole === 'admin';
   const {
     startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR, handleResetToToday,
   } = useOutletContext() || {};
@@ -1000,7 +1002,8 @@ const Dashboard = () => {
   // The range cards (RangeCards.jsx). Class A changes arrive on their own
   // request; only the answer for the range on screen is shown.
   const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
-  const openForecast = (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`);
+  // Every product link opens SKU Forecast, which needs forecast.view: without it there is no link.
+  const openForecast = hasPermission(P.FORECAST_VIEW) ? (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`) : undefined;
 
   // ── The shared comparison on the two value cards ─────────────────────
   // Sales compares RANGE TOTALS (a flow: the range against the comparison
@@ -1470,7 +1473,7 @@ const Dashboard = () => {
                 insight={forecastBeyondRange ? null : portfolioForecast.insight}
                 forecastNote={forecastNote}
               />
-              {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} />}
+              {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} canOpenForecast={hasPermission(P.FORECAST_VIEW)} />}
             </Slot>
             {data.forecast_accuracy && (
               <Slot kind="Predictive" question={<>How <span className="title-accent">close</span> were past forecasts?</>} hint={STORY.accuracy} basis={BASIS.accuracy}>
@@ -1582,7 +1585,7 @@ const Dashboard = () => {
         tier={listedClass}
         args={{ period, startPeriod, principal }}
         onOpenProduct={openForecast}
-        onOpenAbcPage={() => navigate(`/abc?class=${listedClass}&basis=range`)}
+        onOpenAbcPage={hasPermission(P.ABC_VIEW) ? () => navigate(`/abc?class=${listedClass}&basis=range`) : undefined}
       />
       <AtRiskProductsModal
         isOpen={showAtRisk && canListAtRisk}

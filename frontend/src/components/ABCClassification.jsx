@@ -26,6 +26,8 @@ import DateFilter from './DateFilter';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { labelForPrincipal } from '../principals';
+import { monthToSelect, latestRunFor } from '../utils/abcMonth';
+import { parsePeriod } from '../dataCoverage';
 import { isPlaceholderPeriod } from '../dataMode';
 import Pagination from './Pagination';
 import InfoTip from './InfoTip';
@@ -306,6 +308,8 @@ const ABCClassification = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [classificationPeriod, setClassificationPeriod] = useState(null);
+  // This principal's latest classification run, from its own response: the picker's ceiling.
+  const [latestRun, setLatestRun] = useState({ principal: null, period: null });
   // Preview mode only (src/dataMode.js): the payload's placeholder window.
   // A run for one of those months is computed on request from placeholder
   // sales (backend/routers/abc.py), and every label that names it says so.
@@ -345,7 +349,9 @@ const ABCClassification = () => {
   // movement classes), or the dashboard's selected range (AbcRangeView, the
   // ranking the dashboard's ABC card draws). ?basis=range opens the range,
   // which is where the dashboard's class list sends people, so counts match.
-  const basis = searchParams.get('basis') === 'range' ? 'range' : 'month';
+  // The range basis reads GET /dashboard/pareto and /yoy, which need dashboard.view; this page needs abc.view.
+  const canRank = hasPermission(P.DASHBOARD_VIEW);
+  const basis = canRank && searchParams.get('basis') === 'range' ? 'range' : 'month';
   const setBasis = (next) => {
     const params = new URLSearchParams(searchParams);
     if (next === 'range') params.set('basis', 'range'); else params.delete('basis');
@@ -427,6 +433,11 @@ const ABCClassification = () => {
         setStockCountDates(res.stock_count_dates || {});
         setPlanCycle(res.planning_cycle_date ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
+        // FE-6: the picker carried the old principal's month over. If this principal has no
+        // run for it, select the run the response was built from (see utils/abcMonth.js).
+        const moveTo = parsePeriod(monthToSelect(requestedPeriod, res.classification_period));
+        if (moveTo) setSelectedMonth(moveTo);
+        setLatestRun({ principal, period: latestRunFor(res.tier_a_periods, principal === 'all' ? null : labelForPrincipal(principal)) });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -866,7 +877,7 @@ const ABCClassification = () => {
       </span>
     </p>
   );
-  const basisSwitch = (
+  const basisSwitch = !canRank ? null : (
     <div className="segmented abc-basis-switch" role="tablist" aria-label="Rank by">
       {[['month', 'One month'], ['range', 'Selected range']].map(([value, text]) => (
         <button
@@ -898,6 +909,7 @@ const ABCClassification = () => {
           {basisSwitch}
           <DateFilter
             singleMonth
+            ceiling={latestRun.principal === principal ? parsePeriod(latestRun.period) : null}
             localValue={{
               startMonth: selectedMonth.month, startYear: selectedMonth.year,
               endMonth: selectedMonth.month, endYear: selectedMonth.year,

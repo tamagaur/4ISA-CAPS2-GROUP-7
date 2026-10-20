@@ -2,6 +2,8 @@ import React, { useCallback, useId, useLayoutEffect, useMemo, useRef, useState }
 import SectionLede from './ui/SectionLede';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -1389,6 +1391,7 @@ const abcSegments = (data) => {
 // "Revenue not available", and the sentence is left out rather than stated
 // on numbers that aren't real.
 const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
+  const canOpenAbc = usePermissions().hasPermission(P.ABC_VIEW);
   const x = facts.skuPct.toFixed(0);
   const role = ABC_TIER_ROLE[facts.tier];
   const roleText = facts.units === 'categories' ? DEL_MONTE_TIER_ROLE : role?.role;
@@ -1438,7 +1441,7 @@ const AbcTierCard = ({ facts, atRisk = null, onOpenClass = null }) => {
         <button type="button" className="abc-tier-card-link" onClick={() => onOpenClass(facts.tier)}>
           See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
         </button>
-      ) : (
+      ) : canOpenAbc && (
         <Link to={`/abc?class=${facts.tier}`} className="abc-tier-card-link">
           See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
         </Link>

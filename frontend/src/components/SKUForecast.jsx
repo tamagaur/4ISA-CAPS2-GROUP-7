@@ -224,7 +224,11 @@ const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range', ban
 
 const SKUForecast = () => {
   const navigate = useNavigate();
-  const canOpenReorder = usePermissions().hasPermission(P.LP_VIEW);
+  const { hasPermission } = usePermissions();
+  const canOpenReorder = hasPermission(P.LP_VIEW);
+  // The accuracy cards read GET /dashboard/accuracy, which the backend opens with dashboard.view only,
+  // not forecast.view (which is all this page needs). Without it they are not fetched or drawn.
+  const canSeeAccuracy = hasPermission(P.DASHBOARD_VIEW);
   const dropdownRef = useRef(null);
 
   // This page's chart has its OWN date range, independent of the shared
@@ -556,7 +560,7 @@ const SKUForecast = () => {
   const [accuracy, setAccuracy] = useState({ key: null, rows: [], basis: null });
   const accuracyLoadedKey = accuracy.key;
   useEffect(() => {
-    if (!selectedSKU || principal === 'delmonte' || accuracyLoadedKey === accuracyKey) return undefined;
+    if (!canSeeAccuracy || !selectedSKU || principal === 'delmonte' || accuracyLoadedKey === accuracyKey) return undefined;
     let cancelled = false;
     getForecastAccuracy({ level: 'product', period: rangeEndPeriod, startPeriod: rangeStartPeriod, principal })
       .then((res) => {
@@ -565,14 +569,14 @@ const SKUForecast = () => {
       // The cards are extra to the page: on a failure they are left out.
       .catch(() => { if (!cancelled) setAccuracy({ key: accuracyKey, rows: [], basis: null }); });
     return () => { cancelled = true; };
-  }, [selectedSKU, principal, accuracyKey, accuracyLoadedKey, rangeStartPeriod, rangeEndPeriod]);
+  }, [canSeeAccuracy, selectedSKU, principal, accuracyKey, accuracyLoadedKey, rangeStartPeriod, rangeEndPeriod]);
 
   // This product's miss, summed from its rows: the average size of the miss
   // per month in pieces and (when every month has a price) pesos, and its
   // direction by the sign of the net miss — the backend's own rule
   // (backend/marts.py accuracy_summary) — with the months that ran each way.
   const productAccuracy = useMemo(() => {
-    if (!selectedSKU || accuracy.key !== accuracyKey) return null;
+    if (!canSeeAccuracy || !selectedSKU || accuracy.key !== accuracyKey) return null;
     const rows = accuracy.rows
       .filter((r) => String(r.sku_code) === String(selectedSKU.code))
       .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
@@ -595,7 +599,7 @@ const SKUForecast = () => {
       },
       stockLimited: rows.filter((r) => r.possibly_stock_limited).map((r) => r.month),
     };
-  }, [selectedSKU, accuracy, accuracyKey]);
+  }, [canSeeAccuracy, selectedSKU, accuracy, accuracyKey]);
 
   useEffect(() => {
     if (!selectedSKU) {
@@ -1048,14 +1052,14 @@ const SKUForecast = () => {
                   realOnly={realFloor}
                 />
               )}
-              <button
+              {hasPermission(P.SKU_VIEW) && <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => navigate('/sku-management')}
                 title="Go to SKU Management table"
               >
                 Browse all SKUs <ArrowRight size={14} aria-hidden="true" />
-              </button>
+              </button>}
             </>
           )}
         >
@@ -1090,9 +1094,11 @@ const SKUForecast = () => {
               Del Monte is ranked by product category on the ABC Classification page. Switch the scope to
               Unilever to forecast a SKU.
             </p>
-            <button className="forecast-range-fix-btn" onClick={() => navigate('/abc')}>
-              Open ABC Classification
-            </button>
+            {hasPermission(P.ABC_VIEW) && (
+              <button className="forecast-range-fix-btn" onClick={() => navigate('/abc')}>
+                Open ABC Classification
+              </button>
+            )}
           </div>
         )}
 

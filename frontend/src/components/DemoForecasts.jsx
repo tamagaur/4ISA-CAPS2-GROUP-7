@@ -35,7 +35,7 @@ const SyntheticTag = () => (
 );
 
 // Dashboard, step 4, Del Monte: GET /dashboard's demonstration.forecasts.
-export const DemoForecastList = ({ forecasts = [] }) => {
+export const DemoForecastList = ({ forecasts = [], canOpenForecast = false }) => {
   const navigate = useNavigate();
   if (!forecasts.length) return null;
   const period = forecasts[0]?.forecast_period;
@@ -70,9 +70,11 @@ export const DemoForecastList = ({ forecasts = [] }) => {
         </table>
       </div>
       <p className="demo-forecasts-note">{UNIT_NOTE}</p>
-      <button type="button" className="demo-forecasts-link" onClick={() => navigate('/forecast')}>
-        See each category&apos;s history
-      </button>
+      {canOpenForecast && (
+        <button type="button" className="demo-forecasts-link" onClick={() => navigate('/forecast')}>
+          See each category&apos;s history
+        </button>
+      )}
     </div>
   );
 };

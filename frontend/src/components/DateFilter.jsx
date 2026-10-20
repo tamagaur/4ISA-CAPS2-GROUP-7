@@ -91,7 +91,7 @@ const noop = () => {};
 // trend minimum.
 const DateFilter = ({
   onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false, realOnly = false,
-  showToday = true,
+  showToday = true, ceiling = null,
 }) => {
   const outlet = useOutletContext() || {};
   const years = yearsFrom(
@@ -170,10 +170,16 @@ const DateFilter = ({
     onLocalChange({ ...localValue, startMonth: month, endMonth: month });
   };
 
+  // Single-month mode only: `ceiling` ({month, year}, a page's own latest month, e.g. a principal's
+  // latest ABC run) lowers the pickable end below the app-wide LATEST_DATA_PERIOD.
+  const cap = ceiling && periodValue(ceiling.month, ceiling.year) < periodValue(LATEST_DATA_PERIOD.month, LATEST_DATA_PERIOD.year)
+    ? ceiling : LATEST_DATA_PERIOD;
+  const singleYears = years.filter((y) => Number(y) <= Number(cap.year));
+  const singleMonthsFor = (year) => (year === cap.year ? MONTHS.slice(0, MONTHS.indexOf(cap.month) + 1) : MONTHS);
+
   const handleSingleYearChange = (year) => {
-    const month = (year === LATEST_YEAR && !LATEST_YEAR_MONTHS.includes(em))
-      ? LATEST_YEAR_MONTHS[LATEST_YEAR_MONTHS.length - 1]
-      : em;
+    const allowed = singleMonthsFor(year);
+    const month = allowed.includes(em) ? em : allowed[allowed.length - 1];
     onLocalChange({ ...localValue, startMonth: month, startYear: year, endMonth: month, endYear: year });
   };
 
@@ -192,7 +198,7 @@ const DateFilter = ({
               value={em}
               onChange={(e) => handleSingleMonthChange(e.target.value)}
             >
-              {endMonthOptions.map((m) => (
+              {singleMonthsFor(ey).map((m) => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
@@ -206,7 +212,7 @@ const DateFilter = ({
               value={ey}
               onChange={(e) => handleSingleYearChange(e.target.value)}
             >
-              {years.map((y) => (
+              {singleYears.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
