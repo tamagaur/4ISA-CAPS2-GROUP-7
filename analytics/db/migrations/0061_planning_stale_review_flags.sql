@@ -9,12 +9,9 @@
 -- Expected on apply: 0 rows written. planning_stale is true until compute_review_flags --calendar-factor
 -- --write is run against the forecast then in forecast_result.
 --
--- Rollback: re-run the CREATE OR REPLACE VIEW block of 0047 (same column list, so it can replace this one).
---           DELETE FROM schema_migrations WHERE filename = '0061_planning_stale_review_flags.sql';
-
-CREATE OR REPLACE VIEW block);
---           a column cannot be removed with CREATE OR REPLACE.
---           DELETE FROM schema_migrations WHERE filename = '0047_planning_stale_tier_basis.sql';
+-- Rollback: re-create the view from the CREATE OR REPLACE VIEW block of 0047 (same column list, so it replaces this one).
+--           DELETE FROM schema_migrations WHERE filename = '0061_planning_stale_review_flags.sql'.
+-- (No semicolons in comments: scripts/run_canonical_load splits statements on them.)
 
 CREATE OR REPLACE VIEW mart.refresh_status AS
     SELECT r.refreshed_at, r.trigger,
