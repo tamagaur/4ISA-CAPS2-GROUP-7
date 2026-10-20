@@ -565,3 +565,34 @@ def test_main_plans_from_the_opening_count_and_links_its_rows_to_the_run(monkeyp
     plan = pd.read_csv(csv_path)
     assert plan.loc[0, "stock_on_hand"] == 2000.0
     assert (plan.loc[0, "stock_period"], plan.loc[0, "stock_counted_on"]) == ("2026-02", "2026-03-02")
+
+
+# --- refuse_empty_demo_plan (2026-10-20): demo run 10 was written with every order at 0.0 because solve_lp
+# returned None (falsely Infeasible) and the writer turned None into zeros. ---
+
+def test_demo_plan_with_no_solution_is_refused_not_written_as_zeros():
+    import pytest
+    from scripts.run_lp import refuse_empty_demo_plan
+    with pytest.raises(SystemExit, match="no solution"):
+        refuse_empty_demo_plan("demo", None, ["stock on hand is above warehouse_capacity"])
+
+
+def test_demo_plan_with_every_order_zero_is_refused_and_says_whether_there_was_need():
+    import pytest
+    from scripts.run_lp import refuse_empty_demo_plan
+    with pytest.raises(SystemExit, match="solver or input defect"):
+        refuse_empty_demo_plan("demo", {"a": 0.0, "b": 0.0}, need=500.0)
+    with pytest.raises(SystemExit, match="already at or above target"):
+        refuse_empty_demo_plan("demo", {"a": 0.0}, need=0.0)
+
+
+def test_demo_plan_with_at_least_one_order_passes():
+    from scripts.run_lp import refuse_empty_demo_plan
+    refuse_empty_demo_plan("demo", {"a": 0.0, "b": 12.5}, need=500.0)
+
+
+def test_unilever_demo_writer_never_defaults_a_missing_order_to_zero():
+    src = (Path(__file__).resolve().parents[2] / "scripts/run_lp.py").read_text(encoding="utf-8")
+    body = src[src.index("def _run_demo_lp_unilever"):src.index("def main()")]
+    assert "(plan.orders or {})" not in body
+    assert "refuse_empty_demo_plan(" in body

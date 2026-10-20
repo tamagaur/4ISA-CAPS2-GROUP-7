@@ -784,6 +784,11 @@ def build_parser() -> argparse.ArgumentParser:
               "same convention as scripts/run_baseline_forecast.py's --principal.",
     )
     parser.add_argument(
+        "--new-run", action="store_true", default=False,
+        help="--source demo --principal unilever --write only: write the plan under a NEW demo.run (a copy of the "
+             "latest run's inputs, made in the database) instead of replacing the latest run's own plan rows.",
+    )
+    parser.add_argument(
         "--csv", metavar="PATH", default=None,
         help="Also write the per-product plan to this CSV (with --dry-run too).",
     )
@@ -849,6 +854,26 @@ def check_source(source: str, principal: str) -> None:
                          "or --principal unilever. Omit --source, or pass --source real.")
 
 
+def refuse_empty_demo_plan(label: str, orders: dict[str, float] | None, reasons: list[str] | None = None,
+                           need: float | None = None) -> None:
+    """A demonstration plan with no order anywhere is never written (Kelvin, 2026-10-20).
+
+    The 2026-10-16 Unilever plan (demo run 10) was written with all 96 orders at 0.0: solve_lp had returned None
+    (CBC reported a falsely Infeasible stage, fixed in 136529e) and the writer's `(plan.orders or {}).get(sku, 0.0)`
+    turned that None into zeros, silently. None means infeasible, never "order nothing"; and a plan where every
+    order is zero is a state to look at, not to publish. Both stop the run, in a dry run too, before anything is
+    written. `need` (pieces still needed to reach target, summed) is named when known so a genuinely fully-stocked
+    cycle can be told from a solver failure."""
+    if orders is None:
+        raise SystemExit(f"{label}: the LP returned no solution (infeasible). Nothing written. "
+                         + "; ".join(reasons or ["no reason diagnosed"]))
+    if orders and all(q <= 0 for q in orders.values()):
+        detail = (f"total need is {need:,.0f} pieces, so a solver or input defect is likely" if need
+                  else "total need is 0, so every SKU is already at or above target")
+        raise SystemExit(f"{label}: all {len(orders)} orders are 0 ({detail}). Nothing written. "
+                         "An all-zero demonstration plan is never published silently; inspect it first.")
+
+
 def _run_demo_lp(write: bool) -> int:
     """--source demo --principal delmonte: analytics/demo/prescriptive.py's order-up-to over the demonstration's
     own forecast and stock (migration 0056). Reads and writes schema demo only; never touches lp_run,
@@ -896,6 +921,9 @@ def _run_demo_lp(write: bool) -> int:
         plan = plan_category(cat, float(fq), float(stock[cat]), sigma_d)
         plans.append((run_id, cat, pk, period, plan))
 
+    refuse_empty_demo_plan("run_lp --source demo --principal delmonte",
+                           {c: pl.order_qty for _r, c, _pk, _p, pl in plans},
+                           need=sum(max(pl.target_stock - pl.stock_on_hand, 0.0) for _r, _c, _pk, _p, pl in plans))
     print(json.dumps({
         "run_id": run_id, "window_end": window_end, "planned": len(plans), "skipped": skipped,
         "plans": [{"category": c, "period": p, "forecast_quantity": pl.forecast_quantity,
@@ -938,14 +966,18 @@ def _run_demo_lp(write: bool) -> int:
     return 0
 
 
-def _run_demo_lp_unilever(write: bool) -> int:
+def _run_demo_lp_unilever(write: bool, new_run: bool = False) -> int:
     """--source demo --principal unilever: the dominant forecast cohort of demo.unilever_sku_forecast (the one
     forecast_period most SKUs share — most reach the same last real month) against REAL stock on hand and REAL
     cost (scripts/run_lp.py's own fetchers: fetch_stock_counts, opening_counts, fetch_stock_and_cost — the real
     path's data, untouched) and DEMO sigma (the demonstration's own sales history, including the 2021-22
     back-cast — expected to move sigma; see docs/DEMO_DATA.md). plan_cycle() is the real LP, unchanged, run with
     PLACEHOLDERS' real Unilever defaults (warehouse capacity, allocation %). Writes demo.unilever_sku_lp only;
-    never touches lp_run, LP_Recommendation or Forecast_Result. Report-only unless --write."""
+    never touches lp_run, LP_Recommendation or Forecast_Result. Report-only unless --write.
+
+    --new-run (with --write): the plan is written under a NEW demo.run, a copy of the source run's row, sales,
+    backcast exclusions and forecast made inside the database (INSERT ... SELECT), so the source run and its plan
+    are left exactly as they were. Without it the plan replaces the source run's own rows (DELETE + INSERT)."""
     db_url = long_read_db_url()
     conn = psycopg2.connect(db_url, connect_timeout=20)
     try:
@@ -1029,9 +1061,11 @@ def _run_demo_lp_unilever(write: bool) -> int:
     plan = plan_cycle(products, args, planning_cycle_date=None) if products else None
     rows = []
     if plan is not None:
+        refuse_empty_demo_plan("run_lp --source demo --principal unilever", plan.orders, plan.infeasible_reasons,
+                               need=sum(s.need for s in plan.skus))
         for p, s in zip(plan.products, plan.skus):
             rows.append((run_id, p.product_key, p.sku_id, forecast_period, s.demand, p.stock_on_hand, p.sigma_d,
-                        s.safety_stock, s.target_stock, (plan.orders or {}).get(s.sku_id, 0.0)))
+                        s.safety_stock, s.target_stock, plan.orders[s.sku_id]))
 
     print(json.dumps({
         "run_id": run_id, "forecast_period": forecast_period, "stock_period": stock_period,
@@ -1067,6 +1101,26 @@ def _run_demo_lp_unilever(write: bool) -> int:
         wcur.execute("SELECT to_regclass('demo.unilever_sku_lp')")
         if wcur.fetchone()[0] is None:
             raise SystemExit("demo.unilever_sku_lp is not there: apply migration 0057 first")
+        if new_run:
+            source_run = run_id
+            wcur.execute(
+                "INSERT INTO demo.run (label, principal, seed, generator_version, jitter_scale, window_end, "
+                "forecast_target, cost_ratio, cost_ratio_source, approved_by, approved_on, notes) "
+                "SELECT label, principal, seed, generator_version, jitter_scale, window_end, forecast_target, "
+                "cost_ratio, cost_ratio_source, approved_by, approved_on, "
+                "COALESCE(notes, '{}'::jsonb) || jsonb_build_object('cloned_from_run', run_id, "
+                "'clone_reason', 'order plan regenerated after the LP solver fix (136529e); inputs copied unchanged') "
+                "FROM demo.run WHERE run_id = %s RETURNING run_id", (source_run,))
+            run_id = wcur.fetchone()[0]
+            for table, columns in (
+                ("unilever_sku_sales", "product_key, sku_code, period, quantity, net_amount, origin"),
+                ("backcast_excluded", "series_key, reason, real_months, first_real_period"),
+                ("unilever_sku_forecast", "product_key, sku_code, forecast_period, forecast_quantity, method, "
+                                          "history_months, blank_capture_filled"),
+            ):
+                wcur.execute(f"INSERT INTO demo.{table} (run_id, {columns}) SELECT %s, {columns} "
+                             f"FROM demo.{table} WHERE run_id = %s", (run_id, source_run))
+            rows = [(run_id, *r[1:]) for r in rows]
         wcur.execute("DELETE FROM demo.unilever_sku_lp WHERE run_id = %s", (run_id,))
         execute_values(
             wcur,
@@ -1087,7 +1141,10 @@ def main():
     args = build_parser().parse_args()
     check_source(args.source, args.principal)
     if args.source == "demo":
-        return _run_demo_lp_unilever(args.write) if args.principal == "unilever" else _run_demo_lp(args.write)
+        if args.new_run and not (args.write and args.principal == "unilever"):
+            raise SystemExit("--new-run needs --source demo --principal unilever --write")
+        return (_run_demo_lp_unilever(args.write, args.new_run) if args.principal == "unilever"
+                else _run_demo_lp(args.write))
     _log_inputs(args)
 
     load_dotenv(override=False)
