@@ -252,6 +252,11 @@ def build_series(sku_df: pd.DataFrame, end_month: str | None = None) -> pd.Serie
     if end_month is not None and pd.Timestamp(f"{end_month}-01") > s.index[-1]:
         s = s.reindex(pd.date_range(s.index[0], pd.Timestamp(f"{end_month}-01"), freq="MS"))
     s[~s.index.isin(idx)] = 0.0                                  # no row = a zero-sale month
+    # A return reverses demand from an EARLIER month; it is not negative demand in this one. A month whose
+    # returns exceed its sales (net < 0) enters the demand series as 0, so it cannot drag a moving average
+    # below zero (64957373: Dec -4,348 gave MA3 = -460, floored to 0 for a product still selling). Demand
+    # input only: revenue is not read from this series and stays net of returns; a blank (NaN) month stays NaN.
+    s = s.clip(lower=0.0)
     demo = sku_df["is_demo"].eq(True) if "is_demo" in sku_df.columns else None
     s = with_placeholder(s, idx[demo]) if demo is not None and demo.any() else s
     return with_missing(s, blank) if len(blank) else s
@@ -474,11 +479,13 @@ def main():
         # Anchored on latest_demand_month, not on the series' own end:
         # build_series stops at the SKU's last row (session 6's fix), and a
         # series that stops early must not have its old tail read as recent.
-        # A missing (blank-quantity) month in the window is unknown, not "no
-        # sale", so it can never make a product dead.
+        # Activity is a POSITIVE SALE (qty > 0), not a row: a window holding only
+        # returns and blank-quantity rows has no sale, so the product is dead
+        # (2026-10-20: 64373260 had recent rows that were returns and blanks
+        # only, was counted alive, and was ordered 47,008 pieces). The window
+        # length is unchanged (DEAD_SKU_MONTHS).
         if months_span >= DEAD_SKU_MONTHS and no_sale_in_last_months(
-                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month) \
-                and not _missing_in_last_months(missing, latest_demand_month):
+                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month):
             records.append(_with_window(_row_shell(p_key, sku_code, abc_period, months_span,
                                                    months_with_sales, full_class, "dead_sku")))
             continue
