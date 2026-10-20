@@ -22,6 +22,7 @@ import { getRecommendations, decideRecommendation } from '../api/recommendations
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
 import { ReviewBadge } from './PendingCards';
+import { DemoOrderPlanCard } from './DemoOrderPlan';
 import { formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
@@ -223,6 +224,9 @@ const ReorderRecommendations = () => {
           // Del Monte with the server's demonstration switch on: why the
           // synthetic data has no order plan either (GET /recommendations).
           demoOrderPlan: res.demonstration ? res.order_plan || null : null,
+          // Unilever with the switch on: the synthetic order plan (demo forecast, real stock) the server adds
+          // BESIDE the real items (GET /recommendations `demo_unilever`). Listed apart, never merged.
+          demoUnileverPlan: res.demo_unilever || null,
         });
       })
       .catch((err) => {
@@ -235,7 +239,7 @@ const ReorderRecommendations = () => {
     return () => {
       cancelled = true;
     };
-  }, [principal]);
+  }, [principal, dataMode]);
 
   // GET /recommendations has no brand field; this was hardcoded 'Unilever'
   // (the principal) on every row. Real brand comes from the product master,
@@ -1194,6 +1198,14 @@ const ReorderRecommendations = () => {
         )}
         {error && <p className="reorder-page-subtitle">Error: {error}</p>}
         {!loading && !error && (activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab())}
+        {/* The synthetic order plans, below and framed apart from the real list: only with the Topbar switch on
+            (and then only when the server sent them, i.e. DM_DEMO_ENABLED too). Never part of the real rows,
+            the counts or the Accept buttons above. */}
+        {!loading && !error && activeTab === 'RECOMMENDATIONS' && isPreviewMode(dataMode) && (
+          principal === 'delmonte'
+            ? (meta?.demoOrderPlan && <DemoOrderPlanCard plan={meta.demoOrderPlan} kind="delmonte" id="demo-order-plan" />)
+            : (meta?.demoUnileverPlan && <DemoOrderPlanCard plan={meta.demoUnileverPlan} kind="unilever" id="demo-order-plan" />)
+        )}
       </div>
 
       {/* Resolve the row through rankedRows so a modal opened from a

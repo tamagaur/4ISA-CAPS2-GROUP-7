@@ -121,5 +121,8 @@ export const CHART_COLORS = {
   // Tint behind placeholder months in preview mode (src/dataMode.js). Its
   // one meaning is "not SSM's data"; mirrors --color-placeholder.
   placeholder: '#94A3B8',
+  // The synthetic demonstration's forecast line: amber, dotted, hollow dots. Never the forecast violet, so a
+  // generated forecast cannot be read as SSM's own (CLAUDE.md rule 2).
+  syntheticForecast: '#B45309',
   lpWeight: SEMANTIC.recommendation,
 };

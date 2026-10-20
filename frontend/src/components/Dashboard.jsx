@@ -32,6 +32,7 @@ import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { DemoForecastList } from './DemoForecasts';
+import { DemoOrderPlanCard } from './DemoOrderPlan';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
 import { ArrowRight, AlertTriangle, CalendarX } from 'lucide-react';
@@ -216,6 +217,14 @@ const safetyStockMetricType = (rate) => {
 // of those two figures yet, so they can't be shown side by side from data.
 // The widget and its props are untouched; set this to true to bring it back.
 const SHOW_POLICY_CARD = false;
+
+// Why the "Suggested orders" card is empty for Del Monte. The card used to say only "No pending recommendations",
+// which reads like a fault. Checked against SellOut_Fact_Real, 2026-10-20: no Del Monte category has three
+// consecutive real months ending at its latest month (Dec 2025; the best any category has is 1), and the
+// moving-average-3 model needs three, so no real forecast exists to plan an order from.
+const DEL_MONTE_NO_ORDERS_REASON =
+  'Del Monte has no real forecast, so nothing is recommended to order. No category has three consecutive months '
+  + 'of real sales ending at its latest month, and the 3-month moving average needs three.';
 // The sentences that describe or interpret a chart are hidden for now
 // (Audrey, 2026-10-13): the line under each card's title, the generated
 // takeaways and the how-to-read notes, leaving a card its title, switches,
@@ -897,6 +906,9 @@ const Dashboard = () => {
   // (GET /dashboard's demonstration.forecasts), shown under the empty card.
   const demoForecasts = preview && pagePrincipal === 'delmonte' && data.demonstration?.demonstration
     ? data.demonstration.forecasts || [] : [];
+  // ...and its order plan and dead stock (the same block), shown under the empty "Suggested orders" card.
+  const demoPlan = preview && pagePrincipal === 'delmonte' && data.demonstration?.demonstration
+    ? data.demonstration : null;
   const forecastReliability = data.forecast || null;
   // A real-only forecast card in preview has nothing in the placeholder
   // months by construction — dropped rather than drawn as a blank run.
@@ -1504,7 +1516,11 @@ const Dashboard = () => {
                     cycleLabel={lpCycleLabel}
                     countLabel={countLabel}
                     inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
+                    emptyReason={pagePrincipal === 'delmonte' ? DEL_MONTE_NO_ORDERS_REASON : undefined}
                   />
+                  {demoPlan?.order_plan && (
+                    <DemoOrderPlanCard plan={demoPlan.order_plan} kind="delmonte" deadStock={demoPlan.dead_stock || null} />
+                  )}
                 </Slot>
               )}
               {data.idle_stock && (

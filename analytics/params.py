@@ -153,9 +153,16 @@ XGB_NTHREAD = 1
 # --------------------------------------------------------------------------- #
 # Calendar factor (analytics/forecasting/calendar.py)
 # --------------------------------------------------------------------------- #
-# TEAM: approved by Kelvin 2026-10-19 for build + dry run; NOT applied to the
-# live forecast until Sir Catubag signs off (a methodology change), so the
-# runner applies it only with --calendar-factor. SHRINK 0.5 = the "half"
+# TEAM: approved by Kelvin 2026-10-19 for build + dry run, pending Sir Catubag's
+# sign-off (a methodology change); the runner applies it only with --calendar-factor.
+# LIVE STATUS (corrected 2026-10-20, calc audit): the factor IS applied to the stored forecast. All 175
+# 'ok' Forecast_Result rows written 2026-10-19 10:37 UTC carry calendar_factor 1.0762 (March 2026, 2 earlier
+# years) and value_before_calendar, so lp_run 3 (2026-10-19) plans on adjusted forecasts. Sir Catubag's
+# sign-off is STILL PENDING. The runner's default stays OFF (opt-in --calendar-factor); the live write used it.
+# Measured sensitivity (closed form on the 107 stored LP rows, stored safety stock and 2026-02 stock held
+# fixed): 424,127 pieces with the factor, 354,975 without, a 16.3% difference across 70 changed rows. Total
+# forecast 2,036,469 with vs 1,892,199 without (+7.62%). reports/diagnostics/calc_audit_2026-10-20/.
+# SHRINK 0.5 = the "half"
 # variant: same overall gain as the full factor (median WAPE 0.318 -> 0.305 vs
 # 0.304 on MA3) with more products improved (121/59 vs 113/67), chosen because
 # only 1-2 earlier years back each month's factor. PRIOR_MONTHS 3 matches MA3's

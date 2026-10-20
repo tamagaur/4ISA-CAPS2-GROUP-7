@@ -357,8 +357,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "sales already in demo.*).")
     parser.add_argument("--calendar-factor", action="store_true", default=False,
                         help="Multiply each served forecast by the company calendar factor "
-                             "(analytics/forecasting/calendar.py). OFF by default: approved for build + dry run "
-                             "2026-10-19, not for the live forecast until Sir Catubag signs it off.")
+                             "(analytics/forecasting/calendar.py). OFF by default (opt-in), but the live "
+                             "Forecast_Result written 2026-10-19 WAS run with it (x1.0762 for March, all 175 'ok' "
+                             "rows): applied, pending Sir Catubag's sign-off. Without it the LP plans 354,975 "
+                             "pieces instead of 424,127 (-16.3%, 70 of 107 rows change).")
     parser.add_argument("--write", action="store_true", default=False,
                         help="Additionally upsert Forecast_Result for status='ok' SKUs "
                              "(rule_method pick). OFF by default - this run is report-only. With --source demo: "

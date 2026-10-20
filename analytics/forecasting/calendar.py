@@ -24,6 +24,10 @@ Backtest, 2025-01..2026-02, served router, 180 products: median WAPE
 gain is in Dec/Jan/Jul, other months tie. December is the weak part: it rose
 in 2023 and fell in 2024 and 2025, and only 1-2 earlier years exist.
 
+STATUS (2026-10-20): applied to the live Forecast_Result (March 2026 factor 1.0762, all 175 'ok' rows),
+pending Sir Catubag's sign-off. Sensitivity of the LP: 424,127 pieces with it, 354,975 without, a 16.3%
+difference across 70 changed rows (reports/diagnostics/calc_audit_2026-10-20/blast_radius.py).
+
 Pure functions, no DB access.
 """
 from __future__ import annotations
