@@ -40,6 +40,7 @@ import './SKUForecast.css';
 import GapNote from './GapNote';
 import { DemoCategoryForecast } from './DemoForecasts';
 import { gapLabel } from '../utils/gapReasons';
+import { isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
@@ -155,6 +156,7 @@ const formatAxisPeriod = (period) => {
 // hundreds of thousands, and the raw values were wide enough to crowd the
 // plot area.
 const formatAxisQty = (value) => {
+  if (isMissing(value)) return NOT_COLLECTED;
   const n = Math.abs(value);
   if (n >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `${Math.round(value / 1_000)}k`;

@@ -15,6 +15,7 @@ import { getDemoCategoryForecast } from '../api/forecast';
 import { COLORS, SEMANTIC } from '../theme/colors';
 import { originLabel } from '../utils/gapReasons';
 import './DemoForecasts.css';
+import { isMissing, NOT_COLLECTED } from '../utils/formatters';
 
 const monthLabel = (period) => {
   if (!period) return '';
@@ -26,7 +27,7 @@ const formatQty = (v) => {
   if (v == null) return '—';
   return Math.abs(v) < 10 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US');
 };
-const compactQty = (v) => (Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v)));
+const compactQty = (v) => (isMissing(v) ? NOT_COLLECTED : Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v)));
 const UNIT_NOTE = "Quantities are in Del Monte's own unit, which SSM has not confirmed.";
 
 const SyntheticTag = () => (

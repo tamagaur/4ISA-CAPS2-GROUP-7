@@ -16,7 +16,7 @@ import InfoTip from './InfoTip';
 import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { CHART_COLORS, COLORS } from '../theme/colors';
-import { formatCompactPesos } from '../utils/formatters';
+import { formatCompactPesos, isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import './AtRiskProductsModal.css';
@@ -32,7 +32,7 @@ const NO_FIGURE = {
 const sideText = (value, reason) => (value == null
   ? (NO_FIGURE[reason] || `nothing on record${reason ? ` (${reason})` : ''}`)
   : formatCompactPesos(value));
-const signedPesos = (value) => `${value >= 0 ? '+' : '−'}${formatCompactPesos(Math.abs(value))}`;
+const signedPesos = (value) => (isMissing(value) ? NOT_COLLECTED : `${value >= 0 ? '+' : '−'}${formatCompactPesos(Math.abs(value))}`);
 
 // A product list behind a card's figure, in the at-risk list's frame.
 // columns: [{ key, label, sub, render(row) }]; the first column is the product.

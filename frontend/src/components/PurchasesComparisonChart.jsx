@@ -22,7 +22,7 @@ import {
 } from 'recharts';
 import { CHART_COLORS } from '../theme/colors';
 import { chartAnim } from '../theme/motion';
-import { formatCompactPesos } from '../utils/formatters';
+import { formatCompactPesos, formatExactPesos } from '../utils/formatters';
 import { GRID_PROPS } from './ChartZoom';
 import './PurchasesComparisonChart.css';
 
@@ -113,7 +113,6 @@ const pesoTicks = (rows) => {
   return ticks;
 };
 
-const formatExactPesos = (value) => `₱${Math.round(value).toLocaleString('en-PH')}`;
 
 // A bar's outline with rounded top corners and a square foot on the baseline.
 const topRounded = (x, y, width, height, radius) => {

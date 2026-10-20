@@ -14,8 +14,8 @@ import { formatCompactCount, urgencyParts } from '../utils/kpiMath';
 import {
   SalesVsStockWidget, ABCDonutWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
-  formatCompactPesos,
 } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import {
   getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, peekDashboardData,
 } from '../api/dashboard';

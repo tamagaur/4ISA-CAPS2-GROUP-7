@@ -15,7 +15,7 @@ import ProductName from './ProductName';
 import Pagination from './Pagination';
 import ParetoCurve from './ParetoCurve';
 import { ClassBadge } from './ui/StatusBadge';
-import { formatCompactPesos } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import { yoyText } from './ClassProductsModal';
 import { getRangePareto, getRangeYoy } from '../api/dashboard';
 import { labelForPrincipal } from '../principals';

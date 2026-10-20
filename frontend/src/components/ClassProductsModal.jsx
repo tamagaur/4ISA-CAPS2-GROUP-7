@@ -9,7 +9,7 @@ import SectionLede from './ui/SectionLede';
 import { ArrowRight, X } from 'lucide-react';
 import Modal from './Modal';
 import ProductName from './ProductName';
-import { formatCompactPesos } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import { getRangePareto, getRangeYoy } from '../api/dashboard';
 import ParetoCurve from './ParetoCurve';
 import { labelForPrincipal } from '../principals';

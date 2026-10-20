@@ -22,7 +22,7 @@ import { ArrowDown, ArrowUp, ArrowUpRight, Check, AlertTriangle } from 'lucide-r
 import InfoTip from './InfoTip';
 import BasisTag from './BasisTag';
 import { Sparkline } from './KPICard';
-import { formatCompactPesos } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import { formatMonth } from '../utils/formatDate';
 import { coverScale, formatPercent, policyRatio, shareOf } from '../utils/kpiMath';
 import './HeroKpis.css';
