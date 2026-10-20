@@ -1770,18 +1770,29 @@ def get_dashboard(
             cover_periods = _month_range(f"{start_index // 12:04d}-{start_index % 12 + 1:02d}", cover_end)
         # The page's own sums are reused where they are the same scope's; only
         # the months they lack are fetched, in one call.
-        cover_known = sales_by_period if cover_scope == scope else {}
-        cover_missing = [p for p in cover_periods if p not in cover_known]
-        cover_fetched = _sales_by_period(db, cover_missing, cover_scope, mode) if cover_missing else {}
-        cover_demand = {p: cover_known[p] if p in cover_known else cover_fetched.get(p) for p in cover_periods}
+        # Unilever: stock and sales are both in PIECES. Stock was valued at purchase cost and
+        # sales at selling price, so the peso ratio understated cover by the margin (freeze
+        # package 1a: 3.0285 -> 3.1321 weeks). Del Monte has no pack size, so no pieces: its
+        # ratio stays in pesos (stock at cost / sales at selling price) and says so in `basis`.
+        in_pieces = cover_scope == "unilever"
+        if in_pieces:
+            cover_demand = marts.pieces_by_period(db, cover_periods, "unilever", mode)
+            stock_pieces = marts.stock_pieces_at(db, count_period, "unilever")
+        else:
+            cover_known = sales_by_period if cover_scope == scope else {}
+            cover_missing = [p for p in cover_periods if p not in cover_known]
+            cover_fetched = _sales_by_period(db, cover_missing, cover_scope, mode) if cover_missing else {}
+            cover_demand = {p: cover_known[p] if p in cover_known else cover_fetched.get(p) for p in cover_periods}
+            stock_pieces = None
         stock_reason = (
             f"No stock count for {_scope_label(scope)} at all." if count_period is None
             else _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
             else f"No stock valuation for {_scope_label(scope)} in the {count_period} count."
         )
         weekly_demand, demand_reason = _avg_weekly_demand(cover_demand)
-        value, reason = _weeks_of_cover(stock if UNILEVER_SOH_UNIT_CONFIRMED else None, stock_reason,
-                                        weekly_demand, demand_reason)
+        value, reason = _weeks_of_cover(
+            (stock_pieces if in_pieces else stock) if UNILEVER_SOH_UNIT_CONFIRMED else None, stock_reason,
+            weekly_demand, demand_reason)
         return {
             "value": value,
             "blocked_reason": reason,
@@ -1793,6 +1804,7 @@ def get_dashboard(
             "months_used": sum(1 for v in cover_demand.values() if v is not None),
             "stock_period": count_period,
             "stock_value": _to_float(stock),
+            "basis": "pieces" if in_pieces else "pesos",
             "stock_count_date": (_stock_count_dates(db, [count_period], cover_scope).get(count_period)
                                  if count_period is not None else None),
             # The 12 months the average weekly sales came from — fixed to the

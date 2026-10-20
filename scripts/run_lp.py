@@ -361,7 +361,9 @@ def _non_negative_float(raw: str) -> float:
     return value
 
 
-def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float | None, str | None]:
+def _sigma_d_for_product(
+    demand_df: pd.DataFrame, principal: str, end_period: str | None = None,
+) -> tuple[float | None, str | None]:
     """Reconstructs this product's demand series via analytics.etl.granularity
     (per DEC-03: Unilever real SKU-grain passthrough+validate, Del Monte
     category-grain even business-day distribution) and returns
@@ -393,7 +395,14 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
     capture, not a zero: it is left out of sigma here (the same rule as
     analytics/classification/orchestrate_abc.py, which drops a blank
     net_amount), and counted in the log.
+
+    Unilever only: a month with NO row between the product's first row and
+    `end_period` (the latest real demand month; the product's last row when
+    None) is a real zero-sale month and enters sigma as 0 (freeze package 1b;
+    the zero-sale evidence is in CLAUDE.md "Why data is missing"). Del
+    Monte's missing months are collection failures and are never filled.
     """
+    has_row = set(demand_df["period"])
     blank = demand_df["total_quantity"].isna()
     if blank.any():
         logger.info(f"    {int(blank.sum())} blank-capture month(s) excluded from sigma (not zero sales).")
@@ -413,6 +422,14 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
     if principal == "unilever":
         sku_daily_df = demand_df.rename(columns={"period": "calendar_month", "total_quantity": "quantity_sold"})
         sku_daily_df = sku_daily_df[["sku_code", "calendar_month", "quantity_sold"]]
+        if len(sku_daily_df):
+            last = max([max(has_row)] + ([end_period] if end_period else []))
+            absent = [str(m) for m in pd.period_range(min(has_row), last, freq="M") if str(m) not in has_row]
+            if absent:
+                sku_daily_df = pd.concat([sku_daily_df, pd.DataFrame({
+                    "sku_code": sku_daily_df["sku_code"].iloc[0], "calendar_month": absent, "quantity_sold": 0.0})],
+                    ignore_index=True)
+                logger.info(f"    {len(absent)} month(s) with no sales row enter sigma as zero-sale months.")
         if len(sku_daily_df) < 2:
             return None, f"insufficient demand history ({len(sku_daily_df)} period(s), need >= 2)"
         passthrough_df, validation = resolve_unilever_sku_grain(sku_daily_df)
@@ -691,8 +708,19 @@ def run_notes(stock_counts: dict[str, dict]) -> list[str]:
     return notes
 
 
+def forecast_provenance(cur, planning_cycle_date) -> list[dict]:
+    """The distinct Forecast_Result.model_params.run stamps of the cycle's forecast rows, with row
+    counts and the generated_at span; [] when a row has none."""
+    cur.execute("""
+        SELECT model_params -> 'run', COUNT(*), MIN(generated_at)::text, MAX(generated_at)::text
+        FROM Forecast_Result WHERE forecast_date = %s GROUP BY 1 ORDER BY 2 DESC
+    """, (planning_cycle_date,))
+    return [{"run": r[0], "rows": r[1], "generated_from": r[2], "generated_to": r[3]} for r in cur.fetchall()]
+
+
 def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date,
-               stock_counts: dict[str, dict], refused: dict[str, str] | None = None) -> dict:
+               stock_counts: dict[str, dict], refused: dict[str, str] | None = None,
+               forecast_run: list[dict] | None = None) -> dict:
     """The lp_run row for one solved cycle: every flag as run and the stock
     counts planned from (inputs), and what the code fixed (model). What the
     app shows about this run. stock_counts and refused are opening_counts()'
@@ -702,6 +730,10 @@ def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date,
     inputs["notes"] = run_notes(stock_counts)
     if refused:
         inputs["stock_refused"] = dict(sorted(refused.items()))
+    if forecast_run:
+        # Provenance of the forecast this plan used: its commit, whether the calendar factor was on,
+        # when it was written (Forecast_Result.model_params.run) and how many rows carry that stamp.
+        inputs["forecast_run"] = forecast_run
     return {
         "planning_cycle_date": planning_cycle_date,
         "principal_scope": args.principal,
@@ -999,7 +1031,7 @@ def _run_demo_lp_unilever(write: bool, new_run: bool = False) -> int:
         forecast_period = dominant[0]
         cur.execute("SELECT product_key, sku_code, forecast_quantity FROM demo.unilever_sku_forecast "
                     "WHERE run_id = %s AND forecast_period = %s", (run_id, forecast_period))
-        forecasts = {int(pk): (sku, float(fq)) for pk, sku, fq in cur.fetchall()}
+        forecasts = {int(pk): (sku, max(0.0, float(fq))) for pk, sku, fq in cur.fetchall()}   # demand cannot be negative (2a)
         cohort_before_membership_filter = len(forecasts)
         # Membership filter (Kelvin, 2026-10-16): the demo forecast cohort above is every Tier A SKU
         # build_unilever_demo.py could fit an MA3 for -- it has no accuracy metric of its own (rule 2 forbids
@@ -1047,7 +1079,7 @@ def _run_demo_lp_unilever(write: bool, new_run: bool = False) -> int:
     for pk in product_keys:
         sku_id, forecast = forecasts[pk]
         product_demand = demand_df[demand_df["product_key"] == pk].assign(sku_code=sku_id)
-        sigma_d, reason = _sigma_d_for_product(product_demand, "unilever")
+        sigma_d, reason = _sigma_d_for_product(product_demand, "unilever", stock_period)
         if sigma_d is None:
             skipped.append((sku_id, reason))
             continue
@@ -1268,7 +1300,7 @@ def main():
             if product_demand.empty:
                 gate_out(row.sku_id, row.principal, "no demand history at all")
                 continue
-            sigma_d, reason = _sigma_d_for_product(product_demand, row.principal)
+            sigma_d, reason = _sigma_d_for_product(product_demand, row.principal, opening_period(planning_cycle_date))
             if sigma_d is None:
                 gate_out(row.sku_id, row.principal, reason)
                 continue
@@ -1324,7 +1356,7 @@ def main():
             # rolled back (e.g. a retire count mismatch) leaves no lp_run row.
             run_key = None if args.dry_run else save_run(run_record(
                 args, plan, planning_cycle_date, counts_by_cycle[planning_cycle_date],
-                refused_by_cycle[planning_cycle_date],
+                refused_by_cycle[planning_cycle_date], forecast_provenance(cur, planning_cycle_date),
             ))
             for product, sku in zip(products, plan.skus):
                 q_i, ss_i = plan.orders[sku.sku_id], sku.safety_stock

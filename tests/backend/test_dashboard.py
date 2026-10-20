@@ -153,6 +153,8 @@ class FakeSession:
         accuracy_rows: list | None = None,
         # Unilever pieces per sales month (mart.sales_month).
         sales_pieces: dict | None = None,
+        # Unilever stock pieces per count month (mart.inventory_count).
+        soh_pieces: dict | None = None,
     ):
         self.stock_counts = stock_counts or {}
         self.range_revenue = range_revenue or {}
@@ -163,6 +165,7 @@ class FakeSession:
         self.returns = returns or {}
         self.accuracy_rows = accuracy_rows or []
         self.sales_pieces = sales_pieces or {}
+        self.soh_pieces = soh_pieces or {}
         # A current stock on an ABC fixture row means a count was taken that
         # month: the safety-stock check reads the count at the range's end.
         if latest_inventory_period is None:
@@ -262,7 +265,8 @@ class FakeSession:
         for who in {"unilever"} | set(self.stock_coverage):
             for m in counts:
                 _, first, last = self.stock_counts.get((who, m), (None, None, None))
-                add("stock", who, m, "real", pesos=self.soh.get(m), first_date=first, last_date=last)
+                add("stock", who, m, "real", pesos=self.soh.get(m), pieces=self.soh_pieces.get(m) if who == "unilever" else None,
+                    first_date=first, last_date=last)
         for who, by_month in self.estimated_stock.items():
             for m, (kind, value) in by_month.items():
                 add("stock", who, m, kind, pesos=value)
@@ -562,8 +566,10 @@ def test_kpis_weeks_of_cover_real_value():
     session = FakeSession(
         # avg monthly = weekly_target * AVG_WEEKS_PER_MONTH -> weekly demand = weekly_target exactly.
         sales={p1: AVG_WEEKS_PER_MONTH * 10, p2: AVG_WEEKS_PER_MONTH * 10},  # weekly demand = 10
+        sales_pieces={p1: AVG_WEEKS_PER_MONTH * 10, p2: AVG_WEEKS_PER_MONTH * 10},
         latest_inventory_period="2024-02",
-        soh={"2024-02": 100.0},  # -> 100/10 = 10.0 weeks
+        soh={"2024-02": 100.0},
+        soh_pieces={"2024-02": 100.0},  # -> 100/10 = 10.0 weeks
     )
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -577,8 +583,10 @@ def test_kpis_weeks_of_cover_null_when_weekly_demand_is_zero():
     p1 = periods[0]
     session = FakeSession(
         sales={p1: 0.0},
+        sales_pieces={p1: 0.0},
         latest_inventory_period="2024-02",
         soh={"2024-02": 100.0},
+        soh_pieces={"2024-02": 100.0},
     )
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -608,18 +616,19 @@ def test_weeks_of_cover_reads_the_stock_cards_count():
     expected = round(1000.0 / ((sum(sales.values()) / 12) / AVG_WEEKS_PER_MONTH), 2)
     for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2021-01&period=2024-02"):
         session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
-                              sales=dict(sales))
+                              soh_pieces={"2023-07": 300.0, "2024-02": 1000.0}, sales=dict(sales), sales_pieces=dict(sales))
         wc = _get(session, f"principal=unilever{query}")["kpis"]["weeks_of_cover"]
         assert wc["value"] == pytest.approx(expected), query
         assert wc["stock_period"] == "2024-02" and wc["sales_window"] == {"start": periods[0], "end": periods[-1]}
         assert wc["months_used"] == 12, query
     # A range ending at the July 2023 count reads that count, over the sales up to it.
     session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
-                          sales=dict(sales))
+                          soh_pieces={"2023-07": 300.0, "2024-02": 1000.0}, sales=dict(sales), sales_pieces=dict(sales))
     wc = _get(session, "principal=unilever&start_period=2023-01&period=2023-07")["kpis"]["weeks_of_cover"]
     assert wc["stock_period"] == "2023-07"
     assert wc["value"] == pytest.approx(round(300.0 / (100.0 / AVG_WEEKS_PER_MONTH), 2))
-    body = _get(FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales)),
+    body = _get(FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0},
+                            soh_pieces={"2024-02": 1000.0}, sales=dict(sales), sales_pieces=dict(sales)),
                 "principal=unilever")["kpis"]
     assert body["weeks_of_cover_range_end"] == body["weeks_of_cover"]
 
@@ -640,7 +649,8 @@ def test_weeks_of_cover_sales_year_ends_at_the_stock_count():
     """Stock and sales must describe the same moment: a snapshot older than
     the latest sales month is measured against the 12 months up to itself."""
     session = FakeSession(
-        latest_inventory_period="2023-12", soh={"2023-12": 1000.0}, sales={p: 100.0 for p in _periods()}
+        latest_inventory_period="2023-12", soh={"2023-12": 1000.0}, soh_pieces={"2023-12": 1000.0},
+        sales={p: 100.0 for p in _periods()}, sales_pieces={p: 100.0 for p in _periods()},
     )
     with make_client(session) as c:
         wc = c.get(
@@ -1454,6 +1464,10 @@ def test_weeks_of_cover_denominator_follows_the_stock_coverage():
         latest_inventory_period=periods[-1],
         soh={periods[-1]: 1_000_000.0},
         sales={p: 100_000.0 for p in periods},
+        # Freeze package 1a: Unilever cover is pieces over pieces. Stock at cost is 1,000,000 pesos and
+        # sales at selling price 100,000 pesos a month, but the pieces differ (500,000 held, 100,000 a month).
+        soh_pieces={periods[-1]: 500_000.0},
+        sales_pieces={p: 100_000.0 for p in periods},
         stock_coverage=["unilever"],
     )
     session.delmonte_sales = {periods[-1]: 500_000.0}
@@ -1462,7 +1476,8 @@ def test_weeks_of_cover_denominator_follows_the_stock_coverage():
         body = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()
     wc = body["kpis"]["weeks_of_cover"]
     assert wc["coverage"] == ["unilever"], "the card must say which principals it covers"
-    expected = 1_000_000.0 / (100_000.0 / AVG_WEEKS_PER_MONTH)
+    expected = 500_000.0 / (100_000.0 / AVG_WEEKS_PER_MONTH)
+    assert wc["basis"] == "pieces"
     assert wc["value"] == pytest.approx(round(expected, 2)), "Del Monte demand must not enter a Unilever-only ratio"
 
 

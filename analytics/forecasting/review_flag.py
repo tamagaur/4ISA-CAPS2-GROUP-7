@@ -79,16 +79,18 @@ def collapse_ratio(series: pd.Series, cycle: pd.Timestamp) -> float | None:
 
 
 def over_forecast_run(series: pd.Series, cycle: pd.Timestamp, served_bin: str | None,
-                      forecaster: GlobalForecaster | None) -> int | None:
+                      forecaster: GlobalForecaster | None, calendar_totals: pd.Series | None = None) -> int | None:
     """Over-forecast months in a row ending at M-1, counted back at most
     REVIEW_LOOKBACK_MONTHS. None when the product has no served bin, or the
-    served model has no forecast for M-1 (too little history then)."""
+    served model has no forecast for M-1 (too little history then).
+    `calendar_totals`: score the calendar-adjusted values when that is what is served."""
     if served_bin is None or served_bin == "insufficient":
         return None
     h = history_before(series, cycle)
     months = [m for m in (_prev_month(cycle, n) for n in range(REVIEW_LOOKBACK_MONTHS, 0, -1))
               if m in h.index and m > h.index[0]]
-    scored = rolling_one_step(h, months, forecaster, force_bin=served_bin).set_index("month")
+    scored = rolling_one_step(h, months, forecaster, force_bin=served_bin,
+                            calendar_totals=calendar_totals).set_index("month")
     run, m = 0, _prev_month(cycle)
     if m not in scored.index:
         return None
@@ -98,13 +100,13 @@ def over_forecast_run(series: pd.Series, cycle: pd.Timestamp, served_bin: str | 
 
 
 def review_flag(series: pd.Series, cycle: pd.Timestamp, served_bin: str | None,
-                forecaster: GlobalForecaster | None) -> dict:
+                forecaster: GlobalForecaster | None, calendar_totals: pd.Series | None = None) -> dict:
     """{needs_review, reasons, collapse, collapse_ratio, over_run_months} for
     one product and cycle month. needs_review is True when either rule trips,
     False when at least one rule was assessed and none tripped, and None when
     neither could be assessed."""
     ratio = collapse_ratio(series, cycle)
-    run = over_forecast_run(series, cycle, served_bin, forecaster)
+    run = over_forecast_run(series, cycle, served_bin, forecaster, calendar_totals)
     collapse = None if ratio is None else ratio < REVIEW_COLLAPSE_RATIO
     over_run = None if run is None else run >= REVIEW_OVER_RUN_MONTHS
     reasons = [r for r, hit in ((REASON_COLLAPSE, collapse), (REASON_OVER_RUN, over_run)) if hit]

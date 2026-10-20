@@ -173,6 +173,25 @@ def test_run_lp_sigma_ignores_a_blank_month():
     assert s_zero > s_blank * 1.5                      # a zero would have inflated sigma
 
 
+def test_run_lp_sigma_counts_absent_months_as_zero_sales():
+    """Freeze package 1b: a month with no row (in-span, or after the last row up to end_period) is a
+    real zero-sale month; a blank-quantity row is not."""
+    rows = [(1, "A", "unilever", p, q, 1.0) for p, q in zip(_periods(6, "2025-01"), [100, 120, 80, 110, 90, 105])]
+    base = rlp._sigma_d_for_product(_demand(rows), "unilever")[0]
+    gap = [r for r in rows if r[3] != "2025-03"]                      # in-span gap
+    explicit = [r if r[3] != "2025-03" else (1, "A", "unilever", "2025-03", 0.0, 1.0) for r in rows]
+    assert rlp._sigma_d_for_product(_demand(gap), "unilever")[0] == pytest.approx(
+        rlp._sigma_d_for_product(_demand(explicit), "unilever")[0])
+    trailing = rlp._sigma_d_for_product(_demand(rows), "unilever", end_period="2025-09")[0]
+    assert trailing > base                                            # three zero months widen sigma
+    blank = [r if r[3] != "2025-03" else (1, "A", "unilever", "2025-03", None, 1.0) for r in rows]
+    assert rlp._sigma_d_for_product(_demand(blank), "unilever")[0] != pytest.approx(
+        rlp._sigma_d_for_product(_demand(gap), "unilever")[0])          # blank stays excluded, not zero
+    dm = [(1, "A", "delmonte", p, q, 1.0) for p, q in zip(_periods(6, "2025-01"), [100, 120, 80, 110, 90, 105])]
+    assert rlp._sigma_d_for_product(_demand(dm), "delmonte", end_period="2025-09")[0] == pytest.approx(
+        rlp._sigma_d_for_product(_demand(dm), "delmonte")[0])           # Del Monte is never zero-filled
+
+
 def test_run_lp_all_blank_product_is_refused_not_zero_filled():
     sigma, reason = rlp._sigma_d_for_product(_demand([(1, "A", "unilever", "2025-01", None, 5.0),
                                                       (1, "A", "unilever", "2025-02", None, 5.0)]), "unilever")
