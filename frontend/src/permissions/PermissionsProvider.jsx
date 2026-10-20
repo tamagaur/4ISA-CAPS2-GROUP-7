@@ -38,7 +38,9 @@ const PermissionsProvider = ({ children }) => {
         email: me?.email ?? null,
         fullName: me?.full_name ?? null,
         role,
-        avatar: me?.avatar_data_url ?? null,
+        // The stored picture's public URL (MeResponse.avatar_url, built from
+        // avatar_path); avatar_data_url is no longer a column (migration 0060).
+        avatar: me?.avatar_url ?? null,
         profilePictures: Boolean(me?.profile_pictures),
       };
       // Unchanged access and details keep the same state, so a re-check

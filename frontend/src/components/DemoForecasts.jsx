@@ -30,7 +30,7 @@ const formatQty = (v) => {
 const compactQty = (v) => (isMissing(v) ? NOT_COLLECTED : Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v)));
 const UNIT_NOTE = "Quantities are in Del Monte's own unit, which SSM has not confirmed.";
 
-const SyntheticTag = () => (
+export const SyntheticTag = () => (
   <span className="demo-tag"><FlaskConical size={12} aria-hidden="true" /> Synthetic data</span>
 );
 

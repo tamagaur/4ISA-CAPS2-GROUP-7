@@ -38,8 +38,8 @@ import PageHeader from './ui/PageHeader';
 import ProductName from './ProductName';
 import './SKUForecast.css';
 import GapNote from './GapNote';
-import { DemoCategoryForecast } from './DemoForecasts';
-import { gapLabel } from '../utils/gapReasons';
+import { DemoCategoryForecast, SyntheticTag } from './DemoForecasts';
+import { gapLabel, originLabel } from '../utils/gapReasons';
 import { isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
 
@@ -518,6 +518,17 @@ const SKUForecast = () => {
   // containing the separator can't collide.
   const [forecastFor, setForecastFor] = useState(null); // { sku, principal }
 
+  // The server answered from the labelled synthetic demonstration (schema
+  // demo, CLAUDE.md rule 2) instead of the pipeline's own forecast: the body
+  // carries demonstration / data_source, and each actual its origin. Read
+  // from the response, not inferred from the toggle, because a SKU with no
+  // demonstration series is still answered from real data with the toggle on.
+  const isDemonstration = forecastResult?.demonstration === true
+    || forecastResult?.data_source === 'synthetic_demonstration';
+  // Months the demonstration generated (anything but SSM's own figure).
+  const generatedMonths = Object.entries(forecastResult?.origin_counts || {})
+    .filter(([origin, n]) => origin !== 'real_copy' && n > 0);
+
   // Which of the two loading states the card is in. Same SKU, new scope
   // (principal or range) -> the series on screen is still this SKU's, so
   // keep it and mark it stale. Different SKU -> forecastResult still holds
@@ -576,7 +587,9 @@ const SKUForecast = () => {
   // direction by the sign of the net miss — the backend's own rule
   // (backend/marts.py accuracy_summary) — with the months that ran each way.
   const productAccuracy = useMemo(() => {
-    if (!canSeeAccuracy || !selectedSKU || accuracy.key !== accuracyKey) return null;
+    // Never beside a synthetic forecast: these rows score the pipeline's real
+    // forecasts, and the demonstration has no accuracy of its own (rule 2).
+    if (isDemonstration || !canSeeAccuracy || !selectedSKU || accuracy.key !== accuracyKey) return null;
     const rows = accuracy.rows
       .filter((r) => String(r.sku_code) === String(selectedSKU.code))
       .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
@@ -599,7 +612,7 @@ const SKUForecast = () => {
       },
       stockLimited: rows.filter((r) => r.possibly_stock_limited).map((r) => r.month),
     };
-  }, [canSeeAccuracy, selectedSKU, accuracy, accuracyKey]);
+  }, [isDemonstration, canSeeAccuracy, selectedSKU, accuracy, accuracyKey]);
 
   useEffect(() => {
     if (!selectedSKU) {
@@ -1064,14 +1077,26 @@ const SKUForecast = () => {
           )}
         >
             <TierBasisLabel periods={tierAPeriods} />
-            {whatIf && (
+            {/* Synthetic data on: the server answers a SKU that has a
+                demonstration series from it, so the real-data notes below
+                would be false for that product. Which SKUs those are is read
+                from each response (isDemonstration), not from this toggle. */}
+            {syntheticOn && !isDelMonte && (
+              <p className="chart-placeholder-note">
+                Synthetic data is on. A product that has a synthetic series is shown with it: its forecast is a
+                labelled synthetic demonstration (a 3-month average of the months shown), not the pipeline&apos;s
+                forecast and not checked for accuracy. A product without one still shows its real forecast.
+                {realFloor ? `This chart starts no earlier than Jan ${FIRST_DATA_YEAR}.` : ''}
+              </p>
+            )}
+            {whatIf && !syntheticOn && (
               <p className="chart-placeholder-note">
                 Preview: this forecast is a what-if run of the same models on the five-year history, 2021–22
                 placeholder months included (built {String(dashboardRange.previewInfo.outputs.built_at).slice(0, 10)}).
                 It is never saved and is not the live forecast.
               </p>
             )}
-            {realFloor && (
+            {realFloor && !syntheticOn && (
               <p className="chart-placeholder-note">
                 Preview is on, but forecasts are made from real data only, so this chart starts no earlier than
                 Jan {FIRST_DATA_YEAR}. The &ldquo;Demand pattern&rdquo; panel below does include the
@@ -1563,6 +1588,22 @@ const SKUForecast = () => {
                       "accuracy of the latest run" and "how many points" (always
                       1) aren't meaningful headline numbers the way they
                       were for the old multi-point SARIMA forecast. */}
+                  {isDemonstration && (
+                    <div className="demo-forecasts-head" role="note">
+                      <SyntheticTag />
+                      <p className="demo-forecasts-lead">
+                        {forecastResult.demonstration_note
+                          || 'Synthetic demonstration data, generated for visualisation only.'}
+                        {' '}The forecast below is the average of this product&apos;s last 3 months in the series shown.
+                        It is not the pipeline&apos;s forecast, has not been checked for accuracy, and is never used for
+                        SSM&apos;s real orders.
+                        {generatedMonths.length > 0
+                          ? ` Months SSM did not record are generated: ${generatedMonths.map(([origin, n]) => `${n} ${originLabel(origin)}`).join(', ')}.`
+                          : ''}
+                        {forecastResult.forecast_note ? ` ${forecastResult.forecast_note}` : ''}
+                      </p>
+                    </div>
+                  )}
                   <SectionLede className="is-standalone">Next month in one number</SectionLede>
                   <div className="forecast-accuracy-row">
                     {servedModel && servedModel.kind !== 'forecast' ? (
@@ -1592,6 +1633,7 @@ const SKUForecast = () => {
                     <div className="forecast-stat-block">
                       <span className="forecast-stat-label">
                         {derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Forecast'}
+                        {isDemonstration ? ' (synthetic)' : ''}
                         {derivedForecast ? ` for ${formatPeriod(derivedForecast.period)}` : ''}
                       </span>
                       <span className="forecast-stat-value forecast-stat-value-forecast">
@@ -1738,7 +1780,7 @@ const SKUForecast = () => {
                       is explained by its own note, and a provisional /
                       no-order row isn't a forecast. Names models only; no
                       claim that one is more accurate than MA3. */}
-                  {servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
+                  {!isDemonstration && servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
                     <div className="forecast-howmade">
                       <span className="forecast-howmade-title">How this forecast was made</span>
                       <SectionLede>Where the number comes from</SectionLede>
@@ -1897,7 +1939,7 @@ const SKUForecast = () => {
                           align: 'left',
                         },
                         { key: 'actualV', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'forecastV', label: 'Forecast (pieces)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'forecastV', label: `Forecast${isDemonstration ? ', synthetic' : ''} (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                         { key: 'lastYearV', label: 'Same month last year (pieces)', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciLow', label: `${bandLabel} low (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciHigh', label: `${bandLabel} high (pieces)`, format: (v) => Math.round(v).toLocaleString() },
@@ -1942,7 +1984,7 @@ const SKUForecast = () => {
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
                           <line x1="1" y1="6" x2="27" y2="6" stroke={COLORS.forecast} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4" />
                         </svg>
-                        <span className="legend-label">Forecast</span>
+                        <span className="legend-label">{isDemonstration ? 'Forecast (synthetic)' : 'Forecast'}</span>
                       </div>
                     )}
                     {chartData.some((pt) => Array.isArray(pt.ci) && pt.ci[0] !== pt.ci[1]) && (
