@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class RecommendationItem(BaseModel):
@@ -121,6 +121,17 @@ class RecommendationItem(BaseModel):
     review_reasons: list[str] = []
     review_over_run_months: int | None = None
     review_collapse_ratio: float | None = None
+    # The planner's decision, captured beside the recommendation and never in place of it (2026-10-21,
+    # migration 0062). q_i stays what the LP produced; recommended_q_i repeats it under an unambiguous
+    # name so a page can show "recommended X, decided Y". decided_q_i is the quantity the planner chose
+    # when it differs from q_i (None = no override: pending, dismissed, or accepted as recommended).
+    # decision_reason is why (required on dismiss). Capture only: nothing in forecasting, safety stock
+    # or the LP reads these, and none of them changes a recommended value.
+    recommended_q_i: float | None = None
+    decided_q_i: float | None = None
+    decision_reason: str | None = None
+    decided_at: datetime.datetime | None = None
+    decided_by: str | None = None
 
 
 class RecommendationsResponse(BaseModel):
@@ -166,10 +177,23 @@ class RecommendationsResponse(BaseModel):
 
 class RecommendationDecision(BaseModel):
     status: str  # 'accepted' | 'dismissed'
-    # The admin's reason from the decision dialog; it goes into the audit log
-    # entry the server writes for the decision.
+    # Why. It is stored on the row (migration 0062) and goes into the audit log entry. REQUIRED, non-blank,
+    # when status is 'dismissed'; optional when accepting with a different quantity.
     reason: str | None = Field(default=None, max_length=500)
+    # The quantity the planner decided to order instead of the recommendation (pieces, the unit of q_i).
+    # Only on 'accepted'. Left out = accept the recommendation as it is. A value equal to q_i is stored as
+    # no override. Never overwrites q_i.
+    decided_quantity: float | None = Field(default=None, ge=0, le=999_999_999_999, allow_inf_nan=False)
     # Required (true) to ACCEPT a row flagged for review (needs_review): the
     # person confirms they checked it. The page sends it only from a single
     # row's confirm dialog, never from bulk accept.
     reviewed: bool = False
+
+    @model_validator(mode="after")
+    def _decision_shape(self):
+        if self.status == "dismissed":
+            if not (self.reason and self.reason.strip()):
+                raise ValueError("a reason is required to dismiss a recommendation")
+            if self.decided_quantity is not None:
+                raise ValueError("decided_quantity applies to an accepted recommendation, not a dismissed one")
+        return self

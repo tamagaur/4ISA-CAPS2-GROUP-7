@@ -129,7 +129,7 @@ from backend.data_mode import (
 )
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
-from backend.lp_cycle import current_cycle
+from backend.lp_cycle import PLAN_STATUS_SQL_BARE, current_cycle
 from backend.principals import (
     PrincipalQuery,
     abc_period_params,
@@ -527,7 +527,7 @@ def _get_abc_period(
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
-            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+            WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
         WHERE {abc_period_pred("=", "ac")} AND {abc_method_sql("ac")}
@@ -678,7 +678,7 @@ def _get_abc_last_known(
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
-            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+            WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
         ORDER BY ac.tier,

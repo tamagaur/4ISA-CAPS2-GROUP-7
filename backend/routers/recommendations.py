@@ -271,7 +271,9 @@ _SELECT_ONE = f"""
         rf.needs_review AS needs_review,
         rf.reasons AS review_reasons,
         rf.over_run_months AS review_over_run_months,
-        rf.collapse_ratio AS review_collapse_ratio
+        rf.collapse_ratio AS review_collapse_ratio,
+        lr.q_i AS recommended_q_i,
+        {{_DECISION}}
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     LEFT JOIN Forecast_Result fr
@@ -334,8 +336,17 @@ _PRESENT_SQL = """
            EXISTS (
                SELECT 1 FROM pg_attribute
                WHERE attrelid = to_regclass('inventory_fact') AND attname = 'po_qty_cases' AND NOT attisdropped
-           ) AS on_order
+           ) AS on_order,
+           EXISTS (
+               SELECT 1 FROM pg_attribute
+               WHERE attrelid = to_regclass('lp_recommendation') AND attname = 'decided_q_i' AND NOT attisdropped
+           ) AS decision_cols
 """
+# Migration 0062's columns. Where it isn't applied the row query reads the same names as NULLs.
+_DECISION_COLS_SQL = ("lr.decided_q_i AS decided_q_i, lr.decision_reason AS decision_reason, "
+                      "lr.decided_at AS decided_at, lr.decided_by AS decided_by")
+_DECISION_COLS_ABSENT_SQL = ("NULL::numeric AS decided_q_i, NULL::text AS decision_reason, "
+                             "NULL::timestamptz AS decided_at, NULL::text AS decided_by")
 _REVIEW_SQL = """
         SELECT product_key, planning_cycle_date, needs_review, reasons, over_run_months, collapse_ratio
         FROM review_flag
@@ -348,15 +359,18 @@ _REVIEW_ABSENT_SQL = """
 
 
 def _present(db: Session) -> dict:
-    """{review_flag, on_order}: whether migration 0042's table and columns
-    exist. A database (or test fake) that can't answer counts as neither."""
+    """{review_flag, on_order, decision_cols}: whether migration 0042's table and
+    columns and migration 0062's columns exist. A database (or test fake) that
+    can't answer counts as none of them."""
     row = db.execute(text(_PRESENT_SQL)).mappings().first()
-    return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"])}
+    return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"]),
+            "decision_cols": bool(row and row.get("decision_cols"))}
 
 
 def _with_present(sql: str, present: dict) -> str:
     return (sql.replace("{_ON_ORDER}", ON_ORDER_AT_PERIOD_SQL if present["on_order"] else ON_ORDER_ABSENT_SQL)
-               .replace("{_REVIEW}", _REVIEW_SQL if present["review_flag"] else _REVIEW_ABSENT_SQL))
+               .replace("{_REVIEW}", _REVIEW_SQL if present["review_flag"] else _REVIEW_ABSENT_SQL)
+               .replace("{_DECISION}", _DECISION_COLS_SQL if present.get("decision_cols") else _DECISION_COLS_ABSENT_SQL))
 
 _LP_FROM = "FROM lp_recommendation lr"
 assert _SELECT_ONE.count(_LP_FROM) == 1
@@ -373,7 +387,7 @@ def select_one(mode: str = REAL, present: dict | None = None) -> tuple[str, dict
     `present` is _present(db); None reads 0042's table and columns."""
     lp, params = lp_source(mode, "lp_recommendation")
     fc, fc_params = forecast_source(mode, "Forecast_Result")
-    base = _with_present(_SELECT_ONE, present or {"review_flag": True, "on_order": True})
+    base = _with_present(_SELECT_ONE, present or {"review_flag": True, "on_order": True, "decision_cols": False})
     sql = base if lp == "lp_recommendation" else base.replace(_LP_FROM, f"FROM {lp} lr")
     if fc != "Forecast_Result":
         sql = sql.replace(_FC_JOIN, f"LEFT JOIN {fc} fr")
@@ -508,6 +522,12 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         review_reasons=list(reasons or []),
         review_over_run_months=r.get("review_over_run_months") if hasattr(r, "get") else None,
         review_collapse_ratio=_opt_float(r, "review_collapse_ratio"),
+        # Always the LP's own quantity, however the planner decided (migration 0062).
+        recommended_q_i=float(r["q_i"]),
+        decided_q_i=_opt_float(r, "decided_q_i"),
+        decision_reason=r.get("decision_reason") if hasattr(r, "get") else None,
+        decided_at=r.get("decided_at") if hasattr(r, "get") else None,
+        decided_by=r.get("decided_by") if hasattr(r, "get") else None,
     )
 
 
@@ -737,7 +757,7 @@ def get_recommendations(
 
 
 # The planning mart is built on migration 0042's table and columns.
-_MART_PRESENT = {"review_flag": True, "on_order": True}
+_MART_PRESENT = {"review_flag": True, "on_order": True, "decision_cols": False}
 
 
 def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | None, to_date: str | None,
@@ -770,6 +790,11 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
     # path's (abc.product_key IS NOT NULL) at line 260.
     for r in rows:
         r["tier_is_current"] = r["revenue_share"] is not None
+    # The planner's decision (migration 0062) is read from lp_recommendation, not the mart: only decided
+    # rows have any, so a page with nothing decided costs no extra statement.
+    details = _decision_details(db, [r["recommendation_key"] for r in rows if r["status"] != "pending"])
+    for r in rows:
+        r.update(details.get(r["recommendation_key"], {}))
     items = [_to_item(r, _MART_PRESENT) for r in rows]
     # Same anchor as the join path (recommendations.py's own loop above): the newest
     # displayed cycle's own month, never the mart's stored (unanchored) tier_period —
@@ -789,6 +814,27 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
         stock_counts=counts,
         tier_a_periods=tier_a_periods(abc_periods_shown),
     )
+
+
+_DECISION_COLS_SEEN = {"value": False}
+
+
+def _decision_details(db: Session, keys: list[int]) -> dict[int, dict]:
+    """{recommendation_key: {decided_q_i, decision_reason, decided_at, decided_by}} for `keys`, read
+    from lp_recommendation. Empty when there are no keys or migration 0062 isn't applied (remembered
+    once seen, like the other optional-table checks)."""
+    if not keys:
+        return {}
+    if not _DECISION_COLS_SEEN["value"]:
+        if not _present(db)["decision_cols"]:
+            return {}
+        _DECISION_COLS_SEEN["value"] = True
+    rows = db.execute(text("""
+        SELECT recommendation_key, decided_q_i, decision_reason, decided_at, decided_by
+        FROM lp_recommendation WHERE recommendation_key = ANY(:keys)
+    """), {"keys": keys}).mappings().all()
+    return {r["recommendation_key"]: {k: r[k] for k in ("decided_q_i", "decision_reason", "decided_at", "decided_by")}
+            for r in rows}
 
 
 def _attach_demo_unilever(result, db: Session, principal: str | None, mode: str):
@@ -816,6 +862,54 @@ def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):
     return JSONResponse({**jsonable_encoder(response), "data_mode": block})
 
 
+# THE STATE MACHINE (2026-10-21). A decision is made once, on a row that is still open and still current:
+#   pending   -> accepted   legal
+#   pending   -> dismissed  legal, with a reason
+#   accepted  -> anything   refused (409): the order may already be placed
+#   dismissed -> anything   refused (409): re-deciding is not a path this page offers (known limitation:
+#                           a mis-click cannot be undone from the page)
+# and only a row of its principal's CURRENT cycle can be decided: a pending row left behind by an earlier run
+# (179 of them, 33 cycles, on 2026-10-20) is refused (409) however it is reached. Both rules sit in the
+# UPDATE's own WHERE clause, so two requests racing for one row cannot both win.
+_UPDATE_DECISION_SQL = """
+    UPDATE lp_recommendation lr
+    SET status = :status, decided_at = :decided_at, decided_by = :decided_by{capture}
+    FROM product_dimension pd
+    WHERE lr.recommendation_key = :key
+      AND pd.product_key = lr.product_key
+      AND lr.status = 'pending'
+      AND lr.planning_cycle_date = (
+          SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
+          JOIN product_dimension p2 ON p2.product_key = l2.product_key
+          WHERE p2.principal = pd.principal)
+    RETURNING COALESCE(pd.sku_code, pd.category_path) AS sku, lr.planning_cycle_date
+"""
+# Where an update touched nothing, why: a missing row, an already-decided one, or a superseded cycle.
+_WHY_NOT_DECIDED_SQL = """
+    SELECT d.status, d.planning_cycle_date,
+           (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
+            JOIN product_dimension p2 ON p2.product_key = l2.product_key
+            WHERE p2.principal = pd.principal) AS current_cycle
+    FROM lp_recommendation d
+    JOIN product_dimension pd ON pd.product_key = d.product_key
+    WHERE d.recommendation_key = :key
+"""
+
+
+def refusal_for(row) -> HTTPException:
+    """The 404 / 409 for a decision that matched no open, current row. `row` is _WHY_NOT_DECIDED_SQL's."""
+    if row is None:
+        return HTTPException(status_code=404, detail="Recommendation not found")
+    if row["status"] != "pending":
+        return HTTPException(status_code=409, detail=(
+            f"This recommendation was already {row['status']}; a decision is made once and is not changed here."
+        ))
+    return HTTPException(status_code=409, detail=(
+        f"This recommendation belongs to the {row['planning_cycle_date']} cycle, which a newer LP run "
+        f"({row['current_cycle']}) has superseded, so it can no longer be decided."
+    ))
+
+
 @router.patch("/{recommendation_key}", response_model=RecommendationItem)
 def update_recommendation(
     recommendation_key: int,
@@ -826,6 +920,10 @@ def update_recommendation(
     if decision.status not in ("accepted", "dismissed"):
         raise HTTPException(status_code=400, detail="status must be 'accepted' or 'dismissed'")
     present = _present(db)
+    reason = (decision.reason or "").strip() or None
+    # An override cannot be stored before migration 0062, so it is refused rather than dropped silently.
+    if not present["decision_cols"] and decision.decided_quantity is not None:
+        raise HTTPException(status_code=409, detail="Recording a different quantity needs migration 0062, which is not applied yet.")
     flagged = _review_reasons(db, recommendation_key) if present["review_flag"] else None
     if decision.status == "accepted" and flagged is not None and not decision.reviewed:
         raise HTTPException(status_code=409, detail=(
@@ -839,26 +937,28 @@ def update_recommendation(
         "decided_by": current_user.email,
         "key": recommendation_key,
     }
-    decided = db.execute(
-        text("""
-            UPDATE lp_recommendation
-            SET status = :status, decided_at = :decided_at, decided_by = :decided_by
-            WHERE recommendation_key = :key
-            RETURNING (SELECT COALESCE(pd.sku_code, pd.category_path) FROM product_dimension pd
-                        WHERE pd.product_key = lp_recommendation.product_key) AS sku,
-                      planning_cycle_date
-        """),
-        decision_params,
-    ).mappings().first()
+    update_params = dict(decision_params)
+    capture = ""
+    if present["decision_cols"]:
+        # decided_q_i only where it differs from the recommendation (to the 2 decimals it is stored at);
+        # q_i, rop_i and ss_i are never written here.
+        capture = (", decision_reason = :reason, decided_q_i = CASE WHEN CAST(:decided_q AS numeric) IS NULL "
+                   "OR ROUND(CAST(:decided_q AS numeric), 2) = lr.q_i THEN NULL ELSE ROUND(CAST(:decided_q AS numeric), 2) END")
+        update_params.update(reason=reason, decided_q=decision.decided_quantity)
+    decided = db.execute(text(_UPDATE_DECISION_SQL.format(capture=capture)), update_params).mappings().first()
     if decided is None:
+        why = db.execute(text(_WHY_NOT_DECIDED_SQL), {"key": recommendation_key}).mappings().first()
         db.rollback()
-        raise HTTPException(status_code=404, detail="Recommendation not found")
+        raise refusal_for(why)
     # The planning mart's row for this decision, in the same transaction (migration 0046).
     planning_mart.decide(db, decision_params)
+    detail = f"SKU {decided['sku']}" + (f": {reason}" if reason else "")
+    if decision.decided_quantity is not None:
+        detail += f" [quantity decided: {decision.decided_quantity:g}]"
     audit.record(
         db,
         f"Reorder Recommendation {'Accepted' if decision.status == 'accepted' else 'Dismissed'}",
-        f"SKU {decided['sku']}" + (f": {decision.reason}" if decision.reason else "")
+        detail
         + (f" [flagged for review: {', '.join(flagged)}; reviewed]" if flagged and decision.status == "accepted" else ""),
         actor=current_user,
     )
@@ -866,7 +966,7 @@ def update_recommendation(
     response_cache.invalidate()
 
     # Single row pinned by recommendation_key; scope left unfiltered (None
-    # = all), identical to today's behaviour — see sku.py's _one_row_params.
+    # = all), identical to today's behaviour - see sku.py's _one_row_params.
     # Stock at the row's own cycle's opening count, as GET shows it.
     row = db.execute(
         text(_with_present(_SELECT_ONE, present) + " WHERE lr.recommendation_key = :key"),

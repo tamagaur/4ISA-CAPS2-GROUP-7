@@ -407,7 +407,7 @@ from backend.data_notes import COVER_CAVEATS, flagged_count_note, unusual_stock_
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import (
-    CURRENT_CYCLE_CLAUSE, LP_RUN_PRESENT_SQL, LP_WEIGHTS, current_cycle, current_cycle_query,
+    CURRENT_CYCLE_CLAUSE, LP_RUN_PRESENT_SQL, LP_WEIGHTS, PLAN_STATUS_SQL, current_cycle, current_cycle_query,
     forecast_generated_query, freshness_query, lp_run_present, lp_run_present_known, stored_run,
     stored_run_query, superseded_count_query,
 )
@@ -1053,7 +1053,7 @@ def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_periods: dict[str, str
                 LEFT JOIN (
                     SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i, lr.rop_i, lr.q_i
                     FROM {lp_src} lr
-                    WHERE lr.status = 'pending' {_lp_cycle_filter(lp_cycle)}
+                    WHERE {PLAN_STATUS_SQL} {_lp_cycle_filter(lp_cycle)}
                     ORDER BY lr.product_key, lr.planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
                 WHERE {abc_period_pred("=", "ac")} AND ac.tier = 'A'
@@ -1135,7 +1135,7 @@ def _policy_rows_query(scope: str, mode: str, lp_cycle) -> tuple[str, dict]:
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
             JOIN {fc_src} fr
               ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
-            WHERE lr.status = 'pending'
+            WHERE {PLAN_STATUS_SQL}
               {_lp_cycle_filter(lp_cycle)}
               {_principal_filter(scope)}
         """, {"current_cycle": lp_cycle, **lp_params, **fc_params}

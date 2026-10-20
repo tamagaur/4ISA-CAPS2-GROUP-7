@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.deps import TokenPayload, get_db
-from backend.lp_cycle import current_cycle
+from backend.lp_cycle import PLAN_STATUS_SQL_BARE, current_cycle
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.stock_status import stock_status
@@ -51,7 +51,7 @@ def get_inventory_current(
         LEFT JOIN (
             SELECT product_key, ss_i, rop_i
             FROM lp_recommendation
-            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+            WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
         ) lp ON lp.product_key = inv.product_key
         WHERE 1=1 {principal_filter}
     """)

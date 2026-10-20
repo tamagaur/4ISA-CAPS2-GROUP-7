@@ -58,6 +58,26 @@ from backend.data_mode import REAL, forecast_source, lp_source
 # concatenate into a query string alongside the principal clause.
 CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
 
+# WHICH ROWS ARE "THE PLAN" (2026-10-21). Until this date every plan read
+# said `status = 'pending'`, so deciding a row removed it from the plan: an
+# accepted product read "NO ROP" on the inventory page, and once every row of
+# a cycle was decided current_cycle() fell back to an OLDER cycle's pending
+# rows (or to nothing). A decision is about one ORDER, not about the targets:
+#   pending    the order is awaiting a decision          -> plan, and an open action
+#   accepted   the planner took the order (maybe at a
+#              different quantity)                       -> plan, not open
+#   dismissed  the planner declined this cycle's order   -> plan, not open
+# ss_i (safety stock) and rop_i (target stock) are the policy for the product
+# in that cycle whether or not this month's order is placed; a dismissed
+# order does not make the product's target disappear, and treating it as if
+# it did would show "NO ROP" for a product whose target is known. What
+# differs is the OPEN-ACTION reads (dashboard pending count, pending keys,
+# reorder preview totals, superseded_count), which stay PENDING_ONLY: they
+# count work still to do, and accepted/dismissed rows are done.
+PLAN_STATUSES = ("pending", "accepted", "dismissed")
+PLAN_STATUS_SQL = "lr.status IN ('pending', 'accepted', 'dismissed')"
+PLAN_STATUS_SQL_BARE = "status IN ('pending', 'accepted', 'dismissed')"  # for subqueries with no `lr` alias
+
 # The solver's fixed settings (LP_WEIGHTS, LP_SERVICE_Z, LP_SERVICE_LEVEL_PCT,
 # imported above) come from analytics.params, the module analytics/
 # optimization/lp.py reads too, so a label can't drift from what the solver
@@ -111,7 +131,7 @@ def stored_run_query(cycle, principal: str | None = None) -> tuple[str, dict]:
             SELECT MAX(lr.lp_run_key)
             FROM lp_recommendation lr
             JOIN product_dimension pd ON pd.product_key = lr.product_key
-            WHERE lr.planning_cycle_date = :cycle AND lr.status = 'pending'{principal_clause}
+            WHERE lr.planning_cycle_date = :cycle AND {plan}{principal_clause}
         )
     """
     params: dict = {"cycle": cycle}
@@ -119,7 +139,7 @@ def stored_run_query(cycle, principal: str | None = None) -> tuple[str, dict]:
     if _principal_key(principal):
         clause = " AND pd.principal = :principal"
         params["principal"] = _principal_key(principal)
-    return sql.format(principal_clause=clause), params
+    return sql.format(principal_clause=clause, plan=PLAN_STATUS_SQL), params
 
 
 def lp_model_info(run: dict | None = None) -> dict:
@@ -183,8 +203,10 @@ def _principal_key(principal: str | None) -> str | None:
 
 def current_cycle(db: Session, principal: str | None = None, mode: str = REAL) -> datetime.date | None:
     """The planning cycle the LP is currently proposing: the most recent
-    planning_cycle_date that still has undecided (pending) rows, within the
-    selected scope. None when nothing is pending at all.
+    planning_cycle_date that has any plan row (pending, accepted or
+    dismissed: PLAN_STATUSES), within the selected scope. None when the LP has
+    no rows at all. Deciding every row of a cycle therefore leaves it current
+    (until 2026-10-21 it fell back to an older cycle's pending rows).
 
     Scoped by principal because LP_Recommendation carries both (today it
     holds Unilever rows only), so an unscoped MAX could resolve to a cycle
@@ -199,7 +221,7 @@ def current_cycle_query(principal: str | None = None, mode: str = REAL) -> tuple
         SELECT MAX(lr.planning_cycle_date) AS d
         FROM {lp} lr
         JOIN product_dimension pd ON pd.product_key = lr.product_key
-        WHERE lr.status = 'pending'
+        WHERE {PLAN_STATUS_SQL}
     """
     params = dict(params)
     if _principal_key(principal):
@@ -316,7 +338,7 @@ def freshness_query(cycle, fc_at, principal: str | None = None, mode: str = REAL
                COUNT(*) FILTER (WHERE lr.generated_at < :fc_at) AS stale_count
         FROM {lp} lr
         JOIN product_dimension pd ON pd.product_key = lr.product_key
-        WHERE lr.status = 'pending'
+        WHERE {PLAN_STATUS_SQL}
           AND (:cycle IS NULL OR lr.planning_cycle_date = :cycle)
     """
     params: dict = {"cycle": cycle, "fc_at": fc_at, **lp_params}

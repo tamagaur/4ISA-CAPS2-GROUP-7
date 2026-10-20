@@ -28,7 +28,7 @@ from analytics.params import abc_method_sql
 from backend import audit
 from backend.deps import TokenPayload, get_current_user, get_db
 from backend.permissions import can_see_lp, require_permission
-from backend.lp_cycle import current_cycle
+from backend.lp_cycle import PLAN_STATUS_SQL_BARE, current_cycle
 from backend.principals import (
     PrincipalQuery,
     abc_period_params,
@@ -112,7 +112,7 @@ _SELECT_ONE = f"""
     LEFT JOIN (
         SELECT product_key, rop_i
         FROM lp_recommendation
-        WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+        WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
     ) rop ON rop.product_key = pd.product_key
     LEFT JOIN (
         SELECT DISTINCT ON (product_key)
