@@ -1205,7 +1205,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
         wave2 += [_gated_rows_query(scope, mode, forecast_date),
                   _scoped_forecast_count_query(scope, mode, forecast_date)]
     if scope != "delmonte":
-        wave2.append(marts.accuracy_rows_query(range_start, range_end))
+        wave2.append(marts.accuracy_summary_query(range_start, range_end))
     if idle_period is not None:
         wave2 += [marts.idle_head_query(idle_period), marts.idle_items_query(idle_period, 10)]
     if marts.present(db):
@@ -2285,7 +2285,7 @@ def get_dashboard(
     # Every scored forecast in the range: each month from the recreated 29-month
     # backtest (Tier A the month before, the figure the team quotes) where it
     # covers the month, else from the newest stored run that forecast it
-    # (backend/marts.accuracy_rows). Actuals are real sales only. Del Monte has
+    # (backend/marts.accuracy_summary_query, summed by the database). Actuals are real sales only. Del Monte has
     # no product-level forecasts (its sales are category grain).
     if scope == "delmonte":
         forecast_accuracy = marts.accuracy_summary([], range_start, range_end, REVIEW_OVER_RUN_MONTHS)
@@ -2294,8 +2294,9 @@ def get_dashboard(
             "so no per-product forecast is made to check."
         )
     else:
-        forecast_accuracy = marts.accuracy_summary(
-            marts.accuracy_rows(db, range_start, range_end), range_start, range_end, REVIEW_OVER_RUN_MONTHS,
+        forecast_accuracy = marts.accuracy_summary_from(
+            marts.accuracy_aggregates_from_query(batch.rows(db, *marts.accuracy_summary_query(range_start, range_end))),
+            range_start, range_end, REVIEW_OVER_RUN_MONTHS,
         )
     forecast_accuracy["coverage"] = [] if scope == "delmonte" else ["unilever"]
 

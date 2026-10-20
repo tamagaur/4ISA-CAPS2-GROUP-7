@@ -24,6 +24,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import auth_utils, marts
+from tests.backend.accuracy_fake import accuracy_summary_rows
 from backend.deps import get_current_user, get_db
 from backend.main import app
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, _last_12_periods
@@ -381,6 +382,9 @@ class FakeSession:
             return FakeResult([{"product_key": r["product_key"], "pieces": r["current_stock"]}
                                for r in self.abc_rows
                                if r["product_key"] in keys and r.get("current_stock") is not None])
+
+        if "WITH scored AS" in sql:  # marts.accuracy_summary_query: the database sums, a few hundred rows come back
+            return FakeResult(accuracy_summary_rows(self.accuracy_rows))
 
         if "FROM mart.accuracy_mart a" in sql:
             return FakeResult(self.accuracy_rows)
@@ -2157,6 +2161,24 @@ def test_error_card_signed_miss_in_pieces_and_pesos_with_review_list():
     assert runs["items"][0]["possibly_stock_limited"] is True
     assert acc["possibly_stock_limited"] == 1
     assert acc["products_without_price"] == 0, "product 2 has a price in another month"
+
+
+def test_error_card_summed_by_the_database_equals_the_one_summed_from_rows():
+    """BE-5: the dashboard asks the database for per-month and per-product sums (a few hundred rows)
+    instead of every scored product-month (2.2 MB). Same card either way, to the byte."""
+    rows = [
+        _accuracy_row(1, "2024-01", 120, 100, run_length=2),
+        _accuracy_row(1, "2024-02", 130, 100, run_length=3, limited=True),
+        _accuracy_row(2, "2024-01", 80, 100),
+        _accuracy_row(2, "2024-02", 90, 100, price=None),
+        {**_accuracy_row(3, "2024-02", 50, 40), "possibly_stock_limited": None},
+    ]
+    from_rows = marts.accuracy_summary(rows, "2024-01", "2024-02", 3, review_limit=1000)
+    agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
+    assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3, review_limit=1000) == from_rows
+    assert from_rows["possibly_stock_limited_unknown"] == 1
+    empty = marts.accuracy_aggregates_from_query(accuracy_summary_rows([]))
+    assert marts.accuracy_summary_from(empty, "2024-01", "2024-02", 3) == marts.accuracy_summary([], "2024-01", "2024-02", 3)
 
 
 def test_error_card_says_why_del_monte_has_none():

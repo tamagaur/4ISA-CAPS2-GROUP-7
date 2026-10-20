@@ -119,3 +119,55 @@ def test_inventory_current_is_the_latest_snapshot_in_pieces_on_the_shared_rule()
     }
     main_sql = next(sql for sql, _ in session.calls if "inventory_fact_real" in sql)
     assert "latest_period" in main_sql and "SUM(i.quantity_on_hand)" not in main_sql
+
+
+def test_inventory_current_serves_no_received_or_dispatched_zeros():
+    """BE-6: receivedMts / dispatchedMts were hardcoded 0 (no per-SKU receipts exist). They are gone,
+    not zero: a zero here would read as 'nothing was received'."""
+    session = _InventorySession([
+        {"sku_code": "A", "principal": "unilever", "product_name": "a", "current_stock": 10.0,
+         "current_stock_cases": 1.0, "ss_i": 50.0, "rop_i": 100.0}])
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(
+        auth_utils.create_access_token(user_id=1, email="staff@ssmcapstone.com", role="staff", full_name="Staff"))
+    with TestClient(app) as c:
+        (row,) = c.get("/inventory/current?principal=unilever").json()
+    assert "receivedMts" not in row and "dispatchedMts" not in row
+
+
+class _MovementSession:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        self.calls.append(sql)
+        if "FROM purchase_fact_real" in sql:
+            return _Result([
+                {"date": datetime.date(2025, 5, 2), "ref": "P1", "principal": "delmonte", "units_received": 120, "net_amount": 5000},
+                {"date": datetime.date(2025, 5, 1), "ref": "P2", "principal": "delmonte", "units_received": None, "net_amount": 800}])
+        if "FROM sales_fact_real" in sql:
+            return _Result([{"date": datetime.date(2025, 5, 3), "ref": "S1", "principal": "delmonte", "net_amount": 9000}])
+        raise AssertionError(f"Unexpected query: {sql}")
+
+    def close(self):
+        pass
+
+
+def test_inventory_movement_keeps_units_and_pesos_apart_and_never_turns_unknown_into_zero():
+    """BE-6: qty used to be units for purchases and PESOS for sales, an unknown units_received became 0,
+    and every row said sku 'N/A' / product 'Assorted Items'."""
+    session = _MovementSession()
+    app.dependency_overrides[get_db] = lambda: session
+    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(
+        auth_utils.create_access_token(user_id=1, email="staff@ssmcapstone.com", role="staff", full_name="Staff"))
+    with TestClient(app) as c:
+        body = c.get("/inventory/movement?principal=delmonte").json()
+    assert [r["ref"] for r in body] == ["S1", "P1", "P2"], "newest first"
+    by_ref = {r["ref"]: r for r in body}
+    assert by_ref["P1"]["quantity"] == 120.0 and by_ref["P1"]["quantity_unit"] == "units"
+    assert by_ref["P2"]["quantity"] is None, "an unrecorded units_received is unknown, not 0"
+    assert by_ref["S1"]["quantity"] is None and by_ref["S1"]["quantity_unit"] is None, "sales carry no units"
+    assert by_ref["S1"]["amount_pesos"] == 9000.0
+    assert all(r["sku"] is None and r["product"] is None and "qty" not in r for r in body)
+    assert all("ORDER BY invoice_date DESC" in sql for sql in session.calls), "LIMIT 50 takes the newest, not arbitrary rows"
