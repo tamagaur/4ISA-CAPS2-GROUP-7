@@ -575,21 +575,25 @@ export const DEMO_PRODUCT_SALES_LABEL =
   'Demo: Del Monte product sales estimated from total sales × stock share — SSM has no product-level sales';
 const PRODUCT_SALES_PREVIEW = 8;
 
-// One row per product: its estimated pesos summed over the range's months.
+// One row per product: its estimated pesos summed over the range's months. A month with no estimate (pesos
+// null) adds nothing and is not counted; a product with no estimate in ANY month has pesos null (rendered as
+// NOT_COLLECTED), never 0 — a summed 0 means estimates that added up to zero. Those products sort last.
 export const productSalesTotals = (rows = []) => {
   const byProduct = new Map();
   for (const r of rows) {
     const key = r.product_key ?? r.sku_id;
     const entry = byProduct.get(key) || {
-      product_key: r.product_key, sku_id: r.sku_id, product_name: r.product_name, pesos: 0, months: new Set(),
+      product_key: r.product_key, sku_id: r.sku_id, product_name: r.product_name, pesos: null, months: new Set(),
     };
-    if (r.pesos != null) entry.pesos += r.pesos;
-    entry.months.add(r.period);
+    if (r.pesos != null) {
+      entry.pesos = (entry.pesos ?? 0) + r.pesos;
+      entry.months.add(r.period);
+    }
     byProduct.set(key, entry);
   }
   return [...byProduct.values()]
     .map((e) => ({ ...e, months: e.months.size }))
-    .sort((a, b) => b.pesos - a.pesos);
+    .sort((a, b) => (a.pesos == null) - (b.pesos == null) || (b.pesos ?? 0) - (a.pesos ?? 0));
 };
 
 export const PRODUCT_SALES_COLUMNS = [
