@@ -1,6 +1,6 @@
 # Forecast accuracy, as served
 
-Computed 2026-10-21 from code version `c50af3f` (no uncommitted change in the forecasting code) by `scripts/accuracy_as_served.py`. Quote the **as served** rows, and quote them together with this version.
+Computed 2026-10-21 from code version `63542e2` (no uncommitted change in the forecasting code) by `scripts/accuracy_as_served.py`. Quote the **as served** rows, and quote them together with this version.
 
 Window 2023-10 to 2026-02, Unilever Tier A the month before each test month (basis `t12m_new`), one month ahead, the router as the live forecast runs it. Latest demand month: 2026-02.
 
@@ -38,4 +38,5 @@ The dead-SKU rule fired on 90 of 4,370 scored product-months (plain run) and 90 
 - The cohort changes every month (Tier A the month before), so the product count is for the whole window, not for Tier A as of 2026-02 (189 products).
 - The MA3 benchmark on the same product-months has a median product WAPE of 39.37% (served: plain 40.22%, calendar 42.56%); MA3 is never calendar-adjusted. The served models are not shown to beat MA3 here, and the calendar factor raises the median error on these months.
 - Dead-SKU rule: months-with-history gate and window are the live runner's (`DEAD_SKU_MONTHS` = 6); this script does not change them.
+- The dashboard card reads these forecasts from `mart.accuracy_mart` (runs stored by `--write-run`), which scores each month against the sales mart's raw net quantity: a net-negative month stays negative there, where this document floors it to 0. Over the full window the card therefore equals the **raw net quantity** sensitivity row above, not the headline row (median, total WAPE in pesos and surplus share in pesos agree to the rounding shown; the card's pooled pieces WAPE divides by net actual pieces, not absolute, so it differs in the second decimal). A shorter date range on the card is a different window.
 - Per product-month rows are in the git-ignored `local/accuracy_as_served_rows.csv`.

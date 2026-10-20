@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import getpass
+import json
 import subprocess
 import sys
 import time
@@ -45,6 +47,7 @@ from analytics.classification.fsn import no_sale_in_last_months  # noqa: E402
 from analytics.forecasting.calendar import company_totals  # noqa: E402
 from analytics.forecasting.router import route  # noqa: E402
 from analytics.params import DEAD_SKU_MONTHS, abc_method  # noqa: E402
+from psycopg2.extras import execute_values  # noqa: E402
 from scripts.backtest_forecast_run import WINDOW, headline, read_tier_a, ym  # noqa: E402
 from scripts.run_baseline_forecast import build_series, fetch_demand  # noqa: E402
 
@@ -100,7 +103,7 @@ def served_backtest(series: dict, tier_by: dict, calendar_totals=None) -> tuple[
             rows.append({"product_key": k, "month": ym(t), "actual": actual,
                          "value": 0.0 if dead else float(r["value"]), "value_before_dead": float(r["value"]),
                          "dead": bool(dead), "bin": r["bin"], "method": "zero_no_order" if dead else r["method"],
-                         "ma3": max(0.0, float(r["ma3_value"]))})
+                         "ma3": max(0.0, float(r["ma3_value"])), "backup_fired": bool(r["backup_fired"])})
     return pd.DataFrame(rows), skipped
 
 
@@ -217,15 +220,74 @@ def render(res: dict, ver: dict, today: str) -> str:
         f"(served: plain {pct(a['median_product_wape_served'])}, calendar {pct(c['median_product_wape_served'])}); MA3 is never calendar-adjusted. "
         "The served models are not shown to beat MA3 here, and the calendar factor raises the median error on these months.",
         "- Dead-SKU rule: months-with-history gate and window are the live runner's (`DEAD_SKU_MONTHS` = " f"{DEAD_SKU_MONTHS}); this script does not change them.",
+        "- The dashboard card reads these forecasts from `mart.accuracy_mart` (runs stored by `--write-run`), which scores each "
+        "month against the sales mart's raw net quantity: a net-negative month stays negative there, where this document floors it "
+        "to 0. Over the full window the card therefore equals the **raw net quantity** sensitivity row above, not the headline row "
+        "(median, total WAPE in pesos and surplus share in pesos agree to the rounding shown; the card's pooled pieces WAPE divides by "
+        "net actual pieces, not absolute, so it differs in the second decimal). A shorter date range on the card is a different window.",
         "- Per product-month rows are in the git-ignored `local/accuracy_as_served_rows.csv`.",
         "",
     ]
     return "\n".join(lines)
 
 
+# The two stored runs the dashboard's forecast-error card can read, scored as served. NEW labels: the
+# older runs (5, 7) stay as they are, selectable by run_id. The calendar one is the card's default
+# (backend/marts.DEFAULT_BACKTEST_LABEL), since the live forecast is calendar-adjusted.
+AS_SERVED_RUNS = {
+    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month",
+                  "Tier A (current basis) the month before each test month; months after a product's last sale "
+                  "scored; dead-SKU rule applied as the live forecast applies it"),
+    "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted",
+                           "as above; served value x the company calendar factor"),
+}
+
+
+def write_runs(db_url: str, runs: dict[str, pd.DataFrame], checks: dict[str, dict]) -> dict[str, int]:
+    """Insert each run as a NEW mart.forecast_run (+ forecast_run_value), then refresh the marts, one
+    transaction. Refuses a label that already exists: nothing is replaced or deleted."""
+    from analytics.marts import refresh_marts_cursor, vacuum_marts
+    code = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    ids: dict[str, int] = {}
+    conn = psycopg2.connect(db_url)
+    try:
+        cur = conn.cursor()
+        cur.execute("SHOW default_transaction_read_only")
+        if cur.fetchone()[0] != "off":
+            raise SystemExit("default_transaction_read_only is on for this connection; refusing to write")
+        for name, bt in runs.items():
+            label, cohort = AS_SERVED_RUNS[name]
+            cur.execute("SELECT run_id FROM mart.forecast_run WHERE label = %s", (label,))
+            if cur.fetchone():
+                raise SystemExit(f"run {label!r} already exists; this script never replaces a run")
+            cur.execute("""INSERT INTO mart.forecast_run (kind, label, cohort, window_start, window_end, code_version, created_by, notes)
+                           VALUES ('backtest_recreated', %s, %s, %s, %s, %s, %s, %s) RETURNING run_id""",
+                        (label, cohort, ym(WINDOW[0]), ym(WINDOW[-1]), code, getpass.getuser(),
+                         json.dumps({"variant": name, "script": "scripts/accuracy_as_served.py", "check": checks[name]}, default=str)))
+            ids[name] = cur.fetchone()[0]
+            execute_values(cur, """INSERT INTO mart.forecast_run_value (run_id, product_key, month, forecast_pieces, status, method, bin,
+                                                                       ma3_pieces, backup_fired) VALUES %s""",
+                           [(ids[name], int(r.product_key), r.month, float(r.value), "dead_sku" if r.dead else "ok", r.method, r.bin,
+                             float(r.ma3), bool(r.backup_fired)) for r in bt.itertuples()], page_size=1000)
+            print(f"[write] mart.forecast_run {ids[name]}: {label} ({len(bt)} rows)")
+        refresh_marts_cursor(cur, "accuracy_as_served", schema="public")
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    vacuum_marts(db_url)
+    return ids
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true", help="write docs/ACCURACY_AS_SERVED.md and local/accuracy_as_served_rows.csv")
+    ap.add_argument("--write-run", action="store_true",
+                    help="also store both as-served backtests as NEW runs in mart.forecast_run on the live database and "
+                         "refresh the marts (back up first, hard rule 8; needs --target-public)")
+    ap.add_argument("--target-public", action="store_true", help="explicit-only: allow --write-run to write the live mart schema")
     args = ap.parse_args()
     from analytics.config import long_read_db_url
     db_url = long_read_db_url()
@@ -265,6 +327,12 @@ def main() -> int:
         m = v.merge(money[["product_key", "month", "quantity_raw"]], on=["product_key", "month"], how="left").dropna(subset=["quantity_raw"])
         e = m.value - m.quantity_raw
         res[key]["surplus_share_of_miss_pieces"] = float(e.clip(lower=0).sum() / e.abs().sum())
+    if args.write_run:
+        if not args.target_public:
+            ap.error("--write-run writes the live mart schema and needs --target-public")
+        checks = {"as_served": {k: v for k, v in res["as_served"].items()}, "as_served_calendar": {k: v for k, v in res["as_served_calendar"].items()}}
+        ids = write_runs(db_url, {"as_served": bt, "as_served_calendar": btc}, checks)
+        print(f"[write-run] run ids {ids}")
     ver = code_version()
     today = datetime.date.today().isoformat()
     doc = render(res, ver, today)
