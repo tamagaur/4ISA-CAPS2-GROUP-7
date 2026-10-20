@@ -17,12 +17,15 @@ send to a server, so it can't land in an access log.
 from __future__ import annotations
 
 import datetime
+import logging
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import email_templates, mailer
 from backend.auth_utils import hash_link_token, new_link_token
+
+logger = logging.getLogger(__name__)
 
 INVITE_MINUTES = 48 * 60
 # An admin-sent reset can sit in an inbox for a while; a self-service one was
@@ -43,6 +46,13 @@ ISSUE_SQL = """
 """
 PEEK_SQL = """
     SELECT t.purpose, t.expires_at, u.email, u.full_name
+      FROM auth_token t JOIN users u ON u.user_id = t.user_id
+     WHERE t.token_hash = :token_hash AND t.used_at IS NULL AND t.expires_at > now()
+"""
+# The account's password now, read before the link is used up, so a refused
+# new password (the same as the current one) leaves the link working.
+CURRENT_HASH_SQL = """
+    SELECT u.password_hash
       FROM auth_token t JOIN users u ON u.user_id = t.user_id
      WHERE t.token_hash = :token_hash AND t.used_at IS NULL AND t.expires_at > now()
 """
@@ -76,6 +86,13 @@ def peek(db: Session, token: str):
     return db.execute(text(PEEK_SQL), {"token_hash": hash_link_token(token)}).mappings().first()
 
 
+def current_password_hash(db: Session, token: str) -> str | None:
+    """The password hash of the account an open link is for: None for an
+    invite (no password yet) or a dead link. Uses nothing up."""
+    row = db.execute(text(CURRENT_HASH_SQL), {"token_hash": hash_link_token(token)}).mappings().first()
+    return row["password_hash"] if row else None
+
+
 def claim(db: Session, token: str):
     """Uses the link up and returns its user_id/purpose, or None when it is
     unknown, used or expired."""
@@ -87,7 +104,17 @@ def retire_all(db: Session, user_id: int) -> None:
 
 
 def link_url(token: str) -> str:
+    """Raises mailer.FrontendUrlMissing in production when FRONTEND_URL is unset."""
     return mailer.app_link(f"/set-password#token={token}")
+
+
+def link_url_or_none(token: str) -> str | None:
+    """The link for the admin to pass on, or None when none can be built
+    (the response then carries email_problem saying why)."""
+    try:
+        return link_url(token)
+    except mailer.FrontendUrlMissing:
+        return None
 
 
 def _valid_for(minutes: int) -> str:
@@ -103,23 +130,31 @@ def send_link_email(
     and the exact expiry, so the person can tell it's genuine. Returns None
     when it was sent, otherwise the reason it wasn't — shown to the admin,
     who then gets the link to pass on."""
-    link, valid = link_url(token), _valid_for(minutes)
+    valid = _valid_for(minutes)
+    try:
+        # All three on FRONTEND_URL: the link, the sign-in page and the hosted
+        # hero illustration (frontend/public/email/warehouse.jpg).
+        link = link_url(token)
+        sign_in_url = mailer.app_link("/login")
+        hero_url = mailer.app_link(email_templates.HERO_IMAGE_PATH)
+    except mailer.FrontendUrlMissing as exc:
+        logger.warning("Email to %s not sent: %s", email, exc)
+        return str(exc)
     if purpose == "invite":
         from backend import mfa  # imports this module's neighbours; kept local
 
         subject, body, html = email_templates.invite_email(
-            full_name=full_name, email=email, link=link, valid=valid, sign_in_url=mailer.app_link("/login"),
+            full_name=full_name, email=email, link=link, valid=valid, sign_in_url=sign_in_url,
             expires_at=expires_at, invited_by=invited_by, role=role,
-            two_step_required=bool(role) and mfa.is_required(role),
+            two_step_required=bool(role) and mfa.is_required(role), hero_url=hero_url,
         )
     else:
         subject, body, html = email_templates.reset_email(
-            full_name=full_name, email=email, link=link, valid=valid, expires_at=expires_at,
+            full_name=full_name, email=email, link=link, valid=valid, expires_at=expires_at, hero_url=hero_url,
         )
-    logo = email_templates.logo_bytes()
     try:
         mailer.send(email, subject, body, html=html,
-                    inline_images={email_templates.LOGO_CID: logo} if logo else None)
+                    inline_images=email_templates.inline_images_for(html) or None)
     except mailer.MailError as exc:
         return str(exc)
     return None

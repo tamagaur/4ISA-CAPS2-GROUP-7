@@ -98,7 +98,7 @@ git-ignored; never commit it.
 |---|---|
 | `SUPABASE_DB_URL`, `SUPABASE_DIRECT_URL`, `SUPABASE_KEY` | The database (pooler on port 6543; the direct URL on 5432 when 6543 is blocked) |
 | `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `JWT_EXPIRY_HOURS` | Sign-in tokens |
-| `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` | Which frontend may call the API, and where email links point |
+| `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` | Which frontend may call the API, and where email links (and the emails' hosted hero picture, `frontend/public/email/`) point. Unset, `FRONTEND_URL` falls back to `http://localhost:5173` in development; with `APP_ENV=production` it must be set, or no link is built and the admin is told why |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Invitation and password-reset emails |
 | `MFA_ENCRYPTION_KEY`, `MFA_REQUIRED_ROLES`, `MFA_ENABLED` | Two-step sign-in. Paused unless `MFA_ENABLED=true`; every server must share the same key |
 | `DM_DEMO_ENABLED` | Serves the labelled synthetic data behind the dashboard's "Include synthetic data" switch. Off by default (see below) |

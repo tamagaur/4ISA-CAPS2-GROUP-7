@@ -12,6 +12,7 @@ backend.routers.auth — sign-in, sessions, invites and password links.
   POST /auth/forgot-password  public  emails a reset link, or 404 if no account uses the email
   POST /auth/link-info        public  who a set-password link is for
   POST /auth/set-password     public  sets the password through a link
+  POST /auth/change-password  user    changes your own password; asks for the current one
 
 Story #89: login with hashed credentials. There is deliberately no public
 self-registration; the very first admin is seeded outside the API (see
@@ -29,6 +30,16 @@ INVITES AND RESETS (2026-09-28, migration 0031): an admin no longer types a
 password for a new account. The account starts without one and its owner
 sets it through a one-time link (backend/account_links.py), so no admin knows
 anyone's password.
+
+CHANGING YOUR OWN PASSWORD (2026-10-20, Audrey): My profile's Change
+password asks for the current password first, and wrong guesses count toward
+the same lock as wrong sign-ins. A new password that is the same as the
+current one is refused, here and through a reset link (SAME_PASSWORD). The
+browser that changed it stays signed in; every other one is signed out, and
+"Remember me" ends with the old password (mfa.device_remembered). Someone
+who has forgotten the current one uses Forgot password from the same dialog.
+An administrator locked out on a server without email gets a link from
+backend/scripts/reset_link.py.
 
 FAILED SIGN-INS (2026-09-21): repeated wrong passwords lock the email (5 in
 15 min) or the IP address (20 in 15 min) for 15 minutes — see
@@ -89,6 +100,7 @@ from backend.login_limiter import (
     reset_limiter,
 )
 from backend.schemas.auth import (
+    ChangePasswordRequest,
     ForgotPasswordInfo,
     ForgotPasswordRequest,
     InviteResponse,
@@ -107,7 +119,9 @@ from backend.schemas.auth import (
 )
 from backend.schemas.permissions import MeResponse, ProfileUpdate
 from backend.schemas.users import UserOut
-from backend.sessions import CLOSE_IF_IDLE_SQL, SESSION_IDLE_MINUTES, revoke_user_sessions
+from backend.sessions import (
+    CLOSE_IF_IDLE_SQL, SESSION_IDLE_MINUTES, revoke_other_sessions, revoke_user_sessions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -620,7 +634,7 @@ def register(
     return InviteResponse(
         user=UserOut(**dict(row), status="invited"),
         email_sent=problem is None,
-        setup_link=account_links.link_url(token) if problem else None,
+        setup_link=account_links.link_url_or_none(token) if problem else None,
         expires_at=expires_at,
         email_problem=problem,
     )
@@ -685,8 +699,17 @@ def link_info(body: TokenRequest, db: Session = Depends(get_db)) -> LinkInfo:
     return LinkInfo(**dict(row))
 
 
+SAME_PASSWORD = "That's your current password. Choose a different one."
+WRONG_CURRENT_PASSWORD = "Your current password is incorrect."
+
+
 @router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def set_password(body: SetPasswordRequest, db: Session = Depends(get_db)) -> None:
+    # Checked before the link is used up, so the person can try another
+    # password with the same link. An invite has no password to compare.
+    current_hash = account_links.current_password_hash(db, body.token)
+    if current_hash is not None and verify_password(body.password, current_hash):
+        raise ApiError(422, SAME_PASSWORD, code="same_password")
     claimed = account_links.claim(db, body.token)
     if claimed is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=account_links.LINK_INVALID)
@@ -705,4 +728,43 @@ def set_password(body: SetPasswordRequest, db: Session = Depends(get_db)) -> Non
         db, "Password Set" if claimed["purpose"] == "invite" else "Password Reset", None,
         email=user["email"], name=user["full_name"], role=user["role"],
     )
+    db.commit()
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(get_current_user),
+) -> None:
+    """The signed-in person's own password (My profile). A wrong current
+    password is a 400, not a 401: the app signs out on any 401."""
+    client_ip = request.client.host if request.client else "unknown"
+    wait = login_limiter.retry_after(current_user.email, client_ip)
+    if wait is not None:
+        raise _too_many_attempts(wait)
+    row = db.execute(
+        text("SELECT password_hash FROM users WHERE user_id = :user_id"),
+        {"user_id": current_user.user_id},
+    ).mappings().first()
+    current_hash = row["password_hash"] if row else None
+    if current_hash is None or not verify_password(body.current_password, current_hash):
+        lock = login_limiter.record_failure(current_user.email, client_ip)
+        if lock is not None:
+            _record_lockout(db, current_user.email, client_ip, lock)
+            raise _too_many_attempts(lock.seconds)
+        raise ApiError(400, WRONG_CURRENT_PASSWORD, code="wrong_current_password")
+    login_limiter.record_success(current_user.email)
+    if verify_password(body.new_password, current_hash):
+        raise ApiError(422, SAME_PASSWORD, code="same_password")
+    db.execute(
+        text("UPDATE users SET password_hash = :password_hash WHERE user_id = :user_id"),
+        {"password_hash": hash_password(body.new_password), "user_id": current_user.user_id},
+    )
+    # As with a reset link: any open link for the account dies, and other
+    # browsers signed in with the old password are signed out.
+    account_links.retire_all(db, current_user.user_id)
+    revoke_other_sessions(db, current_user.user_id, current_user.session_id)
+    audit.record(db, "Password Changed", None, actor=current_user)
     db.commit()

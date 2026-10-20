@@ -30,6 +30,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from backend import mailer
 from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
 from backend.deps import check_db_connection, get_db
@@ -61,6 +62,7 @@ async def lifespan(app: FastAPI):
     real engine is never touched by any request either, so checking it
     would just fail the test suite against a DB it was never going to use.
     """
+    mailer.warn_if_frontend_url_unset()
     if get_db in app.dependency_overrides:
         logger.info("get_db is overridden (test/mock mode) — skipping startup DB connectivity check.")
     else:

@@ -229,7 +229,7 @@ def send_link(
     return SendLinkResponse(
         purpose=purpose,
         email_sent=problem is None,
-        setup_link=account_links.link_url(token) if problem else None,
+        setup_link=account_links.link_url_or_none(token) if problem else None,
         expires_at=expires_at,
         email_problem=problem,
     )

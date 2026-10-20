@@ -5,7 +5,9 @@
 // provider holds, so it follows a save at once. Email and role are shown,
 // not edited: an admin changes those in User Management. The account
 // security row reads GET /auth/mfa, as the sidebar's line does, and opens
-// the same two-step sign-in dialog.
+// the same two-step sign-in dialog. Below it, Change password opens its own
+// dialog (ChangePasswordModal: asks for the current password, Audrey
+// 2026-10-20) — a dialog, since this whole page is one form.
 //
 // The picture never leaves the browser at full size: the person crops,
 // zooms, turns and flips it in AvatarEditor (a dialog, Audrey 2026-10-18),
@@ -15,7 +17,7 @@
 // button is disabled and says why; the name still saves.
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Camera, Crop, Crown, Info, Mail, MapPin, ShieldAlert, ShieldCheck, Trash2, UserRound,
+  Camera, Crop, Crown, Info, KeyRound, Mail, MapPin, ShieldAlert, ShieldCheck, Trash2, UserRound,
 } from 'lucide-react';
 import { usePermissions } from '../permissions/context';
 import { getCurrentUser } from '../auth';
@@ -24,6 +26,7 @@ import { getMfaStatus, MFA_STATUS_EVENT } from '../api/mfa';
 import { useToast } from './ToastProvider';
 import AccountSecurityModal from './AccountSecurityModal';
 import AvatarEditor from './AvatarEditor';
+import ChangePasswordModal from './ChangePasswordModal';
 import './ProfilePage.css';
 
 const AVATAR_PX = 192;
@@ -147,6 +150,7 @@ export default function ProfilePage() {
   // other opener of it) announces every status it loads.
   const [mfa, setMfa] = useState(undefined);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   useEffect(() => {
     let cancelled = false;
     getMfaStatus()
@@ -369,9 +373,9 @@ export default function ProfilePage() {
           <div className="profile-section">
             <div className="profile-section-label">
               <h3>Account security</h3>
-              <p>Two-step sign-in: a code from your phone after your password.</p>
+              <p>Two-step sign-in (a code from your phone after your password), and your password.</p>
             </div>
-            <div className="profile-section-body">
+            <div className="profile-section-body profile-security-list">
               {security ? (
                 <div className={`profile-security-panel is-${security.tone}`} role="status">
                   <span className="profile-security-icon"><SecurityIcon size={22} aria-hidden="true" /></span>
@@ -390,6 +394,16 @@ export default function ProfilePage() {
                   <span className="profile-security-text"><span>Checking your two-step sign-in…</span></span>
                 </div>
               )}
+              <div className="profile-security-panel is-neutral">
+                <span className="profile-security-icon"><KeyRound size={22} aria-hidden="true" /></span>
+                <div className="profile-security-text">
+                  <strong>Password</strong>
+                  <span>Change the password you sign in with. You&apos;ll need your current one.</span>
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowPassword(true)}>
+                  Change password
+                </button>
+              </div>
             </div>
           </div>
 
@@ -432,7 +446,7 @@ export default function ProfilePage() {
               <span className="profile-aside-icon is-green"><ShieldCheck size={18} aria-hidden="true" /></span>
               <div>
                 <h3>Account security</h3>
-                <p>Indicates the current status of your account protection.</p>
+                <p>Indicates the current status of your account protection, and where you change your password.</p>
               </div>
             </div>
           </div>
@@ -448,6 +462,7 @@ export default function ProfilePage() {
         onApply={applyEdit}
       />
       <AccountSecurityModal isOpen={showSecurity} onClose={() => setShowSecurity(false)} onStatusChange={setMfa} />
+      <ChangePasswordModal isOpen={showPassword} onClose={() => setShowPassword(false)} email={email} />
     </div>
   );
 }

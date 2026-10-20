@@ -355,6 +355,58 @@
   flex: none;
 }
 
+/* Two-step sign-in, then the password, one panel each. */
+.profile-security-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The Change password dialog (ChangePasswordModal.jsx). */
+.change-password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.change-password-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.change-password-field label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.change-password-input {
+  position: relative;
+}
+
+.change-password-input .profile-input {
+  padding-right: 48px;
+}
+
+.change-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+}
+
+.change-password-forgot {
+  align-self: flex-start;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.change-password-form .twostep-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
 /* Cancel and Save, bottom right. */
 .profile-card .form-api-error {
   margin: 0 24px;
