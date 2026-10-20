@@ -53,6 +53,11 @@ router = APIRouter(prefix="/sku", tags=["sku"])
 # STOCK_AT_LATEST_SQL takes the stock from — one row per principal, joined
 # on principal, so it can't name a different count than the figure beside
 # it. Read-only; GET /abc joins it too.
+#
+# Del Monte is left out (audit FE-5, 2026-10-20): its stored snapshot_date is a 1st-of-month placeholder
+# (DEC-12; mart.inventory_count already refuses it as `count date not loaded`), so MAX(snapshot_date) printed
+# "counted Dec 1, 2025" beside a figure nobody counted on that day — and, on the demonstration path, beside
+# stock that is generated. The page names the month instead.
 STOCK_COUNT_DATE_SQL = """
     SELECT inv.principal, MAX(inv.snapshot_date) AS count_date
     FROM inventory_fact_real inv
@@ -61,6 +66,7 @@ STOCK_COUNT_DATE_SQL = """
         FROM inventory_fact_real
         GROUP BY principal
     ) latest_inv ON latest_inv.principal = inv.principal AND inv._period = latest_inv.latest_period
+    WHERE inv.principal <> 'delmonte'
     GROUP BY inv.principal
 """
 

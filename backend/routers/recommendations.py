@@ -524,7 +524,7 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
 _LABEL_CONTEXT_SQL = f"""
     SELECT
         (SELECT MAX(snapshot_date) FROM inventory_fact_real
-         WHERE _period = :inv_period{{scope}}) AS count_date,
+         WHERE _period = :inv_period AND principal <> 'delmonte'{{scope}}) AS count_date,
         (SELECT MIN(m) FROM (
             SELECT DISTINCT calendar_month AS m FROM unilever_sku_demand_fact_real
             WHERE calendar_month <= :inv_period
@@ -550,8 +550,17 @@ def label_context(db: Session, inv_period: str | None, abc_period: str | None, p
     if row:
         out.update(stock_count_date=row["count_date"], cover_sales_start=row["sales_start"],
                    cover_sales_end=row["sales_end"])
+    # Del Monte's stored day is a 1st-of-month placeholder (DEC-12), never offered as a count date (audit FE-5):
+    # when it is the stock in view, the page is told why there is no day instead of being left to guess.
+    if out["stock_count_date"] is None and normalize_principal(principal) in (None, "delmonte"):
+        out["stock_count_note"] = STOCK_COUNT_DATE_NOTE
     return out
 
+
+STOCK_COUNT_DATE_NOTE = (
+    "Del Monte's count day is not recorded (DEC-12): the stored date is a 1st-of-month placeholder, not the day "
+    "stock was counted. Any stock shown by the demonstration is generated, not counted."
+)
 
 # On every row: what on_order is and isn't (decision 2026-10-04, DEC-34).
 ON_ORDER_NOTE = ("PO Qty meaning unverified, pending SSM: shown for information only, "

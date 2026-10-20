@@ -216,6 +216,7 @@ const ReorderRecommendations = () => {
           // label_context), for the period on every header and card.
           stockPeriod: res.stock_period || null,
           stockCountDate: res.stock_count_date || null,
+          stockCountNote: res.stock_count_note || null,
           abcPeriod: res.abc_period || null,
           coverSalesStart: res.cover_sales_start || null,
           coverSalesEnd: res.cover_sales_end || null,
@@ -472,7 +473,7 @@ const ReorderRecommendations = () => {
   const planLabel = cycleMonth ? `${cycleMonth} plan` : 'this plan';
   const countLabel = meta?.stockCountDate
     ? `counted ${formatDate(meta.stockCountDate)}`
-    : meta?.stockPeriod ? `${formatMonth(meta.stockPeriod)} count` : 'latest count';
+    : meta?.stockPeriod ? `${formatMonth(meta.stockPeriod)} count${meta.stockCountNote ? ' (day not recorded)' : ''}` : 'latest count';
   const abcLabel = meta?.abcPeriod ? formatMonth(meta.abcPeriod) : null;
   const coverSalesLabel = meta?.coverSalesStart && meta?.coverSalesEnd
     ? `${formatMonth(meta.coverSalesStart)} – ${formatMonth(meta.coverSalesEnd)}`

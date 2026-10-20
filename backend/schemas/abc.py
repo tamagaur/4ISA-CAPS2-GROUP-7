@@ -127,6 +127,9 @@ class ABCResponse(BaseModel):
     # at or before classification_period — never ranked, so they have no tier
     # to show. None in the default view, which does not compute it.
     unclassified_count: int | None = None
+    # view=last_known only: Del Monte categories left out because they stopped existing (the Jan 2025 regrouping)
+    # — their last real month is before the anchor, so their tier is not carried forward (audit BE-3).
+    retired_series_count: int = 0
     # {principal: day its latest stock count was taken} — the count every
     # row's current_stock comes from (routers/sku.py's STOCK_COUNT_DATE_SQL).
     # Unilever's "Mar 2026" file was counted 2026-04-06, so the page states

@@ -24,6 +24,14 @@ import './PendingCards.css';
 import './RangeCards.css';
 
 const pct = (share) => (share == null ? '—' : `${(share * 100).toFixed(1)}%`);
+// A side with no figure (null) says why instead of printing ₱0: formatCompactPesos(null) is "₱0", which reads
+// as a real zero when nothing was collected (audit FE-4). The reason is the backend's own sentence/code.
+const NO_FIGURE = {
+  not_collected: 'nothing (not collected)',
+};
+const sideText = (value, reason) => (value == null
+  ? (NO_FIGURE[reason] || `nothing on record${reason ? ` (${reason})` : ''}`)
+  : formatCompactPesos(value));
 const signedPesos = (value) => `${value >= 0 ? '+' : '−'}${formatCompactPesos(Math.abs(value))}`;
 
 // A product list behind a card's figure, in the at-risk list's frame.
@@ -539,10 +547,10 @@ export const ClassChanges = ({ changes, onOpen }) => {
                 earlier, {p.class_a_count.toLocaleString()} now ({p.stayed_count.toLocaleString()} stayed).{' '}
                 {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
                 {(p.entered || []).length > 0
-                  ? `The ones that joined sold ${formatCompactPesos(p.entered_compare_revenue)} a year earlier and ${formatCompactPesos(p.entered_revenue)} now. `
+                  ? `The ones that joined sold ${sideText(p.entered_compare_revenue, p.entered_compare_revenue_reason)} a year earlier and ${sideText(p.entered_revenue, p.entered_revenue_reason)} now. `
                   : 'None joined. '}
                 {(p.left || []).length > 0
-                  ? `The ones that left sold ${formatCompactPesos(p.left_compare_revenue)} a year earlier and ${formatCompactPesos(p.left_revenue)} now. `
+                  ? `The ones that left sold ${sideText(p.left_compare_revenue, p.left_compare_revenue_reason)} a year earlier and ${sideText(p.left_revenue, p.left_revenue_reason)} now. `
                   : 'None left. '}
                 Pesos at {p.pesos_basis}.
               </p>

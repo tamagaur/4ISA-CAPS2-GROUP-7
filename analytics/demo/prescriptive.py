@@ -13,9 +13,12 @@ NO allocation or warehouse ceiling is applied. Del Monte has neither an SSM-conf
 nor a warehouse capacity (CLAUDE.md "LP blocked on 4 missing cost params from SSM"), and reusing Unilever's real
 warehouse_capacity (3.8M pieces, measured from Unilever's own stock history) would conflate two different
 businesses and quantity units (DEC-31: Del Monte's quantity unit is unconfirmed). order_qty is therefore a plain
-order-up-to: max(0, target_stock - stock_on_hand) — the 'need' layer of analytics.optimization.lp.net_need with
-no allocation/warehouse cap, floored at target_weeks of the month's own demand (the 'per-sku' cover rule) since
-there is no portfolio-wide LP here to enforce SSM's "3 weeks of cover" softly instead.
+the real 'need' layer, analytics.optimization.lp.net_need = max(0, F + T - S): the forecast month's demand F PLUS
+the target T, less the stock on hand S, because the stock on hand is the opening count and the month's sales draw it
+down before the target can be met (audit DATA-6, 2026-10-20: this used max(0, T - S), which left the month's own
+demand out of every order — BEVERAGE ordered 0 against a forecast of 3,419). No allocation/warehouse cap; T is
+floored at target_weeks of the month's own demand (the 'per-sku' cover rule) since there is no portfolio-wide LP
+here to enforce SSM's "3 weeks of cover" softly instead.
 """
 from __future__ import annotations
 
@@ -25,7 +28,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from analytics.etl.granularity import resolve_delmonte_category_grain
-from analytics.optimization.lp import compute_safety_stock
+from analytics.optimization.lp import compute_safety_stock, net_need
 from analytics.optimization.lp import target_stock as _target_stock
 from analytics.params import PLACEHOLDERS, SERVICE_Z
 
@@ -70,5 +73,5 @@ def plan_category(
     window = review_days + lead_days
     ss = compute_safety_stock(sigma_d * math.sqrt(window), z=z)
     target = _target_stock(forecast_quantity, ss, review_days, lead_days, floor_weeks=target_weeks)
-    order_qty = max(0.0, target - stock_on_hand)
+    order_qty = net_need(forecast_quantity, target, stock_on_hand)
     return CategoryPlan(category_path, forecast_quantity, stock_on_hand, sigma_d, ss, target, order_qty)

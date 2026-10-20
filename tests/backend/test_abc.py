@@ -236,6 +236,9 @@ class LastKnownFakeSession:
                     "tier_period": r["classification_period"],
                     "revenue_share": r["revenue_share"], "cumulative_share": r["cumulative_share"],
                     "boundary_flag": r["boundary_flag"], "current_stock": None, "has_stock_row": False, "reorder_point": None, "safety_stock": None,
+                    # SQL decides this from sellout_fact_real (backend/routers/abc._DM_RETIRED_PRED); the
+                    # fake takes it from the fixture row.
+                    "retired_series": r.get("retired", False),
                 }
                 for k, r in latest.items()
             ]
@@ -246,9 +249,9 @@ class LastKnownFakeSession:
         pass
 
 
-def _abc(pk, tier, period, share, principal="unilever", boundary=False):
+def _abc(pk, tier, period, share, principal="unilever", boundary=False, retired=False):
     return {"product_key": pk, "principal": principal, "tier": tier, "classification_period": period,
-            "revenue_share": share, "cumulative_share": share, "boundary_flag": boundary}
+            "revenue_share": share, "cumulative_share": share, "boundary_flag": boundary, "retired": retired}
 
 
 @pytest.fixture
@@ -713,3 +716,18 @@ def test_scope_all_reports_each_principals_own_run_and_marks_both_current():
     assert body["tier_a_periods"] == {"Unilever": "2026-02", "Del Monte": "2025-12"}
     assert body["classification_period"] == "2026-02"  # the scalar is unchanged
     assert {i["product_key"]: i["tier_period"] for i in body["items"]} == {1: "2026-02", 10: "2025-12"}
+
+
+def test_last_known_leaves_out_a_retired_series_and_says_how_many():
+    """BE-3 (2026-10-20): a Del Monte category that stopped existing is not carried past its last real month, so
+    it is neither listed nor shown as Non-moving; it is counted in retired_series_count."""
+    products = [{"product_key": k, "sku_id": f"DM-{k}", "product_name": f"C{k}", "principal": "delmonte"}
+                for k in (10, 11, 12)]
+    abc_rows = [
+        _abc(10, "A", "2025-12", 0.6, principal="delmonte"),
+        _abc(11, "B", "2024-02", 0.3, principal="delmonte", retired=True),
+        _abc(12, "C", "2024-02", 0.1, principal="delmonte", retired=True),
+    ]
+    body = _get(LastKnownFakeSession(abc_rows, products), "view=last_known&principal=delmonte")
+    assert [i["product_key"] for i in body["items"]] == [10]
+    assert body["count"] == 1 and body["retired_series_count"] == 2

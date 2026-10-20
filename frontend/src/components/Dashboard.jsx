@@ -165,6 +165,11 @@ const trendExtras = (trend, color, noun = '') => {
     extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${noun ? ` ${noun}` : ''}${gap}`;
     extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
     extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
+  } else if (trend.delta_blocked_reason) {
+    // The nearest earlier count is more than a year back (kpi_trend's
+    // MAX_COMPARE_GAP_MONTHS): no percentage, and the backend says why.
+    extras.deltaLine = trend.delta_blocked_reason;
+    extras.deltaTone = 'neutral';
   }
   return extras;
 };

@@ -149,6 +149,8 @@ class RecommendationsResponse(BaseModel):
     #   cover_sales_start/end  the sales months days_of_cover averages over
     stock_period: str | None = None
     stock_count_date: datetime.date | None = None
+    # Why stock_count_date is null when Del Monte's stock is in view (its stored day is a placeholder, DEC-12).
+    stock_count_note: str | None = None
     abc_period: str | None = None
     cover_sales_start: str | None = None
     cover_sales_end: str | None = None

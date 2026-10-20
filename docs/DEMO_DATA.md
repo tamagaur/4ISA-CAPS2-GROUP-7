@@ -217,15 +217,18 @@ demonstration's own forecast (§13) and stock (§8) — **two layers of generate
 row's `demonstration_note`, not just a generic synthetic flag. **No allocation or warehouse ceiling**: Del Monte
 has neither an SSM-confirmed yearly allocation nor a warehouse capacity, and reusing Unilever's real
 `warehouse_capacity` (3.8M pieces, measured from Unilever's own stock history) would conflate two different
-businesses and quantity units (DEC-31: Del Monte's unit is unconfirmed). `order_qty` is a plain order-up-to:
-`max(0, target_stock - stock_on_hand)`, floored at `target_weeks` of the month's own demand since there is no
-portfolio LP here to enforce SSM's "3 weeks of cover" softly instead.
+businesses and quantity units (DEC-31: Del Monte's unit is unconfirmed). `order_qty` is the real LP's `net_need`,
+`max(0, F + T - S)`: the forecast month's demand **F** plus the target **T**, less the opening stock **S**, floored
+(inside T) at `target_weeks` of the month's own demand since there is no portfolio LP here to enforce SSM's "3 weeks
+of cover" softly instead. **Corrected 2026-10-20 (audit DATA-6):** it used `max(0, T - S)`, so the month's own demand
+was in no order — stock sitting just above target ordered 0 against a full month of sales. Same run_id 7, regenerated
+with `run_lp --source demo`; the demand an order has to cover, BEVERAGE 2026-01: F = 3,418.82 was in 0 before
+(order 0.00 with S = 3,016.25 and T = 2,358.78), and is in 2,761.35 now.
 
 Live, run_id 7 (same run as the sales/stock/forecast build): **5 rows** — one per category with a forecast
-(BEVERAGE, CULINARY, DAIRY, FRUITS, INNOVATION — §13). With the wider stock spread (§8), **2 of 5 (40%) now sit
-below their reorder point and order**: FRUITS 15.71, INNOVATION 1.91. BEVERAGE, CULINARY and DAIRY still order 0
-this draw — a real result of a 45%-spread draw against a 3-week centre, not tuned per-category to hit a
-particular count. Run with `python -m scripts.run_lp --source demo --principal delmonte --write`; served at
+(BEVERAGE, CULINARY, DAIRY, FRUITS, INNOVATION — §13). After the correction **all 5 order**: BEVERAGE 2,761.35,
+CULINARY 10,997.05, DAIRY 0.06, FRUITS 2,274.01, INNOVATION 31.27 (before: 0, 0, 0, 15.71, 1.91). Run with
+`python -m scripts.run_lp --source demo --principal delmonte --write`; served at
 `GET /recommendations?principal=delmonte` (`order_plan.available`) and in `GET /dashboard`'s `demonstration`
 block, behind `DM_DEMO_ENABLED`.
 
@@ -304,3 +307,20 @@ endpoints: `no_sale`, `blank_capture`, `outside_product_lifespan`, `not_collecte
 only: `no_data_recorded_before_2023`, `no_observation_before_series_start`, `interpolated`,
 `taxonomy_change_bridge`, `series_gap_forward_filled`. Any response containing a reason carries a `gap_note`
 explaining the codes present.
+
+## 14. Audit corrections, 2026-10-20 (FE-3, FE-4, FE-5, DATA-6, BE-3)
+
+| item | path | what the generator / reader now does |
+|---|---|---|
+| DATA-6 order omits a month | demo | order = `net_need` = `F + T - S` (§10). `demo.dm_category_lp` rewritten for run 7 (backup `backups/tables_20261020T112333Z`). |
+| FE-3 "vs a year ago", 22 months apart | real only | the stock card compared Dec 2025 with Feb 2024 (Del Monte's counts run to 2024-02, then 2025-03 on). `kpi_trend` now gives no percentage past `MAX_COMPARE_GAP_MONTHS` (12) and says so (`delta_blocked_reason`). The demonstration has no such gap: `demo.dm_category_stock` holds all 60 months 2021-01..2025-12 for every category, so every month from 2022-01 has a count 12 months back (0 missing, queried). |
+| FE-4 "0 a year earlier" | real only | the API already returned null + reason; the card rendered null as "₱0". It now prints the reason. Nothing generated is involved. |
+| FE-5 "counted Dec 1, 2025" | both | Del Monte's `snapshot_date` is a 1st-of-month placeholder (DEC-12). No endpoint offers it as a count date now (`/sku`, `/abc`, `/recommendations`); `stock_count_note` says why, and states that demonstration stock is generated (`generated_months_of_cover`), not counted. |
+| BE-3 "Non-moving" x80 | real (view=last_known) | a retired old-vocabulary Del Monte category is no longer carried past its last real month (80 at anchor 2025-12; the five 2025 categories stay). `retired_series_count` reports it. **The generator already stops each series where this rule says it should** — see below. |
+
+**Series ends in the generator (BE-3, checked by query, 2026-10-20).** Rows after a series' own last real month, run 7:
+`bridged` 978 rows / 77 old paths, 2023-04..2025-02 only; `forward_filled` 6 rows / DAIRY, 2025-07..12. No other
+origin exists past a series' last real month. No old path has a row past 2025-02 (the end of its canonical window),
+and the five 2025 categories have none past their own last real month except DAIRY's `forward_filled`. The
+bridge is the canonical series' definition (old paths *through* 2025-02, §3 / migration 0055) rather than an
+extension of a retired series, so it was kept: removing it would leave 2024-03..2025-02 with no canonical total.

@@ -75,6 +75,13 @@ def _months_between(earlier: str, later: str) -> int:
     return (ly - ey) * 12 + (lm - em)
 
 
+# The farthest back a card's comparison count may sit (Kelvin, 2026-10-20, audit FE-3). Del Monte's real
+# counts run 2024-02, then 2025-03 on: the nearest earlier count to Dec 2025 is Feb 2024, 22 months back,
+# and "-49.8%" between them is a change over two years labelled as if it were one step. Past this limit the
+# card gets no percentage and `delta_blocked_reason` names the gap.
+MAX_COMPARE_GAP_MONTHS = 12
+
+
 def kpi_trend(
     by_period: dict[str, float | None],
     latest_period: str | None,
@@ -116,6 +123,12 @@ def kpi_trend(
         (pt for pt in reversed(points) if pt["period"] < latest["period"] and pt["period"] not in unusual),
         None,
     )
+    gap = _months_between(prev["period"], latest["period"]) if prev else None
+    too_far = gap is not None and gap > MAX_COMPARE_GAP_MONTHS
+    blocked = (
+        f"The count before {month_label(latest['period'])} is {month_label(prev['period'])}, {gap} months earlier "
+        f"(more than {MAX_COMPARE_GAP_MONTHS}), so no change is shown."
+    ) if too_far else None
     skipped = [
         {"period": pt["period"], "reason": unusual[pt["period"]]}
         for pt in points
@@ -126,8 +139,9 @@ def kpi_trend(
         "latest_period": latest["period"],
         "prev_period": prev["period"] if prev else None,
         "prev_value": prev["value"] if prev else None,
-        "delta_pct": _pct_change(latest["value"], prev["value"]) if prev else None,
-        "months_apart": _months_between(prev["period"], latest["period"]) if prev else None,
+        "delta_pct": _pct_change(latest["value"], prev["value"]) if prev and not too_far else None,
+        "delta_blocked_reason": blocked,
+        "months_apart": gap,
         "skipped": skipped,
         "latest_unusual": latest_unusual,
     }
