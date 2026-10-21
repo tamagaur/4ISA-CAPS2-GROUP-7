@@ -361,7 +361,9 @@ def _non_negative_float(raw: str) -> float:
     return value
 
 
-def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float | None, str | None]:
+def _sigma_d_for_product(
+    demand_df: pd.DataFrame, principal: str, end_period: str | None = None,
+) -> tuple[float | None, str | None]:
     """Reconstructs this product's demand series via analytics.etl.granularity
     (per DEC-03: Unilever real SKU-grain passthrough+validate, Del Monte
     category-grain even business-day distribution) and returns
@@ -393,7 +395,14 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
     capture, not a zero: it is left out of sigma here (the same rule as
     analytics/classification/orchestrate_abc.py, which drops a blank
     net_amount), and counted in the log.
+
+    Unilever only: a month with NO row between the product's first row and
+    `end_period` (the latest real demand month; the product's last row when
+    None) is a real zero-sale month and enters sigma as 0 (freeze package 1b;
+    the zero-sale evidence is in CLAUDE.md "Why data is missing"). Del
+    Monte's missing months are collection failures and are never filled.
     """
+    has_row = set(demand_df["period"])
     blank = demand_df["total_quantity"].isna()
     if blank.any():
         logger.info(f"    {int(blank.sum())} blank-capture month(s) excluded from sigma (not zero sales).")
@@ -413,6 +422,14 @@ def _sigma_d_for_product(demand_df: pd.DataFrame, principal: str) -> tuple[float
     if principal == "unilever":
         sku_daily_df = demand_df.rename(columns={"period": "calendar_month", "total_quantity": "quantity_sold"})
         sku_daily_df = sku_daily_df[["sku_code", "calendar_month", "quantity_sold"]]
+        if len(sku_daily_df):
+            last = max([max(has_row)] + ([end_period] if end_period else []))
+            absent = [str(m) for m in pd.period_range(min(has_row), last, freq="M") if str(m) not in has_row]
+            if absent:
+                sku_daily_df = pd.concat([sku_daily_df, pd.DataFrame({
+                    "sku_code": sku_daily_df["sku_code"].iloc[0], "calendar_month": absent, "quantity_sold": 0.0})],
+                    ignore_index=True)
+                logger.info(f"    {len(absent)} month(s) with no sales row enter sigma as zero-sale months.")
         if len(sku_daily_df) < 2:
             return None, f"insufficient demand history ({len(sku_daily_df)} period(s), need >= 2)"
         passthrough_df, validation = resolve_unilever_sku_grain(sku_daily_df)
@@ -691,8 +708,19 @@ def run_notes(stock_counts: dict[str, dict]) -> list[str]:
     return notes
 
 
+def forecast_provenance(cur, planning_cycle_date) -> list[dict]:
+    """The distinct Forecast_Result.model_params.run stamps of the cycle's forecast rows, with row
+    counts and the generated_at span; [] when a row has none."""
+    cur.execute("""
+        SELECT model_params -> 'run', COUNT(*), MIN(generated_at)::text, MAX(generated_at)::text
+        FROM Forecast_Result WHERE forecast_date = %s GROUP BY 1 ORDER BY 2 DESC
+    """, (planning_cycle_date,))
+    return [{"run": r[0], "rows": r[1], "generated_from": r[2], "generated_to": r[3]} for r in cur.fetchall()]
+
+
 def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date,
-               stock_counts: dict[str, dict], refused: dict[str, str] | None = None) -> dict:
+               stock_counts: dict[str, dict], refused: dict[str, str] | None = None,
+               forecast_run: list[dict] | None = None) -> dict:
     """The lp_run row for one solved cycle: every flag as run and the stock
     counts planned from (inputs), and what the code fixed (model). What the
     app shows about this run. stock_counts and refused are opening_counts()'
@@ -702,6 +730,10 @@ def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date,
     inputs["notes"] = run_notes(stock_counts)
     if refused:
         inputs["stock_refused"] = dict(sorted(refused.items()))
+    if forecast_run:
+        # Provenance of the forecast this plan used: its commit, whether the calendar factor was on,
+        # when it was written (Forecast_Result.model_params.run) and how many rows carry that stamp.
+        inputs["forecast_run"] = forecast_run
     return {
         "planning_cycle_date": planning_cycle_date,
         "principal_scope": args.principal,
@@ -784,6 +816,11 @@ def build_parser() -> argparse.ArgumentParser:
               "same convention as scripts/run_baseline_forecast.py's --principal.",
     )
     parser.add_argument(
+        "--new-run", action="store_true", default=False,
+        help="--source demo --principal unilever --write only: write the plan under a NEW demo.run (a copy of the "
+             "latest run's inputs, made in the database) instead of replacing the latest run's own plan rows.",
+    )
+    parser.add_argument(
         "--csv", metavar="PATH", default=None,
         help="Also write the per-product plan to this CSV (with --dry-run too).",
     )
@@ -849,6 +886,26 @@ def check_source(source: str, principal: str) -> None:
                          "or --principal unilever. Omit --source, or pass --source real.")
 
 
+def refuse_empty_demo_plan(label: str, orders: dict[str, float] | None, reasons: list[str] | None = None,
+                           need: float | None = None) -> None:
+    """A demonstration plan with no order anywhere is never written (Kelvin, 2026-10-20).
+
+    The 2026-10-16 Unilever plan (demo run 10) was written with all 96 orders at 0.0: solve_lp had returned None
+    (CBC reported a falsely Infeasible stage, fixed in 136529e) and the writer's `(plan.orders or {}).get(sku, 0.0)`
+    turned that None into zeros, silently. None means infeasible, never "order nothing"; and a plan where every
+    order is zero is a state to look at, not to publish. Both stop the run, in a dry run too, before anything is
+    written. `need` (pieces still needed to reach target, summed) is named when known so a genuinely fully-stocked
+    cycle can be told from a solver failure."""
+    if orders is None:
+        raise SystemExit(f"{label}: the LP returned no solution (infeasible). Nothing written. "
+                         + "; ".join(reasons or ["no reason diagnosed"]))
+    if orders and all(q <= 0 for q in orders.values()):
+        detail = (f"total need is {need:,.0f} pieces, so a solver or input defect is likely" if need
+                  else "total need is 0, so every SKU is already at or above target")
+        raise SystemExit(f"{label}: all {len(orders)} orders are 0 ({detail}). Nothing written. "
+                         "An all-zero demonstration plan is never published silently; inspect it first.")
+
+
 def _run_demo_lp(write: bool) -> int:
     """--source demo --principal delmonte: analytics/demo/prescriptive.py's order-up-to over the demonstration's
     own forecast and stock (migration 0056). Reads and writes schema demo only; never touches lp_run,
@@ -896,6 +953,9 @@ def _run_demo_lp(write: bool) -> int:
         plan = plan_category(cat, float(fq), float(stock[cat]), sigma_d)
         plans.append((run_id, cat, pk, period, plan))
 
+    refuse_empty_demo_plan("run_lp --source demo --principal delmonte",
+                           {c: pl.order_qty for _r, c, _pk, _p, pl in plans},
+                           need=sum(max(pl.target_stock - pl.stock_on_hand, 0.0) for _r, _c, _pk, _p, pl in plans))
     print(json.dumps({
         "run_id": run_id, "window_end": window_end, "planned": len(plans), "skipped": skipped,
         "plans": [{"category": c, "period": p, "forecast_quantity": pl.forecast_quantity,
@@ -938,14 +998,18 @@ def _run_demo_lp(write: bool) -> int:
     return 0
 
 
-def _run_demo_lp_unilever(write: bool) -> int:
+def _run_demo_lp_unilever(write: bool, new_run: bool = False) -> int:
     """--source demo --principal unilever: the dominant forecast cohort of demo.unilever_sku_forecast (the one
     forecast_period most SKUs share — most reach the same last real month) against REAL stock on hand and REAL
     cost (scripts/run_lp.py's own fetchers: fetch_stock_counts, opening_counts, fetch_stock_and_cost — the real
     path's data, untouched) and DEMO sigma (the demonstration's own sales history, including the 2021-22
     back-cast — expected to move sigma; see docs/DEMO_DATA.md). plan_cycle() is the real LP, unchanged, run with
     PLACEHOLDERS' real Unilever defaults (warehouse capacity, allocation %). Writes demo.unilever_sku_lp only;
-    never touches lp_run, LP_Recommendation or Forecast_Result. Report-only unless --write."""
+    never touches lp_run, LP_Recommendation or Forecast_Result. Report-only unless --write.
+
+    --new-run (with --write): the plan is written under a NEW demo.run, a copy of the source run's row, sales,
+    backcast exclusions and forecast made inside the database (INSERT ... SELECT), so the source run and its plan
+    are left exactly as they were. Without it the plan replaces the source run's own rows (DELETE + INSERT)."""
     db_url = long_read_db_url()
     conn = psycopg2.connect(db_url, connect_timeout=20)
     try:
@@ -967,7 +1031,7 @@ def _run_demo_lp_unilever(write: bool) -> int:
         forecast_period = dominant[0]
         cur.execute("SELECT product_key, sku_code, forecast_quantity FROM demo.unilever_sku_forecast "
                     "WHERE run_id = %s AND forecast_period = %s", (run_id, forecast_period))
-        forecasts = {int(pk): (sku, float(fq)) for pk, sku, fq in cur.fetchall()}
+        forecasts = {int(pk): (sku, max(0.0, float(fq))) for pk, sku, fq in cur.fetchall()}   # demand cannot be negative (2a)
         cohort_before_membership_filter = len(forecasts)
         # Membership filter (Kelvin, 2026-10-16): the demo forecast cohort above is every Tier A SKU
         # build_unilever_demo.py could fit an MA3 for -- it has no accuracy metric of its own (rule 2 forbids
@@ -1015,7 +1079,7 @@ def _run_demo_lp_unilever(write: bool) -> int:
     for pk in product_keys:
         sku_id, forecast = forecasts[pk]
         product_demand = demand_df[demand_df["product_key"] == pk].assign(sku_code=sku_id)
-        sigma_d, reason = _sigma_d_for_product(product_demand, "unilever")
+        sigma_d, reason = _sigma_d_for_product(product_demand, "unilever", stock_period)
         if sigma_d is None:
             skipped.append((sku_id, reason))
             continue
@@ -1029,9 +1093,11 @@ def _run_demo_lp_unilever(write: bool) -> int:
     plan = plan_cycle(products, args, planning_cycle_date=None) if products else None
     rows = []
     if plan is not None:
+        refuse_empty_demo_plan("run_lp --source demo --principal unilever", plan.orders, plan.infeasible_reasons,
+                               need=sum(s.need for s in plan.skus))
         for p, s in zip(plan.products, plan.skus):
             rows.append((run_id, p.product_key, p.sku_id, forecast_period, s.demand, p.stock_on_hand, p.sigma_d,
-                        s.safety_stock, s.target_stock, (plan.orders or {}).get(s.sku_id, 0.0)))
+                        s.safety_stock, s.target_stock, plan.orders[s.sku_id]))
 
     print(json.dumps({
         "run_id": run_id, "forecast_period": forecast_period, "stock_period": stock_period,
@@ -1067,6 +1133,26 @@ def _run_demo_lp_unilever(write: bool) -> int:
         wcur.execute("SELECT to_regclass('demo.unilever_sku_lp')")
         if wcur.fetchone()[0] is None:
             raise SystemExit("demo.unilever_sku_lp is not there: apply migration 0057 first")
+        if new_run:
+            source_run = run_id
+            wcur.execute(
+                "INSERT INTO demo.run (label, principal, seed, generator_version, jitter_scale, window_end, "
+                "forecast_target, cost_ratio, cost_ratio_source, approved_by, approved_on, notes) "
+                "SELECT label, principal, seed, generator_version, jitter_scale, window_end, forecast_target, "
+                "cost_ratio, cost_ratio_source, approved_by, approved_on, "
+                "COALESCE(notes, '{}'::jsonb) || jsonb_build_object('cloned_from_run', run_id, "
+                "'clone_reason', 'order plan regenerated after the LP solver fix (136529e); inputs copied unchanged') "
+                "FROM demo.run WHERE run_id = %s RETURNING run_id", (source_run,))
+            run_id = wcur.fetchone()[0]
+            for table, columns in (
+                ("unilever_sku_sales", "product_key, sku_code, period, quantity, net_amount, origin"),
+                ("backcast_excluded", "series_key, reason, real_months, first_real_period"),
+                ("unilever_sku_forecast", "product_key, sku_code, forecast_period, forecast_quantity, method, "
+                                          "history_months, blank_capture_filled"),
+            ):
+                wcur.execute(f"INSERT INTO demo.{table} (run_id, {columns}) SELECT %s, {columns} "
+                             f"FROM demo.{table} WHERE run_id = %s", (run_id, source_run))
+            rows = [(run_id, *r[1:]) for r in rows]
         wcur.execute("DELETE FROM demo.unilever_sku_lp WHERE run_id = %s", (run_id,))
         execute_values(
             wcur,
@@ -1087,7 +1173,10 @@ def main():
     args = build_parser().parse_args()
     check_source(args.source, args.principal)
     if args.source == "demo":
-        return _run_demo_lp_unilever(args.write) if args.principal == "unilever" else _run_demo_lp(args.write)
+        if args.new_run and not (args.write and args.principal == "unilever"):
+            raise SystemExit("--new-run needs --source demo --principal unilever --write")
+        return (_run_demo_lp_unilever(args.write, args.new_run) if args.principal == "unilever"
+                else _run_demo_lp(args.write))
     _log_inputs(args)
 
     load_dotenv(override=False)
@@ -1211,7 +1300,7 @@ def main():
             if product_demand.empty:
                 gate_out(row.sku_id, row.principal, "no demand history at all")
                 continue
-            sigma_d, reason = _sigma_d_for_product(product_demand, row.principal)
+            sigma_d, reason = _sigma_d_for_product(product_demand, row.principal, opening_period(planning_cycle_date))
             if sigma_d is None:
                 gate_out(row.sku_id, row.principal, reason)
                 continue
@@ -1267,7 +1356,7 @@ def main():
             # rolled back (e.g. a retire count mismatch) leaves no lp_run row.
             run_key = None if args.dry_run else save_run(run_record(
                 args, plan, planning_cycle_date, counts_by_cycle[planning_cycle_date],
-                refused_by_cycle[planning_cycle_date],
+                refused_by_cycle[planning_cycle_date], forecast_provenance(cur, planning_cycle_date),
             ))
             for product, sku in zip(products, plan.skus):
                 q_i, ss_i = plan.orders[sku.sku_id], sku.safety_stock

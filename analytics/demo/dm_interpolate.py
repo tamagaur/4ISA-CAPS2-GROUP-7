@@ -162,9 +162,11 @@ def fill_series(
 
 
 def ma3_one_step(values: list[float]) -> float:
-    """The deployed MA3 (analytics/forecasting/baseline.moving_average_forecast, window 3)."""
+    """The deployed MA3 (analytics/forecasting/baseline.moving_average_forecast, window 3), floored at zero
+    like the deployed forecast: demand cannot be negative (a Unilever window of net-of-returns months can
+    average below zero; freeze package 2a)."""
     tail = values[-3:]
-    return float(sum(tail) / len(tail))
+    return max(0.0, float(sum(tail) / len(tail)))
 
 
 def in_canonical_total(origin: str, anchor_override: bool) -> bool:

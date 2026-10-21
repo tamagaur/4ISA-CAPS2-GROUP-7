@@ -231,8 +231,13 @@ def blank_quantity_rows(demand: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 # Series + per-SKU evaluation
 # --------------------------------------------------------------------------- #
-def build_series(sku_df: pd.DataFrame) -> pd.Series:
-    """Zero-filled monthly series. Zeros are real demand and SBA's gap
+def build_series(sku_df: pd.DataFrame, end_month: str | None = None) -> pd.Series:
+    """Zero-filled monthly series. With `end_month` ('YYYY-MM', the latest real
+    demand month) the series runs to it even when the product's last row is
+    earlier: the absent trailing months are real zero-sale months (Unilever
+    reports no row for a month a product sold nothing), so a product that
+    stopped selling is not forecast from its stale last months (freeze
+    package 1c; 68212522 was stored 594 against a true 0). Zeros are real demand and SBA's gap
     structure depends on them - the zero-fill stays in the modeling series;
     only the eligibility gate looks at real observations instead (fix #1).
     Only a month with NO row is zero-filled. A month whose row has a blank
@@ -244,7 +249,14 @@ def build_series(sku_df: pd.DataFrame) -> pd.Series:
     s = pd.Series(sku_df["quantity"].to_numpy(dtype=float), index=idx).sort_index()
     blank = s.index[s.isna()]
     s = s.resample("MS").asfreq()
-    s[~s.index.isin(idx)] = 0.0                                   # no row = a zero-sale month
+    if end_month is not None and pd.Timestamp(f"{end_month}-01") > s.index[-1]:
+        s = s.reindex(pd.date_range(s.index[0], pd.Timestamp(f"{end_month}-01"), freq="MS"))
+    s[~s.index.isin(idx)] = 0.0                                  # no row = a zero-sale month
+    # A return reverses demand from an EARLIER month; it is not negative demand in this one. A month whose
+    # returns exceed its sales (net < 0) enters the demand series as 0, so it cannot drag a moving average
+    # below zero (64957373: Dec -4,348 gave MA3 = -460, floored to 0 for a product still selling). Demand
+    # input only: revenue is not read from this series and stays net of returns; a blank (NaN) month stays NaN.
+    s = s.clip(lower=0.0)
     demo = sku_df["is_demo"].eq(True) if "is_demo" in sku_df.columns else None
     s = with_placeholder(s, idx[demo]) if demo is not None and demo.any() else s
     return with_missing(s, blank) if len(blank) else s
@@ -437,7 +449,7 @@ def main():
                                       status="insufficient_data"))
             continue
 
-        series = build_series(sku_df)
+        series = build_series(sku_df, latest_demand_month)
         months_span = int(len(series))
         months_with_sales = int((series > 0).sum())          # a missing month is not counted (NaN > 0 is False)
         missing = missing_months(series)
@@ -467,11 +479,13 @@ def main():
         # Anchored on latest_demand_month, not on the series' own end:
         # build_series stops at the SKU's last row (session 6's fix), and a
         # series that stops early must not have its old tail read as recent.
-        # A missing (blank-quantity) month in the window is unknown, not "no
-        # sale", so it can never make a product dead.
+        # Activity is a POSITIVE SALE (qty > 0), not a row: a window holding only
+        # returns and blank-quantity rows has no sale, so the product is dead
+        # (2026-10-20: 64373260 had recent rows that were returns and blanks
+        # only, was counted alive, and was ordered 47,008 pieces). The window
+        # length is unchanged (DEAD_SKU_MONTHS).
         if months_span >= DEAD_SKU_MONTHS and no_sale_in_last_months(
-                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month) \
-                and not _missing_in_last_months(missing, latest_demand_month):
+                series.index.strftime("%Y-%m"), series.to_numpy(), latest_demand_month):
             records.append(_with_window(_row_shell(p_key, sku_code, abc_period, months_span,
                                                    months_with_sales, full_class, "dead_sku")))
             continue
@@ -988,7 +1002,8 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) ->
     No DB access. Metrics come from analytics.forecasting.diagnostic_metrics.
     """
     wanted = {int(k) for k in df["product_key"]}
-    series_by_key = {int(k): build_series(g) for k, g in demand_by_key.items() if int(k) in wanted}
+    last_month = (planning_month - pd.DateOffset(months=1)).strftime("%Y-%m")   # the latest real demand month
+    series_by_key = {int(k): build_series(g, last_month) for k, g in demand_by_key.items() if int(k) in wanted}
     forecaster = GlobalForecaster(series_by_key)          # Tier A training pool, refit per target month
     out = {}
     for _, r in df[df["status"] == "ok"].iterrows():
@@ -1007,6 +1022,24 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) ->
             "holdout_backups": int(scored["backup_fired"].sum()), "holdout_months": int(len(scored)),
         }
     return out
+
+
+def _code_version() -> str | None:
+    """The git commit this run came from; '+dirty' when a tracked file under the code the run
+    executes differs from it (same rule as scripts/run_lp._code_version)."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10, cwd=root)
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no", "--",
+                                "scripts", "analytics", "backend", "config"],
+                               capture_output=True, text=True, timeout=10, cwd=root)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    commit = head.stdout.strip() if head.returncode == 0 else ""
+    if not commit:
+        return None
+    return f"{commit}+dirty" if dirty.returncode != 0 or dirty.stdout.strip() else commit
 
 
 def _keep_forecast_history(conn) -> None:
@@ -1094,6 +1127,8 @@ def _write_forecast_result(cur, df, calendar: bool = False):
 
     assert_real_rows(demand)
     calendar_totals = company_totals(demand) if calendar else None
+    run_meta = {"code_version": _code_version(), "calendar_factor_on": bool(calendar),
+                "written_at": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
     if calendar:
         logger.warning("--calendar-factor: served values and their holdout are calendar-adjusted "
                        "(analytics/forecasting/calendar.py; pending Sir Catubag's sign-off).")
@@ -1152,9 +1187,10 @@ def _write_forecast_result(cur, df, calendar: bool = False):
             if sku_df is None or sku_df.empty:
                 counts["skipped_no_demand"] += 1
                 continue
-            series = build_series(sku_df)
+            series = build_series(sku_df, (pd.Timestamp(planning_date) - pd.DateOffset(months=1)).strftime("%Y-%m"))
             status = r["status"]
             base_mp = {
+                "run": run_meta,       # provenance: the commit, whether the calendar factor was on, when
                 "abc_period_used": r["abc_period_used"],
                 "abc_method_used": abc_method(PRINCIPAL),
                 "min_months_threshold": MIN_MONTHS_WITH_SALES,

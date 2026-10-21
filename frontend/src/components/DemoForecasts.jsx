@@ -15,6 +15,7 @@ import { getDemoCategoryForecast } from '../api/forecast';
 import { COLORS, SEMANTIC } from '../theme/colors';
 import { originLabel } from '../utils/gapReasons';
 import './DemoForecasts.css';
+import { isMissing, NOT_COLLECTED } from '../utils/formatters';
 
 const monthLabel = (period) => {
   if (!period) return '';
@@ -26,15 +27,15 @@ const formatQty = (v) => {
   if (v == null) return '—';
   return Math.abs(v) < 10 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US');
 };
-const compactQty = (v) => (Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v)));
+const compactQty = (v) => (isMissing(v) ? NOT_COLLECTED : Math.abs(v) >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v)));
 const UNIT_NOTE = "Quantities are in Del Monte's own unit, which SSM has not confirmed.";
 
-const SyntheticTag = () => (
+export const SyntheticTag = () => (
   <span className="demo-tag"><FlaskConical size={12} aria-hidden="true" /> Synthetic data</span>
 );
 
 // Dashboard, step 4, Del Monte: GET /dashboard's demonstration.forecasts.
-export const DemoForecastList = ({ forecasts = [] }) => {
+export const DemoForecastList = ({ forecasts = [], canOpenForecast = false }) => {
   const navigate = useNavigate();
   if (!forecasts.length) return null;
   const period = forecasts[0]?.forecast_period;
@@ -69,9 +70,11 @@ export const DemoForecastList = ({ forecasts = [] }) => {
         </table>
       </div>
       <p className="demo-forecasts-note">{UNIT_NOTE}</p>
-      <button type="button" className="demo-forecasts-link" onClick={() => navigate('/forecast')}>
-        See each category&apos;s history
-      </button>
+      {canOpenForecast && (
+        <button type="button" className="demo-forecasts-link" onClick={() => navigate('/forecast')}>
+          See each category&apos;s history
+        </button>
+      )}
     </div>
   );
 };

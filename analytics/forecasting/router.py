@@ -128,7 +128,8 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
             out.update(backup_fired=True, backup_reason=reason)
             method, value = "ma3", ma3
 
-    value = max(0.0, float(value)) if method == "ma3" else float(value)
+    # Demand cannot be negative: floor every served value, whichever model produced it.
+    value = max(0.0, float(value))
     if calendar_totals is not None:
         factor, years = calendar_factor(calendar_totals, target_month)
         out.update(value_before_calendar=value, calendar_factor=factor, calendar_years=years)

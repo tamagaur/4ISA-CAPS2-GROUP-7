@@ -408,7 +408,7 @@ from backend.data_notes import COVER_CAVEATS, flagged_count_note, unusual_stock_
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import (
-    CURRENT_CYCLE_CLAUSE, LP_RUN_PRESENT_SQL, LP_WEIGHTS, current_cycle, current_cycle_query,
+    CURRENT_CYCLE_CLAUSE, LP_RUN_PRESENT_SQL, LP_WEIGHTS, PLAN_STATUS_SQL, current_cycle, current_cycle_query,
     forecast_generated_query, freshness_query, lp_run_present, lp_run_present_known, stored_run,
     stored_run_query, superseded_count_query,
 )
@@ -1054,7 +1054,7 @@ def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_periods: dict[str, str
                 LEFT JOIN (
                     SELECT DISTINCT ON (lr.product_key) lr.product_key, lr.ss_i, lr.rop_i, lr.q_i
                     FROM {lp_src} lr
-                    WHERE lr.status = 'pending' {_lp_cycle_filter(lp_cycle)}
+                    WHERE {PLAN_STATUS_SQL} {_lp_cycle_filter(lp_cycle)}
                     ORDER BY lr.product_key, lr.planning_cycle_date DESC
                 ) rop ON rop.product_key = ac.product_key
                 WHERE {abc_period_pred("=", "ac")} AND ac.tier = 'A'
@@ -1173,7 +1173,7 @@ def _policy_rows_query(scope: str, mode: str, lp_cycle) -> tuple[str, dict]:
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
             JOIN {fc_src} fr
               ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
-            WHERE lr.status = 'pending'
+            WHERE {PLAN_STATUS_SQL}
               {_lp_cycle_filter(lp_cycle)}
               {_principal_filter(scope)}
         """, {"current_cycle": lp_cycle, **lp_params, **fc_params}
@@ -1243,7 +1243,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
         wave2 += [_gated_rows_query(scope, mode, forecast_date),
                   _scoped_forecast_count_query(scope, mode, forecast_date)]
     if scope != "delmonte":
-        wave2.append(marts.accuracy_rows_query(range_start, range_end))
+        wave2.append(marts.accuracy_summary_query(range_start, range_end))
     if idle_period is not None:
         wave2 += [marts.idle_head_query(idle_period), marts.idle_items_query(idle_period, 10)]
     if marts.present(db):
@@ -1835,18 +1835,29 @@ def get_dashboard(
             cover_periods = _month_range(f"{start_index // 12:04d}-{start_index % 12 + 1:02d}", cover_end)
         # The page's own sums are reused where they are the same scope's; only
         # the months they lack are fetched, in one call.
-        cover_known = sales_by_period if cover_scope == scope else {}
-        cover_missing = [p for p in cover_periods if p not in cover_known]
-        cover_fetched = _sales_by_period(db, cover_missing, cover_scope, mode) if cover_missing else {}
-        cover_demand = {p: cover_known[p] if p in cover_known else cover_fetched.get(p) for p in cover_periods}
+        # Unilever: stock and sales are both in PIECES. Stock was valued at purchase cost and
+        # sales at selling price, so the peso ratio understated cover by the margin (freeze
+        # package 1a: 3.0285 -> 3.1321 weeks). Del Monte has no pack size, so no pieces: its
+        # ratio stays in pesos (stock at cost / sales at selling price) and says so in `basis`.
+        in_pieces = cover_scope == "unilever"
+        if in_pieces:
+            cover_demand = marts.pieces_by_period(db, cover_periods, "unilever", mode)
+            stock_pieces = marts.stock_pieces_at(db, count_period, "unilever")
+        else:
+            cover_known = sales_by_period if cover_scope == scope else {}
+            cover_missing = [p for p in cover_periods if p not in cover_known]
+            cover_fetched = _sales_by_period(db, cover_missing, cover_scope, mode) if cover_missing else {}
+            cover_demand = {p: cover_known[p] if p in cover_known else cover_fetched.get(p) for p in cover_periods}
+            stock_pieces = None
         stock_reason = (
             f"No stock count for {_scope_label(scope)} at all." if count_period is None
             else _UNILEVER_SOH_UNIT_UNCONFIRMED_REASON if not UNILEVER_SOH_UNIT_CONFIRMED
             else f"No stock valuation for {_scope_label(scope)} in the {count_period} count."
         )
         weekly_demand, demand_reason = _avg_weekly_demand(cover_demand)
-        value, reason = _weeks_of_cover(stock if UNILEVER_SOH_UNIT_CONFIRMED else None, stock_reason,
-                                        weekly_demand, demand_reason)
+        value, reason = _weeks_of_cover(
+            (stock_pieces if in_pieces else stock) if UNILEVER_SOH_UNIT_CONFIRMED else None, stock_reason,
+            weekly_demand, demand_reason)
         return {
             "value": value,
             "blocked_reason": reason,
@@ -1858,6 +1869,7 @@ def get_dashboard(
             "months_used": sum(1 for v in cover_demand.values() if v is not None),
             "stock_period": count_period,
             "stock_value": _to_float(stock),
+            "basis": "pieces" if in_pieces else "pesos",
             "stock_count_date": (_stock_count_dates(db, [count_period], cover_scope).get(count_period)
                                  if count_period is not None else None),
             # The 12 months the average weekly sales came from — fixed to the
@@ -2352,7 +2364,7 @@ def get_dashboard(
     # Every scored forecast in the range: each month from the recreated 29-month
     # backtest (Tier A the month before, the figure the team quotes) where it
     # covers the month, else from the newest stored run that forecast it
-    # (backend/marts.accuracy_rows). Actuals are real sales only. Del Monte has
+    # (backend/marts.accuracy_summary_query, summed by the database). Actuals are real sales only. Del Monte has
     # no product-level forecasts (its sales are category grain).
     if scope == "delmonte":
         forecast_accuracy = marts.accuracy_summary([], range_start, range_end, REVIEW_OVER_RUN_MONTHS)
@@ -2361,8 +2373,9 @@ def get_dashboard(
             "so no per-product forecast is made to check."
         )
     else:
-        forecast_accuracy = marts.accuracy_summary(
-            marts.accuracy_rows(db, range_start, range_end), range_start, range_end, REVIEW_OVER_RUN_MONTHS,
+        forecast_accuracy = marts.accuracy_summary_from(
+            marts.accuracy_aggregates_from_query(batch.rows(db, *marts.accuracy_summary_query(range_start, range_end))),
+            range_start, range_end, REVIEW_OVER_RUN_MONTHS,
         )
     forecast_accuracy["coverage"] = [] if scope == "delmonte" else ["unilever"]
     # The same backtest without the calendar factor, when the figures above are the

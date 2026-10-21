@@ -975,11 +975,13 @@ def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, 
 # Forecast accuracy
 # ---------------------------------------------------------------------------
 
-# The backtest the error card shows by default: the at-the-time cohort (decision 2026-10-03;
-# scripts/backtest_forecast_run.py), calendar-adjusted since 2026-10-19 (Kelvin) because the
-# live forecast is (run_baseline_forecast.py --calendar-factor). The published, unadjusted run
-# stays stored and selectable under its own label.
-DEFAULT_BACKTEST_LABEL = "backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted"
+# The backtest the error card shows by default: the at-the-time cohort (decision 2026-10-03),
+# calendar-adjusted because the live forecast is (run_baseline_forecast.py --calendar-factor),
+# and scored AS SERVED (scripts/accuracy_as_served.py --write-run, docs/ACCURACY_AS_SERVED.md):
+# months after a product's last sale are scored and the dead-SKU rule is applied as the live
+# forecast applies it. The older runs (backtest_forecast_run.py: 5 unadjusted, 7 calendar-adjusted)
+# never scored a month with no sales row; they stay stored and selectable under their own labels.
+DEFAULT_BACKTEST_LABEL = "as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted"
 # A calendar-adjusted run is the at-the-time run with this suffix on its label
 # (scripts/backtest_forecast_run.py's at_the_time_calendar); its unadjusted twin is
 # the same label without it, so the card can show both from the run list alone.
@@ -1120,18 +1122,10 @@ OVER_RUN_RULE = ("over-forecast {n}+ months in a row as of the product's last sc
                  "(the over-forecast part of DEC-33, on this range's forecasts)")
 
 
-def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int, review_limit: int = 20) -> dict:
-    """The forecast-error card for the scored rows of a range (accuracy_rows): pieces and
-    pesos (selling price, VAT-inclusive), surplus against shortage, each month's direction
-    (the colour chips), and the products to review before ordering: over-forecast
-    `review_months` months or more in a row as of their last scored month in the range."""
-    if not rows:
-        return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
-                "run_labels": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
-                **accuracy_headlines(None, None),
-                "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
-                "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
-                                   "with a real actual in these months.")}
+def accuracy_aggregates(rows: list[dict]) -> dict:
+    """What accuracy_summary_from needs, worked out from the scored product-month rows: one entry
+    per month, one per product (its sums and its last scored month) and the whole-range counts.
+    accuracy_summary_query gives the same shape straight from the database."""
     by_month: dict[str, dict] = {}
     by_product: dict[int, dict] = {}
     for r in rows:
@@ -1158,6 +1152,107 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
         p["act"] += abs(act)
         p["priced"] = p["priced"] or price is not None
         p["last"] = r  # rows arrive ordered by product, then month
+    return {
+        "product_months": len(rows),
+        "sources": sorted({r["forecast_source"] for r in rows}),
+        "run_labels": sorted({r["run_label"] for r in rows}),
+        "possibly_stock_limited": sum(1 for r in rows if r.get("possibly_stock_limited") is True),
+        "possibly_stock_limited_unknown": sum(1 for r in rows if r["direction"] == "over"
+                                              and r.get("possibly_stock_limited") is None),
+        "months": by_month, "products": by_product,
+    }
+
+
+# The same aggregates computed by the database, so the dashboard receives a few hundred small
+# rows instead of every scored product-month (1,942 rows, 2.2 MB of JSON for the default 12
+# months, measured 2026-10-20). The scored rows are accuracy_rows_query's own, as a CTE read
+# three times (Postgres computes it once). Three kinds of row, each {kind, d}: one per month,
+# one per product, one for the whole range.
+_SUM_KEYS = ("forecast_pieces", "actual_pieces", "net_miss_pieces", "abs_miss_pieces", "net_miss_pesos",
+             "abs_miss_pesos", "surplus_pesos", "shortage_pesos", "actual_pesos")
+
+
+def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> tuple[str, dict]:
+    sql, params = accuracy_rows_query(start, end, run_id)
+    return f"""
+        WITH scored AS ({sql})
+        SELECT 'month' AS kind, row_to_json(x) AS d FROM (
+            SELECT month AS period, COUNT(*)::int AS products,
+                   SUM(forecast_pieces) AS forecast_pieces, SUM(actual_pieces) AS actual_pieces,
+                   SUM(forecast_pieces - actual_pieces) AS net_miss_pieces,
+                   SUM(ABS(forecast_pieces - actual_pieces)) AS abs_miss_pieces,
+                   COALESCE(SUM((forecast_pieces - actual_pieces) * price_per_piece), 0) AS net_miss_pesos,
+                   COALESCE(SUM(ABS(forecast_pieces - actual_pieces) * price_per_piece), 0) AS abs_miss_pesos,
+                   COALESCE(SUM(GREATEST(forecast_pieces - actual_pieces, 0) * price_per_piece), 0) AS surplus_pesos,
+                   COALESCE(SUM(GREATEST(actual_pieces - forecast_pieces, 0) * price_per_piece), 0) AS shortage_pesos,
+                   COALESCE(SUM(actual_pieces * price_per_piece), 0) AS actual_pesos,
+                   array_agg(DISTINCT forecast_source) AS sources
+            FROM scored GROUP BY month) x
+        UNION ALL
+        SELECT 'product', row_to_json(x) FROM (
+            SELECT p.product_key, p.abs_miss, p.abs_actual, p.priced, l.month, l.direction, l.run_length,
+                   l.miss_pieces, l.price_per_piece, l.sku_code, l.product_name, l.possibly_stock_limited
+            FROM (SELECT product_key, SUM(ABS(forecast_pieces - actual_pieces)) AS abs_miss,
+                         SUM(ABS(actual_pieces)) AS abs_actual, bool_or(price_per_piece IS NOT NULL) AS priced
+                  FROM scored GROUP BY product_key) p
+            JOIN (SELECT DISTINCT ON (product_key) product_key, month, direction, run_length, miss_pieces,
+                         price_per_piece, sku_code, product_name, possibly_stock_limited
+                  FROM scored ORDER BY product_key, month DESC) l ON l.product_key = p.product_key) x
+        UNION ALL
+        SELECT 'total', row_to_json(x) FROM (
+            SELECT COUNT(*)::int AS product_months, array_agg(DISTINCT forecast_source) AS sources,
+                   array_agg(DISTINCT run_label) AS run_labels,
+                   (COUNT(*) FILTER (WHERE possibly_stock_limited IS TRUE))::int AS possibly_stock_limited,
+                   (COUNT(*) FILTER (WHERE direction = 'over' AND possibly_stock_limited IS NULL))::int
+                       AS possibly_stock_limited_unknown
+            FROM scored) x
+    """, params
+
+
+def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
+    """accuracy_summary_query's rows, in accuracy_aggregates' shape."""
+    months: dict[str, dict] = {}
+    products: dict[int, dict] = {}
+    total: dict = {}
+    for r in rows:
+        d = r["d"]
+        if r["kind"] == "month":
+            months[d["period"]] = {**{k: float(d[k]) for k in _SUM_KEYS}, "period": d["period"],
+                                   "products": int(d["products"]), "sources": set(d["sources"])}
+        elif r["kind"] == "product":
+            products[int(d["product_key"])] = {
+                "abs": float(d["abs_miss"]), "act": float(d["abs_actual"]), "priced": bool(d["priced"]),
+                "last": {k: d[k] for k in ("month", "direction", "run_length", "miss_pieces", "price_per_piece",
+                                           "sku_code", "product_name", "possibly_stock_limited")}}
+        else:
+            total = d
+    return {
+        "product_months": int(total.get("product_months") or 0),
+        "sources": sorted(total.get("sources") or []), "run_labels": sorted(total.get("run_labels") or []),
+        "possibly_stock_limited": int(total.get("possibly_stock_limited") or 0),
+        "possibly_stock_limited_unknown": int(total.get("possibly_stock_limited_unknown") or 0),
+        "months": months, "products": dict(sorted(products.items())),
+    }
+
+
+def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int, review_limit: int = 20) -> dict:
+    """The forecast-error card for the scored rows of a range (accuracy_rows): pieces and
+    pesos (selling price, VAT-inclusive), surplus against shortage, each month's direction
+    (the colour chips), and the products to review before ordering: over-forecast
+    `review_months` months or more in a row as of their last scored month in the range."""
+    return accuracy_summary_from(accuracy_aggregates(rows), start, end, review_months, review_limit)
+
+
+def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, review_limit: int = 20) -> dict:
+    """accuracy_summary from aggregates (accuracy_aggregates or accuracy_aggregates_from_query)."""
+    if not agg["product_months"]:
+        return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
+                "run_labels": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
+                **accuracy_headlines(None, None),
+                "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
+                "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
+                                   "with a real actual in these months.")}
+    by_month, by_product = agg["months"], agg["products"]
     months = sorted(by_month)
     keys = ("forecast_pieces", "actual_pieces", "net_miss_pieces", "abs_miss_pieces", "net_miss_pesos",
             "abs_miss_pesos", "surplus_pesos", "shortage_pesos", "actual_pesos")
@@ -1196,12 +1291,12 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
     month_total_wape = _wape(sum(abs(by_month[mo]["net_miss_pesos"]) for mo in months), totals["actual_pesos"])
     return {
         "start_period": start, "end_period": end, "label": range_label(months[0], months[-1]), "months": months,
-        "forecast_source": "/".join(sorted({r["forecast_source"] for r in rows})),
-        "run_labels": sorted({r["run_label"] for r in rows}),
+        "forecast_source": "/".join(agg["sources"]),
+        "run_labels": agg["run_labels"],
         # Whether those runs' forecasts carry the company calendar factor (2026-10-19):
         # 'yes' / 'partly' / 'no' (calendar_adjusted_state).
-        "calendar_adjusted": calendar_adjusted_state(sorted({r["run_label"] for r in rows})),
-        "products": len(by_product), "product_months": len(rows),
+        "calendar_adjusted": calendar_adjusted_state(agg["run_labels"]),
+        "products": len(by_product), "product_months": agg["product_months"],
         **{k: round(v, 2) for k, v in totals.items()},
         "direction": "over" if net > 0 else "under" if net < 0 else "exact",
         # Pooled over every product-month; the median of each product's own; and the miss
@@ -1216,9 +1311,8 @@ def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int,
                                         if totals["abs_miss_pesos"] > 0 else None),
         "pesos_basis": "selling price, VAT-inclusive (each product's average over its scored months in the run)",
         "products_without_price": sum(1 for v in by_product.values() if not v["priced"]),
-        "possibly_stock_limited": sum(1 for r in rows if r.get("possibly_stock_limited") is True),
-        "possibly_stock_limited_unknown": sum(1 for r in rows if r["direction"] == "over"
-                                              and r.get("possibly_stock_limited") is None),
+        "possibly_stock_limited": agg["possibly_stock_limited"],
+        "possibly_stock_limited_unknown": agg["possibly_stock_limited_unknown"],
         "by_month": month_rows,
         "over_forecast_runs": {"run_months": review_months, "count": len(review), "items": review[:review_limit],
                                "rule": OVER_RUN_RULE.format(n=review_months)},

@@ -15,21 +15,21 @@
 
 | metric | naive | ma3 | sba |
 |---|---|---|---|
-| MASE median | 1.088 | 1.024 | 1.038 |
-| MASE mean | 1.269 | 1.153 | 1.210 |
-| MASE<1.0 % | 42.857 | 48.571 | 46.286 |
-| MAPE median | 0.540 | 0.504 | 0.496 |
-| MAPE<20% % | 9.884 | 10.465 | 7.558 |
-| MAE median | 1008.250 | 868.238 | 1104.800 |
-| RMSE median | 1149.854 | 975.463 | 1301.292 |
-| outright wins (oracle) | 70 | 51 | 54 |
+| MASE median | 1.065 | 1.024 | 1.038 |
+| MASE mean | 1.216 | 1.138 | 1.209 |
+| MASE<1.0 % | 45.714 | 48.571 | 46.286 |
+| MAPE median | 0.532 | 0.497 | 0.491 |
+| MAPE<20% % | 10.000 | 10.588 | 7.647 |
+| MAE median | 917.000 | 838.583 | 1075.750 |
+| RMSE median | 1104.307 | 966.050 | 1245.766 |
+| outright wins (oracle) | 73 | 49 | 53 |
 
 ## Pass rates (MASE<1.0)
 
 | selection | pass | rate |
 |---|---|---|
-| oracle (upper bound) | 112/175 | 64.0% |
-| rule (deployable) | 81/175 | 46.3% |
+| oracle (upper bound) | 115/175 | 65.7% |
+| rule (deployable) | 82/175 | 46.9% |
 | plain MA3 alone | 85/175 | 48.6% |
 
 ## rule_method mapping

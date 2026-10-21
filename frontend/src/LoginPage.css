@@ -205,6 +205,34 @@
   }
 }
 
+/* The yard comes in with them (Audrey, 2026-10-21): a veil of the
+   picture's own cream lifts off it while the words and the card rise.
+   The page's first child, and the brand row and the stage are positioned
+   after it, so it lies over the picture and under everything else. */
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--login-warm);
+  pointer-events: none;
+  animation: login-yard-in 900ms ease-out both;
+}
+
+@keyframes login-yard-in {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Nothing starts until the yard has loaded (AuthShell adds .is-ready, or
+   gives up waiting after a moment), so the picture can't pop in after the
+   words have settled: everything holds its first frame (the page's fade
+   from Login.css included) and then plays from the same moment. */
+.login-page:not(.is-ready),
+.login-page:not(.is-ready)::before,
+.login-page:not(.is-ready) * {
+  animation-play-state: paused;
+}
+
 /* ── The card ──────────────────────────────────────────────────────── */
 
 .login-page .login-card {
@@ -727,5 +755,9 @@
   .login-page .login-features,
   .login-page .login-card {
     animation: none;
+  }
+
+  .login-page::before {
+    display: none;
   }
 }

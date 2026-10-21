@@ -265,7 +265,9 @@ def unilever_forecast(db: Session, sku_code: str) -> dict | None:
     if r is None:
         return None
     return {
-        "forecast_period": r["forecast_period"], "forecast_quantity": _num(r["forecast_quantity"]),
+        "forecast_period": r["forecast_period"],
+        # Demand cannot be negative: a stored MA3 over net-of-returns months can be (freeze package 2a).
+        "forecast_quantity": max(0.0, _num(r["forecast_quantity"])),
         "method": r["method"], "history_months": int(r["history_months"]),
         "blank_capture_filled": bool(r["blank_capture_filled"]),
         "status": "ok", "demonstration": True, "demonstration_note": POINT_NOTE,

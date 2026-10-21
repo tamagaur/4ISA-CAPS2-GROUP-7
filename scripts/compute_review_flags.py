@@ -21,6 +21,11 @@ run being flagged, and the script stops.
     python -m scripts.compute_review_flags                 # report only, read-only
     python -m scripts.compute_review_flags --write         # also replace the cycle's rows
     python -m scripts.compute_review_flags --cycle 2026-03 # default: latest forecast_date
+    python -m scripts.compute_review_flags --calendar-factor --write
+        # required when the forecast run was made with run_baseline_forecast --calendar-factor: the
+        # reproduce check and the over-forecast run then score the calendar-adjusted values, as served.
+        # Rerun it after every forecast rerun: planning_stale (migration 0061) is true while any flag
+        # row's forecast_generated_at differs from the live forecast's generated_at.
 
 Reads in BEGIN; SET TRANSACTION READ ONLY; ... ROLLBACK. --write replaces
 the cycle's rows (DELETE + INSERT) in one transaction and checks the row
@@ -38,6 +43,7 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
+from analytics.forecasting.calendar import company_totals
 from analytics.forecasting.global_model import GlobalForecaster
 from analytics.forecasting.review_flag import review_flag
 from analytics.forecasting.router import assert_real_rows, route
@@ -91,16 +97,18 @@ def read_inputs(conn, cycle: str | None):
     return cycle_date, fr, demand
 
 
-def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame) -> pd.DataFrame:
+def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool = False) -> pd.DataFrame:
     assert_real_rows(demand)
     cycle = pd.Timestamp(cycle_date)
     wanted = set(int(k) for k in fr.product_key)
-    series = {int(k): build_series(g) for k, g in demand.groupby("product_key") if int(k) in wanted}
+    last_month = (cycle - pd.DateOffset(months=1)).strftime("%Y-%m")   # the latest real demand month
+    series = {int(k): build_series(g, last_month) for k, g in demand.groupby("product_key") if int(k) in wanted}
+    calendar_totals = company_totals(demand) if calendar else None
     forecaster = GlobalForecaster(series)
 
     gaps = []
     for r in fr[fr.status == "ok"].itertuples():
-        got = route(series[int(r.product_key)], cycle, forecaster)["value"]
+        got = route(series[int(r.product_key)], cycle, forecaster, calendar_totals=calendar_totals)["value"]
         gaps.append(abs(round(float(got), STORED_DECIMALS) - float(r.forecast_value)))
     worst = max(gaps, default=0.0)
     print(f"reproduce check: route() for {cycle:%Y-%m}, rounded to {STORED_DECIMALS} decimals, vs stored "
@@ -114,7 +122,7 @@ def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame) -> pd.DataFrame:
         k = int(r.product_key)
         s = series.get(k)
         served_bin = r.served_bin if r.status == "ok" else None
-        f = review_flag(s, cycle, served_bin, forecaster) if s is not None else {
+        f = review_flag(s, cycle, served_bin, forecaster, calendar_totals) if s is not None else {
             "needs_review": None, "reasons": [], "collapse": None, "collapse_ratio": None, "over_run_months": None}
         rows.append({"product_key": k, "sku_code": r.sku_code, "product_name": r.product_name,
                      "served_bin": served_bin, "forecast_generated_at": r.generated_at, **f})
@@ -151,6 +159,8 @@ def write(conn, cycle_date, flags: pd.DataFrame) -> None:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cycle", help="YYYY-MM; default: the latest Unilever forecast_date")
+    ap.add_argument("--calendar-factor", action="store_true",
+                    help="the forecast being flagged was made with --calendar-factor: apply it when re-running route()")
     ap.add_argument("--write", action="store_true", help="replace the cycle's review_flag rows")
     args = ap.parse_args()
 
@@ -158,7 +168,7 @@ def main():
     cycle_date, fr, demand = read_inputs(conn, args.cycle)
     if fr.empty:
         sys.exit(f"no Forecast_Result rows for {cycle_date}")
-    flags = compute(cycle_date, fr, demand)
+    flags = compute(cycle_date, fr, demand, args.calendar_factor)
 
     flagged = flags[flags.needs_review.eq(True)]
     summary = {

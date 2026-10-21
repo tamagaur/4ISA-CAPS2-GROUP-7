@@ -962,6 +962,9 @@ def main() -> int:
     p.add_argument("--restore", default=None, metavar="BACKUP_DIR",
                    help="put every backed-up table back to the backup (full restore, independent of the change log)")
     p.add_argument("--i-have-approval", action="store_true", help="required for anything that writes to public")
+    p.add_argument("--confirm-restore-public", default=None, metavar="BACKUP_NAME",
+                   help="second confirmation for --restore of a backup whose target is public: the backup directory's own "
+                        "name, typed again (a full restore deletes across 10 tables, schema_migrations among them)")
     p.add_argument("--one-shot", action="store_true", help="every batch in a single transaction (the pre-batch behaviour)")
     p.add_argument("--batch", type=int, default=None, metavar="ID", help="run exactly this batch, then stop")
     p.add_argument("--from", dest="from_batch", type=int, default=None, metavar="ID", help="start at this batch")
@@ -981,6 +984,15 @@ def main() -> int:
         p.error("--rehearse needs its own scratch schema name")
     if args.one_shot and (args.batch or args.from_batch or args.max_batches or args.dry_run):
         p.error("--one-shot runs everything in one transaction; it takes none of the batch flags")
+    if args.restore:
+        # Before any connection is opened: a full restore of public deletes rows from every table in
+        # BACKUP_TABLES (schema_migrations included), so --i-have-approval alone is not enough.
+        restore_dir = Path(args.restore)
+        restore_target = json.loads((restore_dir / "manifest.json").read_text(encoding="utf-8"))["target"]
+        if restore_target == "public" and args.confirm_restore_public != restore_dir.name:
+            sys.exit(f"refusing: --restore of {restore_dir.name} would rewrite public (deleting across {len(BACKUP_TABLES)} tables, "
+                     f"schema_migrations included). Prefer --rollback, which undoes only what the cutover changed. "
+                     f"If a full restore is really intended, repeat: --confirm-restore-public {restore_dir.name}")
 
     conn = connect()
     cur = conn.cursor()

@@ -21,7 +21,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Check } from 'lucide-react';
 import InfoTip from './InfoTip';
 import BasisTag from './BasisTag';
-import { formatCompactPesos } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import { formatMonth } from '../utils/formatDate';
 import {
   allocationPace, classAChecks, coverScale, coverSplit, coverVerdict, excessAbovePolicy, formatCompactCount, formatPercent,

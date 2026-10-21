@@ -52,7 +52,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.data_mode import PREVIEW, get_data_mode, forecast_source, lp_source, predictive_preview, preview_block
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle
+from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, PLAN_STATUS_SQL, current_cycle
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, POLICY_WEEKS
 from backend.stock_units import last_purchase_price_sql
 from analytics.params import BUSINESS_DAYS_PER_WEEK, PLACEHOLDERS
@@ -164,7 +164,7 @@ def get_policy_comparison(
             JOIN {fc} fr
               ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
             {price_join}
-            WHERE lr.status = 'pending'
+            WHERE {PLAN_STATUS_SQL}
               {cycle_clause}
               {scope_sql}
         """),

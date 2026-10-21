@@ -24,6 +24,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import auth_utils, marts
+from tests.backend.accuracy_fake import accuracy_summary_rows
 from backend.deps import get_current_user, get_db
 from backend.main import app
 from backend.routers.dashboard import AVG_WEEKS_PER_MONTH, _last_12_periods
@@ -153,6 +154,8 @@ class FakeSession:
         accuracy_rows: list | None = None,
         # Unilever pieces per sales month (mart.sales_month).
         sales_pieces: dict | None = None,
+        # Unilever stock pieces per count month (mart.inventory_count).
+        soh_pieces: dict | None = None,
     ):
         self.stock_counts = stock_counts or {}
         self.range_revenue = range_revenue or {}
@@ -163,6 +166,7 @@ class FakeSession:
         self.returns = returns or {}
         self.accuracy_rows = accuracy_rows or []
         self.sales_pieces = sales_pieces or {}
+        self.soh_pieces = soh_pieces or {}
         # A current stock on an ABC fixture row means a count was taken that
         # month: the safety-stock check reads the count at the range's end.
         if latest_inventory_period is None:
@@ -262,7 +266,8 @@ class FakeSession:
         for who in {"unilever"} | set(self.stock_coverage):
             for m in counts:
                 _, first, last = self.stock_counts.get((who, m), (None, None, None))
-                add("stock", who, m, "real", pesos=self.soh.get(m), first_date=first, last_date=last)
+                add("stock", who, m, "real", pesos=self.soh.get(m), pieces=self.soh_pieces.get(m) if who == "unilever" else None,
+                    first_date=first, last_date=last)
         for who, by_month in self.estimated_stock.items():
             for m, (kind, value) in by_month.items():
                 add("stock", who, m, kind, pesos=value)
@@ -383,6 +388,9 @@ class FakeSession:
             return FakeResult([{"product_key": r["product_key"], "pieces": r["current_stock"]}
                                for r in self.abc_rows
                                if r["product_key"] in keys and r.get("current_stock") is not None])
+
+        if "WITH scored AS" in sql:  # marts.accuracy_summary_query: the database sums, a few hundred rows come back
+            return FakeResult(accuracy_summary_rows(self.accuracy_rows))
 
         if "FROM mart.accuracy_mart a" in sql:
             return FakeResult(self.accuracy_rows)
@@ -568,8 +576,10 @@ def test_kpis_weeks_of_cover_real_value():
     session = FakeSession(
         # avg monthly = weekly_target * AVG_WEEKS_PER_MONTH -> weekly demand = weekly_target exactly.
         sales={p1: AVG_WEEKS_PER_MONTH * 10, p2: AVG_WEEKS_PER_MONTH * 10},  # weekly demand = 10
+        sales_pieces={p1: AVG_WEEKS_PER_MONTH * 10, p2: AVG_WEEKS_PER_MONTH * 10},
         latest_inventory_period="2024-02",
-        soh={"2024-02": 100.0},  # -> 100/10 = 10.0 weeks
+        soh={"2024-02": 100.0},
+        soh_pieces={"2024-02": 100.0},  # -> 100/10 = 10.0 weeks
     )
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -583,8 +593,10 @@ def test_kpis_weeks_of_cover_null_when_weekly_demand_is_zero():
     p1 = periods[0]
     session = FakeSession(
         sales={p1: 0.0},
+        sales_pieces={p1: 0.0},
         latest_inventory_period="2024-02",
         soh={"2024-02": 100.0},
+        soh_pieces={"2024-02": 100.0},
     )
     with make_client(session) as c:
         resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
@@ -614,18 +626,19 @@ def test_weeks_of_cover_reads_the_stock_cards_count():
     expected = round(1000.0 / ((sum(sales.values()) / 12) / AVG_WEEKS_PER_MONTH), 2)
     for query in ("", "&start_period=2024-01&period=2024-02", "&start_period=2021-01&period=2024-02"):
         session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
-                              sales=dict(sales))
+                              soh_pieces={"2023-07": 300.0, "2024-02": 1000.0}, sales=dict(sales), sales_pieces=dict(sales))
         wc = _get(session, f"principal=unilever{query}")["kpis"]["weeks_of_cover"]
         assert wc["value"] == pytest.approx(expected), query
         assert wc["stock_period"] == "2024-02" and wc["sales_window"] == {"start": periods[0], "end": periods[-1]}
         assert wc["months_used"] == 12, query
     # A range ending at the July 2023 count reads that count, over the sales up to it.
     session = FakeSession(latest_inventory_period="2024-02", soh={"2023-07": 300.0, "2024-02": 1000.0},
-                          sales=dict(sales))
+                          soh_pieces={"2023-07": 300.0, "2024-02": 1000.0}, sales=dict(sales), sales_pieces=dict(sales))
     wc = _get(session, "principal=unilever&start_period=2023-01&period=2023-07")["kpis"]["weeks_of_cover"]
     assert wc["stock_period"] == "2023-07"
     assert wc["value"] == pytest.approx(round(300.0 / (100.0 / AVG_WEEKS_PER_MONTH), 2))
-    body = _get(FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0}, sales=dict(sales)),
+    body = _get(FakeSession(latest_inventory_period="2024-02", soh={"2024-02": 1000.0},
+                            soh_pieces={"2024-02": 1000.0}, sales=dict(sales), sales_pieces=dict(sales)),
                 "principal=unilever")["kpis"]
     assert body["weeks_of_cover_range_end"] == body["weeks_of_cover"]
 
@@ -646,7 +659,8 @@ def test_weeks_of_cover_sales_year_ends_at_the_stock_count():
     """Stock and sales must describe the same moment: a snapshot older than
     the latest sales month is measured against the 12 months up to itself."""
     session = FakeSession(
-        latest_inventory_period="2023-12", soh={"2023-12": 1000.0}, sales={p: 100.0 for p in _periods()}
+        latest_inventory_period="2023-12", soh={"2023-12": 1000.0}, soh_pieces={"2023-12": 1000.0},
+        sales={p: 100.0 for p in _periods()}, sales_pieces={p: 100.0 for p in _periods()},
     )
     with make_client(session) as c:
         wc = c.get(
@@ -1489,6 +1503,10 @@ def test_weeks_of_cover_denominator_follows_the_stock_coverage():
         latest_inventory_period=periods[-1],
         soh={periods[-1]: 1_000_000.0},
         sales={p: 100_000.0 for p in periods},
+        # Freeze package 1a: Unilever cover is pieces over pieces. Stock at cost is 1,000,000 pesos and
+        # sales at selling price 100,000 pesos a month, but the pieces differ (500,000 held, 100,000 a month).
+        soh_pieces={periods[-1]: 500_000.0},
+        sales_pieces={p: 100_000.0 for p in periods},
         stock_coverage=["unilever"],
     )
     session.delmonte_sales = {periods[-1]: 500_000.0}
@@ -1497,7 +1515,8 @@ def test_weeks_of_cover_denominator_follows_the_stock_coverage():
         body = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"}).json()
     wc = body["kpis"]["weeks_of_cover"]
     assert wc["coverage"] == ["unilever"], "the card must say which principals it covers"
-    expected = 1_000_000.0 / (100_000.0 / AVG_WEEKS_PER_MONTH)
+    expected = 500_000.0 / (100_000.0 / AVG_WEEKS_PER_MONTH)
+    assert wc["basis"] == "pieces"
     assert wc["value"] == pytest.approx(round(expected, 2)), "Del Monte demand must not enter a Unilever-only ratio"
 
 
@@ -2177,6 +2196,24 @@ def test_error_card_signed_miss_in_pieces_and_pesos_with_review_list():
     assert runs["items"][0]["possibly_stock_limited"] is True
     assert acc["possibly_stock_limited"] == 1
     assert acc["products_without_price"] == 0, "product 2 has a price in another month"
+
+
+def test_error_card_summed_by_the_database_equals_the_one_summed_from_rows():
+    """BE-5: the dashboard asks the database for per-month and per-product sums (a few hundred rows)
+    instead of every scored product-month (2.2 MB). Same card either way, to the byte."""
+    rows = [
+        _accuracy_row(1, "2024-01", 120, 100, run_length=2),
+        _accuracy_row(1, "2024-02", 130, 100, run_length=3, limited=True),
+        _accuracy_row(2, "2024-01", 80, 100),
+        _accuracy_row(2, "2024-02", 90, 100, price=None),
+        {**_accuracy_row(3, "2024-02", 50, 40), "possibly_stock_limited": None},
+    ]
+    from_rows = marts.accuracy_summary(rows, "2024-01", "2024-02", 3, review_limit=1000)
+    agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
+    assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3, review_limit=1000) == from_rows
+    assert from_rows["possibly_stock_limited_unknown"] == 1
+    empty = marts.accuracy_aggregates_from_query(accuracy_summary_rows([]))
+    assert marts.accuracy_summary_from(empty, "2024-01", "2024-02", 3) == marts.accuracy_summary([], "2024-01", "2024-02", 3)
 
 
 def test_error_card_says_why_del_monte_has_none():

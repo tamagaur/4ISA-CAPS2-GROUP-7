@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.deps import TokenPayload, get_db
-from backend.lp_cycle import current_cycle
+from backend.lp_cycle import PLAN_STATUS_SQL_BARE, current_cycle
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.stock_status import stock_status
@@ -51,7 +51,7 @@ def get_inventory_current(
         LEFT JOIN (
             SELECT product_key, ss_i, rop_i
             FROM lp_recommendation
-            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+            WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
         ) lp ON lp.product_key = inv.product_key
         WHERE 1=1 {principal_filter}
     """)
@@ -74,8 +74,9 @@ def get_inventory_current(
                 "pieces" if r["current_stock"] is not None
                 else "cases" if r["current_stock_cases"] is not None else None
             ),
-            "receivedMts": 0,
-            "dispatchedMts": 0,
+            # receivedMts / dispatchedMts were hardcoded 0 here until 2026-10-20. Purchases and
+            # sales have no product on them (see /movement), so a per-SKU received or dispatched
+            # figure does not exist; the keys are gone rather than served as a zero.
             "status": stock_status(
                 None if r["current_stock"] is None else float(r["current_stock"]),
                 None if r["ss_i"] is None else float(r["ss_i"]),
@@ -114,50 +115,45 @@ def get_inventory_movement(
         params["from_period"] = from_period
         params["to_period"] = to_period
 
-    # PURCHASE (Received)
-    purchases_query = text(f"""
-        SELECT 
-            invoice_date as date,
-            invoice_num as ref,
-            principal,
-            units_received as qty,
-            'RECEIVED' as type
+    # One row per purchase invoice (RECEIVED) and per sales invoice (DISPATCHED). Neither table has
+    # a product on it, so there is no SKU or product name to show; the keys say null instead of the
+    # "N/A" / "Assorted Items" this route used to invent. The two carry DIFFERENT units, so they are
+    # different fields: `quantity` is units received (purchases only; null when the source did not
+    # give it, not 0) and `amount_pesos` is the invoice value (both). Newest first, 50 of each.
+    purchases = db.execute(text(f"""
+        SELECT invoice_date AS date, invoice_num AS ref, principal, units_received, net_amount
         FROM purchase_fact_real
         WHERE 1=1 {principal_filter} {period_filter}
+        ORDER BY invoice_date DESC NULLS LAST, invoice_num
         LIMIT 50
-    """)
-    purchases = db.execute(purchases_query, params).mappings().all()
-
-    # SALES (Dispatched)
-    sales_query = text(f"""
-        SELECT 
-            invoice_date as date,
-            invoice_num as ref,
-            principal,
-            net_amount as qty, -- Sales_Fact_Real has no qty, use amount as proxy
-            'DISPATCHED' as type
+    """), params).mappings().all()
+    sales = db.execute(text(f"""
+        SELECT invoice_date AS date, invoice_num AS ref, principal, net_amount
         FROM sales_fact_real
         WHERE 1=1 {principal_filter} {period_filter}
+        ORDER BY invoice_date DESC NULLS LAST, invoice_num
         LIMIT 50
-    """)
-    sales = db.execute(sales_query, params).mappings().all()
+    """), params).mappings().all()
+
+    def _number(value):
+        return float(value) if value is not None else None
 
     movements = []
-    _id = 1
-    for r in list(purchases) + list(sales):
-        movements.append({
-            "id": _id,
-            "date": str(r["date"]),
-            "sku": "N/A",
-            "product": "Assorted Items",
-            "type": r["type"],
-            "qty": float(r["qty"] or 0),
-            "ref": r["ref"],
-            "supplier": (r["principal"] or "").title() or None
-        })
-        _id += 1
+    for kind, source in (("RECEIVED", purchases), ("DISPATCHED", sales)):
+        for r in source:
+            movements.append({
+                "id": len(movements) + 1,
+                "date": str(r["date"]) if r["date"] is not None else None,
+                "sku": None,
+                "product": None,
+                "type": kind,
+                "quantity": _number(r["units_received"]) if kind == "RECEIVED" else None,
+                "quantity_unit": "units" if kind == "RECEIVED" else None,
+                "amount_pesos": _number(r["net_amount"]),
+                "ref": r["ref"],
+                "supplier": (r["principal"] or "").title() or None,
+            })
 
-    # Sort by date desc
-    movements.sort(key=lambda x: x["date"], reverse=True)
+    movements.sort(key=lambda x: x["date"] or "", reverse=True)
 
     return movements

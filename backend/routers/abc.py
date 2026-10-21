@@ -129,7 +129,7 @@ from backend.data_mode import (
 )
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
-from backend.lp_cycle import current_cycle
+from backend.lp_cycle import PLAN_STATUS_SQL_BARE, current_cycle
 from backend.principals import (
     PrincipalQuery,
     abc_period_params,
@@ -527,7 +527,7 @@ def _get_abc_period(
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
-            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+            WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
         WHERE {abc_period_pred("=", "ac")} AND {abc_method_sql("ac")}
@@ -561,6 +561,30 @@ def _get_abc_period(
         stock_count_dates=stock_count_dates(rows),
         planning_cycle_date=cycle if lp_visible else None,
     )
+
+
+# Del Monte categories that stopped existing (audit BE-3, 2026-10-20). The January 2025 regrouping replaced
+# ~80 sub-category paths with five categories and there is no mapping between them (DEC-03), so an old path's
+# last real sell-out month is also its last month as a series. view=last_known used to carry its tier forward
+# to the anchor, and the page (finding no sales for it in the FSN window) labelled 79-80 of them "Non-moving":
+# they are not non-moving, they no longer exist. A series gets no row after its own last real observation,
+# as it gets none before its first.
+#
+# "Retired" = carried (its last real month is before the anchor) AND of the old vocabulary, meaning it first
+# sold before the earliest first month of the categories still selling at the principal's latest real month
+# (2025-03 today, read from the data, not typed). DAIRY's real data also stops early (2025-06) but it IS the
+# new vocabulary, so it is a collection gap, not a retirement, and stays. Unilever is never touched: a SKU that
+# stops selling while stock is on hand is genuinely non-moving.
+_DM_SERIES_CTES = """dm_span AS (
+            SELECT product_key, MIN(_period) AS first_real, MAX(_period) AS last_real
+            FROM sellout_fact_real GROUP BY product_key
+        ), dm_vocab AS (
+            SELECT MIN(first_real) AS starts FROM dm_span
+            WHERE last_real = (SELECT MAX(last_real) FROM dm_span)
+        )"""
+_DM_RETIRED_PRED = """COALESCE(ac.principal = 'delmonte'
+                AND dm_span.last_real < :dm_anchor
+                AND dm_span.first_real < (SELECT starts FROM dm_vocab), FALSE)"""
 
 
 def _get_abc_last_known(
@@ -628,7 +652,8 @@ def _get_abc_last_known(
             FROM {abc_source}
             WHERE {abc_method_sql()} AND {abc_period_pred("<=")}{ac_scope_sql}
             ORDER BY product_key, classification_period DESC
-        )
+        ),
+        {_DM_SERIES_CTES}
         SELECT
             ac.product_key,
             COALESCE(pd.sku_code, pd.category_path, '') AS sku_id,
@@ -643,15 +668,17 @@ def _get_abc_last_known(
             inv.product_key IS NOT NULL AS has_stock_row,
             rop.rop_i AS reorder_point,
             rop.ss_i AS safety_stock,
-            stock_count.count_date AS stock_count_date{_PLAN_POOL_COLUMNS}
+            stock_count.count_date AS stock_count_date,
+            {_DM_RETIRED_PRED} AS retired_series{_PLAN_POOL_COLUMNS}
         FROM latest ac
         JOIN product_dimension pd ON pd.product_key = ac.product_key
+        LEFT JOIN dm_span ON dm_span.product_key = ac.product_key
         LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = ac.product_key
         LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = ac.principal
         LEFT JOIN (
             SELECT product_key, rop_i, ss_i
             FROM {lp_src}
-            WHERE status = 'pending' AND planning_cycle_date = :current_cycle
+            WHERE {PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle
         ) rop ON rop.product_key = ac.product_key
         {_plan_pool_joins(fc_src)}
         ORDER BY ac.tier,
@@ -667,8 +694,13 @@ def _get_abc_last_known(
         **source_params,
         **lp_params,
         **fc_params,
+        "dm_anchor": periods.get("delmonte") or "",
     }
-    rows = db.execute(text(query), params).mappings().all()
+    all_rows = db.execute(text(query), params).mappings().all()
+    # A retired Del Monte category (see _DM_RETIRED_PRED) is not carried past its last real month, so it is
+    # neither listed nor read as "Non-moving" on the strength of a tier it earned before it stopped existing.
+    rows = [r for r in all_rows if not r["retired_series"]]
+    retired_count = len(all_rows) - len(rows)
 
     items = [_item(r, r["tier_period"], lp_visible=lp_visible, has_cycle=cycle is not None) for r in rows]
 
@@ -676,6 +708,7 @@ def _get_abc_last_known(
     return ABCResponse(
         items=items,
         count=len(items),
+        retired_series_count=retired_count,
         classification_period=period,
         tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,

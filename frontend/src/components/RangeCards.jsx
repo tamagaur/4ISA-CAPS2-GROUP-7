@@ -21,7 +21,7 @@ import { BAR_FADE_FLOOR, Fade, endDot } from './ui/ChartParts';
 import { getForecastAccuracy } from '../api/dashboard';
 import { CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarSignoffText } from '../utils/calendarAdjustment';
 import { CHART_COLORS, COLORS } from '../theme/colors';
-import { formatCompactPesos } from '../utils/formatters';
+import { formatCompactPesos, isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import './AtRiskProductsModal.css';
@@ -29,7 +29,8 @@ import './PendingCards.css';
 import './RangeCards.css';
 
 const pct = (share) => (share == null ? '—' : `${(share * 100).toFixed(1)}%`);
-const signedPesos = (value) => `${value >= 0 ? '+' : '−'}${formatCompactPesos(Math.abs(value))}`;
+// A missing change (null) prints the not-collected marker, never ₱0 (audit FE-4).
+const signedPesos = (value) => (isMissing(value) ? NOT_COLLECTED : `${value >= 0 ? '+' : '−'}${formatCompactPesos(Math.abs(value))}`);
 
 // A product list behind a card's figure, in the at-risk list's frame.
 // columns: [{ key, label, sub, render(row) }]; the first column is the product.
@@ -871,21 +872,25 @@ export const DEMO_PRODUCT_SALES_LABEL =
   'Demo: Del Monte product sales estimated from total sales × stock share — SSM has no product-level sales';
 const PRODUCT_SALES_PREVIEW = 8;
 
-// One row per product: its estimated pesos summed over the range's months.
+// One row per product: its estimated pesos summed over the range's months. A month with no estimate (pesos
+// null) adds nothing and is not counted; a product with no estimate in ANY month has pesos null (rendered as
+// NOT_COLLECTED), never 0 — a summed 0 means estimates that added up to zero. Those products sort last.
 export const productSalesTotals = (rows = []) => {
   const byProduct = new Map();
   for (const r of rows) {
     const key = r.product_key ?? r.sku_id;
     const entry = byProduct.get(key) || {
-      product_key: r.product_key, sku_id: r.sku_id, product_name: r.product_name, pesos: 0, months: new Set(),
+      product_key: r.product_key, sku_id: r.sku_id, product_name: r.product_name, pesos: null, months: new Set(),
     };
-    if (r.pesos != null) entry.pesos += r.pesos;
-    entry.months.add(r.period);
+    if (r.pesos != null) {
+      entry.pesos = (entry.pesos ?? 0) + r.pesos;
+      entry.months.add(r.period);
+    }
     byProduct.set(key, entry);
   }
   return [...byProduct.values()]
     .map((e) => ({ ...e, months: e.months.size }))
-    .sort((a, b) => b.pesos - a.pesos);
+    .sort((a, b) => (a.pesos == null) - (b.pesos == null) || (b.pesos ?? 0) - (a.pesos ?? 0));
 };
 
 export const PRODUCT_SALES_COLUMNS = [

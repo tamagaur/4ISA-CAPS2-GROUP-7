@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, pareto_check
 from analytics.params import DEAD_SKU_MONTHS, REVIEW_OVER_RUN_MONTHS
-from backend import marts
+from backend import batch, marts
 from backend.data_mode import PREVIEW, get_data_mode, preview_block
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
@@ -216,6 +216,11 @@ def get_range_accuracy(
         summary["blocked_reason"] = ("No product-level forecasts exist for Del Monte: its sales data is "
                                      "category grain, so no per-product forecast is made to check.")
         return {**summary, "level": level, "rows": []}
+    if level == "summary":  # nothing per product or category is asked for: the database sums
+        agg = marts.accuracy_aggregates_from_query(batch.rows(db, *marts.accuracy_summary_query(start, end, run_id)))
+        summary = marts.accuracy_summary_from(agg, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
+        summary["compare_run"] = marts.accuracy_comparison(db, summary)
+        return {**summary, "level": level, "rows": [], "coverage": ["unilever"]}
     rows = marts.accuracy_rows(db, start, end, run_id)
     summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
     # The unadjusted twin of a calendar-adjusted run (GET /dashboard's forecast_accuracy

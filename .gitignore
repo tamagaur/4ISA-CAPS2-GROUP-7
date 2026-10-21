@@ -140,3 +140,15 @@ reports/diagnostics/fit_diagnosis_*/classified.csv
 reports/baseline_forecast_per_sku.csv
 # Retired order rows saved by run_lp --retire-stale-pending: per-product order quantities (hard rule 9)
 reports/lp_runs/*.csv
+
+# reports/ (hard rule 9, 2026-10-21): row-level dumps and generated output stay local. A new file under
+# reports/ is ignored unless it is a top-level .md document or sits in one of the already-tracked
+# analysis folders below (tracked files stay tracked either way). scripts/restore_abc_purge.py still
+# reads reports/abc_purge_backup_2026-08.json from the working copy: the file is untracked, not deleted.
+reports/*
+!reports/*.md
+!reports/diagnostics/
+!reports/evidence/
+!reports/experiment_artifacts/
+!reports/experiments/
+!reports/simulation/

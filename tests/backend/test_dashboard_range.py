@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from backend import auth_utils
 from backend.deps import get_current_user, get_db
 from backend.main import app
+from tests.backend.accuracy_fake import accuracy_summary_rows
 
 
 @pytest.fixture(autouse=True)
@@ -67,9 +68,11 @@ class FakeSession:
     def execute(self, stmt, params=None):
         sql, params = str(stmt), dict(params or {})
         self.calls.append((sql, params))
+        summed = "WITH scored AS" in sql  # marts.accuracy_summary_query: the database sums the scored rows
         for fragment, rows in self.routes:
             if fragment in sql:
-                return FakeResult(rows(params) if callable(rows) else rows)
+                rows = rows(params) if callable(rows) else rows
+                return FakeResult(accuracy_summary_rows(rows) if summed else rows)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
     def close(self):

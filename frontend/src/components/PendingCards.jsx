@@ -16,10 +16,11 @@ import React from 'react';
 import { AlertTriangle, Eye } from 'lucide-react';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
+import { formatExactPesos } from '../utils/formatters';
 import './PendingCards.css';
 
 const WEEKS_PER_MONTH = 4.3;
-const pesos = (value) => `₱${Math.round(value).toLocaleString('en-PH')}`;
+const pesos = formatExactPesos;
 
 // How far off the forecast is, in the units a buyer orders in and in money,
 // with its direction — never as a bare percentage (no "WAPE" on screen).

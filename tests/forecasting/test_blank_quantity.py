@@ -177,3 +177,21 @@ def test_a_missing_month_in_the_window_is_not_no_sale():
     assert rbf._missing_in_last_months([pd.Timestamp("2026-01-01")], "2026-02")
     assert not rbf._missing_in_last_months([pd.Timestamp("2025-06-01")], "2026-02")   # outside the 6-month window
     assert not rbf._missing_in_last_months([], "2026-02")
+
+
+def test_series_runs_to_end_month_with_trailing_zeros():
+    """Freeze package 1c: a product that stopped selling is zero through the latest demand month."""
+    rows = _rows([10, 20, 30], absent=())
+    s = rbf.build_series(rows, end_month="2025-06")
+    assert s.index[-1] == pd.Timestamp("2025-06-01")
+    assert s.loc["2025-04-01":].tolist() == [0.0, 0.0, 0.0]
+    assert rbf.build_series(rows).index[-1] == pd.Timestamp("2025-03-01")       # default unchanged
+    assert rbf.build_series(rows, end_month="2025-02").index[-1] == pd.Timestamp("2025-03-01")   # never trims
+
+
+def test_router_floors_a_negative_value_at_zero():
+    from analytics.forecasting.router import route
+    s = pd.Series([10.0, 10.0, 10.0, 10.0, 10.0, 10.0, -50.0, -40.0, -30.0],
+                  index=pd.date_range("2024-01-01", periods=9, freq="MS"))
+    r = route(s, pd.Timestamp("2024-10-01"), allow_placeholder=True)
+    assert r["value"] == 0.0 and r["ma3_value"] < 0

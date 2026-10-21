@@ -14,8 +14,8 @@ import { formatCompactCount, policyRatio, shareOf, stockChangeTone, urgencyParts
 import {
   SalesVsStockWidget, ABCDonutWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
-  formatCompactPesos,
 } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import {
   getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, peekDashboardData,
 } from '../api/dashboard';
@@ -167,6 +167,11 @@ const trendExtras = (trend, color, noun = '') => {
     extras.deltaLine = `${Math.abs(trend.delta_pct).toFixed(1)}% vs ${periodLabel(trend.prev_period)}${noun ? ` ${noun}` : ''}${gap}`;
     extras.trendDirection = trend.delta_pct > 0 ? 'up' : trend.delta_pct < 0 ? 'down' : undefined;
     extras.deltaTone = trend.delta_pct > 0 ? 'positive' : trend.delta_pct < 0 ? 'negative' : 'neutral';
+  } else if (trend.delta_blocked_reason) {
+    // The nearest earlier count is more than a year back (kpi_trend's
+    // MAX_COMPARE_GAP_MONTHS): no percentage, and the backend says why.
+    extras.deltaLine = trend.delta_blocked_reason;
+    extras.deltaTone = 'neutral';
   }
   return extras;
 };
@@ -1064,7 +1069,8 @@ const Dashboard = () => {
   // The range cards (RangeCards.jsx). Class A changes arrive on their own
   // request; only the answer for the range on screen is shown.
   const rangeChanges = classChanges?.key === loaded.key ? classChanges.data : null;
-  const openForecast = (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`);
+  // Every product link opens SKU Forecast, which needs forecast.view: without it there is no link.
+  const openForecast = hasPermission(P.FORECAST_VIEW) ? (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`) : undefined;
 
   // ── The shared comparison on the inventory card ──────────────────────
   // Stock compares the COUNT at each range's end (a snapshot); with "Same
@@ -1651,7 +1657,7 @@ const Dashboard = () => {
                 analog={forecastBeyondRange ? null : forecastAnalog}
                 calendar={forecastBeyondRange ? null : calendarAdj}
               />
-              {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} />}
+              {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} canOpenForecast={hasPermission(P.FORECAST_VIEW)} />}
             </Slot>
             {data.forecast_accuracy && (
               <Slot kind="Predictive" question={<>How <span className="title-accent">close</span> were past forecasts?</>} hint={STORY.accuracy} basis={BASIS.accuracy}>
@@ -1763,7 +1769,7 @@ const Dashboard = () => {
         tier={listedClass}
         args={{ period, startPeriod, principal }}
         onOpenProduct={openForecast}
-        onOpenAbcPage={() => navigate(`/abc?class=${listedClass}&basis=range`)}
+        onOpenAbcPage={hasPermission(P.ABC_VIEW) ? () => navigate(`/abc?class=${listedClass}&basis=range`) : undefined}
       />
       <AtRiskProductsModal
         isOpen={showAtRisk && canListAtRisk}

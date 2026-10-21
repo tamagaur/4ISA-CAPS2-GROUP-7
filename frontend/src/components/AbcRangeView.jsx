@@ -9,13 +9,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import SectionLede from './ui/SectionLede';
 import { useNavigate } from 'react-router-dom';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import { AlertTriangle, CheckCircle2, Info, Search, X } from 'lucide-react';
 import KPICard from './KPICard';
 import ProductName from './ProductName';
 import Pagination from './Pagination';
 import ParetoCurve from './ParetoCurve';
 import { ClassBadge } from './ui/StatusBadge';
-import { formatCompactPesos } from './Charts';
+import { formatCompactPesos } from '../utils/formatters';
 import { yoyText } from './ClassProductsModal';
 import { getRangePareto, getRangeYoy } from '../api/dashboard';
 import { labelForPrincipal } from '../principals';
@@ -31,6 +33,7 @@ const pct = (share, digits = 1) => (share == null ? '—' : `${(share * 100).toF
 
 const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, onShowMonth }) => {
   const navigate = useNavigate();
+  const canOpenForecast = usePermissions().hasPermission(P.FORECAST_VIEW);
   const key = JSON.stringify([startPeriod, endPeriod, principal]);
   const [state, setState] = useState({ key: null, pareto: null, yoy: null, error: null });
   const [classFilter, setClassFilter] = useState(initialClass || 'ALL');
@@ -226,7 +229,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                   <ProductName
                     name={r.product_name || r.category_path}
                     code={r.isCategory ? null : r.sku_id}
-                    onOpen={!r.isCategory && r.sku_id ? () => navigate(`/forecast?sku=${encodeURIComponent(r.sku_id)}`) : undefined}
+                    onOpen={canOpenForecast && !r.isCategory && r.sku_id ? () => navigate(`/forecast?sku=${encodeURIComponent(r.sku_id)}`) : undefined}
                     openLabel="Open its forecast"
                   />
                   {multi && <span className="abc-th-sub">{labelForPrincipal(r.principal)}</span>}

@@ -2,6 +2,8 @@ import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from '
 import SectionLede from './ui/SectionLede';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import {
   ComposedChart, BarChart, Bar, Cell, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -11,6 +13,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Info } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
+import { formatCompactPesos, formatExactPesos, formatCompactQty } from '../utils/formatters';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
@@ -179,24 +182,6 @@ export const CoverTrendWidget = ({ coverSeries = [], policyTarget = 3 }) => {
     </div>
   );
 };
-
-// ₱500k / ₱1.2M / ₱0 — compact currency, unsigned (callers prepend a sign
-// where one is needed). Shared by the axis ticks and the bar-end labels so
-// the two can never disagree on formatting.
-export function formatCompactPesos(value) {
-  const abs = Math.abs(value);
-  // A five-year total passes ₱1 billion (2026-10-16): ₱1.51B, not ₱1511.7M.
-  if (abs >= 1_000_000_000) {
-    const billions = abs / 1_000_000_000;
-    return `₱${Number.isInteger(billions) ? billions : Math.round(billions * 100) / 100}B`;
-  }
-  if (abs >= 1_000_000) {
-    const millions = abs / 1_000_000;
-    return `₱${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
-  }
-  if (abs >= 1_000) return `₱${Math.round(abs / 1000)}k`;
-  return `₱${Math.round(abs)}`;
-}
 
 const AllocationTooltip = ({ active, payload }) => {
   if (!active || !payload || !payload.length) return null;
@@ -372,7 +357,6 @@ const useElementWidth = (ref) => {
 // The tooltip gives the exact peso amount (the axis and end labels stay
 // compact): ₱19,217,832 — whole pesos, the source rows carry centavos the
 // reader never acts on.
-const formatExactPesos = (value) => `₱${Math.round(value).toLocaleString('en-PH')}`;
 
 // Which metrics the chart shows. The table always holds both.
 const METRIC_VIEWS = [['both', 'Both'], ['sales', 'Sales'], ['inventory', 'Inventory']];
@@ -1324,11 +1308,14 @@ const abcSegments = (data) => {
 // Where a class's list opens: on the dashboard, from the range's own
 // ranking (ClassProductsModal), when the ring ranks the selected range, so
 // its count is this count; else the ABC page, which ranks one month too.
-const ClassListLink = ({ facts, onOpenClass, className, label = undefined, children }) => (
-  facts.rangeBased && onOpenClass
-    ? <button type="button" className={className} onClick={() => onOpenClass(facts.tier)} aria-label={label}>{children}</button>
-    : <Link to={`/abc?class=${facts.tier}`} className={className} aria-label={label}>{children}</Link>
-);
+// No link to the ABC page for an account that can't open it (audit FE-7).
+const ClassListLink = ({ facts, onOpenClass, className, label = undefined, children }) => {
+  const canOpenAbc = usePermissions().hasPermission(P.ABC_VIEW);
+  if (facts.rangeBased && onOpenClass) {
+    return <button type="button" className={className} onClick={() => onOpenClass(facts.tier)} aria-label={label}>{children}</button>;
+  }
+  return canOpenAbc ? <Link to={`/abc?class=${facts.tier}`} className={className} aria-label={label}>{children}</Link> : null;
+};
 
 // The finding, first (2026-10-19): what Class A is worth against its size,
 // with the period it was ranked over, from the same abc_mix rows the ring
@@ -2044,18 +2031,6 @@ const PortfolioForecastTooltip = ({ active, payload, label, calendar = null }) =
       )}
     </Callouts>
   );
-};
-
-// 236k / 1.2M / 940 — the same compaction the pieces axis uses.
-// millionDigits: the axis passes 2 so a 1,350k tick reads 1.35M, not a
-// rounded 1.4M that sits beside a gridline it doesn't match; trailing
-// zeros are dropped (1.80M -> 1.8M).
-const formatCompactQty = (value, millionDigits = 1) => {
-  const n = Math.abs(value);
-  // 999,600 rounds to "1000k" in thousands, so it is shown as 1M instead.
-  if (Math.round(n / 1_000) >= 1_000) return `${parseFloat((value / 1_000_000).toFixed(millionDigits))}M`;
-  if (n >= 1_000) return `${Math.round(value / 1_000)}k`;
-  return `${Math.round(value)}`;
 };
 
 // Past / Present / Future on the forecast chart (Audrey, 2026-10-03). The

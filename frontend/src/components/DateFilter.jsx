@@ -99,11 +99,11 @@ const noop = () => {};
 // trend minimum.
 const DateFilter = ({
   onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false, realOnly = false,
-  showToday = true,
+  showToday = true, ceiling = null,
 }) => {
   const outlet = useOutletContext() || {};
-  const ceiling = outlet.dataLatest || LATEST_DATA_PERIOD;
-  const { latestYear, latestYearMonths, monthsForYear, yearsFrom } = pickerBounds(ceiling);
+  const dataCeiling = outlet.dataLatest || LATEST_DATA_PERIOD;
+  const { latestYear, latestYearMonths, monthsForYear, yearsFrom } = pickerBounds(dataCeiling);
   const years = yearsFrom(
     !realOnly && isPreviewMode(outlet.dataMode) ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR
   );
@@ -112,7 +112,7 @@ const DateFilter = ({
 
   const sm = (isLocal ? localValue.startMonth : outlet.pendingStartMonth) ?? 'Jan';
   const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? latestYear;
-  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? ceiling.month;
+  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? dataCeiling.month;
   const ey = (isLocal ? localValue.endYear : outlet.pendingEndYear) ?? latestYear;
 
   const startMonthOptions = monthsForYear(sy);
@@ -180,10 +180,16 @@ const DateFilter = ({
     onLocalChange({ ...localValue, startMonth: month, endMonth: month });
   };
 
+  // Single-month mode only: `ceiling` ({month, year}, a page's own latest month, e.g. a principal's
+  // latest ABC run) lowers the pickable end below the data's own latest month (dataCeiling).
+  const cap = ceiling && periodValue(ceiling.month, ceiling.year) < periodValue(dataCeiling.month, dataCeiling.year)
+    ? ceiling : dataCeiling;
+  const singleYears = years.filter((y) => Number(y) <= Number(cap.year));
+  const singleMonthsFor = (year) => (year === cap.year ? MONTHS.slice(0, MONTHS.indexOf(cap.month) + 1) : MONTHS);
+
   const handleSingleYearChange = (year) => {
-    const month = (year === latestYear && !latestYearMonths.includes(em))
-      ? latestYearMonths[latestYearMonths.length - 1]
-      : em;
+    const allowed = singleMonthsFor(year);
+    const month = allowed.includes(em) ? em : allowed[allowed.length - 1];
     onLocalChange({ ...localValue, startMonth: month, startYear: year, endMonth: month, endYear: year });
   };
 
@@ -202,7 +208,7 @@ const DateFilter = ({
               value={em}
               onChange={(e) => handleSingleMonthChange(e.target.value)}
             >
-              {endMonthOptions.map((m) => (
+              {singleMonthsFor(ey).map((m) => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
@@ -216,7 +222,7 @@ const DateFilter = ({
               value={ey}
               onChange={(e) => handleSingleYearChange(e.target.value)}
             >
-              {years.map((y) => (
+              {singleYears.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
