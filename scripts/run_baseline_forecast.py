@@ -1019,7 +1019,10 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) ->
             "holdout_mape": mape(a, p), "holdout_mase": mase(a, p, naive_scale(train.dropna().to_numpy(dtype=float))),
             "holdout_wape": wape(a, p), "holdout_rmse": rmse(a, p),
             "holdout_ma3_wape": wape(a, scored["ma3"].to_numpy()),
+            # additive, read only by scripts/accuracy_as_served.py: the same MASE denominator for the MA3 benchmark
+            "holdout_ma3_mase": mase(a, scored["ma3"].to_numpy(), naive_scale(train.dropna().to_numpy(dtype=float))),
             "holdout_backups": int(scored["backup_fired"].sum()), "holdout_months": int(len(scored)),
+            "holdout_scored": scored[["actual", "value", "ma3"]].to_numpy(dtype=float),
         }
     return out
 
