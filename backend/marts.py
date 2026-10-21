@@ -865,14 +865,16 @@ DEFAULT_BACKTEST_LABEL = "as-served backtest 2023-10..2026-02, Tier A the month 
 def accuracy_runs(db: Session) -> list[dict]:
     rows = db.execute(text("""
         SELECT r.run_id, r.kind, r.label, r.cohort, r.window_start, r.window_end, r.created_at,
-               r.source_generated_at, COUNT(v.*) AS rows
+               r.source_generated_at, r.notes, COUNT(v.*) AS rows
         FROM mart.forecast_run r LEFT JOIN mart.forecast_run_value v ON v.run_id = r.run_id
         GROUP BY r.run_id ORDER BY r.run_id
     """)).mappings().all()
     return [
         {"run_id": int(r["run_id"]), "forecast_source": r["kind"], "label": r["label"], "cohort": r["cohort"],
          "window_start": r["window_start"], "window_end": r["window_end"], "rows": int(r["rows"]),
-         "default": r["label"] == DEFAULT_BACKTEST_LABEL}
+         "default": r["label"] == DEFAULT_BACKTEST_LABEL,
+         # a backtest of a tier the live runner does not forecast (migration 0064): never deployed accuracy
+         "counterfactual": bool((r.get("notes") or {}).get("counterfactual"))}
         for r in rows
     ]
 
@@ -1197,6 +1199,7 @@ def accuracy_by_category(rows: list[dict]) -> list[dict]:
 # data: nothing in forecasting, safety stock, targets or the LP reads it.
 # ---------------------------------------------------------------------------
 
+SERVED_TIER = "A"  # the live runner forecasts Tier A only; B and C are counterfactual backtests (migration 0064)
 DECOMPOSITION_SCORING_RULE = (
     "Scored as the live forecast is served, the same rule as scripts/accuracy_as_served.py and "
     "docs/ACCURACY_AS_SERVED.md: calendar-adjusted forecast with the dead-SKU rule applied; a net-negative month "
@@ -1297,7 +1300,10 @@ def error_decomposition(db: Session, start: str, end: str, top: int = 10, tier: 
             })
     return {
         "period_start": start, "period_end": end, "products_tier": tier,
-        "totals": by_tier.get("all"), "by_tier": [{"tier": t, **by_tier[t]} for t in ("A", "B", "C") if t in by_tier],
+        "totals": by_tier.get("all"), "by_tier": [{"tier": t, **by_tier[t], "counterfactual": t != SERVED_TIER} for t in ("A", "B", "C") if t in by_tier],
+        "served_tier": SERVED_TIER,
+        "counterfactual_note": ("Only Tier A is forecast by the live runner. Tier B and C rows score a backtest that was "
+                                "never served (forecast_run labelled COUNTERFACTUAL), and totals / 'all' include them."),
         "monthly": monthly,
         "stockout_exposure_concentration": {
             "products_with_exposure": len(products), "products_for_50_percent": n50, "products_for_80_percent": n80,

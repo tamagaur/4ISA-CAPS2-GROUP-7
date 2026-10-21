@@ -26,10 +26,16 @@ from scripts.accuracy_as_served import AS_SERVED_RUNS
 
 REPO = Path(__file__).resolve().parents[2]
 MIGRATION = REPO / "analytics" / "db" / "migrations" / "0063_error_decomposition.sql"
+# the function as last defined (0064 replaces 0063's body)
+LATEST = REPO / "analytics" / "db" / "migrations" / "0064_error_decomposition_counterfactual_and_orphans.sql"
 
 
 def _sql() -> str:
     return "\n".join(l for l in MIGRATION.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("--"))
+
+
+def _latest() -> str:
+    return "\n".join(l for l in LATEST.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("--"))
 
 
 def test_the_migration_writes_only_its_own_tables():
@@ -63,7 +69,7 @@ def test_defaults_are_the_values_the_code_passes_and_the_signature_matches():
 
 
 def test_the_forecast_source_pattern_matches_every_as_served_calendar_label_and_no_other():
-    pattern = re.search(r"r\.label ~ '([^']+)'", _sql()).group(1)
+    pattern = re.search(r"r\.label ~ '([^']+)'", _latest()).group(1)
     for name, (label, _cohort) in AS_SERVED_RUNS.items():
         assert bool(re.search(pattern, label)) == name.startswith("as_served_calendar"), name
     # the three tiers each have one such run
@@ -72,7 +78,7 @@ def test_the_forecast_source_pattern_matches_every_as_served_calendar_label_and_
 
 
 def test_safety_stock_prefers_the_stored_plan_and_records_which_method_was_used():
-    sql = _sql()
+    sql = _latest()
     assert "COALESCE(s.ss_stored, s.ss_rebuilt) AS ss" in sql
     assert "WHEN ss_stored IS NOT NULL THEN 'stored_lp' WHEN ss_rebuilt IS NOT NULL THEN 'rebuilt' ELSE 'none'" in sql
     assert "lp.ss_i AS ss_stored" in sql
@@ -292,3 +298,31 @@ def test_live_stored_tables_add_up():
     finally:
         conn.rollback()
         conn.close()
+
+
+# ---- 0064: counterfactual runs and orphan safety stock ---------------------------------
+
+def test_a_stored_safety_stock_must_belong_to_an_actual_lp_run():
+    sql = _latest()
+    assert "FROM lp_recommendation l JOIN lp_run lr ON lr.run_key = l.lp_run_key" in sql
+    assert "LEFT JOIN lp_recommendation lp" not in sql
+
+
+def test_tier_b_and_c_runs_are_labelled_counterfactual_in_the_script_and_the_migration():
+    for name in ("as_served_calendar_B", "as_served_calendar_C"):
+        label, cohort = AS_SERVED_RUNS[name]
+        assert label.startswith("COUNTERFACTUAL (never served") and cohort.startswith("COUNTERFACTUAL, NOT SERVED")
+    assert not AS_SERVED_RUNS["as_served_calendar"][0].startswith("COUNTERFACTUAL")
+    sql = _latest()
+    assert "'counterfactual', true" in sql and "Tier [BC]" in sql and "Tier A" not in sql.split("WHERE kind")[1].split(";")[0]
+
+
+def test_the_accuracy_card_flags_a_counterfactual_run_and_the_decomposition_marks_tiers_b_and_c():
+    from backend.routers.dashboard_range import _flag_counterfactual
+    assert _flag_counterfactual({"run_labels": ["COUNTERFACTUAL (never served: x) - as-served backtest"]})["counterfactual"] is True
+    served = _flag_counterfactual({"run_labels": [marts.DEFAULT_BACKTEST_LABEL]})
+    assert served["counterfactual"] is False and served["counterfactual_warning"] is None
+    tiers = [{"tier": t, "first_period": "2025-01", "last_period": "2026-02", **_sums()} for t in ("A", "B", "all")]
+    body = _get(_Session(tiers, [], []), "/dashboard/error-decomposition?principal=unilever")
+    assert {t["tier"]: t["counterfactual"] for t in body["by_tier"]} == {"A": False, "B": True}
+    assert body["served_tier"] == "A" and "never served" in body["counterfactual_note"]

@@ -185,6 +185,16 @@ def get_class_changes(
             "cutoffs": {"A": TIER_A_CUTOFF, "B": TIER_B_CUTOFF}, "principals": out}
 
 
+COUNTERFACTUAL_WARNING = ("These forecasts are COUNTERFACTUAL: a backtest of a tier the live runner does not forecast "
+                          "(Tier A only). They are not served or deployed accuracy.")
+
+
+def _flag_counterfactual(body: dict) -> dict:
+    """A chosen run whose label says COUNTERFACTUAL (mart.forecast_run, migration 0064) is never read as served accuracy."""
+    flagged = any(str(l).startswith("COUNTERFACTUAL") for l in body.get("run_labels") or [])
+    return {**body, "counterfactual": flagged, "counterfactual_warning": COUNTERFACTUAL_WARNING if flagged else None}
+
+
 @router.get("/accuracy")
 def get_range_accuracy(
     period: str | None = PeriodQuery,
@@ -215,8 +225,8 @@ def get_range_accuracy(
         return {**summary, "level": level, "rows": []}
     if level == "summary":  # nothing per product or category is asked for: the database sums
         agg = marts.accuracy_aggregates_from_query(batch.rows(db, *marts.accuracy_summary_query(start, end, run_id)))
-        return {**marts.accuracy_summary_from(agg, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000),
-                "level": level, "rows": [], "coverage": ["unilever"]}
+        return _flag_counterfactual({**marts.accuracy_summary_from(agg, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000),
+                                     "level": level, "rows": [], "coverage": ["unilever"]})
     rows = marts.accuracy_rows(db, start, end, run_id)
     summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
     detail: list[dict] = []
@@ -228,7 +238,7 @@ def get_range_accuracy(
                 "run_length", "price_per_piece", "miss_pesos", "abs_miss_pesos", "surplus_pesos",
                 "shortage_pesos", "opening_pieces", "closing_pieces", "possibly_stock_limited", "method", "bin")
         detail = [{k: (float(r[k]) if hasattr(r.get(k), "is_finite") else r.get(k)) for k in keep} for r in rows]
-    return {**summary, "level": level, "rows": detail, "coverage": ["unilever"]}
+    return _flag_counterfactual({**summary, "level": level, "rows": detail, "coverage": ["unilever"]})
 
 
 @router.get("/error-decomposition")
