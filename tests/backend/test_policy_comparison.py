@@ -115,7 +115,7 @@ def test_per_sku_rule_vs_lp_and_rollup():
     assert pf["lp_safety_stock_units"] == pytest.approx(50.0)
     assert pf["rule_stock_units"] == pytest.approx(rule_total, rel=1e-4)
     assert pf["target_vs_rule_pct"] == pytest.approx(round((rule_total - 180.0) / rule_total * 100, 1))
-    assert pf["lp_vs_rule_pct"] == pytest.approx(round((rule_total - 50.0) / rule_total * 100, 1))
+    assert "lp_vs_rule_pct" not in pf
     # A1's target is above its 3 weeks, so only B2 holds less.
     assert pf["skus_lp_holds_less"] == 1
 
@@ -147,7 +147,7 @@ def test_blocked_when_nothing_compares():
     with make_client(FakeSession([])) as c:
         body = c.get("/policy-comparison", headers={"Authorization": f"Bearer {user_token()}"}).json()
     assert body["items"] == []
-    assert body["portfolio"]["lp_vs_rule_pct"] is None
+    assert "lp_vs_rule_pct" not in body["portfolio"]
     assert body["portfolio"]["target_vs_rule_pct"] is None
     assert body["blocked_reason"]
 

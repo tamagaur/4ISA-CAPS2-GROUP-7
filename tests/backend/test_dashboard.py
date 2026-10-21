@@ -1262,8 +1262,7 @@ def test_policy_comparison_sums_lp_ss_against_three_week_rule():
     assert pc["sku_count"] == 2
     assert pc["lp_safety_stock_units"] == pytest.approx(50.0)
     assert pc["rule_safety_stock_units"] == pytest.approx(3 * 150.0 / AVG_WEEKS_PER_MONTH, rel=1e-4)
-    rule = 3 * 150.0 / AVG_WEEKS_PER_MONTH
-    assert pc["lp_vs_rule_pct"] == pytest.approx(round((rule - 50.0) / rule * 100, 1))
+    assert "lp_vs_rule_pct" not in pc  # safety stock vs the whole rule was not like-for-like
     assert pc["rule_weeks"] == 3
     assert pc["blocked_reason"] is None
 
@@ -1283,7 +1282,7 @@ def test_policy_comparison_headline_is_target_stock_vs_rule():
     assert pc["rule_stock_units"] == pytest.approx(rule, rel=1e-4)
     # Targets above the rule read as MORE (negative), while ss alone reads less.
     assert pc["target_vs_rule_pct"] == pytest.approx(round((rule - 150.0) / rule * 100, 1))
-    assert pc["target_vs_rule_pct"] < 0 < pc["lp_vs_rule_pct"]
+    assert pc["target_vs_rule_pct"] < 0 and "lp_vs_rule_pct" not in pc
     assert pc["lp_target_weeks"] == pytest.approx(round(150.0 / (150.0 / AVG_WEEKS_PER_MONTH), 2))
     assert pc["skus_above_rule"] == 1  # 120 > 3 weeks of 100; 30 < 3 weeks of 50
     assert pc["window_business_days"] == 8.0
@@ -1304,7 +1303,7 @@ def test_policy_comparison_blocked_when_no_comparable_rows():
     pc = resp.json()["policy_comparison"]
     assert pc["lp_safety_stock_units"] is None
     assert pc["rule_safety_stock_units"] is None
-    assert pc["lp_vs_rule_pct"] is None
+    assert "lp_vs_rule_pct" not in pc
     assert pc["target_vs_rule_pct"] is None
     assert pc["lp_target_stock_units"] is None
     assert pc["blocked_reason"]

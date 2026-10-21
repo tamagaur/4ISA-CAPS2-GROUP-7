@@ -345,14 +345,15 @@ zero):
   policy_comparison
     — {cycle_date, sku_count, lp_target_stock_units, lp_safety_stock_units,
     rule_stock_units, target_vs_rule_pct, lp_target_weeks, skus_above_rule,
-    lp_vs_rule_pct, rule_weeks, window_business_days,
+    rule_weeks, window_business_days,
     inputs_are_placeholders, blocked_reason} (rule_safety_stock_units is
     rule_stock_units under its pre-2026-09-30 name). target_vs_rule_pct is
     the headline: how much less stock the LP's per-SKU targets (rop_i, the
     order-up-to level T_i since the 2026-09-30 run) hold than the rule, as a
-    percent of the rule (negative = more). lp_vs_rule_pct is safety stock
-    alone against the rule, kept as a detail — SSM's 3 weeks is a target for
-    all stock, not a buffer, so it is not the like-for-like figure.
+    percent of the rule (negative = more). There is no safety-stock-vs-rule
+    percent (lp_vs_rule_pct, removed): SSM's 3 weeks is a target for all stock,
+    not a buffer, so it was not like-for-like and read "less" when the targets
+    hold more. lp_safety_stock_units stays as a plain sum.
     The per-SKU rows behind these sums are GET /policy-comparison
     (policy_comparison.py) — keep the two queries in step. Sums, over the latest pending planning
     cycle, the LP's rop_i and ss_i against what SSM's own stock policy would hold
@@ -2251,8 +2252,6 @@ def get_dashboard(
                 1 for r in policy_rows
                 if float(r["rop_i"]) > POLICY_WEEKS * float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH
             ),
-            # Safety stock alone against the rule — no longer the headline.
-            "lp_vs_rule_pct": round((rule_units - lp_units) / rule_units * 100, 1) if rule_units > 0 else None,
             "rule_weeks": POLICY_WEEKS,
             # The window the safety stock covers, from the same placeholder
             # dict the run takes its defaults from (lp_model_info).
@@ -2271,7 +2270,6 @@ def get_dashboard(
             "target_vs_rule_pct": None,
             "lp_target_weeks": None,
             "skus_above_rule": None,
-            "lp_vs_rule_pct": None,
             "rule_weeks": POLICY_WEEKS,
             "window_business_days": PLACEHOLDERS["review_days"] + PLACEHOLDERS["lead_days"],
             "inputs_are_placeholders": True,

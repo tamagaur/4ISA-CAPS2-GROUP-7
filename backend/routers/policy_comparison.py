@@ -223,8 +223,6 @@ def get_policy_comparison(
             "rule_stock_units": round(rule_total, 2) if items else None,
             "rule_safety_stock_units": round(rule_total, 2) if items else None,
             "target_vs_rule_pct": round((rule_total - target_total) / rule_total * 100, 1) if rule_total > 0 else None,
-            # Safety stock alone against the rule — a detail, not the headline.
-            "lp_vs_rule_pct": round((rule_total - lp_total) / rule_total * 100, 1) if rule_total > 0 else None,
             "skus_lp_holds_less": sum(1 for i in items if i["difference_units"] > 0),
         },
         "items": items,
