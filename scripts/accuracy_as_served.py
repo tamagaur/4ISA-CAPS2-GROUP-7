@@ -76,20 +76,27 @@ def read_inputs(db_url: str):
     return demand, latest, money
 
 
-def served_backtest(series: dict, tier_by: dict, calendar_totals=None) -> tuple[pd.DataFrame, dict]:
-    """route() per Tier A product x test month, then the live dead-SKU rule. Columns: value (as served),
-    value_before_dead (the router's own number), dead (the rule fired), actual (floored series; NaN = blank,
-    not scored)."""
+def served_backtest(series: dict, tier_by: dict, calendar_totals=None, pool_by: dict | None = None) -> tuple[pd.DataFrame, dict]:
+    """route() per product of the cohort `tier_by` x test month, then the live dead-SKU rule. Columns: value
+    (as served), value_before_dead (the router's own number), dead (the rule fired), actual (floored series;
+    NaN = blank, not scored). `pool_by` is the XGBoost pool by period; it defaults to the cohort itself (Tier A),
+    and is Tier A for a Tier B or C cohort, as the live runner trains one global model on Tier A."""
     rows, skipped = [], {"insufficient": 0, "blank_actual": 0}
+    pool_by = tier_by if pool_by is None else pool_by
     for t in WINDOW:
-        keys = sorted(k for k in tier_by.get(ym(t - pd.offsets.MonthBegin(1)), set()) if k in series)
-        fc = gm.GlobalForecaster({k: series[k] for k in keys})
+        prev_period = ym(t - pd.offsets.MonthBegin(1))
+        keys = sorted(k for k in tier_by.get(prev_period, set()) if k in series)
+        fc = gm.GlobalForecaster({k: series[k] for k in sorted(k for k in pool_by.get(prev_period, set()) if k in series)})
         prev = ym(t - pd.offsets.MonthBegin(1))
         for k in keys:
             s = series[k]
             if t not in s.index or not t > s.index[0]:
                 continue
-            r = route(s, t, fc, calendar_totals=calendar_totals)
+            try:
+                r = route(s, t, fc, calendar_totals=calendar_totals)
+            except ValueError:  # no history before the month at all
+                skipped["no_history"] = skipped.get("no_history", 0) + 1
+                continue
             if r["value"] is None:
                 skipped["insufficient"] += 1
                 continue
@@ -240,7 +247,30 @@ AS_SERVED_RUNS = {
                   "scored; dead-SKU rule applied as the live forecast applies it"),
     "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted",
                            "as above; served value x the company calendar factor"),
+    # Tier B and C cohorts (the error decomposition, migration 0063, scores every tier). Calendar-adjusted only,
+    # the form the live forecast is served in; XGBoost pool = Tier A, as the live runner trains it.
+    "as_served_calendar_B": ("as-served backtest 2023-10..2026-02, Tier B the month before each month, calendar-adjusted",
+                             "Tier B (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
+                             "served value x the company calendar factor"),
+    "as_served_calendar_C": ("as-served backtest 2023-10..2026-02, Tier C the month before each month, calendar-adjusted",
+                             "Tier C (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
+                             "served value x the company calendar factor"),
 }
+
+
+def read_tier_cohort(db_url: str, method: str, tier: str) -> dict[str, set[int]]:
+    """Product_keys of one ABC tier by classification_period (read_tier_a, any tier). One read-only transaction."""
+    conn = psycopg2.connect(db_url)
+    try:
+        cur = conn.cursor()
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("""SELECT product_key, classification_period FROM abc_classification
+                       WHERE principal = 'unilever' AND method = %s AND tier = %s""", (method, tier))
+        df = pd.DataFrame(cur.fetchall(), columns=["product_key", "period"])
+        conn.rollback()
+    finally:
+        conn.close()
+    return {p: set(g.product_key.astype(int)) for p, g in df.groupby("period")}
 
 
 def write_runs(db_url: str, runs: dict[str, pd.DataFrame], checks: dict[str, dict]) -> dict[str, int]:
@@ -287,7 +317,11 @@ def main() -> int:
     ap.add_argument("--write-run", action="store_true",
                     help="also store both as-served backtests as NEW runs in mart.forecast_run on the live database and "
                          "refresh the marts (back up first, hard rule 8; needs --target-public)")
-    ap.add_argument("--target-public", action="store_true", help="explicit-only: allow --write-run to write the live mart schema")
+    ap.add_argument("--write-tier-runs", action="store_true",
+                    help="store the calendar-adjusted as-served backtest of Tier B and Tier C as NEW runs (the error "
+                         "decomposition scores every tier); computes only those two, then refreshes the marts (back up first; "
+                         "needs --target-public)")
+    ap.add_argument("--target-public", action="store_true", help="explicit-only: allow --write-run / --write-tier-runs to write the live mart schema")
     args = ap.parse_args()
     from analytics.config import long_read_db_url
     db_url = long_read_db_url()
@@ -297,6 +331,22 @@ def main() -> int:
     series = {int(k): build_series(g, latest) for k, g in demand.groupby("product_key")}
     tier_by = read_tier_a(db_url, abc_method("unilever"))
     print(f"[inputs] {len(series)} products, latest demand month {latest} ({time.time() - t0:.0f}s)")
+
+    if args.write_tier_runs:
+        if not args.target_public:
+            ap.error("--write-tier-runs writes the live mart schema and needs --target-public")
+        cal = company_totals(demand)
+        runs, checks = {}, {}
+        for tier in ("B", "C"):
+            cohort = read_tier_cohort(db_url, abc_method("unilever"), tier)
+            btt, sk = served_backtest(series, cohort, calendar_totals=cal, pool_by=tier_by)
+            name = f"as_served_calendar_{tier}"
+            runs[name] = btt
+            checks[name] = {"rows": len(btt), "products": int(btt.product_key.nunique()), "skipped": sk}
+            print(f"[as served, calendar, Tier {tier}] {len(btt)} rows, {btt.product_key.nunique()} products, skipped {sk} "
+                  f"({time.time() - t0:.0f}s)")
+        print(f"[write-tier-runs] run ids {write_runs(db_url, runs, checks)}")
+        return 0
 
     bt, skipped = served_backtest(series, tier_by)
     print(f"[as served] {len(bt)} rows in {time.time() - t0:.0f}s")

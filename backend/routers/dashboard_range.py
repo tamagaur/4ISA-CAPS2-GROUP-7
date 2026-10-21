@@ -231,6 +231,43 @@ def get_range_accuracy(
     return {**summary, "level": level, "rows": detail, "coverage": ["unilever"]}
 
 
+@router.get("/error-decomposition")
+def get_error_decomposition(
+    period: str | None = PeriodQuery,
+    start_period: str | None = StartQuery,
+    principal: str | None = PrincipalQuery,
+    top: int = Query(10, ge=1, le=100, description="How many products to list by stockout exposure."),
+    tier: str = Query("all", pattern="^(all|A|B|C)$", description="Whose products the exposure list and its concentration "
+                                                                   "cover; totals and by_tier always show every tier."),
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+) -> dict:
+    """The forecast miss for the range, split into over-buying, under-forecast that safety stock absorbed, and
+    under-forecast beyond safety stock (potential stockout exposure), in pieces and pesos, each as a share of the
+    total error and of the total actual; the share of product-months where demand beat the forecast by more than
+    safety stock; the same per ABC tier; and the `top` products by exposure (exposure is concentrated, so that list
+    is the useful part: see stockout_exposure_concentration).
+
+    Same permission and the same range as GET /dashboard/accuracy, and the same scoring rule (as served, see
+    scoring_rule). Kept in mart.error_decomposition, rebuilt with every mart refresh. Safety stock is the stored LP
+    figure where one exists and is rebuilt from history otherwise; ss_method says which, per figure. A view of
+    existing data: it changes no forecast, safety stock, target or order."""
+    scope = normalize_principal(principal) or "all"
+    if scope == "delmonte":
+        return {"available": False, "coverage": [], "totals": None, "by_tier": [], "monthly": [],
+                "top_products_by_stockout_exposure": [],
+                "blocked_reason": ("No product-level forecasts exist for Del Monte: its sales data is category grain, "
+                                   "so there is no per-product miss to split.")}
+    start, end = resolve_range(db, period, start_period, "unilever")
+    if not marts.decomposition_available(db):
+        return {"available": False, "coverage": ["unilever"], "totals": None, "by_tier": [], "monthly": [],
+                "top_products_by_stockout_exposure": [], "period_start": start, "period_end": end,
+                "blocked_reason": "The error decomposition mart is not built on this database (migration 0063)."}
+    out = marts.error_decomposition(db, start, end, top, tier)
+    return {"available": out["totals"] is not None, "coverage": ["unilever"], **out,
+            "blocked_reason": None if out["totals"] is not None else "No scored product-months in this range."}
+
+
 @router.get("/idle-stock")
 def get_idle_stock(
     period: str | None = PeriodQuery,

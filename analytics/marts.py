@@ -12,6 +12,9 @@ reads mart.refresh_status and says when a source changed after the last refresh.
 After the commit, vacuum_marts() reclaims the replaced rows (VACUUM cannot run inside a
 transaction), so a mart table peaks at its live rows plus one refresh's worth of dead ones.
 
+The error decomposition (migration 0063: the forecast miss split into over-buying, under-forecast absorbed by
+safety stock and under-forecast beyond it) is rebuilt in the same transaction, after the planning mart.
+
 The planning mart (migration 0046: one row per product x LP cycle, what the Reorder page
 reads) is rebuilt with every full refresh, in the same transaction, and on its own after a
 review-flag write (refresh_planning_conn). A reorder decision updates its own row
@@ -28,17 +31,22 @@ import re
 
 from analytics.params import (
     DEAD_SKU_MONTHS,
+    PLACEHOLDERS,
+    SERVICE_Z,
     POSSIBLY_PARTIAL_COUNTS,
     SKU_COVER_HISTORY_MONTHS,
     TIER_A_BASIS,
+    abc_method,
     STOCK_LIMITED_AVG_MIN_MONTHS,
     STOCK_LIMITED_AVG_MONTHS,
     STOCK_LIMITED_WEEKS,
 )
 
 MART_SCHEMA = "mart"
-# planning_mart last: on a database without migration 0046 its VACUUM fails and ends the loop.
-MART_TABLES = ("sales_mart", "flow_month", "inventory_mart", "idle_stock", "accuracy_mart", "planning_mart")
+# planning_mart and the error decomposition last: on a database without migration 0046 / 0063 their VACUUM
+# fails and ends the loop.
+MART_TABLES = ("sales_mart", "flow_month", "inventory_mart", "idle_stock", "accuracy_mart", "planning_mart",
+               "error_decomposition_row", "error_decomposition")
 # mart.refresh()'s arguments since migration 0043 (the stock-limited rule's three numbers).
 REFRESH_SIGNATURE = "refresh(text,integer,text[],numeric,integer,integer)"
 
@@ -47,6 +55,17 @@ PLANNING_SIGNATURE = "refresh_planning(text,integer,text[],text)"
 # Principals whose stock count never lists a zero-stock item, so a product missing from it
 # has 0 on hand: backend/stock_status.COUNT_OMITS_ZERO_STOCK (pinned by tests/test_planning_mart.py).
 PLANNING_ZERO_OMITTING = ("unilever",)
+
+# mart.refresh_error_decomposition()'s arguments (migration 0063).
+DECOMPOSITION_SIGNATURE = "refresh_error_decomposition(text,numeric,integer,text)"
+
+
+def decomposition_params(trigger: str) -> dict:
+    """The arguments mart.refresh_error_decomposition() takes, from analytics.params — one definition: the
+    safety-stock z and protected days the LP uses, and the ABC basis the as-served backtests were cohorted on."""
+    return {"trigger": trigger, "service_z": SERVICE_Z,
+            "protect_days": int(PLACEHOLDERS["review_days"] + PLACEHOLDERS["lead_days"]),
+            "tier_a_basis": abc_method("unilever")}
 
 
 def planning_params(trigger: str) -> dict:
@@ -90,7 +109,39 @@ def refresh_marts_cursor(cur, trigger: str, schema: str | None = "public", mart_
     counts = cur.fetchone()[0]
     print(f"[marts] refreshed ({trigger}): {counts}")
     planning = refresh_planning_cursor(cur, trigger, schema, mart_schema)
-    return {**counts, **planning} if planning else counts
+    decomposition = refresh_error_decomposition_cursor(cur, trigger, schema, mart_schema)
+    return {**counts, **(planning or {}), **(decomposition or {})}
+
+
+def refresh_error_decomposition_cursor(cur, trigger: str, schema: str | None = "public",
+                                       mart_schema: str = MART_SCHEMA) -> dict | None:
+    """<mart_schema>.refresh_error_decomposition() on a psycopg2 cursor, inside the caller's transaction: the
+    forecast miss split into over-buying / absorbed by safety stock / beyond it (migration 0063), rebuilt with
+    every full refresh so it moves when new actuals land. None when skipped (a scratch target, or 0063 not
+    applied). It reads forecasts, actuals, tiers and safety stock that already exist and changes none of them."""
+    mart = _mart(mart_schema)
+    reason = _skip(schema)
+    if reason is None:
+        cur.execute(f"SELECT to_regprocedure('{mart}.{DECOMPOSITION_SIGNATURE}') IS NOT NULL")
+        if not cur.fetchone()[0]:
+            reason = "migration 0063 (error decomposition) is not applied"
+    if reason is not None:
+        print(f"[marts] error decomposition refresh skipped: {reason}")
+        return None
+    # A savepoint: a failure here must not undo the refresh it rides on (the other marts are what the
+    # dashboard reads); the decomposition keeps its previous rows and the failure is printed.
+    cur.execute("SAVEPOINT error_decomposition")
+    try:
+        cur.execute(f"SELECT {mart}.refresh_error_decomposition(%(trigger)s, %(service_z)s, %(protect_days)s, %(tier_a_basis)s)",
+                    decomposition_params(trigger))
+        counts = cur.fetchone()[0]
+    except Exception as exc:  # noqa: BLE001 - see comment above
+        cur.execute("ROLLBACK TO SAVEPOINT error_decomposition")
+        print(f"[marts] error decomposition refresh FAILED, previous rows kept: {type(exc).__name__}: {exc}")
+        return None
+    cur.execute("RELEASE SAVEPOINT error_decomposition")
+    print(f"[marts] error decomposition refreshed ({trigger}): {counts}")
+    return counts
 
 
 def refresh_planning_cursor(cur, trigger: str, schema: str | None = "public", mart_schema: str = MART_SCHEMA) -> dict | None:
