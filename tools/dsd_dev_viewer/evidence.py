@@ -41,6 +41,8 @@ DRAWN = {
 GENERATORS = {
     "reports/evidence/ch01_sku_series.csv": "python scripts/evidence/ch01_models.py",
     "reports/evidence/ch06_months.csv": "python scripts/evidence/ch06_unfit.py",
+    "reports/evidence/ch06_skus.csv": "python scripts/evidence/ch06_unfit.py",
+    "reports/evidence/ch10_curve.csv": "python scripts/evidence/lp_charts.py",
 }
 
 

@@ -191,6 +191,7 @@ def delete_user(
             detail="You cannot delete your own account.",
         )
     existing = _get_user(db, user_id)
+    require_admin_for(current_user, existing["role"])  # deleting an admin account takes an admin
     if existing["role"] == "admin" and admin_count(db) <= 1:
         raise ApiError(409, LAST_ADMIN, code="last_admin")
     revoke_user_sessions(db, user_id)

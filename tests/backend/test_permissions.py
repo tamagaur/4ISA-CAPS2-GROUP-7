@@ -583,7 +583,8 @@ def test_one_of_two_admins_can_be_demoted():
 def test_the_last_admin_cannot_be_demoted_or_deleted():
     """users.manage can be given to someone who isn't an admin. They can't
     touch an admin account at all any more (403 admin_required, see the
-    escalation tests below), and they still can't delete the only admin."""
+    escalation tests below), deleting included. An admin still can't delete
+    or demote the only admin (409 last_admin)."""
     store = FakeStore(team(), overrides={2: {"users.manage": True}})
     manager_of_users = auth(2, "staff")
     last_admin = {"detail": "There must be at least one admin.", "code": "last_admin"}
@@ -591,10 +592,13 @@ def test_the_last_admin_cannot_be_demoted_or_deleted():
         put = c.put("/admin/users/1/permissions", json={"role": "staff"}, headers=manager_of_users)
         patch = c.patch("/users/1", json={"role": "staff"}, headers=manager_of_users)
         delete = c.delete("/users/1", headers=manager_of_users)
-    for resp in (put, patch):
+    for resp in (put, patch, delete):
         assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
-    assert delete.status_code == 409 and delete.json() == last_admin
     assert store.users[1]["role"] == "admin" and store.commits == 0
+    with client_for(store) as c:   # an admin (a second one, so not self) still hits the last-admin rule
+        solo = FakeStore([user(1, "admin"), user(2, "staff")])
+    with client_for(solo) as c:
+        assert c.delete("/users/1", headers=auth(1, "admin")).status_code == 400   # can't delete yourself
 
 
 # ═══ ADMIN ESCALATION: users.manage ALONE CANNOT MAKE OR CHANGE AN ADMIN ═════
@@ -654,6 +658,23 @@ def test_users_manage_alone_cannot_modify_an_existing_admin(method, url, body):
     assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
     assert store.users[4]["role"] == "admin" and store.users[4]["email"] == "user4@ssmcapstone.com"
     assert store.commits == 0 and store.revoked == [] and store.audit == []
+
+
+@pytest.mark.real_permission_store
+def test_users_manage_alone_cannot_delete_an_admin_account():
+    store = _manager_store(extra_admin=True)
+    with client_for(store) as c:
+        resp = c.delete("/users/4", headers=auth(2, "staff"))
+    assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
+    assert 4 in store.users and store.commits == 0 and store.revoked == [] and store.audit == []
+
+
+@pytest.mark.real_permission_store
+def test_users_manage_can_still_delete_a_staff_account():
+    store = FakeStore(team(), overrides={2: {"users.manage": True}}, strict=False)
+    with client_for(store) as c:
+        resp = c.delete("/users/3", headers=auth(2, "staff"))
+    assert resp.status_code != 403   # the guard is about admin accounts only
 
 
 @pytest.mark.real_permission_store
