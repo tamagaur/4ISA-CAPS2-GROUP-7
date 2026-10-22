@@ -16,7 +16,8 @@ data/raw/*
 SAN SAN Marketing/
 
 # Extract stage output — generated from raw SSM client data, never committed
-staging/
+staging/*
+!staging/_manifest.json
 
 # Transform stage output — manifest/review/sign-off, same reasoning as staging/
 transform/
