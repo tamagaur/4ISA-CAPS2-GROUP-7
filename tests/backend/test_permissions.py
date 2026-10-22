@@ -325,8 +325,8 @@ def _routes():
 # (2026-10-15, behind DM_DEMO_ENABLED, default off); 48 since POST /users/me/avatar (2026-10-17,
 # migration 0058); plus the 9 two-step sign-in routes (/auth/login/verify, /auth/login/setup[/confirm],
 # /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
-# page, 2026-10-16) from the Main-Final merge (2026-10-17). Change it when a route is added or removed.
-ROUTE_COUNT = 58
+# page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route). Change it when a route is added or removed.
+ROUTE_COUNT = 59
 
 
 def test_the_walk_finds_every_route():

@@ -30,7 +30,15 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 def test_the_cycle_anchor_counts_decided_rows():
     sql, _ = lp_cycle.current_cycle_query("unilever")
     assert "'accepted'" in sql and "'dismissed'" in sql and "'pending'" in sql
-    assert "lr.status = 'pending'" not in sql
+    # Not pending-only: pending is one arm of the plan predicate, decided rows are the other.
+    assert lp_cycle.PLAN_STATUS_SQL in sql
+
+
+def test_a_decided_row_with_no_lp_run_is_not_the_plan():
+    """2026-10-22: recommendation 4 (Tier C, accepted 2026-08-24, lp_run_key NULL) was counted in the 2026-03
+    plan. A decided row is plan only when an LP run produced it; a pending row always is."""
+    for sql in (lp_cycle.PLAN_STATUS_SQL, lp_cycle.PLAN_STATUS_SQL_BARE, lp_cycle.CURRENT_CYCLE_CLAUSE):
+        assert "lp_run_key IS NOT NULL" in sql and "= 'pending' OR" in sql
 
 
 def test_freshness_and_the_stored_run_read_the_whole_cycle_not_only_pending():
@@ -38,7 +46,7 @@ def test_freshness_and_the_stored_run_read_the_whole_cycle_not_only_pending():
     run, _ = lp_cycle.stored_run_query(datetime.date(2026, 3, 1), "unilever")
     for sql in (fresh, run):
         assert "'accepted'" in sql and "'dismissed'" in sql
-        assert "status = 'pending'" not in sql
+        assert lp_cycle.PLAN_STATUS_SQL in sql
 
 
 def test_open_action_counts_stay_pending_only():
@@ -59,7 +67,7 @@ def test_every_plan_read_uses_the_plan_statuses():
     src = inspect.getsource(abc_router)
     assert src.count("PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle") == 2
     q, _ = dashboard._policy_rows_query("unilever", "real", datetime.date(2026, 3, 1))
-    assert "'accepted'" in q and "status = 'pending'" not in q
+    assert "'accepted'" in q and lp_cycle.PLAN_STATUS_SQL in q
     # ...while the dashboard's "awaiting a decision" count keeps meaning open work.
     q, _ = dashboard._product_count_query("unilever", "real", datetime.date(2026, 3, 1))
     assert "lr.status = 'pending'" in q

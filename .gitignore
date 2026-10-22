@@ -152,3 +152,41 @@ reports/*
 !reports/experiment_artifacts/
 !reports/experiments/
 !reports/simulation/
+
+# Per-product quantity / stock / forecast / plan files (hard rule 9; untracked 2026-10-22). The working copies stay on disk.
+# Listed after the reports/ negations above so they win.
+reports/audit_B1_per_sku.csv
+reports/audit_B5_negatives.csv
+reports/demand_diagnosis_ok_mape_mase.csv
+reports/diagnostics/fit_diagnosis_2026-10/per_sku.csv
+reports/diagnostics/fit_review_2026-09-23.csv
+reports/diagnostics/fit_review_common_2026-09-23.csv
+reports/diagnostics/forecast_error_business_2026-10-03/collapse_flag.csv
+reports/diagnostics/forecast_error_business_2026-10-03/per_product_summary.csv
+reports/diagnostics/forecast_error_business_2026-10-03/xgb_month_ablation_2026-03.csv
+reports/diagnostics/lp_logic_check_2026-10-03/issue1_stock_timing_per_product.csv
+reports/diagnostics/lp_logic_check_2026-10-03/issue4_policy_card_per_product.csv
+reports/diagnostics/lp_rerun_2026-10-03/before_30sep_105pct.csv
+reports/diagnostics/lp_rerun_2026-10-03/comparison_per_product.csv
+reports/diagnostics/lp_rerun_2026-10-03/plan_2026-03_103pct.csv
+reports/diagnostics/tier_a_basis_2026-10-03/safety_stock_by_sku.csv
+reports/evidence/ch01_sku_series.csv
+reports/evidence/ch06_months.csv
+reports/evidence/ch08_cli_plan_103.csv
+reports/evidence/ch08_cli_plan_105.csv
+reports/evidence/ch08_cli_plan_108.csv
+reports/lp_dry_run_2026-09-29/plan_aggregate_103.csv
+reports/lp_dry_run_2026-09-29/plan_aggregate_105.csv
+reports/lp_dry_run_2026-09-29/plan_aggregate_108.csv
+reports/lp_dry_run_2026-09-29/plan_per-sku_103.csv
+reports/lp_dry_run_2026-09-29/plan_per-sku_105.csv
+reports/lp_dry_run_2026-09-29/plan_per-sku_108.csv
+reports/unilever_derived_receipts_2026-09.csv
+reports/unilever_receipts_v2_per_sku_2026-09.csv
+reports/diagnostics/fit_diagnosis_2026-10/classified.csv
+# Future dumps of the same kinds, so the next one is ignored by default
+reports/lp_dry_run_*/
+reports/diagnostics/lp_rerun_*/*.csv
+reports/evidence/ch*_cli_plan_*.csv
+reports/**/*_per_sku*.csv
+reports/**/*per_product*.csv

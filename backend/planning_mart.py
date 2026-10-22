@@ -41,6 +41,8 @@ from backend.principals import principal_clause
 
 # The rows that are the plan (backend/lp_cycle.PLAN_STATUSES), as a SQL list.
 PLAN_STATUS_LIST = "('" + "', '".join(PLAN_STATUSES) + "')"
+# A decided row is plan only when an LP run produced it (backend/lp_cycle.PLAN_STATUS_SQL).
+PLAN_ROW_SQL = f"pm.decision_status IN {PLAN_STATUS_LIST} AND (pm.decision_status = 'pending' OR pm.lp_run_key IS NOT NULL)"
 
 # The schema the mart is read from. 'mart' always, except scripts/rehearse_planning_mart.py,
 # which points it at its scratch build to compare the two read paths before 0046 is applied.
@@ -100,7 +102,7 @@ def _current_cycle(scope_sql: str) -> str:
     """backend/lp_cycle.current_cycle as a subquery: the latest cycle with any plan row
     (pending, accepted or dismissed) in scope."""
     return (f"(SELECT MAX(pm.planning_cycle_date) FROM {_STATE['schema']}.planning_mart pm "
-            f"WHERE pm.decision_status IN {PLAN_STATUS_LIST}{scope_sql})")
+            f"WHERE {PLAN_ROW_SQL}{scope_sql})")
 
 
 def head_query(principal: str | None) -> tuple[str, dict]:
@@ -113,7 +115,7 @@ def head_query(principal: str | None) -> tuple[str, dict]:
         fc AS (SELECT MAX(generated_at) AS t FROM forecast_result),
         pending AS (
             SELECT pm.planning_cycle_date, pm.generated_at, pm.decision_status FROM {mart}.planning_mart pm
-            WHERE pm.decision_status IN {PLAN_STATUS_LIST}{scope_sql}
+            WHERE {PLAN_ROW_SQL}{scope_sql}
         )
         SELECT cur.d AS cycle, fc.t AS fc_at,
                (SELECT MAX(p.generated_at) FROM pending p WHERE p.planning_cycle_date = cur.d) AS lp_at,
@@ -144,7 +146,7 @@ def _where(principal: str | None, status: str | None, cycle: str,
         params["from_date"] = from_date
         params["to_date"] = to_date
     if cycle == "current":
-        where += f" AND pm.planning_cycle_date = {_current_cycle(scope_sql)}"
+        where += f" AND pm.planning_cycle_date = {_current_cycle(scope_sql)} AND (pm.decision_status = 'pending' OR pm.lp_run_key IS NOT NULL)"
     return where, params
 
 
@@ -200,7 +202,7 @@ def run_query(principal: str | None) -> tuple[str, dict]:
         FROM lp_run r
         WHERE r.run_key = (
             SELECT MAX(pm.lp_run_key) FROM {_STATE['schema']}.planning_mart pm
-            WHERE pm.decision_status IN {PLAN_STATUS_LIST}{scope_sql}
+            WHERE {PLAN_ROW_SQL}{scope_sql}
               AND pm.planning_cycle_date = {_current_cycle(scope_sql)}
         )
     """, params
