@@ -27,7 +27,7 @@ from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_db
 from backend.permissions import (
     ALL_KEYS, CATALOG, LAST_ADMIN, PRESETS, admin_count, effective, load_overrides, normalize,
-    require_permission, require_ready,
+    require_admin_for, require_permission, require_ready,
 )
 from backend.schemas.permissions import CatalogResponse, UserPermissions, UserPermissionsUpdate
 from backend.sessions import revoke_user_sessions
@@ -109,6 +109,10 @@ def put_user_permissions(
         if losing:
             raise ApiError(409, "You can't remove your own admin access.", code="self_lockout")
         raise ApiError(409, "You can't change your own access. Ask another admin.", code="self_promotion")
+
+    # After the self-change guards above, so changing your own access keeps its
+    # own error; before anything is written.
+    require_admin_for(current_user, old_role, new_role)
 
     if old_role == "admin" and new_role != "admin" and admin_count(db) <= 1:
         raise ApiError(409, LAST_ADMIN, code="last_admin")

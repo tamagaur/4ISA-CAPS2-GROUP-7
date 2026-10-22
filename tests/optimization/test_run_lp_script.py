@@ -437,8 +437,9 @@ class _FakeDB:
     counts: {period: [(principal, row_count, counted_on)]};
     stock: {period: {product_key: pieces}}."""
 
-    def __init__(self, counts, stock, candidates=((1, "SKU1", "unilever"),)):
+    def __init__(self, counts, stock, candidates=((1, "SKU1", "unilever"),), packs=None, pack_columns=True):
         self.counts, self.stock = counts, stock
+        self.packs, self.pack_columns = packs or {}, pack_columns
         self.candidates = [(k, sku, who, CYCLE, 1200.0, 0.5) for k, sku, who in candidates]
         self.statements: list[tuple[str, object]] = []
         self.description = None
@@ -462,6 +463,10 @@ class _FakeDB:
         self.description, self._rows, self.rowcount = None, [], -1
         if "to_regclass('lp_run')" in flat:
             self._rows = [(True,)]
+        elif "column_name IN ('q_i_before_pack_rounding', 'pack_size')" in flat:
+            self._rows = [(self.pack_columns,)]
+        elif "pd_pack.pack_size::numeric" in flat and "AS in_stock_file" not in flat:
+            self._rows = [(k, v) for k, v in self.packs.items() if k in params[0]]
         elif "FROM Forecast_Result fr" in flat:
             self._rows = list(self.candidates)
         elif "FROM SellOut_Fact_Real" in flat:
@@ -544,7 +549,7 @@ def test_main_plans_from_the_opening_count_and_links_its_rows_to_the_run(monkeyp
     sent = [s for s, _ in db.statements]
     run_at = next(i for i, s in enumerate(sent) if s.startswith("INSERT INTO lp_run"))
     upserts = [(i, p) for i, (s, p) in enumerate(db.statements) if s.startswith("INSERT INTO LP_Recommendation")]
-    assert len(upserts) == 1 and upserts[0][1][-1] == 41  # the row carries the run's key
+    assert len(upserts) == 1 and upserts[0][1][5] == 41  # the row carries the run's key
     assert sent.index("BEGIN") < run_at < upserts[0][0] < sent.index("COMMIT")
 
     cycle, scope, inputs, model, code_version = db.statements[run_at][1]
@@ -596,3 +601,33 @@ def test_unilever_demo_writer_never_defaults_a_missing_order_to_zero():
     body = src[src.index("def _run_demo_lp_unilever"):src.index("def main()")]
     assert "(plan.orders or {})" not in body
     assert "refuse_empty_demo_plan(" in body
+
+
+# --- case-pack rounding (migration 0066) ---
+
+def _opening_db(**kwargs):
+    return _FakeDB(counts={"2026-02": [("unilever", 812, _COUNTED_2026_03_02)]}, stock={"2026-02": {1: 2000.0}}, **kwargs)
+
+
+def test_a_real_run_keeps_the_order_before_rounding_and_the_pack_size(monkeypatch):
+    db = _opening_db(packs={1: 24.0})
+    _run_main(monkeypatch, db, "--allocation-pct", "103")
+    (params,) = [p for s, p in db.statements if s.startswith("INSERT INTO LP_Recommendation")]
+    q_i, before, pack = params[2], params[6], params[7]
+    assert pack == 24.0 and q_i % 24.0 == 0 and abs(q_i - before) < 24.0
+
+
+def test_a_real_run_without_the_0066_columns_refuses_and_writes_nothing(monkeypatch, caplog):
+    db = _opening_db(packs={1: 24.0}, pack_columns=False)
+    with caplog.at_level(logging.INFO, logger="scripts.run_lp"):
+        _run_main(monkeypatch, db)
+    assert not any(s.startswith("INSERT") for s, _ in db.statements)
+    assert "0066_lp_case_pack_rounding.sql" in caplog.text
+
+
+def test_without_the_0066_columns_the_old_behaviour_is_available_by_flag(monkeypatch):
+    db = _opening_db(packs={1: 24.0}, pack_columns=False)
+    _run_main(monkeypatch, db, "--no-case-pack-rounding")
+    (params,) = [p for s, p in db.statements if s.startswith("INSERT INTO LP_Recommendation")]
+    assert len(params) == 6   # the pre-0066 upsert: no extra columns
+
