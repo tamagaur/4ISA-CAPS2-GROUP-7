@@ -152,7 +152,7 @@ def net_need(monthly_demand: float, target: float, stock_on_hand: float) -> floa
 
 
 FILL_LAYERS = ("demand", "safety_stock", "rest_of_target")
-HOLD_SLACK_REL = 1e-6   # solve_lp's retry only: CBC's own feasibility tolerance; 1e-6 of ~208,000 pieces = 0.2 piece
+HOLD_SLACK_REL = 1e-7   # solve_lp's retry only: below CBC's own 1e-6 feasibility tolerance; 1e-7 of ~208,000 pieces = 0.02 piece
 
 
 def fill_layers(sku: SKUInput) -> tuple[float, float, float]:
