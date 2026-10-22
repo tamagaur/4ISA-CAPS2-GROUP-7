@@ -1293,7 +1293,7 @@ const Dashboard = () => {
   const pendingTooltip = lpHidden ? null : [
     `Order recommendations in the ${planLabel || 'current plan'} that nobody has accepted or dismissed yet. `
       + 'Rows already decided, and undecided rows from earlier plans, are not counted.',
-    'Critical: stock below safety stock. Urgent: below the target stock. Routine: at or above the target stock. '
+    'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
       + `Stock is the count that opens the plan${openingCount ? ` (${openingCount})` : ''}; a SKU missing from that `
       + 'count is read as 0 on hand.',
     'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',

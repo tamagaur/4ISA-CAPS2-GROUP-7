@@ -28,6 +28,7 @@ import {
   policyRatio, shareOf,
 } from '../utils/kpiMath';
 import './HeroKpis.css';
+import { URGENCY_HOVER } from '../utils/urgency';
 
 const monthName = (period) => (period ? formatMonth(period).split(' ')[0] : null);
 const signed = (pct) => `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%`;
@@ -829,11 +830,13 @@ export const BelowSafetyCard = ({
 // count's pop-up). The orders' value needs SSM's cost data, so it is "—"
 // (`valueReason`, in its pop-up). `criticalTo` opens the Reorder page
 // filtered to critical rows.
+// The Reorder page's words (2026-10-20); what to do is in each row's hover
+// (utils/urgency.js), not a tag of its own.
 const URGENCY_ROWS = {
-  critical: { name: 'critical', what: 'below safety stock', act: 'Act first' },
-  urgent: { name: 'urgent', what: 'below target stock', act: 'Next' },
-  planned: { name: 'routine', what: 'stock is fine', act: 'Can wait' },
-  nodata: { name: 'no stock data', what: 'stock can\'t be read', act: 'Check the count' },
+  critical: { name: 'critical', what: 'below safety stock', code: 'CRITICAL' },
+  urgent: { name: 'urgent', what: 'below target stock', code: 'URGENT' },
+  planned: { name: 'planned', what: 'stock is fine', code: 'PLANNED' },
+  nodata: { name: 'no data', what: 'stock can\'t be read', code: 'NO DATA' },
 };
 
 export const PendingReordersCard = ({
@@ -857,7 +860,7 @@ export const PendingReordersCard = ({
   const value = (key) => parts?.find((p) => p.key === key)?.value ?? 0;
   const routineSum = parts
     ? `${n(count)} − ${n(value('critical'))} critical − ${n(value('urgent'))} urgent`
-      + `${value('nodata') > 0 ? ` − ${n(value('nodata'))} no stock data` : ''} = ${n(value('planned'))}`
+      + `${value('nodata') > 0 ? ` − ${n(value('nodata'))} no data` : ''} = ${n(value('planned'))}`
     : null;
   return (
     <KpiCard
@@ -902,17 +905,16 @@ export const PendingReordersCard = ({
               const row = URGENCY_ROWS[p.key];
               const label = <strong>{n(p.value)} {row.name}</strong>;
               return (
-                <li key={p.key} className={`is-${p.key}`}>
+                <li key={p.key} className={`is-${p.key}`} title={URGENCY_HOVER[row.code]}>
                   <span>
                     {p.key === 'critical' && p.value > 0 ? <NumLink to={criticalTo} title="See the critical orders">{label}</NumLink>
                       : p.key === 'planned' ? (
-                        <HoverValue label="How routine is worked out" subtle what="Pending orders that are not critical, urgent or without stock data." sums={[routineSum]}>
+                        <HoverValue label="How planned is worked out" subtle what={`Pending orders that are not critical, urgent or no data. ${URGENCY_HOVER.PLANNED}.`} sums={[routineSum]}>
                           {label}
                         </HoverValue>
                       ) : label}
                     {' · '}{row.what}
                   </span>
-                  <span className="hero-urgency-act">{row.act}</span>
                 </li>
               );
             })}

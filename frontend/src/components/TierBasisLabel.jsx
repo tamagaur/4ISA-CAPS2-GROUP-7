@@ -1,4 +1,6 @@
 import { formatMonth } from '../utils/formatDate';
+import InfoTip from './InfoTip';
+import { tierShort } from '../labels';
 import './TierBasisLabel.css';
 
 // One statement of which ABC run the tiers on a page come from, shared by the
@@ -7,9 +9,20 @@ import './TierBasisLabel.css';
 // '2025-12' }, one run per principal); `period` is the older single value, used
 // only when the map is missing.
 
+// The visible line says "top sellers" (src/labels.js); the class letter is in the "?".
 const BASIS = {
-  Unilever: 'Top sellers = Class A over the last 12 months, plus new products that are Class A over the last 3 (pending adviser confirmation)',
-  'Del Monte': 'Top sellers = Class A in that month',
+  Unilever: 'the biggest sellers over the last 12 months, plus new products that are among them over the last 3',
+  'Del Monte': 'the biggest sellers in that month',
+};
+const TECHNICAL = {
+  Unilever: 'Top sellers are ABC Class A: the products that together make up the first 80% of revenue over the last 12 months, plus products first sold within 12 months that are Class A over the last 3. Middle sellers are Class B, low sellers Class C.',
+  'Del Monte': 'Top sellers are ABC Class A in that month. Middle sellers are Class B, low sellers Class C.',
+};
+
+// A basis still waiting on the adviser (DEC-38): said behind the line's "?",
+// not in the visible line (2026-10-19), on every page that shows it.
+const CAVEAT = {
+  Unilever: 'This rule for Unilever\'s top sellers is pending adviser confirmation.',
 };
 
 const PRINCIPAL_LABEL = { unilever: 'Unilever', delmonte: 'Del Monte' };
@@ -44,12 +57,12 @@ export function latestPeriod(periods, fallback) {
 
 export function tierBasisText(periods, period) {
   const entries = Object.entries(periods || {});
-  if (entries.length === 0) return period ? `Classes as of ${formatMonth(period)}` : null;
+  if (entries.length === 0) return period ? `Top sellers as of ${formatMonth(period)}` : null;
   if (entries.length === 1) {
     const [name, p] = entries[0];
-    return `Classes as of ${formatMonth(p)}${BASIS[name] ? ` · ${BASIS[name]}` : ''}`;
+    return `Top sellers as of ${formatMonth(p)}${BASIS[name] ? `: ${BASIS[name]}` : ''}`;
   }
-  return entries.map(([name, p]) => `${name} as of ${formatMonth(p)}`).join(' · ');
+  return `Top sellers as of ${entries.map(([name, p]) => `${formatMonth(p)} (${name})`).join(' · ')}`;
 }
 
 export default function TierBasisLabel({ periods, period, className = '' }) {
@@ -57,9 +70,16 @@ export default function TierBasisLabel({ periods, period, className = '' }) {
   if (!text) return null;
   const names = Object.keys(periods || {});
   const title = names.length > 1 ? names.map((n) => `${n}: ${BASIS[n]}`).join('\n') : undefined;
+  const caveats = names.filter((n) => CAVEAT[n]);
+  const technical = names.map((n) => TECHNICAL[n]).filter(Boolean);
   return (
     <p className={`tier-basis-label ${className}`.trim()} title={title}>
       {text}
+      {(caveats.length > 0 || technical.length > 0) && (
+        <InfoTip label="About top sellers" size={12}>
+          {[...technical, ...caveats.map((n) => CAVEAT[n])].join(' ')}
+        </InfoTip>
+      )}
     </p>
   );
 }
@@ -76,7 +96,7 @@ export function TierChip({ tier, tierPeriod, isCurrent, anchor }) {
     : `Class ${tier} — current run${tierPeriod ? ` (${formatMonth(tierPeriod)})` : ''}`;
   return (
     <span className={`tier-chip tier-chip-${tier}${aged ? ' tier-chip-aged' : ''}`} title={title}>
-      {tier}
+      {tierShort(tier)}
       {aged && tierPeriod && <span className="tier-chip-age">{formatMonth(tierPeriod)}</span>}
       {stale && <span className="tier-chip-stale">stale</span>}
     </span>

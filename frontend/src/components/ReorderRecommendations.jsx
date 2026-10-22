@@ -34,6 +34,7 @@ import './DateFilter.css';
 import './Dashboard.css';
 import TierBasisLabel, { TierChip } from './TierBasisLabel';
 import './ReorderRecommendations.css';
+import { URGENCY_HOVER, getUrgencyBadge } from '../utils/urgency';
 
 // Helper to format SKU to 5 digits (SKU-#####)
 const formatSKU = (sku) => {
@@ -645,15 +646,6 @@ const ReorderRecommendations = () => {
     });
   };
 
-  const getUrgencyBadge = (urgency) => {
-    switch (urgency) {
-      case 'CRITICAL': return 'pill pill-critical';
-      case 'URGENT': return 'pill pill-warning';
-      case 'PLANNED': return 'pill pill-planned';
-      default: return 'pill pill-neutral'; // 'NO DATA' — no stock record, no verdict
-    }
-  };
-
   const getLogActionBadge = (action) => {
     switch (action) {
       case 'ACCEPTED': return 'pill pill-planned';
@@ -801,7 +793,7 @@ const ReorderRecommendations = () => {
           {item.shortUnits > 0 && <span className="reorder-short-note">{formatUnits(item.shortUnits)} short</span>}
         </td>
         <td className="reorder-urgency-cell">
-          <span className={getUrgencyBadge(item.urgency)}>
+          <span className={getUrgencyBadge(item.urgency)} title={URGENCY_HOVER[item.urgency]}>
             {item.urgency}
           </span>
           <ReviewBadge reason={item.reviewFlag} />

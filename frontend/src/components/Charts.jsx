@@ -28,6 +28,7 @@ import {
   CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarFactorText, calendarSignoffText, calendarYearsText,
 } from '../utils/calendarAdjustment';
 import './Charts.css';
+import { URGENCY_HOVER, getUrgencyBadge } from '../utils/urgency';
 
 // Legend entry for the placeholder band (utils/placeholderBand.jsx).
 // "Synthetic — SSM data not received": the label the data plan gives every
@@ -2548,14 +2549,9 @@ export const PortfolioForecastWidget = ({
   );
 };
 
-// Soft pills in the shared badge tints (ui.css): critical soft red, urgent
-// soft amber, planned neutral. The word is printed in every pill and rows
-// stay most-urgent first (sortedRows below), so colour never stands alone.
-const URGENCY_STYLES = {
-  CRITICAL: { bg: 'var(--badge-critical-bg)', color: 'var(--badge-critical-fg)' },
-  URGENT: { bg: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' },
-  PLANNED: { bg: 'var(--badge-neutral-bg)', color: 'var(--badge-neutral-fg)' },
-};
+// The urgency pills are the Reorder page's (utils/urgency.js, 2026-10-20).
+// The word is printed in every pill and rows stay most-urgent first
+// (sortedRows below), so colour never stands alone.
 
 // Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
 // routers/dashboard.py's LP_WEIGHT_* constants, themselves a mirror of
@@ -2749,15 +2745,12 @@ export const ReorderRecommendationWidget = ({
                       {/* Why this urgency, on hover: the stock against the
                           safety stock it is judged by (2026-10-19). */}
                       <span
-                        className="urgency-badge-mini"
-                        style={{
-                          backgroundColor: URGENCY_STYLES[r.urgency]?.bg,
-                          color: URGENCY_STYLES[r.urgency]?.color,
-                        }}
-                        title={r.safetyStock != null
-                          ? `${r.urgency === 'CRITICAL' ? 'Below' : r.urgency === 'URGENT' ? 'Above' : 'Well above'} its safety stock of ${formatUnits(r.safetyStock)} pieces`
-                            + `${r.notInCount ? '; not in the stock count, so read as 0 on hand' : ''}`
-                          : undefined}
+                        className={getUrgencyBadge(r.urgency)}
+                        title={[
+                          URGENCY_HOVER[r.urgency],
+                          r.safetyStock != null ? `safety stock ${formatUnits(r.safetyStock)} pieces` : null,
+                          r.notInCount ? 'not in the stock count, so read as 0 on hand' : null,
+                        ].filter(Boolean).join('; ') || undefined}
                       >
                         {r.urgency}
                       </span>

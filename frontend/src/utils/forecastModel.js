@@ -135,7 +135,7 @@ function withCalendar(served, params) {
 // stored, never guessed at — callers keep the raw string in a tooltip.
 const wholeUnits = (value) => Math.round(Number(value)).toLocaleString();
 const FALLBACK_REASONS = [
-  [/^above_historical_max: (\S+) > (\S+)$/, (value, max) => `the model's value (${wholeUnits(value)}) was above this SKU's highest month (${wholeUnits(max)})`],
+  [/^above_historical_max: (\S+) > (\S+)$/, (value, max) => `the model's value (${wholeUnits(value)}) was above this product's highest month (${wholeUnits(max)})`],
   [/^below_zero: (\S+)$/, (value) => `the model's value (${wholeUnits(value)}) was below zero`],
   [/^xgb_unavailable: (.+)$/, (detail) => `XGBoost wasn't available (${detail})`],
   [/^xgb_no_forecast: (.+)$/, (detail) => `XGBoost produced no forecast (${detail})`],
