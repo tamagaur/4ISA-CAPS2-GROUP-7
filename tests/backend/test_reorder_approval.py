@@ -57,9 +57,9 @@ class _DB:
 
     def __init__(self, *, status="pending", q_i=384.80, current_cycle=CYCLE, grants=(), change=None,
                  propose_wins=True, decide_matches=True, open_change=None, prior=None, approval=True,
-                 reversal=True, users=None):
+                 reversal=True, users=None, pack=None):
         self.row = {"recommendation_key": 1, "q_i": q_i, "status": status, "planning_cycle_date": CYCLE,
-                    "sku": "U-1", "current_cycle": current_cycle}
+                    "sku": "U-1", "current_cycle": current_cycle, "pack": pack}
         self.grants, self.change = set(grants), change
         self.propose_wins, self.decide_matches, self.open_change = propose_wins, decide_matches, open_change
         self.prior, self.approval, self.reversal, self.users = prior, approval, reversal, users or {}
@@ -88,6 +88,8 @@ class _DB:
             return FakeResult([{"one": 1}] if params["uid"] in self.grants else [])
         if "SELECT lr.recommendation_key, lr.q_i, lr.status, lr.planning_cycle_date" in sql:
             return FakeResult([self.row])
+        if "AS pack FROM lp_recommendation lr" in sql:   # the PATCH path's pack lookup (backend/case_pack.py)
+            return FakeResult([{"q_i": self.row["q_i"], "pack": self.row["pack"]}])
         if "SELECT q_i FROM lp_recommendation WHERE recommendation_key" in sql:
             return FakeResult([self.row["q_i"]])
         if "INSERT INTO lp_quantity_change" in sql:
@@ -554,3 +556,70 @@ def test_the_state_machine_the_code_assumes_is_in_the_migration():
     # a reversed row goes back to the shape ck_lp_decision_shape (0062) already allows
     capture = _migration("0062_lp_recommendation_decision_capture.sql")
     assert "decided_q_i IS NULL OR status = 'accepted'" in capture and "status <> 'dismissed'" in capture
+
+
+# ── 8. a planner's quantity must be whole cases (audit finding 4, 2026-10-23) ─────────────────────────────
+# 6,192 pieces on a pack of 288 is 21.5 cases and was applied. The edit is REFUSED (422 not_whole_cases), not
+# rounded: the planner typed it. The LP rounds because nobody typed its number.
+
+def _off_pack_refused(call):
+    with pytest.raises(ApiError) as err:
+        call()
+    assert err.value.status_code == 422 and err.value.code == "not_whole_cases"
+    return err.value
+
+
+def test_direct_apply_by_a_granted_planner_refuses_a_part_case_quantity():
+    db = _DB(q_i=5472.0, grants={3}, pack=288)
+    err = _off_pack_refused(lambda: _propose(db, user=BYPASS, quantity=6192.0))
+    assert err.extra["pack_size"] == 288 and err.extra["nearest_below"] == 6048 and err.extra["nearest_above"] == 6336
+    assert "21.50 cases" in err.detail
+    assert db.run("UPDATE lp_recommendation") == [] and db.audit == [] and db.commits == 0
+
+
+def test_direct_apply_by_an_admin_refuses_it_too_and_a_whole_case_quantity_still_applies():
+    db = _DB(q_i=5472.0, pack=288)
+    _off_pack_refused(lambda: _propose(db, user=ADMIN, quantity=5 * 288 + 1.0))
+    ok = _DB(q_i=5472.0, pack=288)
+    out, status = _propose(ok, user=ADMIN, quantity=6048.0)       # 21 cases
+    assert status == 200 and out.outcome == "applied"
+    assert ok.run("UPDATE lp_recommendation lr")[0][1]["decided_q"] == 6048.0
+
+
+def test_patch_by_a_granted_planner_refuses_a_part_case_quantity():
+    db = _DB(q_i=5472.0, grants={3}, pack=288)
+    _off_pack_refused(lambda: rec.update_recommendation(
+        1, RecommendationDecision(status="accepted", decided_quantity=6192), db=db, current_user=BYPASS))
+    assert db.run("UPDATE lp_recommendation lr") == [] and db.audit == []
+    ok = _DB(q_i=5472.0, grants={3}, pack=288)
+    rec.update_recommendation(1, RecommendationDecision(status="accepted", decided_quantity=6048), db=ok, current_user=BYPASS)
+    assert ok.run("UPDATE lp_recommendation lr")[0][1]["decided_q"] == 6048
+
+
+def test_a_proposal_that_would_be_held_is_refused_before_it_is_queued():
+    db = _DB(q_i=5472.0, pack=288)
+    _off_pack_refused(lambda: _propose(db, user=PLANNER, quantity=6192.0))
+    assert db.run("INSERT INTO lp_quantity_change") == [] and db.commits == 0
+    held = _DB(q_i=5472.0, pack=288, change=_change_row(recommended_q_i=5472.0, proposed_q_i=6048.0))
+    out, status = _propose(held, user=PLANNER, quantity=6048.0)
+    assert status == 202 and out.outcome == "held"
+
+
+def test_approving_a_held_part_case_quantity_is_refused_and_rolls_back():
+    """A proposal held before the check existed: the admin cannot approve it into the plan."""
+    db = _DB(q_i=5472.0, pack=288, change=_change_row(recommended_q_i=5472.0, proposed_q_i=6192.0))
+    _off_pack_refused(lambda: ra.approve_change(7, None, db=db, admin=ADMIN))
+    assert db.rolled_back and db.run("UPDATE lp_quantity_change") == [] and db.run("UPDATE lp_recommendation") == []
+    ok = _DB(q_i=5472.0, pack=288, change=_change_row(recommended_q_i=5472.0, proposed_q_i=6048.0))
+    assert ra.approve_change(7, None, db=ok, admin=ADMIN).state == "approved"
+
+
+def test_the_checks_that_are_not_made():
+    # No usable pack size (the LP leaves such rows unchanged), a pack of 1, zero, and the recommended quantity itself.
+    for pack, quantity in ((None, 390.0), (1, 390.0), (288, 0.0)):
+        db = _DB(q_i=5472.0, pack=pack, grants={3})
+        out, _ = _propose(db, user=BYPASS, quantity=quantity)
+        assert out.outcome == "applied"
+    from backend.case_pack import check_whole_cases
+    check_whole_cases(5472.4, 288, recommended=5472.4)       # an old off-pack row accepted as recommended is no edit
+    check_whole_cases(5472.0000004, 288)                      # within the LP's tolerance of a whole pack

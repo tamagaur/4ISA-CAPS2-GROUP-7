@@ -59,6 +59,7 @@ from sqlalchemy.orm import Session
 
 from backend import audit, planning_mart, response_cache
 from backend.api_errors import ApiError
+from backend.case_pack import PACK_SQL, check_whole_cases
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.routers import recommendations as rec
@@ -92,13 +93,14 @@ _CURRENT_CYCLE = """
 _ROW_SQL = """
     SELECT lr.recommendation_key, lr.q_i, lr.status, lr.planning_cycle_date,
            COALESCE(pd.sku_code, pd.category_path) AS sku,
+           {PACK} AS pack,
            (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
             JOIN product_dimension p2 ON p2.product_key = l2.product_key
             WHERE p2.principal = pd.principal) AS current_cycle
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     WHERE lr.recommendation_key = :key
-"""
+""".replace("{PACK}", PACK_SQL)
 
 _CHANGE_COLUMNS = """
     SELECT c.change_key, c.recommendation_key, COALESCE(pd.sku_code, pd.category_path) AS sku_code, pd.product_name,
@@ -226,6 +228,7 @@ def change_quantity(
     if quantity == recommended:
         raise ApiError(400, "That is the recommended quantity. Accept the recommendation as it is instead.",
                        code="quantity_unchanged", recommended_q_i=recommended)
+    check_whole_cases(quantity, row["pack"], recommended)
     reason = (body.reason or "").strip() or None
     flagged = rec._review_reasons(db, recommendation_key) if present["review_flag"] else None
     if flagged is not None and not body.reviewed:
@@ -331,6 +334,11 @@ def approve_change(
                              f"{_fmt(change['recommended_q_i'])}, it is now {_fmt(current['q_i'])}). Reject this "
                              "change and have it proposed again."), code="recommendation_changed",
                        recommended_q_i=float(current["q_i"]))
+    try:  # a proposal held before the case-pack check existed is refused here too
+        check_whole_cases(change["proposed_q_i"], current["pack"], current["q_i"])
+    except ApiError:
+        db.rollback()
+        raise
     note = ((body.note if body else None) or "").strip() or None
     now = datetime.datetime.utcnow()
     resolved = db.execute(text(_RESOLVE_SQL), {

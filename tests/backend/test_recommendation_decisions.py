@@ -99,6 +99,8 @@ class _PatchDB:
         self.sql.append((sql, dict(params or {})))
         if "to_regclass('review_flag')" in sql:
             return FakeResult([{"review_flag": False, "on_order": True, "decision_cols": self.decision_cols}])
+        if "AS pack FROM lp_recommendation lr" in sql:
+            return FakeResult([{"q_i": 50.0, "pack": None}])
         if "UPDATE lp_recommendation" in sql:
             return FakeResult([{"sku": "U-1", "planning_cycle_date": datetime.date(2026, 3, 1)}] if self.updated else [])
         if "AS current_cycle" in sql:

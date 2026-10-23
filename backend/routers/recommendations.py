@@ -202,6 +202,7 @@ from backend.data_mode import (
 from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, freshness_from, lp_model_info, stored_run
 from backend.lp_cycle import freshness as lp_freshness
 from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
+from backend.case_pack import PACK_SQL, check_whole_cases
 from backend.stock_status import COUNT_OMITS_ZERO_STOCK, NO_DATA, URGENCY, stock_status
 from backend.stock_units import (
     NO_PACK_SIZE_REASON,
@@ -1023,6 +1024,13 @@ def update_recommendation(
                                 f"POST /recommendations/{recommendation_key}/quantity-change.",
                            code="approval_required", recommendation_key=recommendation_key)
 
+    if decision.decided_quantity is not None:
+        # A quantity the planner typed must be whole cases (backend/case_pack.py); one equal to the recommendation is no edit.
+        sized = db.execute(text(f"SELECT lr.q_i, {PACK_SQL} AS pack FROM lp_recommendation lr "
+                                "JOIN product_dimension pd ON pd.product_key = lr.product_key "
+                                "WHERE lr.recommendation_key = :key"), {"key": recommendation_key}).mappings().first()
+        if sized is not None:
+            check_whole_cases(decision.decided_quantity, sized["pack"], sized["q_i"])
     decided = decide_row(db, present, key=recommendation_key, status=decision.status, reason=reason,
                          decided_quantity=decision.decided_quantity, decided_by=current_user.email)
     detail = f"SKU {decided['sku']}" + (f": {reason}" if reason else "")
