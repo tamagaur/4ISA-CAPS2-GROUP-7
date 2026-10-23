@@ -577,6 +577,22 @@ def test_class_shares_are_summed_when_a_class_is_not_one_block_of_the_ranking():
     assert summary == {"A": pytest.approx(0.65), "B": pytest.approx(0.30), "C": pytest.approx(0.05)}
 
 
+def test_two_principals_do_not_get_a_summed_revenue_share():
+    """Audit 2026-10-23 finding 5: under principal=all the shares are fractions of two different totals
+    (A read 152%), so the tier total is withheld rather than summed."""
+    from backend.routers.abc import _summarize
+    from backend.schemas.abc import ABCItem
+
+    def row(principal, tier, share):
+        return ABCItem(sku_id="x", principal=principal, tier=tier, tier_period="2026-02",
+                       revenue_share=share, cumulative_share=share, stock_status="NO DATA")
+
+    items = [row("unilever", "A", 0.8), row("delmonte", "A", 0.7), row("unilever", "B", 0.2)]
+    summary = _summarize(items, {"unilever": "2026-02", "delmonte": "2026-02"})[0]
+    assert all(t.revenue_share_total is None and t.sku_share is None for t in summary)
+    assert {t.tier: t.sku_count for t in summary} == {"A": 2, "B": 1}
+
+
 def test_lp_mase_gate_matches_the_forecast_gate():
     from analytics.forecasting.baseline import MASE_GATE
     from backend.routers.abc import LP_MASE_GATE

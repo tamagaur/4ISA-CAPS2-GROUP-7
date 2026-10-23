@@ -117,10 +117,17 @@ _LOCK_ROW_SQL = """
 _CHANGE_COLUMNS = """
     SELECT c.change_key, c.recommendation_key, COALESCE(pd.sku_code, pd.category_path) AS sku_code, pd.product_name,
            lr.planning_cycle_date, c.recommended_q_i, c.proposed_q_i, c.proposal_reason AS reason, c.reviewed,
-           c.state, c.proposed_by, c.proposed_at, c.resolved_by, c.resolved_at, c.resolution_note
+           c.state, c.proposed_by, c.proposed_at, c.resolved_by, c.resolved_at, c.resolution_note,
+           rv.reversed_by, rv.reversed_at
     FROM lp_quantity_change c
     JOIN lp_recommendation lr ON lr.recommendation_key = c.recommendation_key
     JOIN product_dimension pd ON pd.product_key = lr.product_key
+    -- An approved change whose decision an admin later reversed (audit 2026-10-23 finding 10): the state stays
+    -- 'approved' as the record, and these two columns say the decision it made was undone.
+    LEFT JOIN LATERAL (SELECT r.reversed_by, r.reversed_at FROM lp_decision_reversal r
+                       WHERE r.recommendation_key = c.recommendation_key AND c.state = 'approved'
+                         AND r.reversed_at >= c.resolved_at
+                       ORDER BY r.reversed_at DESC LIMIT 1) rv ON true
 """
 _CHANGE_BY_KEY_SQL = _CHANGE_COLUMNS + " WHERE c.change_key = :change_key"
 # FOR UPDATE on both rows: a rerun of the LP (which upserts pending rows) or another decision waits for the commit.
@@ -348,6 +355,24 @@ def approve_change(
     _require_approval(present)
     change = _locked_pending_change(db, change_key)
     current = db.execute(text(_ROW_SQL), {"key": change["recommendation_key"]}).mappings().first()
+    if current["planning_cycle_date"] != current["current_cycle"]:
+        # Audit 2026-10-23 finding 9: the row's cycle has been superseded, so the change can never be applied. Close it
+        # (rejected, with the reason) and commit, instead of rolling back and leaving it in the queue for ever.
+        note = (f"Closed automatically: the {current['planning_cycle_date']} cycle was superseded by the "
+                f"{current['current_cycle']} LP run, so this change can no longer be applied.")
+        closed = db.execute(text(_RESOLVE_SQL), {
+            "state": "rejected", "resolved_by": admin.email, "resolved_at": datetime.datetime.utcnow(), "note": note,
+            "change_key": change_key,
+        }).mappings().first()
+        if closed is not None:
+            audit.record(db, "Reorder Quantity Change Closed",
+                         f"SKU {current['sku']}: quantity change {change_key} closed, {note}", actor=admin)
+            db.commit()
+        else:
+            db.rollback()
+        raise HTTPException(status_code=409, detail=(
+            f"This recommendation belongs to the {current['planning_cycle_date']} cycle, which a newer LP run "
+            f"({current['current_cycle']}) has superseded, so the change cannot be approved. It has been closed."))
     if round(float(current["q_i"]), 2) != round(float(change["recommended_q_i"]), 2):
         db.rollback()
         raise ApiError(409, (f"The recommendation changed after this was proposed (it was "

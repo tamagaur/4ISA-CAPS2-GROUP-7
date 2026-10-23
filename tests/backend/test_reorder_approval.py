@@ -23,7 +23,7 @@ from backend.api_errors import ApiError
 from backend.routers import recommendations as rec
 from backend.routers import reorder_approval as ra
 from backend.schemas.recommendations import (
-    ApprovalNote, QuantityChangeRequest, RecommendationDecision, RejectRequest, ReverseRequest,
+    ApprovalNote, QuantityChange, QuantityChangeRequest, RecommendationDecision, RejectRequest, ReverseRequest,
 )
 from tests.backend.test_recommendations import FakeResult, _item_row
 
@@ -252,6 +252,26 @@ def test_approval_is_refused_when_the_recommendation_moved_since_the_proposal():
         ra.approve_change(7, None, db=db, admin=ADMIN)
     assert err.value.status_code == 409 and err.value.code == "recommendation_changed"
     assert db.run("UPDATE lp_quantity_change") == [] and db.run("UPDATE lp_recommendation") == []
+
+
+def test_a_change_on_a_superseded_cycle_is_closed_not_left_in_the_queue():
+    """Audit 2026-10-23 finding 9: approve answered 409 and rolled back, so the change stayed pending for ever."""
+    db = _DB(change=_change_row(), current_cycle=datetime.date(2026, 4, 1))
+    with pytest.raises(HTTPException) as err:
+        ra.approve_change(7, None, db=db, admin=ADMIN)
+    assert err.value.status_code == 409 and "superseded" in err.value.detail
+    closed = db.run("UPDATE lp_quantity_change")
+    assert len(closed) == 1 and closed[0][1]["state"] == "rejected" and "superseded" in closed[0][1]["note"]
+    assert db.commits == 1 and db.run("UPDATE lp_recommendation") == []  # the closure is kept, no decision written
+    assert len(db.audit) == 1
+
+
+def test_the_change_list_names_an_approval_whose_decision_was_later_reversed():
+    sql = " ".join(ra._CHANGE_COLUMNS.split())
+    assert "lp_decision_reversal" in sql and "rv.reversed_at" in sql and "c.state = 'approved'" in sql
+    change = QuantityChange(**_change_row(state="approved", reversed_by="admin@ssmcapstone.com",
+                                          reversed_at=PROPOSED_AT))
+    assert change.state == "approved" and change.reversed_by == "admin@ssmcapstone.com"
 
 
 @pytest.mark.parametrize("state", ["approved", "rejected"])

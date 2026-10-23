@@ -71,7 +71,8 @@ class TierSummary(BaseModel):
     # adding them would push the tiers past 100% combined. Read off the
     # stored running total at the tier's boundary, not summed from per-row
     # shares that were each rounded to 4 dp (routers/abc.py's _tier_shares).
-    revenue_share_total: float
+    # None when the response spans two principals: their shares are fractions of two different totals.
+    revenue_share_total: float | None
     # How many of sku_count are carried forward (view=last_known); always 0
     # in the default view.
     carried_forward_count: int = 0

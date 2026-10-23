@@ -303,6 +303,7 @@ def _summarize(items: list[ABCItem], periods: dict[str, str]) -> tuple[list[Tier
     one principal — two principals' shares are fractions of two different
     totals, and their running totals interleave."""
     summary: dict[str, TierSummary] = {}
+    one_principal = len({i.principal for i in items if i.tier_period == periods.get(i.principal)}) == 1
     # "Current" is each row's OWN principal's run: under 'all' the two
     # principals' latest runs differ (Unilever 2026-02, Del Monte 2025-12).
     def is_current(i: ABCItem) -> bool:
@@ -312,17 +313,18 @@ def _summarize(items: list[ABCItem], periods: dict[str, str]) -> tuple[list[Tier
     for item in items:
         entry = summary.setdefault(item.tier, TierSummary(tier=item.tier, sku_count=0, revenue_share_total=0.0))
         entry.sku_count += 1
-        if is_current(item):
+        if is_current(item) and one_principal:
             entry.revenue_share_total += item.revenue_share or 0.0
         else:
             entry.carried_forward_count += 1
-    one_principal = len({i.principal for i in current}) == 1
     shares = _tier_shares(current) if one_principal else None
     for entry in summary.values():
         ranked_here = entry.sku_count - entry.carried_forward_count
         entry.sku_share = round(ranked_here / len(current), 6) if current and one_principal else None
         if shares is not None:
             entry.revenue_share_total = shares.get(entry.tier, 0.0)
+        elif not one_principal:  # audit 2026-10-23 finding 5: a sum over two principals is ~200%, not a share
+            entry.revenue_share_total = None
     check = _pareto(current) if one_principal else None
     return sorted(summary.values(), key=lambda t: t.tier), check
 
