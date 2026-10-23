@@ -468,7 +468,10 @@ def test_original_fields_unchanged():
     assert resp.status_code == 200
     body = resp.json()
     assert body["principal"] == "unilever"
-    assert body["inventory"] == {"value": None, "weeks_of_cover": None, "policy_weeks": 3}
+    inventory = dict(body["inventory"])
+    counts = inventory.pop("stock_counts")
+    assert inventory == {"value": None, "weeks_of_cover": None, "policy_weeks": 3, "count_date": None}
+    assert counts == body["kpis"]["stock_counts"]  # the stock card names the count it is the stock of
     assert body["recommendations"] == {"order_value": None, "product_count": 5}
     assert body["forecast"] == {"unreliable_count": 3, "evaluated_count": 8, "total_count": 10, "mase_gate": 1.0}
     # latest real sales month, overall and per principal (no Del Monte sales in this fixture)

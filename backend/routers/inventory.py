@@ -6,7 +6,8 @@ from backend.lp_cycle import PLAN_STATUS_SQL_BARE, current_cycle
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, principal_clause
 from backend.stock_status import stock_status
-from backend.stock_units import STOCK_AT_LATEST_SQL
+from backend.routers.sku import STOCK_COUNT_DATE_SQL
+from backend.stock_units import COUNT_DATE_NOT_LOADED, STOCK_AT_LATEST_SQL
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -45,9 +46,16 @@ def get_inventory_current(
             inv.stock_pieces AS current_stock,
             inv.stock_cases AS current_stock_cases,
             lp.ss_i,
-            lp.rop_i
+            lp.rop_i,
+            count_period.latest_period AS count_period,
+            stock_count.count_date AS count_date
         FROM ({STOCK_AT_LATEST_SQL}) inv
         JOIN product_dimension pd ON inv.product_key = pd.product_key
+        -- The count every stock figure above comes from, per principal (the same latest snapshot
+        -- STOCK_AT_LATEST_SQL reads): its file month and the day it was counted (2026-10-23).
+        LEFT JOIN (SELECT principal, MAX(_period) AS latest_period FROM inventory_fact_real GROUP BY principal)
+               count_period ON count_period.principal = pd.principal
+        LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = pd.principal
         LEFT JOIN (
             SELECT product_key, ss_i, rop_i
             FROM lp_recommendation
@@ -77,6 +85,11 @@ def get_inventory_current(
             # receivedMts / dispatchedMts were hardcoded 0 here until 2026-10-20. Purchases and
             # sales have no product on them (see /movement), so a per-SKU received or dispatched
             # figure does not exist; the keys are gone rather than served as a zero.
+            # Which count currentStock is: the file month it is filed under and the day it was counted.
+            # Del Monte's stored day is a placeholder (DEC-12), so its date is null and says why.
+            "count_period": r["count_period"],
+            "count_date": r["count_date"].isoformat() if r["count_date"] is not None else None,
+            "count_date_note": COUNT_DATE_NOT_LOADED if r["count_date"] is None else None,
             "status": stock_status(
                 None if r["current_stock"] is None else float(r["current_stock"]),
                 None if r["ss_i"] is None else float(r["ss_i"]),

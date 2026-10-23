@@ -82,6 +82,9 @@ class _Result:
         return self._rows[0] if self._rows else None
 
 
+_COUNT = {"count_period": "2026-03", "count_date": datetime.date(2026, 4, 6)}
+
+
 class _InventorySession:
     def __init__(self, rows):
         self.rows, self.calls = rows, []
@@ -101,11 +104,11 @@ class _InventorySession:
 
 def test_inventory_current_is_the_latest_snapshot_in_pieces_on_the_shared_rule():
     session = _InventorySession([
-        {"sku_code": "A", "principal": "unilever", "product_name": "a", "current_stock": 10.0, "current_stock_cases": 1.0, "ss_i": 50.0, "rop_i": 100.0},
-        {"sku_code": "B", "principal": "unilever", "product_name": "b", "current_stock": 150.0, "current_stock_cases": 6.0, "ss_i": 50.0, "rop_i": 100.0},
-        {"sku_code": "C", "principal": "unilever", "product_name": "c", "current_stock": 150.0, "current_stock_cases": 6.0, "ss_i": None, "rop_i": None},
-        {"sku_code": "D", "principal": "unilever", "product_name": "d", "current_stock": None, "current_stock_cases": 3.0, "ss_i": 50.0, "rop_i": 100.0},
-        {"sku_code": "E", "principal": "delmonte", "product_name": "e", "current_stock": None, "current_stock_cases": 12.0, "ss_i": None, "rop_i": None},
+        {"sku_code": "A", "principal": "unilever", "product_name": "a", "current_stock": 10.0, "current_stock_cases": 1.0, "ss_i": 50.0, "rop_i": 100.0, **_COUNT},
+        {"sku_code": "B", "principal": "unilever", "product_name": "b", "current_stock": 150.0, "current_stock_cases": 6.0, "ss_i": 50.0, "rop_i": 100.0, **_COUNT},
+        {"sku_code": "C", "principal": "unilever", "product_name": "c", "current_stock": 150.0, "current_stock_cases": 6.0, "ss_i": None, "rop_i": None, **_COUNT},
+        {"sku_code": "D", "principal": "unilever", "product_name": "d", "current_stock": None, "current_stock_cases": 3.0, "ss_i": 50.0, "rop_i": 100.0, **_COUNT},
+        {"sku_code": "E", "principal": "delmonte", "product_name": "e", "current_stock": None, "current_stock_cases": 12.0, "ss_i": None, "rop_i": None, **_COUNT},
     ])
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(
@@ -119,6 +122,9 @@ def test_inventory_current_is_the_latest_snapshot_in_pieces_on_the_shared_rule()
     }
     main_sql = next(sql for sql, _ in session.calls if "inventory_fact_real" in sql)
     assert "latest_period" in main_sql and "SUM(i.quantity_on_hand)" not in main_sql
+    # Every row says which count it is (2026-10-23): the file month and the day it was counted.
+    assert {(r["count_period"], r["count_date"]) for r in body} == {("2026-03", "2026-04-06")}
+    assert all(r["count_date_note"] is None for r in body)
 
 
 def test_inventory_current_serves_no_received_or_dispatched_zeros():
@@ -126,7 +132,7 @@ def test_inventory_current_serves_no_received_or_dispatched_zeros():
     not zero: a zero here would read as 'nothing was received'."""
     session = _InventorySession([
         {"sku_code": "A", "principal": "unilever", "product_name": "a", "current_stock": 10.0,
-         "current_stock_cases": 1.0, "ss_i": 50.0, "rop_i": 100.0}])
+         "current_stock_cases": 1.0, "ss_i": 50.0, "rop_i": 100.0, **_COUNT}])
     app.dependency_overrides[get_db] = lambda: session
     app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(
         auth_utils.create_access_token(user_id=1, email="staff@ssmcapstone.com", role="staff", full_name="Staff"))

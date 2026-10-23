@@ -2336,6 +2336,9 @@ def get_dashboard(
             "value": _to_float(soh_value),
             "weeks_of_cover": None,
             "policy_weeks": POLICY_WEEKS,
+            # The count `value` is the stock of (2026-10-23): the same entries as kpis.stock_counts.
+            "count_date": soh_count_date,
+            "stock_counts": latest_stock_counts,
         },
         "recommendations": {"order_value": None, "product_count": product_count},
         "forecast": {
