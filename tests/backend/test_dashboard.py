@@ -351,7 +351,7 @@ class FakeSession:
         # Checked FIRST among the row queries: recommendations._SELECT_ONE
         # (reused verbatim by reorder_preview) embeds its own stock
         # subquery, which a stock matcher below would otherwise claim.
-        if "FROM lp_recommendation lr" in sql and "WHERE lr.status = 'pending'" in sql:
+        if "FROM lp_recommendation lr" in sql and "WHERE (lr.status IN ('pending', 'accepted', 'dismissed')" in sql:
             return FakeResult(self.reco_preview_rows)
 
         if "COUNT(*) AS product_count" in sql:
@@ -1089,6 +1089,7 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
     preview = resp.json()["reorder_preview"]
     assert preview == {
         "rows": [], "critical_count": 0, "low_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
+        "plan_count": 0, "pending_count": 0, "pending_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
         "lp_weights_source": "defaults",
         "stock_counts": [],  # no LP cycle, so no opening count to name
@@ -2350,3 +2351,45 @@ def test_annual_sales_under_all_needs_both_principals_in_a_month():
 def test_annual_sales_is_blocked_with_a_reason_when_there_are_no_sales():
     annual = _get(FakeSession(latest_sales_period=None), "principal=unilever")["annual_sales"]
     assert annual["years"] == [] and "No " in annual["blocked_reason"]
+
+
+def test_accepting_a_row_leaves_the_dashboard_and_the_reorder_page_in_agreement():
+    """2026-10-23 (audit finding 2): after one accept, /recommendations kept the decided row in the plan
+    (total and count unchanged) while the Dashboard's total_order_qty and product_count fell by that row.
+    A decided row stays in the plan at its q_i; pending is a second, separately named number."""
+    from tests.backend import test_recommendations as rec_tests
+
+    def rows(accepted_key):
+        out = []
+        for k in (1, 2, 3, 4):
+            r = _reco_row(k, urgency_stock=0, rop_i=100)
+            r["q_i"] = 288.0 * k
+            r["status"] = "accepted" if k == accepted_key else "pending"
+            out.append(r)
+        return out
+
+    def both(accepted_key):
+        dash_rows = rows(accepted_key)
+        with make_client(FakeSession(reco_preview_rows=dash_rows, recommendation_count=4)) as c:
+            body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+        rec_rows = [{**r, "product_key": r["recommendation_key"], "tier": "A", "revenue_share": 0.03,
+                     "decided_at": None, "decided_by": None, "generated_at": None, "_abc_period": "2026-02"}
+                    for r in dash_rows]
+        rec_session = rec_tests.FakeSession(
+            rec_rows, stock_by_period={(k, "2026-02"): 0.0 for k in (1, 2, 3, 4)},
+            inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"})
+        app.dependency_overrides[get_db] = lambda: rec_session
+        with TestClient(app) as c:
+            reco = c.get("/recommendations?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+        return body, reco
+
+    for accepted in (None, 2):
+        body, reco = both(accepted)
+        preview = body["reorder_preview"]
+        assert preview["total_order_qty"] == sum(i["q_i"] for i in reco["items"]) == 2880
+        assert preview["plan_count"] == body["recommendations"]["product_count"] == reco["count"] == 4
+        # The urgency parts of the card add up to the same plan count.
+        assert preview["critical_count"] == sum(1 for i in reco["items"] if i["urgency"] == "CRITICAL") == 4
+    # ...and the open work is its own number, one lower, with the accepted row out of the preview.
+    assert preview["pending_count"] == 3 and preview["pending_order_qty"] == 2880 - 576
+    assert 2 not in [r["recommendation_key"] for r in preview["rows"]]

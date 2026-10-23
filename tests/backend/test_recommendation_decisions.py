@@ -68,9 +68,11 @@ def test_every_plan_read_uses_the_plan_statuses():
     assert src.count("PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle") == 2
     q, _ = dashboard._policy_rows_query("unilever", "real", datetime.date(2026, 3, 1))
     assert "'accepted'" in q and lp_cycle.PLAN_STATUS_SQL in q
-    # ...while the dashboard's "awaiting a decision" count keeps meaning open work.
+    # The dashboard's product count is the plan too (2026-10-23); the still-pending subset is a separate column.
     q, _ = dashboard._product_count_query("unilever", "real", datetime.date(2026, 3, 1))
-    assert "lr.status = 'pending'" in q
+    assert lp_cycle.PLAN_STATUS_SQL in q and "FILTER (WHERE lr.status = 'pending') AS pending_count" in q
+    q, _ = dashboard._reorder_preview_query("unilever", "real", datetime.date(2026, 3, 1), "2026-02", {})
+    assert lp_cycle.PLAN_STATUS_SQL in q
 
 
 def test_the_planning_mart_anchors_on_the_same_statuses():

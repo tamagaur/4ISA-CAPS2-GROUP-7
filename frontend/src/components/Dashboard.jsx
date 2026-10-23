@@ -1239,8 +1239,12 @@ const Dashboard = () => {
   });
   const openingCount = stockCountedLine(reorderPreview.stock_counts);
   const pendingTooltip = lpHidden ? null : [
-    `Order recommendations in the ${planLabel || 'current plan'} that nobody has accepted or dismissed yet. `
-      + 'Rows already decided, and undecided rows from earlier plans, are not counted.',
+    `Order recommendations in the ${planLabel || 'current plan'}: the whole plan, as the Reorder page counts it. `
+      + 'A row that has been accepted or dismissed stays in it. '
+      + (reorderPreview.pending_count != null
+        ? `${reorderPreview.pending_count.toLocaleString()} of them still wait for a decision `
+          + `(${(reorderPreview.pending_order_qty ?? 0).toLocaleString()} pieces). ` : '')
+      + 'Undecided rows from earlier plans are not counted.',
     'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
       + `Stock is the count that opens the plan${openingCount ? ` (${openingCount})` : ''}; a SKU missing from that `
       + 'count is read as 0 on hand.',
