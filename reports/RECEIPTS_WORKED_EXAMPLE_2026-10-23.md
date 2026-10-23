@@ -1,5 +1,7 @@
 # Worked example: derived February 2026 receipts (Unilever)
 
+> Published figures: its two products appear in the manuscript with their arithmetic, so these figures are published and the purpose of hard rule 9 (confidentiality of unpublished per-product data) does not apply to this file.
+
 Written for: the manuscript, as two single-product illustrations of the derived-receipts calculation. Source discussion: `reports/FOLLOWUP_2026-10-23.md` §3c. All figures queried read-only on 2026-10-24 and cross-checked against `local/stock_reconciliation_per_product_2026-10-23.csv`.
 
 ## The rule
