@@ -15,6 +15,7 @@ Password Reset, Sign-in Locked, Sign-in Failed, Sign-in Failure Logging
 Paused, Add SKU, Edit SKU, Reorder Recommendation Accepted / Dismissed,
 Two-Step Sign-In On / Off / Reset, Recovery Codes Replaced, Recovery Code
 Used, Device Remembered, Two-Step Code Skipped (backend/mfa.py).
+Reorder Decision Reversed (backend/routers/reorder_approval.py).
 """
 from __future__ import annotations
 

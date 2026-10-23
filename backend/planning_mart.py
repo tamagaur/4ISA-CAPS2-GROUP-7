@@ -245,6 +245,25 @@ def decide(db, params: dict) -> bool:
         return False
 
 
+def undecide(db, key: int) -> bool:
+    """A reversed decision (POST /recommendations/{key}/reverse, migration 0067) copied to the mart's own row:
+    pending again, no decider, inside the reversal's transaction and behind a savepoint, exactly as decide() does.
+    False when skipped or failed (the mart then no longer matches lp_recommendation and isn't served)."""
+    if not present(db):
+        return False
+    try:
+        with db.begin_nested():
+            db.execute(text(f"""
+                UPDATE {_STATE['schema']}.planning_mart
+                SET decision_status = 'pending', decided_at = NULL, decided_by = NULL
+                WHERE recommendation_key = :key
+            """), {"key": key})
+        return True
+    except Exception as exc:  # noqa: BLE001 - the reversal must not fail on a summary table
+        print(f"[planning_mart] reversal not copied to the mart: {exc!r}")
+        return False
+
+
 def refresh(db, trigger: str) -> bool:
     """mart.refresh_planning() inside the caller's transaction, behind a savepoint: a failure
     is reported and leaves the caller's own write intact (the mart then reads as stale and

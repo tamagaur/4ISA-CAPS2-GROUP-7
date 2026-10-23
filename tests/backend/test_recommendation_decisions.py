@@ -235,6 +235,9 @@ ALLOWED = {
     "backend/routers/recommendations.py", "backend/schemas/recommendations.py",
     "analytics/db/migrations/0062_lp_recommendation_decision_capture.sql",
     "tests/backend/test_recommendation_decisions.py",
+    # 2026-10-23: the reversal is part of the decision endpoint (it copies and resets the same columns). Still nothing in forecasting, safety stock or the LP.
+    "backend/routers/reorder_approval.py", "tests/backend/test_reorder_approval.py",
+    "analytics/db/migrations/0067_lp_decision_reversal.sql",
 }
 
 

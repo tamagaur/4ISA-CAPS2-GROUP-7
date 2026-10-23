@@ -35,7 +35,7 @@ from backend.client_ip import RealClientIPMiddleware
 from backend.deps import check_db_connection, get_db
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
-    inventory, pareto, permissions, policy_comparison, recommendations, segment, sku, two_factor, users,
+    inventory, pareto, permissions, policy_comparison, recommendations, reorder_approval, segment, sku, two_factor, users,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,6 +115,7 @@ app.include_router(permissions.router)
 app.include_router(inventory.router)
 app.include_router(forecast.router)
 app.include_router(recommendations.router)
+app.include_router(reorder_approval.router)
 app.include_router(abc.router)
 app.include_router(dashboard.router)
 app.include_router(dashboard_range.router)

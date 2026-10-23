@@ -340,7 +340,8 @@ _PRESENT_SQL = """
            EXISTS (
                SELECT 1 FROM pg_attribute
                WHERE attrelid = to_regclass('lp_recommendation') AND attname = 'decided_q_i' AND NOT attisdropped
-           ) AS decision_cols
+           ) AS decision_cols,
+           to_regclass('lp_decision_reversal') IS NOT NULL AS reversal
 """
 # Migration 0062's columns. Where it isn't applied the row query reads the same names as NULLs.
 _DECISION_COLS_SQL = ("lr.decided_q_i AS decided_q_i, lr.decision_reason AS decision_reason, "
@@ -359,12 +360,12 @@ _REVIEW_ABSENT_SQL = """
 
 
 def _present(db: Session) -> dict:
-    """{review_flag, on_order, decision_cols}: whether migration 0042's table and
-    columns and migration 0062's columns exist. A database (or test fake) that
-    can't answer counts as none of them."""
+    """{review_flag, on_order, decision_cols, reversal}: whether migration 0042's table and
+    columns, migration 0062's columns and migration 0067's table (reversal) exist. A database
+    (or test fake) that can't answer counts as none of them."""
     row = db.execute(text(_PRESENT_SQL)).mappings().first()
     return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"]),
-            "decision_cols": bool(row and row.get("decision_cols"))}
+            "decision_cols": bool(row and row.get("decision_cols")), "reversal": bool(row and row.get("reversal"))}
 
 
 def _with_present(sql: str, present: dict) -> str:
@@ -866,8 +867,10 @@ def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):
 #   pending   -> accepted   legal
 #   pending   -> dismissed  legal, with a reason
 #   accepted  -> anything   refused (409): the order may already be placed
-#   dismissed -> anything   refused (409): re-deciding is not a path this page offers (known limitation:
-#                           a mis-click cannot be undone from the page)
+#   dismissed -> anything   refused (409) here
+#   accepted | dismissed -> pending   ONLY by an admin, through POST /{key}/reverse (backend/routers/
+#                           reorder_approval.py, migration 0067). The decision is copied to lp_decision_reversal
+#                           first, never deleted.
 # and only a row of its principal's CURRENT cycle can be decided: a pending row left behind by an earlier run
 # (179 of them, 33 cycles, on 2026-10-20) is refused (409) however it is reached. Both rules sit in the
 # UPDATE's own WHERE clause, so two requests racing for one row cannot both win.
@@ -908,6 +911,20 @@ def refusal_for(row) -> HTTPException:
         f"This recommendation belongs to the {row['planning_cycle_date']} cycle, which a newer LP run "
         f"({row['current_cycle']}) has superseded, so it can no longer be decided."
     ))
+
+
+def item_for(db: Session, present: dict, key: int, cycle) -> RecommendationItem:
+    """One row as GET shows it. Single row pinned by recommendation_key; scope left unfiltered (None = all),
+    identical to today's behaviour - see sku.py's _one_row_params. Stock at the row's own cycle's opening count."""
+    row = db.execute(
+        text(_with_present(_SELECT_ONE, present) + " WHERE lr.recommendation_key = :key"),
+        {
+            "key": key,
+            "inv_period": opening_period(cycle),
+            **abc_period_params(latest_abc_periods(db, None, str(cycle)[:7])),
+        },
+    ).mappings().first()
+    return _to_item(row, present)
 
 
 @router.patch("/{recommendation_key}", response_model=RecommendationItem)

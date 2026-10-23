@@ -197,3 +197,15 @@ class RecommendationDecision(BaseModel):
             if self.decided_quantity is not None:
                 raise ValueError("decided_quantity applies to an accepted recommendation, not a dismissed one")
         return self
+
+
+# ── Reversing a decision (2026-10-23, migration 0067) ──────────────────────────────────────────────────────
+class ReverseRequest(BaseModel):
+    """POST /recommendations/{key}/reverse (admin only). A reason is required."""
+    reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _reason_not_blank(self):
+        if not self.reason.strip():
+            raise ValueError("a reason is required to reverse a decision")
+        return self
