@@ -1,7 +1,7 @@
 # Reorder approval and reversal: API for the frontend (2026-10-23)
 
 Backend only. Code: `backend/routers/reorder_approval.py` (new), `backend/routers/recommendations.py` (PATCH gate).
-Migrations **0067** (reversal) and **0068** (approval) are written and **not applied** to `public`. Until they are,
+Migrations **0067** (reversal) and **0068** (approval) are **applied** to `public` (2026-10-23). Before that
 the new endpoints answer 503 (`reversal_not_ready` / `approval_not_ready`) and `PATCH /recommendations/{key}` behaves
 exactly as before. All quantities are pieces. Errors are `{"detail": "...", "code": "..."}` where a code is listed.
 
