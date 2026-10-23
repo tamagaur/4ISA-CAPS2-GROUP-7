@@ -147,6 +147,7 @@ from backend.stock_units import STOCK_AT_LATEST_SQL
 from backend.routers.sku import STOCK_COUNT_DATE_SQL, stock_count_dates
 from analytics.classification.abc import abc_rules, pareto_check
 from analytics.params import abc_method_sql
+from backend.abc_basis import abc_page_basis
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
 from backend.response_cache import cached
 
@@ -495,7 +496,8 @@ def _get_abc_period(
             periods = {"unilever": month}
             abc_source, source_params = abc_relation(computed, with_stored=False)
     if period is None:
-        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()))
+        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], basis=abc_page_basis(principal),
+                           rules=ABCRules(**abc_rules()))
     # The target stock each row's stock status is judged against: the LP's
     # own, or in preview with built outputs the five-year what-if's.
     lp_src, lp_params = lp_source(mode, "lp_recommendation")
@@ -556,6 +558,7 @@ def _get_abc_period(
         classification_period=period,
         tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,
+        basis=abc_page_basis(principal),
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
         stock_count_dates=stock_count_dates(rows),
@@ -633,8 +636,8 @@ def _get_abc_last_known(
 
     if period is None:
         return ABCResponse(
-            items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()),
-            unclassified_count=unclassified_count,
+            items=[], count=0, classification_period=None, tier_summary=[], basis=abc_page_basis(principal),
+            rules=ABCRules(**abc_rules()), unclassified_count=unclassified_count,
         )
 
     ac_scope_sql, ac_scope_params = principal_clause(principal, "principal")
@@ -712,6 +715,7 @@ def _get_abc_last_known(
         classification_period=period,
         tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,
+        basis=abc_page_basis(principal),
         unclassified_count=unclassified_count,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,

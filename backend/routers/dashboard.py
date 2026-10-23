@@ -394,6 +394,7 @@ from backend.data_mode import (
 from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
 from analytics.params import abc_method_sql
+from backend.abc_basis import dashboard_basis
 from analytics.params import (
     ALLOCATION_DEFAULT_PCT,
     COVER_KPI_HISTORY_MONTHS,
@@ -2423,6 +2424,9 @@ def get_dashboard(
         # sales months it should label, from the same rows it plots.
         "sales_vs_stock_insight": svs_insight,
         "abc_mix": abc_mix,
+        # What abc_mix and tier_stock were ranked on (backend/abc_basis.py): the range's plain Pareto, not the
+        # t12m_new basis the ABC page and the plan use. Labelled, not changed (audit 2026-10-23, finding 1).
+        "abc_basis": dashboard_basis(range_text),
         # The cutoffs the ABC run applied, so the card states them from the
         # source (analytics/classification/abc.py) rather than in its copy.
         "abc_rules": abc_rules(),

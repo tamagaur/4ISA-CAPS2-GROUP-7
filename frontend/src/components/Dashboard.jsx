@@ -1088,7 +1088,11 @@ const Dashboard = () => {
       detail: `${FOLLOWS_RANGE} Jan to Dec across, one line per calendar year: the range's months, and the `
         + '"Compare with" period\'s months on their own years\' lines.',
     },
-    abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
+    abc: {
+      ...rangeBasis,
+      detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.`
+        + (data.abc_basis ? ` ${data.abc_basis.label}. ${data.abc_basis.note}` : ''),
+    },
     classChanges: {
       label: 'Range vs a year earlier',
       follows: true,

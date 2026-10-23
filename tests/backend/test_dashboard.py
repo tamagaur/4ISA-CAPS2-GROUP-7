@@ -2393,3 +2393,10 @@ def test_accepting_a_row_leaves_the_dashboard_and_the_reorder_page_in_agreement(
     # ...and the open work is its own number, one lower, with the accepted row out of the preview.
     assert preview["pending_count"] == 3 and preview["pending_order_qty"] == 2880 - 576
     assert 2 not in [r["recommendation_key"] for r in preview["rows"]]
+
+
+def test_the_dashboard_tier_cards_state_the_basis_they_were_ranked_on():
+    with make_client(FakeSession()) as c:
+        body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+    assert body["abc_basis"]["method"] == "range_pareto"
+    assert body["abc_basis"]["planning_basis"]["unilever"]["method"] == "t12m_new"

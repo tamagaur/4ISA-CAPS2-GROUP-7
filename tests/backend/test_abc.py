@@ -731,3 +731,15 @@ def test_last_known_leaves_out_a_retired_series_and_says_how_many():
     body = _get(LastKnownFakeSession(abc_rows, products), "view=last_known&principal=delmonte")
     assert [i["product_key"] for i in body["items"]] == [10]
     assert body["count"] == 1 and body["retired_series_count"] == 2
+
+
+def test_the_abc_response_names_its_tier_a_basis_per_principal():
+    """Audit 2026-10-23, finding 1: 189 on the ABC page and 175 on the Dashboard's tier cards each state their basis."""
+    from backend.abc_basis import abc_page_basis, dashboard_basis
+
+    both = abc_page_basis(None)["by_principal"]
+    assert both["unilever"]["method"] == "t12m_new" and both["delmonte"]["method"] == "single"
+    assert list(abc_page_basis("delmonte")["by_principal"]) == ["delmonte"]
+    dash = dashboard_basis("Mar 2025 – Feb 2026")
+    assert dash["method"] == "range_pareto" and "Mar 2025 – Feb 2026" in dash["label"]
+    assert dash["planning_basis"]["unilever"]["method"] == "t12m_new" and dash["differs_from_planning_basis"] is True
