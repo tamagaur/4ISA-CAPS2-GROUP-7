@@ -57,12 +57,15 @@ class _DB:
 
     def __init__(self, *, status="pending", q_i=384.80, current_cycle=CYCLE, grants=(), change=None,
                  propose_wins=True, decide_matches=True, open_change=None, prior=None, approval=True,
-                 reversal=True, users=None, pack=None):
+                 reversal=True, users=None, pack=None, status_after_insert=None):
         self.row = {"recommendation_key": 1, "q_i": q_i, "status": status, "planning_cycle_date": CYCLE,
                     "sku": "U-1", "current_cycle": current_cycle, "pack": pack}
         self.grants, self.change = set(grants), change
         self.propose_wins, self.decide_matches, self.open_change = propose_wins, decide_matches, open_change
         self.prior, self.approval, self.reversal, self.users = prior, approval, reversal, users or {}
+        # What the row reads as when the proposer re-reads it under a lock after its INSERT: another transaction's
+        # accept that committed in between shows up here (the race, audit 2026-10-23).
+        self.status_after_insert = status_after_insert
         self.sql: list[tuple[str, dict]] = []
         self.audit: list[dict] = []
         self.commits = 0
@@ -109,6 +112,10 @@ class _DB:
         if "AS current_cycle" in sql and "FROM lp_recommendation d" in sql:
             return FakeResult([{"status": self.row["status"], "planning_cycle_date": CYCLE,
                                 "current_cycle": self.row["current_cycle"]}])
+        if sql.startswith("SELECT lr.status, lr.planning_cycle_date,") and "FOR UPDATE OF lr" in sql:
+            self.locked_after_insert = True
+            return FakeResult([{"status": self.status_after_insert or self.row["status"],
+                                "planning_cycle_date": CYCLE, "current_cycle": self.row["current_cycle"]}])
         if "FOR UPDATE OF lr" in sql:
             return FakeResult([self.prior] if self.prior else [])
         if "SELECT user_id, email, role FROM users" in sql:
@@ -623,3 +630,48 @@ def test_the_checks_that_are_not_made():
     from backend.case_pack import check_whole_cases
     check_whole_cases(5472.4, 288, recommended=5472.4)       # an old off-pack row accepted as recommended is no edit
     check_whole_cases(5472.0000004, 288)                      # within the LP's tolerance of a whole pack
+
+
+# ── 9. the race: a planner's proposal against an admin's accept on the same row (audit 2026-10-23) ───────────
+# Before: the proposal INSERT read `status = 'pending'` without a lock, and the accept's "no open change" guard
+# could not see an uncommitted insert, so both committed and left an open change on an accepted row. Postgres only
+# takes KEY SHARE on the row for the insert's foreign key, which the accept's UPDATE does not conflict with.
+
+def test_the_accept_locks_the_row_before_its_guarded_update():
+    db = _DB()
+    rec.update_recommendation(1, RecommendationDecision(status="accepted"), db=db, current_user=PLANNER)
+    order = db.statements()
+    lock = next(i for i, s in enumerate(order) if s.startswith("SELECT 1 FROM lp_recommendation WHERE recommendation_key"))
+    assert "FOR UPDATE" in db.run("SELECT 1 FROM lp_recommendation WHERE recommendation_key")[0][0]
+    assert lock < order.index(next(s for s in order if s.startswith("UPDATE lp_recommendation")))
+
+
+def test_approving_a_change_takes_the_same_row_lock_before_the_accept():
+    db = _DB(change=_change_row())
+    ra.approve_change(7, None, db=db, admin=ADMIN)
+    order = db.statements()
+    assert order.index(next(s for s in order if s.startswith("SELECT 1 FROM lp_recommendation"))) <         order.index(next(s for s in order if s.startswith("UPDATE lp_recommendation")))
+
+
+def test_a_proposal_that_loses_the_race_to_an_accept_is_rolled_back_and_refused():
+    """The interleaving: the planner's INSERT ran (uncommitted), the admin's accept committed, and the planner's
+    locked re-read now finds the row accepted. The proposal is rolled back, not committed on a decided row."""
+    db = _DB(change=_change_row(), status_after_insert="accepted")
+    with pytest.raises(HTTPException) as err:
+        _propose(db, user=PLANNER)
+    assert err.value.status_code == 409 and "already accepted" in err.value.detail
+    assert db.rolled_back and db.commits == 0 and db.audit == []
+    assert db.run("INSERT INTO lp_quantity_change")          # the insert was attempted, then rolled back with the txn
+
+
+def test_a_proposal_that_wins_the_race_is_committed_and_the_accept_then_sees_it():
+    """The other interleaving: the proposal commits first. The accept's guard (a fresh statement after its own row
+    lock) finds the open change, so the accept is refused rather than deciding past it."""
+    db = _DB(change=_change_row())
+    out, status = _propose(db, user=PLANNER)
+    assert status == 202 and out.outcome == "held" and db.commits == 1 and not db.rolled_back
+    assert "FOR UPDATE OF lr" in next(s for s, _ in db.sql if s.lstrip().startswith("SELECT lr.status, lr.planning_cycle_date,"))
+    blocked = _DB(decide_matches=False, open_change={"change_key": 7, "proposed_by": "planner@ssmcapstone.com"})
+    with pytest.raises(HTTPException) as refusal:
+        rec.update_recommendation(1, RecommendationDecision(status="accepted"), db=blocked, current_user=PLANNER)
+    assert refusal.value.status_code == 409 and "awaiting approval" in refusal.value.detail

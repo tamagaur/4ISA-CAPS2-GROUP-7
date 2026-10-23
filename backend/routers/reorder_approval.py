@@ -102,6 +102,18 @@ _ROW_SQL = """
     WHERE lr.recommendation_key = :key
 """.replace("{PACK}", PACK_SQL)
 
+# The row's state under a lock, after the proposal is inserted (change_quantity).
+_LOCK_ROW_SQL = """
+    SELECT lr.status, lr.planning_cycle_date,
+           (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
+            JOIN product_dimension p2 ON p2.product_key = l2.product_key
+            WHERE p2.principal = pd.principal) AS current_cycle
+    FROM lp_recommendation lr
+    JOIN product_dimension pd ON pd.product_key = lr.product_key
+    WHERE lr.recommendation_key = :key
+    FOR UPDATE OF lr
+"""
+
 _CHANGE_COLUMNS = """
     SELECT c.change_key, c.recommendation_key, COALESCE(pd.sku_code, pd.category_path) AS sku_code, pd.product_name,
            lr.planning_cycle_date, c.recommended_q_i, c.proposed_q_i, c.proposal_reason AS reason, c.reviewed,
@@ -261,6 +273,14 @@ def change_quantity(
         db.rollback()
         raise rec.refusal_for({"status": "pending", "planning_cycle_date": row["planning_cycle_date"],
                                "current_cycle": row["current_cycle"]}, open_change)
+    # The row is locked and re-read AFTER the insert (audit 2026-10-23, the race with an admin's accept). The insert
+    # above read `status = 'pending'` without a lock; an accept that committed since (or commits while this waits for
+    # the lock) must not leave an open change on a decided row. Lock order is the change, then the row, the same
+    # as approve_change, and decide_row takes the row lock first and nothing else, so no cycle is possible.
+    after = db.execute(text(_LOCK_ROW_SQL), {"key": recommendation_key}).mappings().first()
+    if after is None or after["status"] != "pending" or after["planning_cycle_date"] != after["current_cycle"]:
+        db.rollback()
+        raise rec.refusal_for(None if after is None else dict(after))
     change = _change(db, created["change_key"])
     audit.record(
         db, "Reorder Quantity Change Proposed",

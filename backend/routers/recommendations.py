@@ -943,6 +943,14 @@ def decide_row(db: Session, present: dict, *, key: int, status: str, reason: str
     awaiting approval), then the planning mart's copy, in the caller's transaction. Returns the UPDATE's row
     (sku, planning_cycle_date). A row that matched nothing rolls the transaction back and raises the 404 / 409.
     The caller audits and commits."""
+    # Lock the row BEFORE the guarded UPDATE (audit 2026-10-23, the planner-proposal vs admin-accept race). The
+    # guard reads "no open quantity change" from the UPDATE statement's own snapshot, and a proposal INSERT that has
+    # not committed yet is invisible to it; both then commit and leave an open change on a decided row. The
+    # proposal INSERT only takes a KEY SHARE lock on this row (its foreign key), which the UPDATE's NO KEY UPDATE
+    # lock does not conflict with, so nothing made them wait. FOR UPDATE here conflicts with the proposer's own
+    # FOR UPDATE re-read (reorder_approval.change_quantity); whichever is second waits, and its next statement
+    # takes a fresh snapshot that sees the other's commit. READ COMMITTED gives each statement its own snapshot.
+    db.execute(text("SELECT 1 FROM lp_recommendation WHERE recommendation_key = :key FOR UPDATE"), {"key": key})
     decision_params = {
         "status": status,
         "decided_at": decided_at or datetime.datetime.utcnow(),
