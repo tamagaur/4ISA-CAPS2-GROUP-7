@@ -182,6 +182,7 @@ from analytics.params import abc_method_sql
 from sqlalchemy.orm import Session
 
 from backend import audit, demo_data
+from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import (
@@ -341,6 +342,8 @@ _PRESENT_SQL = """
                SELECT 1 FROM pg_attribute
                WHERE attrelid = to_regclass('lp_recommendation') AND attname = 'decided_q_i' AND NOT attisdropped
            ) AS decision_cols,
+           (to_regclass('lp_quantity_change') IS NOT NULL
+            AND to_regclass('lp_direct_apply_grant') IS NOT NULL) AS approval,
            to_regclass('lp_decision_reversal') IS NOT NULL AS reversal
 """
 # Migration 0062's columns. Where it isn't applied the row query reads the same names as NULLs.
@@ -360,12 +363,13 @@ _REVIEW_ABSENT_SQL = """
 
 
 def _present(db: Session) -> dict:
-    """{review_flag, on_order, decision_cols, reversal}: whether migration 0042's table and
-    columns, migration 0062's columns and migration 0067's table (reversal) exist. A database
-    (or test fake) that can't answer counts as none of them."""
+    """{review_flag, on_order, decision_cols, approval, reversal}: whether migration 0042's table and
+    columns, migration 0062's columns, migration 0068's two tables (approval) and migration 0067's table
+    (reversal) exist. A database (or test fake) that can't answer counts as none of them."""
     row = db.execute(text(_PRESENT_SQL)).mappings().first()
     return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"]),
-            "decision_cols": bool(row and row.get("decision_cols")), "reversal": bool(row and row.get("reversal"))}
+            "decision_cols": bool(row and row.get("decision_cols")),
+            "approval": bool(row and row.get("approval")), "reversal": bool(row and row.get("reversal"))}
 
 
 def _with_present(sql: str, present: dict) -> str:
@@ -863,10 +867,11 @@ def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):
     return JSONResponse({**jsonable_encoder(response), "data_mode": block})
 
 
-# THE STATE MACHINE (2026-10-21). A decision is made once, on a row that is still open and still current:
+# THE STATE MACHINE (2026-10-21, reversal and approval added 2026-10-23). A decision is made once, on a row that is
+# still open and still current:
 #   pending   -> accepted   legal
 #   pending   -> dismissed  legal, with a reason
-#   accepted  -> anything   refused (409): the order may already be placed
+#   accepted  -> anything   refused (409) here
 #   dismissed -> anything   refused (409) here
 #   accepted | dismissed -> pending   ONLY by an admin, through POST /{key}/reverse (backend/routers/
 #                           reorder_approval.py, migration 0067). The decision is copied to lp_decision_reversal
@@ -874,18 +879,30 @@ def _with_data_mode(response: RecommendationsResponse, db: Session, mode: str):
 # and only a row of its principal's CURRENT cycle can be decided: a pending row left behind by an earlier run
 # (179 of them, 33 cycles, on 2026-10-20) is refused (409) however it is reached. Both rules sit in the
 # UPDATE's own WHERE clause, so two requests racing for one row cannot both win.
+# A third rule (migration 0068): while a quantity change is awaiting approval (lp_quantity_change.state =
+# 'pending_approval') nobody decides the row directly. The admin approves it (which is the accept) or rejects it
+# (the row stays pending) first. _OPEN_CHANGE_GUARD is that rule, in the same WHERE clause, and is added only
+# where the table exists.
 _UPDATE_DECISION_SQL = """
     UPDATE lp_recommendation lr
     SET status = :status, decided_at = :decided_at, decided_by = :decided_by{capture}
     FROM product_dimension pd
     WHERE lr.recommendation_key = :key
       AND pd.product_key = lr.product_key
-      AND lr.status = 'pending'
+      AND lr.status = 'pending'{guard}
       AND lr.planning_cycle_date = (
           SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
           JOIN product_dimension p2 ON p2.product_key = l2.product_key
           WHERE p2.principal = pd.principal)
     RETURNING COALESCE(pd.sku_code, pd.category_path) AS sku, lr.planning_cycle_date
+"""
+_OPEN_CHANGE_GUARD = """
+      AND NOT EXISTS (SELECT 1 FROM lp_quantity_change qc
+                      WHERE qc.recommendation_key = lr.recommendation_key AND qc.state = 'pending_approval')"""
+# The pending change on a row, read only to explain a refusal.
+_OPEN_CHANGE_SQL = """
+    SELECT change_key, proposed_by FROM lp_quantity_change
+    WHERE recommendation_key = :key AND state = 'pending_approval'
 """
 # Where an update touched nothing, why: a missing row, an already-decided one, or a superseded cycle.
 _WHY_NOT_DECIDED_SQL = """
@@ -899,10 +916,16 @@ _WHY_NOT_DECIDED_SQL = """
 """
 
 
-def refusal_for(row) -> HTTPException:
-    """The 404 / 409 for a decision that matched no open, current row. `row` is _WHY_NOT_DECIDED_SQL's."""
+def refusal_for(row, open_change=None) -> HTTPException:
+    """The 404 / 409 for a decision that matched no open, current row. `row` is _WHY_NOT_DECIDED_SQL's;
+    `open_change` is _OPEN_CHANGE_SQL's row when the row has a quantity change awaiting approval."""
     if row is None:
         return HTTPException(status_code=404, detail="Recommendation not found")
+    if row["status"] == "pending" and open_change is not None:
+        return HTTPException(status_code=409, detail=(
+            f"This recommendation has a quantity change awaiting approval (change {open_change['change_key']}, "
+            f"proposed by {open_change['proposed_by']}). An admin approves or rejects it before the row is decided."
+        ))
     if row["status"] != "pending":
         return HTTPException(status_code=409, detail=(
             f"This recommendation was already {row['status']}; a decision is made once and is not changed here."
@@ -911,6 +934,40 @@ def refusal_for(row) -> HTTPException:
         f"This recommendation belongs to the {row['planning_cycle_date']} cycle, which a newer LP run "
         f"({row['current_cycle']}) has superseded, so it can no longer be decided."
     ))
+
+
+def decide_row(db: Session, present: dict, *, key: int, status: str, reason: str | None,
+               decided_quantity: float | None, decided_by: str, decided_at: datetime.datetime | None = None):
+    """The one place a reorder decision is written: the guarded UPDATE (pending, current cycle, no quantity change
+    awaiting approval), then the planning mart's copy, in the caller's transaction. Returns the UPDATE's row
+    (sku, planning_cycle_date). A row that matched nothing rolls the transaction back and raises the 404 / 409.
+    The caller audits and commits."""
+    decision_params = {
+        "status": status,
+        "decided_at": decided_at or datetime.datetime.utcnow(),
+        "decided_by": decided_by,
+        "key": key,
+    }
+    update_params = dict(decision_params)
+    capture = ""
+    if present["decision_cols"]:
+        # decided_q_i only where it differs from the recommendation (to the 2 decimals it is stored at);
+        # q_i, rop_i and ss_i are never written here.
+        capture = (", decision_reason = :reason, decided_q_i = CASE WHEN CAST(:decided_q AS numeric) IS NULL "
+                   "OR ROUND(CAST(:decided_q AS numeric), 2) = lr.q_i THEN NULL ELSE ROUND(CAST(:decided_q AS numeric), 2) END")
+        update_params.update(reason=reason, decided_q=decided_quantity)
+    guard = _OPEN_CHANGE_GUARD if present.get("approval") else ""
+    decided = db.execute(text(_UPDATE_DECISION_SQL.format(capture=capture, guard=guard)), update_params).mappings().first()
+    if decided is None:
+        why = db.execute(text(_WHY_NOT_DECIDED_SQL), {"key": key}).mappings().first()
+        open_change = None
+        if present.get("approval") and why is not None and why["status"] == "pending"                 and why["planning_cycle_date"] == why["current_cycle"]:
+            open_change = db.execute(text(_OPEN_CHANGE_SQL), {"key": key}).mappings().first()
+        db.rollback()
+        raise refusal_for(why, open_change)
+    # The planning mart's row for this decision, in the same transaction (migration 0046).
+    planning_mart.decide(db, decision_params)
+    return decided
 
 
 def item_for(db: Session, present: dict, key: int, cycle) -> RecommendationItem:
@@ -925,6 +982,15 @@ def item_for(db: Session, present: dict, key: int, cycle) -> RecommendationItem:
         },
     ).mappings().first()
     return _to_item(row, present)
+
+
+def may_apply_directly(db: Session, user: TokenPayload) -> bool:
+    """Whether this user's quantity change applies at once: an admin always, anyone else only with a row in
+    lp_direct_apply_grant (migration 0068). Read fresh on every request, like permissions."""
+    if user.role == "admin":
+        return True
+    return db.execute(text("SELECT 1 FROM lp_direct_apply_grant WHERE user_id = :uid"),
+                      {"uid": user.user_id}).first() is not None
 
 
 @router.patch("/{recommendation_key}", response_model=RecommendationItem)
@@ -947,28 +1013,18 @@ def update_recommendation(
             "This product is flagged for review before ordering (" + ", ".join(flagged) + "). "
             "Accept it from its own row after checking it; it is never accepted in bulk."
         ))
+    # With migration 0068 applied a different quantity is a proposed change unless the caller may apply it
+    # directly. A quantity equal to the recommendation is no change and is accepted as before.
+    if present.get("approval") and decision.status == "accepted" and decision.decided_quantity is not None             and not may_apply_directly(db, current_user):
+        recommended = db.execute(text("SELECT q_i FROM lp_recommendation WHERE recommendation_key = :key"),
+                                 {"key": recommendation_key}).scalar()
+        if recommended is not None and round(float(decision.decided_quantity), 2) != round(float(recommended), 2):
+            raise ApiError(403, "A change to the recommended quantity needs an admin's approval. Propose it with "
+                                f"POST /recommendations/{recommendation_key}/quantity-change.",
+                           code="approval_required", recommendation_key=recommendation_key)
 
-    decision_params = {
-        "status": decision.status,
-        "decided_at": datetime.datetime.utcnow(),
-        "decided_by": current_user.email,
-        "key": recommendation_key,
-    }
-    update_params = dict(decision_params)
-    capture = ""
-    if present["decision_cols"]:
-        # decided_q_i only where it differs from the recommendation (to the 2 decimals it is stored at);
-        # q_i, rop_i and ss_i are never written here.
-        capture = (", decision_reason = :reason, decided_q_i = CASE WHEN CAST(:decided_q AS numeric) IS NULL "
-                   "OR ROUND(CAST(:decided_q AS numeric), 2) = lr.q_i THEN NULL ELSE ROUND(CAST(:decided_q AS numeric), 2) END")
-        update_params.update(reason=reason, decided_q=decision.decided_quantity)
-    decided = db.execute(text(_UPDATE_DECISION_SQL.format(capture=capture)), update_params).mappings().first()
-    if decided is None:
-        why = db.execute(text(_WHY_NOT_DECIDED_SQL), {"key": recommendation_key}).mappings().first()
-        db.rollback()
-        raise refusal_for(why)
-    # The planning mart's row for this decision, in the same transaction (migration 0046).
-    planning_mart.decide(db, decision_params)
+    decided = decide_row(db, present, key=recommendation_key, status=decision.status, reason=reason,
+                         decided_quantity=decision.decided_quantity, decided_by=current_user.email)
     detail = f"SKU {decided['sku']}" + (f": {reason}" if reason else "")
     if decision.decided_quantity is not None:
         detail += f" [quantity decided: {decision.decided_quantity:g}]"
@@ -981,19 +1037,7 @@ def update_recommendation(
     )
     db.commit()
     response_cache.invalidate()
-
-    # Single row pinned by recommendation_key; scope left unfiltered (None
-    # = all), identical to today's behaviour - see sku.py's _one_row_params.
-    # Stock at the row's own cycle's opening count, as GET shows it.
-    row = db.execute(
-        text(_with_present(_SELECT_ONE, present) + " WHERE lr.recommendation_key = :key"),
-        {
-            "key": recommendation_key,
-            "inv_period": opening_period(decided["planning_cycle_date"]),
-            **abc_period_params(latest_abc_periods(db, None, str(decided["planning_cycle_date"])[:7])),
-        },
-    ).mappings().first()
-    return _to_item(row, present)
+    return item_for(db, present, recommendation_key, decided["planning_cycle_date"])
 
 
 def _review_reasons(db: Session, recommendation_key: int) -> list[str] | None:

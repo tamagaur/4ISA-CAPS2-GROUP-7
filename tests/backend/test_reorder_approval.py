@@ -1,6 +1,6 @@
 """
-tests/backend/test_reorder_approval.py - the admin reversal of a decision (migration 0067),
-backend/routers/reorder_approval.py.
+tests/backend/test_reorder_approval.py - the reorder approval flow (migration 0068) and the admin reversal of a
+decision (migration 0067), backend/routers/reorder_approval.py.
 
 Like tests/backend/test_recommendation_decisions.py, the fake session answers by SQL text, so these tests check
 what the code asks the database and what it does with the answer: which statements run, in what order, with what
@@ -20,8 +20,11 @@ from pydantic import ValidationError
 
 from backend import auth_utils, planning_mart
 from backend.api_errors import ApiError
+from backend.routers import recommendations as rec
 from backend.routers import reorder_approval as ra
-from backend.schemas.recommendations import ReverseRequest
+from backend.schemas.recommendations import (
+    ApprovalNote, QuantityChangeRequest, RecommendationDecision, RejectRequest, ReverseRequest,
+)
 from tests.backend.test_recommendations import FakeResult, _item_row
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -37,6 +40,14 @@ def _user(user_id: int, email: str, role: str = "staff"):
 PLANNER = _user(1, "planner@ssmcapstone.com")
 BYPASS = _user(3, "trusted@ssmcapstone.com")
 ADMIN = _user(2, "admin@ssmcapstone.com", "admin")
+
+
+def _change_row(**over):
+    row = {"change_key": 7, "recommendation_key": 1, "sku_code": "U-1", "product_name": "Uni One",
+           "planning_cycle_date": CYCLE, "recommended_q_i": 384.80, "proposed_q_i": 390.0, "reason": "Truck is full",
+           "reviewed": False, "state": "pending_approval", "proposed_by": "planner@ssmcapstone.com",
+           "proposed_at": PROPOSED_AT, "resolved_by": None, "resolved_at": None, "resolution_note": None}
+    return {**row, **over}
 
 
 class _DB:
@@ -114,12 +125,296 @@ class _DB:
         self.rolled_back = True
 
 
-def test_reversal_is_the_admins_route_and_checks_the_role_not_only_the_key():
-    """lp.decide can be ticked for a staff account (permission overrides), and reversing is still the admin's."""
+def _propose(db, user=PLANNER, quantity=390.0, **extra):
+    response = type("R", (), {"status_code": 200})()
+    out = ra.change_quantity(1, QuantityChangeRequest(quantity=quantity, **extra), response, db=db, current_user=user)
+    return out, response.status_code
+
+
+# ── 1. a planner's edit is held, not applied ──────────────────────────────────────────────────────────────
+
+def test_a_planners_quantity_edit_is_held_and_nothing_is_applied():
+    db = _DB(change=_change_row())
+    out, status = _propose(db, reason="  Truck is full ")
+    assert status == 202 and out.outcome == "held" and out.item is None
+    assert out.change.state == "pending_approval" and out.change.proposed_q_i == 390.0
+    assert db.run("INSERT INTO lp_quantity_change")
+    insert_params = db.run("INSERT INTO lp_quantity_change")[0][1]
+    assert insert_params["quantity"] == 390.0 and insert_params["reason"] == "Truck is full"
+    assert insert_params["proposed_by"] == "planner@ssmcapstone.com"
+    # the recommendation row is not written: no UPDATE of lp_recommendation, no mart write, no decision columns
+    assert db.run("UPDATE lp_recommendation") == []
+    assert db.commits == 1
+
+
+def test_a_proposal_is_audited_with_who_and_both_quantities():
+    db = _DB(change=_change_row())
+    _propose(db)
+    (entry,) = db.audit
+    assert entry["action"] == "Reorder Quantity Change Proposed"
+    assert entry["user_email"] == "planner@ssmcapstone.com"
+    assert "384.8 -> 390" in entry["details"] and "change 7" in entry["details"] and "awaiting approval" in entry["details"]
+
+
+def test_the_proposal_insert_is_guarded_to_a_pending_current_row_with_a_different_quantity():
+    sql = ra._PROPOSE_SQL
+    assert "lr.status = 'pending'" in sql
+    assert "MAX(l2.planning_cycle_date)" in sql and "p2.principal = pd.principal" in sql
+    assert "<> lr.q_i" in sql
+    assert "ON CONFLICT (recommendation_key) WHERE state = 'pending_approval' DO NOTHING" in sql
+
+
+@pytest.mark.parametrize("quantity", [384.80, 384.8004])
+def test_the_recommended_quantity_is_not_a_change(quantity):
+    db = _DB()
     with pytest.raises(ApiError) as err:
-        ra.require_lp_admin(current_user=PLANNER)
-    assert err.value.status_code == 403 and err.value.code == "admin_required"
-    assert ra.require_lp_admin(current_user=ADMIN) is ADMIN
+        _propose(db, quantity=quantity)
+    assert err.value.status_code == 400 and err.value.code == "quantity_unchanged"
+    assert db.run("INSERT INTO lp_quantity_change") == [] and db.run("UPDATE lp_recommendation") == []
+
+
+def test_a_second_proposal_on_a_row_with_one_open_is_refused():
+    db = _DB(propose_wins=False, open_change={"change_key": 7, "proposed_by": "other@ssmcapstone.com"})
+    with pytest.raises(HTTPException) as err:
+        _propose(db)
+    assert err.value.status_code == 409 and "awaiting approval" in err.value.detail and "other@ssmcapstone.com" in err.value.detail
+    assert db.rolled_back
+
+
+@pytest.mark.parametrize("row, text", [
+    (dict(status="accepted"), "already accepted"),
+    (dict(status="pending", current_cycle=datetime.date(2026, 4, 1)), "superseded"),
+])
+def test_only_a_pending_current_row_can_be_proposed_on(row, text):
+    with pytest.raises(HTTPException) as err:
+        _propose(_DB(**row))
+    assert err.value.status_code == 409 and text in err.value.detail
+
+
+def test_the_proposal_endpoint_needs_migration_0068():
+    with pytest.raises(ApiError) as err:
+        _propose(_DB(approval=False))
+    assert err.value.status_code == 503 and err.value.code == "approval_not_ready"
+
+
+# ── 2. an admin approves ──────────────────────────────────────────────────────────────────────────────────
+
+def test_an_admin_approving_makes_the_ordinary_accept_with_the_proposed_quantity():
+    db = _DB(change=_change_row())
+    out = ra.approve_change(7, ApprovalNote(note="OK for the Friday truck"), db=db, admin=ADMIN)
+    assert out.state == "approved" and out.resolved_by == "admin@ssmcapstone.com"
+    update_change = db.run("UPDATE lp_quantity_change")[0][1]
+    assert update_change["state"] == "approved" and update_change["note"] == "OK for the Friday truck"
+    (accept_sql, accept) = db.run("UPDATE lp_recommendation lr")[0]
+    assert accept["status"] == "accepted" and accept["decided_q"] == 390.0
+    assert accept["decided_by"] == "planner@ssmcapstone.com"        # the planner made the decision
+    assert accept["reason"] == "Truck is full"                      # decision_reason reused
+    assert accept["decided_at"] == update_change["resolved_at"]
+    # The change is settled BEFORE the accept, so the open-change guard in the accept lets it through, and a
+    # refused accept rolls the settlement back with it.
+    order = db.statements()
+    assert order.index(next(s for s in order if s.startswith("UPDATE lp_quantity_change"))) < \
+        order.index(next(s for s in order if s.startswith("UPDATE lp_recommendation")))
+    assert "NOT EXISTS" in accept_sql and "lp_quantity_change" in accept_sql
+    assert db.commits == 1
+
+
+def test_an_approval_is_audited_with_the_approver_and_both_quantities():
+    db = _DB(change=_change_row())
+    ra.approve_change(7, None, db=db, admin=ADMIN)
+    (entry,) = db.audit
+    assert entry["action"] == "Reorder Quantity Change Approved"
+    assert entry["user_email"] == "admin@ssmcapstone.com" and entry["role"] == "admin"
+    assert "384.8 -> 390" in entry["details"] and "planner@ssmcapstone.com" in entry["details"]
+    assert "2026-10-23 09:00 UTC" in entry["details"]
+
+
+def test_a_refused_accept_rolls_the_settlement_back():
+    db = _DB(change=_change_row(), decide_matches=False)
+    with pytest.raises(HTTPException) as err:
+        ra.approve_change(7, None, db=db, admin=ADMIN)
+    assert err.value.status_code == 409
+    assert db.rolled_back and db.commits == 0 and db.audit == []
+
+
+def test_approval_is_refused_when_the_recommendation_moved_since_the_proposal():
+    db = _DB(change=_change_row(recommended_q_i=300.0), q_i=384.80)
+    with pytest.raises(ApiError) as err:
+        ra.approve_change(7, None, db=db, admin=ADMIN)
+    assert err.value.status_code == 409 and err.value.code == "recommendation_changed"
+    assert db.run("UPDATE lp_quantity_change") == [] and db.run("UPDATE lp_recommendation") == []
+
+
+@pytest.mark.parametrize("state", ["approved", "rejected"])
+def test_a_settled_change_is_not_settled_twice(state):
+    db = _DB(change=_change_row(state=state, resolved_by="admin@ssmcapstone.com", resolved_at=PROPOSED_AT))
+    for call in (lambda: ra.approve_change(7, None, db=db, admin=ADMIN),
+                 lambda: ra.reject_change(7, RejectRequest(reason="no"), db=db, admin=ADMIN)):
+        with pytest.raises(HTTPException) as err:
+            call()
+        assert err.value.status_code == 409 and f"already {state}" in err.value.detail
+    assert db.run("UPDATE lp_quantity_change") == []
+
+
+def test_approval_locks_the_change_and_the_recommendation():
+    assert "FOR UPDATE OF c, lr" in ra._CHANGE_LOCKED_SQL
+
+
+# ── 3. an admin rejects ───────────────────────────────────────────────────────────────────────────────────
+
+def test_an_admin_rejecting_leaves_the_recommendation_untouched_and_keeps_the_change():
+    db = _DB(change=_change_row())
+    out = ra.reject_change(7, RejectRequest(reason="  Over the warehouse ceiling "), db=db, admin=ADMIN)
+    assert out.state == "rejected" and out.resolution_note == "Over the warehouse ceiling"
+    assert out.proposed_q_i == 390.0                                # the change is the record, not deleted
+    assert db.run("UPDATE lp_recommendation") == [] and db.run("DELETE") == []
+    assert db.run("UPDATE lp_quantity_change")[0][1]["state"] == "rejected"
+
+
+def test_a_rejection_is_audited_with_who_and_both_quantities_and_the_reason():
+    db = _DB(change=_change_row())
+    ra.reject_change(7, RejectRequest(reason="Over the warehouse ceiling"), db=db, admin=ADMIN)
+    (entry,) = db.audit
+    assert entry["action"] == "Reorder Quantity Change Rejected" and entry["user_email"] == "admin@ssmcapstone.com"
+    assert "384.8 -> 390" in entry["details"] and "Over the warehouse ceiling" in entry["details"]
+    assert "planner@ssmcapstone.com" in entry["details"]
+
+
+@pytest.mark.parametrize("reason", ["", "   "])
+def test_a_rejection_needs_a_reason(reason):
+    with pytest.raises(ValidationError):
+        RejectRequest(reason=reason)
+
+
+def test_a_missing_change_is_a_404():
+    with pytest.raises(HTTPException) as err:
+        ra.approve_change(99, None, db=_DB(change=None), admin=ADMIN)
+    assert err.value.status_code == 404
+
+
+# ── 4. a user with the grant applies directly ─────────────────────────────────────────────────────────────
+
+def test_a_user_with_a_grant_applies_a_quantity_change_at_once():
+    db = _DB(grants={3})
+    out, status = _propose(db, user=BYPASS, reason="Truck is full")
+    assert status == 200 and out.outcome == "applied" and out.change is None and out.item is not None
+    assert db.run("INSERT INTO lp_quantity_change") == []           # nothing is held
+    (sql, accept) = db.run("UPDATE lp_recommendation lr")[0]
+    assert accept["status"] == "accepted" and accept["decided_q"] == 390.0
+    assert accept["decided_by"] == "trusted@ssmcapstone.com"
+    (entry,) = db.audit
+    assert entry["action"] == "Reorder Recommendation Accepted" and "applied directly" in entry["details"]
+    assert "390" in entry["details"] and "384.8" in entry["details"]
+
+
+def test_an_admins_own_quantity_change_applies_at_once_without_a_grant():
+    db = _DB()
+    out, status = _propose(db, user=ADMIN)
+    assert status == 200 and out.outcome == "applied"
+    assert db.run("FROM lp_direct_apply_grant") == []               # an admin is never looked up
+    assert db.run("INSERT INTO lp_quantity_change") == []
+
+
+def test_patch_with_a_different_quantity_works_for_a_user_with_the_grant():
+    db = _DB(grants={3})
+    rec.update_recommendation(1, RecommendationDecision(status="accepted", decided_quantity=390), db=db, current_user=BYPASS)
+    assert db.run("UPDATE lp_recommendation lr")[0][1]["decided_q"] == 390
+
+
+# ── 5. a user without the grant cannot ────────────────────────────────────────────────────────────────────
+
+def test_patch_with_a_different_quantity_is_refused_for_a_user_without_the_grant():
+    db = _DB()
+    with pytest.raises(ApiError) as err:
+        rec.update_recommendation(1, RecommendationDecision(status="accepted", decided_quantity=390), db=db,
+                                  current_user=PLANNER)
+    assert err.value.status_code == 403 and err.value.code == "approval_required"
+    assert "quantity-change" in err.value.detail
+    assert db.run("UPDATE lp_recommendation") == [] and db.audit == []
+
+
+def test_patch_with_the_recommended_quantity_or_none_still_accepts_for_everyone():
+    for quantity in (None, 384.80):
+        db = _DB()
+        rec.update_recommendation(1, RecommendationDecision(status="accepted", decided_quantity=quantity), db=db,
+                                  current_user=PLANNER)
+        assert db.run("UPDATE lp_recommendation lr")
+
+
+def test_dismissing_needs_no_approval():
+    db = _DB()
+    rec.update_recommendation(1, RecommendationDecision(status="dismissed", reason="Overstocked"), db=db, current_user=PLANNER)
+    assert db.run("UPDATE lp_recommendation lr")
+
+
+def test_before_migration_0068_a_quantity_edit_applies_as_it_did():
+    db = _DB(approval=False)
+    rec.update_recommendation(1, RecommendationDecision(status="accepted", decided_quantity=390), db=db, current_user=PLANNER)
+    assert db.run("UPDATE lp_recommendation lr")[0][1]["decided_q"] == 390
+    assert "lp_quantity_change" not in db.run("UPDATE lp_recommendation lr")[0][0]
+    assert db.run("FROM lp_direct_apply_grant") == []
+
+
+def test_a_row_with_a_change_awaiting_approval_cannot_be_decided_directly():
+    db = _DB(decide_matches=False, open_change={"change_key": 7, "proposed_by": "planner@ssmcapstone.com"})
+    with pytest.raises(HTTPException) as err:
+        rec.update_recommendation(1, RecommendationDecision(status="dismissed", reason="no"), db=db, current_user=PLANNER)
+    assert err.value.status_code == 409 and "awaiting approval" in err.value.detail and "change 7" in err.value.detail
+    assert db.rolled_back
+
+
+# ── 6. who can see and settle the queue ───────────────────────────────────────────────────────────────────
+
+def test_only_an_admin_can_approve_reject_reverse_or_grant():
+    from fastapi.testclient import TestClient
+    from backend.deps import get_db
+    from backend.main import app
+
+    db = _DB(change=_change_row())
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(app) as client:
+            headers = {"Authorization": "Bearer " + auth_utils.create_access_token(
+                user_id=1, email="planner@ssmcapstone.com", role="staff", full_name="Planner")}
+            calls = [("post", "/recommendations/changes/7/approve", {}),
+                     ("post", "/recommendations/changes/7/reject", {"reason": "no"}),
+                     ("post", "/recommendations/1/reverse", {"reason": "mis-click"}),
+                     ("get", "/recommendations/direct-apply-grants", None),
+                     ("put", "/recommendations/direct-apply-grants/3", {"granted": True})]
+            for method, path, body in calls:
+                resp = getattr(client, method)(path, headers=headers, **({"json": body} if body is not None else {}))
+                assert resp.status_code in (401, 403), (path, resp.status_code)
+    finally:
+        app.dependency_overrides.clear()
+    assert db.run("UPDATE") == [] and db.run("INSERT") == [] and db.run("DELETE") == []
+
+
+def test_the_admin_routes_also_check_the_role_not_only_the_key():
+    """lp.decide or users.manage can be ticked for a staff account (permission overrides); these routes are still
+    the admin's."""
+    for dependency in (ra.require_lp_admin, ra.require_grant_admin):
+        with pytest.raises(ApiError) as err:
+            dependency(current_user=PLANNER)
+        assert err.value.status_code == 403 and err.value.code == "admin_required"
+        assert dependency(current_user=ADMIN) is ADMIN
+
+
+def test_a_non_admin_lists_only_their_own_changes():
+    db = _DB(change=_change_row())
+    ra.list_changes(state="pending_approval", recommendation_key=None, db=db, current_user=PLANNER)
+    sql, params = db.run("FROM lp_quantity_change c")[-1]
+    assert "c.proposed_by = :me" in sql and params["me"] == "planner@ssmcapstone.com"
+    db = _DB(change=_change_row())
+    out = ra.list_changes(state="pending_approval", recommendation_key=None, db=db, current_user=ADMIN)
+    sql, params = db.run("FROM lp_quantity_change c")[-1]
+    assert "proposed_by" not in sql.split("FROM lp_quantity_change c", 1)[1].split("ORDER BY")[0] and out.count == 1
+    assert params == {"state": "pending_approval"}
+
+
+def test_the_state_filter_is_checked():
+    with pytest.raises(HTTPException) as err:
+        ra.list_changes(state="done", recommendation_key=None, db=_DB(), current_user=ADMIN)
+    assert err.value.status_code == 400
 
 
 # ── 7. reversing a decision ───────────────────────────────────────────────────────────────────────────────
@@ -200,24 +495,60 @@ def test_a_reversal_is_copied_to_the_planning_mart(monkeypatch):
     assert "decision_status = 'pending'" in sql and "decided_at = NULL" in sql and params == {"key": 5}
 
 
-# ── 8. the migration ──────────────────────────────────────────────────────────────────────────────────────
+# ── 8. who may apply directly ─────────────────────────────────────────────────────────────────────────────
+
+def test_an_admin_grants_and_revokes_and_each_is_audited():
+    users = {3: {"user_id": 3, "email": "trusted@ssmcapstone.com", "role": "staff"}}
+    db = _DB(users=users)
+    out = ra.set_direct_apply_grant(3, ra.DirectApplyGrantBody(granted=True), db=db, admin=ADMIN)
+    assert out.can_apply_directly and out.reason == "granted"
+    assert db.run("INSERT INTO lp_direct_apply_grant")[0][1] == {"uid": 3, "by": "admin@ssmcapstone.com"}
+    assert db.audit[0]["action"] == "Direct Apply Granted" and db.audit[0]["details"] == "trusted@ssmcapstone.com"
+    db = _DB(users=users)
+    out = ra.set_direct_apply_grant(3, ra.DirectApplyGrantBody(granted=False), db=db, admin=ADMIN)
+    assert not out.can_apply_directly and db.run("DELETE FROM lp_direct_apply_grant")
+    assert db.audit[0]["action"] == "Direct Apply Revoked"
+
+
+def test_granting_an_unknown_user_is_a_404():
+    with pytest.raises(HTTPException) as err:
+        ra.set_direct_apply_grant(99, ra.DirectApplyGrantBody(granted=True), db=_DB(), admin=ADMIN)
+    assert err.value.status_code == 404
+
+
+def test_the_caller_can_ask_whether_their_change_will_apply_at_once():
+    assert ra.my_direct_apply(db=_DB(), current_user=ADMIN).reason == "admin"
+    assert ra.my_direct_apply(db=_DB(grants={3}), current_user=BYPASS).reason == "granted"
+    not_granted = ra.my_direct_apply(db=_DB(), current_user=PLANNER)
+    assert not_granted.can_apply_directly is False and not_granted.reason == "not_granted"
+    assert ra.my_direct_apply(db=_DB(approval=False), current_user=PLANNER).approval_ready is False
+
+
+# ── 9. the migrations ─────────────────────────────────────────────────────────────────────────────────────
 
 def _migration(name: str) -> str:
     return (REPO / "analytics/db/migrations" / name).read_text(encoding="utf-8")
 
 
-def test_the_migration_is_additive_and_the_number_is_free():
+def test_the_migrations_are_additive_and_the_numbers_are_free():
     names = sorted(p.name for p in (REPO / "analytics/db/migrations").glob("0*.sql"))
     numbers = [n[:4] for n in names]
-    assert numbers.count("0067") == 1
-    text_ = _migration("0067_lp_decision_reversal.sql")
-    sql = "\n".join(l for l in text_.splitlines() if not l.strip().startswith("--"))
-    assert not re.search(r"\b(DELETE|TRUNCATE|UPDATE)\b", sql, re.I) and "DROP TABLE" not in sql.upper()
-    # the runner splits on semicolons: none inside a comment line
-    assert all(";" not in l for l in text_.splitlines() if l.strip().startswith("--"))
+    assert numbers.count("0067") == 1 and numbers.count("0068") == 1 and "0069" not in numbers
+    for name in ("0067_lp_decision_reversal.sql", "0068_lp_quantity_change_approval.sql"):
+        sql = "\n".join(l for l in _migration(name).splitlines() if not l.strip().startswith("--"))
+        assert not re.search(r"\b(DELETE|TRUNCATE|UPDATE|ALTER\s+TABLE\s+\w+\s+DROP)\b", sql, re.I)
+        assert "DROP TABLE" not in sql.upper()
+        # the runner splits on semicolons: none inside a comment line
+        assert all(";" not in l for l in _migration(name).splitlines() if l.strip().startswith("--"))
 
 
-def test_the_shape_the_code_assumes_is_in_the_migrations():
+def test_the_state_machine_the_code_assumes_is_in_the_migration():
+    sql = _migration("0068_lp_quantity_change_approval.sql")
+    assert "state IN ('pending_approval', 'approved', 'rejected')" in sql
+    assert "UNIQUE INDEX IF NOT EXISTS ux_lp_quantity_change_one_open" in sql and "WHERE state = 'pending_approval'" in sql
+    assert "proposed_q_i <> recommended_q_i" in sql
+    # a settled change names who settled it, and a rejection names why
+    assert "resolved_by IS NOT NULL" in sql and "resolution_note" in sql
     reversal = _migration("0067_lp_decision_reversal.sql")
     assert "prior_status IN ('accepted', 'dismissed')" in reversal and "length(btrim(reversal_reason)) > 0" in reversal
     # a reversed row goes back to the shape ck_lp_decision_shape (0062) already allows

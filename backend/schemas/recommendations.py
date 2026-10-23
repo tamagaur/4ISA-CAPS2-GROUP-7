@@ -199,9 +199,69 @@ class RecommendationDecision(BaseModel):
         return self
 
 
-# ── Reversing a decision (2026-10-23, migration 0067) ──────────────────────────────────────────────────────
+# ── Reorder approval flow (2026-10-23, migrations 0067 and 0068) ───────────────────────────────────────────
+# backend/routers/reorder_approval.py. A planner's edit to the recommended quantity is a PROPOSED CHANGE held for
+# an admin (state 'pending_approval'), unless the planner may apply directly (an admin always, anyone else with
+# an admin's grant). Quantities are pieces, the unit of q_i.
+
+class QuantityChangeRequest(BaseModel):
+    """POST /recommendations/{key}/quantity-change."""
+    quantity: float = Field(ge=0, le=999_999_999_999, allow_inf_nan=False)  # the quantity wanted instead of q_i
+    reason: str | None = Field(default=None, max_length=500)
+    # As on PATCH: required (true) when the product is flagged for review, i.e. the person checked it.
+    reviewed: bool = False
+
+
+class QuantityChange(BaseModel):
+    """One lp_quantity_change row. state: pending_approval | approved | rejected."""
+    change_key: int
+    recommendation_key: int
+    sku_code: str | None = None
+    product_name: str | None = None
+    planning_cycle_date: datetime.date | None = None
+    recommended_q_i: float          # q_i when proposed
+    proposed_q_i: float
+    reason: str | None = None       # the planner's reason (becomes decision_reason when approved)
+    reviewed: bool = False
+    state: str
+    proposed_by: str
+    proposed_at: datetime.datetime
+    resolved_by: str | None = None  # the admin who approved or rejected
+    resolved_at: datetime.datetime | None = None
+    resolution_note: str | None = None  # required on a rejection
+
+
+class QuantityChangeOutcome(BaseModel):
+    """outcome 'held' (HTTP 202): the change awaits an admin, nothing was applied, `change` is set.
+    outcome 'applied' (HTTP 200): the caller may apply directly, the row is now accepted, `item` is set."""
+    outcome: str
+    change: QuantityChange | None = None
+    item: RecommendationItem | None = None
+
+
+class QuantityChangeList(BaseModel):
+    count: int
+    items: list[QuantityChange]
+
+
+class ApprovalNote(BaseModel):
+    """POST /recommendations/changes/{key}/approve. The note is optional."""
+    note: str | None = Field(default=None, max_length=500)
+
+
+class RejectRequest(BaseModel):
+    """POST /recommendations/changes/{key}/reject. A reason is required (stored as resolution_note)."""
+    reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _reason_not_blank(self):
+        if not self.reason.strip():
+            raise ValueError("a reason is required to reject a quantity change")
+        return self
+
+
 class ReverseRequest(BaseModel):
-    """POST /recommendations/{key}/reverse (admin only). A reason is required."""
+    """POST /recommendations/{key}/reverse. A reason is required."""
     reason: str = Field(min_length=1, max_length=500)
 
     @model_validator(mode="after")
@@ -209,3 +269,22 @@ class ReverseRequest(BaseModel):
         if not self.reason.strip():
             raise ValueError("a reason is required to reverse a decision")
         return self
+
+
+class DirectApplyGrantBody(BaseModel):
+    granted: bool
+
+
+class DirectApplyGrant(BaseModel):
+    user_id: int
+    email: str | None = None
+    full_name: str | None = None
+    granted_by: str
+    granted_at: datetime.datetime
+
+
+class DirectApplyStatus(BaseModel):
+    """GET /recommendations/direct-apply-grants/me: whether the caller's quantity changes apply at once."""
+    can_apply_directly: bool
+    reason: str  # 'admin' | 'granted' | 'not_granted'
+    approval_ready: bool  # false until migration 0068 is applied: a quantity edit then still applies at once

@@ -325,9 +325,9 @@ def _routes():
 # (2026-10-15, behind DM_DEMO_ENABLED, default off); 48 since POST /users/me/avatar (2026-10-17,
 # migration 0058); plus the 9 two-step sign-in routes (/auth/login/verify, /auth/login/setup[/confirm],
 # /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
-# page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 60 since the reorder
-# reversal route (backend/routers/reorder_approval.py, 2026-10-23). Change it when a route is added or removed.
-ROUTE_COUNT = 60
+# page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 67 since the reorder
+# approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23). Change it when a route is added or removed.
+ROUTE_COUNT = 67
 
 
 def test_the_walk_finds_every_route():
@@ -365,7 +365,12 @@ NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user
               ("PUT", "/admin/users/{user_id}/permissions"),
               ("POST", "/users/{user_id}/mfa/reset"),  # 2026-10-02, users.manage like the rest of /users
               # 2026-10-23, backend/routers/reorder_approval.py. Admin-only on top of the key, so a staff preset opens none.
-              ("POST", "/recommendations/{recommendation_key}/reverse")}
+              ("POST", "/recommendations/{recommendation_key}/quantity-change"), ("GET", "/recommendations/changes"),
+              ("POST", "/recommendations/changes/{change_key}/approve"),
+              ("POST", "/recommendations/changes/{change_key}/reject"),
+              ("POST", "/recommendations/{recommendation_key}/reverse"),
+              ("GET", "/recommendations/direct-apply-grants/me"), ("GET", "/recommendations/direct-apply-grants"),
+              ("PUT", "/recommendations/direct-apply-grants/{user_id}")}
 
 
 def test_the_staff_preset_opens_exactly_what_staff_could_open_before():
