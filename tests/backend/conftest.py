@@ -29,6 +29,7 @@ import os
 import pytest
 
 from backend import deps, mailer, mfa, permissions
+from backend import profile as user_profile
 from backend.login_limiter import failure_log_budget, login_limiter, reset_limiter
 
 
@@ -59,6 +60,16 @@ def _presets_only(request, monkeypatch):
         # Every such test starts as a fresh server would: nothing cached.
         monkeypatch.setitem(permissions._ready_cache, "value", False)
         monkeypatch.setitem(permissions._ready_cache, "checked_at", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def _profile_probe_isolated(monkeypatch):
+    """backend/profile.py caches whether app.users has the picture column (60 s, module level). Left alone, a test
+    that asks for it passes or fails on whether an earlier test already filled the cache (test_permissions'
+    strict fake rejects the probe when it runs first). Every test starts as "probed a moment ago, no column", with
+    its own cache dict; tests of the probe itself (test_profile.py) set their own."""
+    import time
+    monkeypatch.setattr(user_profile, "_ready_cache", {"value": False, "checked_at": time.monotonic()})
 
 
 @pytest.fixture(autouse=True)

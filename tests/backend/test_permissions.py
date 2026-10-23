@@ -326,8 +326,9 @@ def _routes():
 # migration 0058); plus the 9 two-step sign-in routes (/auth/login/verify, /auth/login/setup[/confirm],
 # /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
 # page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 67 since the reorder
-# approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23). Change it when a route is added or removed.
-ROUTE_COUNT = 67
+# approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23); 70 since the three
+# /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23). Change it when a route is added or removed.
+ROUTE_COUNT = 70
 
 
 def test_the_walk_finds_every_route():

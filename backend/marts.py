@@ -1311,3 +1311,116 @@ def error_decomposition(db: Session, start: str, end: str, top: int = 10, tier: 
         "top_products_by_stockout_exposure": listed,
         "scoring_rule": DECOMPOSITION_SCORING_RULE, "safety_stock_note": SS_METHOD_NOTE,
     }
+
+
+# Three narrower reads of the same two tables (2026-10-23): one product's months, the split by principal and tier,
+# and the products ranked by pesos beyond safety stock with a running share. Same scoring rule, same tables.
+
+def decomposition_by_product(db: Session, sku_code: str, start: str, end: str) -> dict | None:
+    """One product's scored months in start..end (None when the SKU is not in the product master)."""
+    prod = batch.first(db, """
+        SELECT pd.product_key, pd.sku_code, pd.product_name, pd.category_path FROM product_dimension pd
+        WHERE pd.sku_code = :sku
+        ORDER BY EXISTS (SELECT 1 FROM mart.error_decomposition_row r WHERE r.product_key = pd.product_key) DESC,
+                 pd.product_key LIMIT 1""", {"sku": sku_code})
+    if prod is None:
+        return None
+    months = batch.rows(db, """
+        SELECT month, tier, forecast_source, forecast_pieces, actual_pieces, price_per_piece, safety_stock_pieces,
+               ss_method, over_pieces, absorbed_pieces, beyond_pieces, exceeds_safety_stock,
+               over_pesos, absorbed_pesos, beyond_pesos
+        FROM mart.error_decomposition_row
+        WHERE principal = 'unilever' AND product_key = :pk AND month BETWEEN :start AND :end ORDER BY month""",
+                        {"pk": prod["product_key"], "start": start, "end": end})
+
+    def num(v):
+        return None if v is None else round(float(v), 2)
+
+    def total(k):
+        return round(sum(float(m[k] or 0) for m in months), 2)
+
+    amounts = ("over_pieces", "absorbed_pieces", "beyond_pieces", "over_pesos", "absorbed_pesos", "beyond_pesos")
+    return {
+        "product_key": int(prod["product_key"]), "sku_code": prod["sku_code"], "product_name": prod["product_name"],
+        "category_path": prod["category_path"], "period_start": start, "period_end": end,
+        "months": [{
+            "month": m["month"], "tier": m["tier"], "forecast_source": m["forecast_source"],
+            "counterfactual": m["tier"] != SERVED_TIER, "ss_method": m["ss_method"],
+            "exceeds_safety_stock": bool(m["exceeds_safety_stock"]),
+            **{k: num(m[k]) for k in ("forecast_pieces", "actual_pieces", "price_per_piece", "safety_stock_pieces") + amounts},
+        } for m in months],
+        "totals": {"months_scored": len(months), "exposure_months": sum(1 for m in months if m["exceeds_safety_stock"]),
+                   **{k: total(k) for k in amounts}},
+        "scoring_rule": DECOMPOSITION_SCORING_RULE, "safety_stock_note": SS_METHOD_NOTE,
+    }
+
+
+def decomposition_aggregate(db: Session, start: str, end: str) -> dict:
+    """The range's split per principal and ABC tier ('all' = every tier of that principal), summed from the
+    per-month aggregate rows. Only principals with scored product-months appear."""
+    rows = batch.rows(db, f"""
+        SELECT principal, tier, {', '.join(f'SUM({c}) AS {c}' for c in _DECOMP_SUMS + _DECOMP_AMOUNTS)}
+        FROM mart.error_decomposition WHERE period BETWEEN :start AND :end
+        GROUP BY principal, tier ORDER BY principal, tier""", {"start": start, "end": end})
+    by_principal: dict[str, list] = {}
+    for r in rows:
+        by_principal.setdefault(r["principal"], []).append(
+            {"tier": r["tier"], "counterfactual": r["tier"] not in (SERVED_TIER, "all"), **_decomposition_figure(r)})
+    return {
+        "period_start": start, "period_end": end, "served_tier": SERVED_TIER,
+        "principals": [{"principal": p, "tiers": sorted(t, key=lambda x: (x["tier"] == "all", x["tier"]))}
+                       for p, t in by_principal.items()],
+        "counterfactual_note": ("Only Tier A is forecast by the live runner. Tier B and C rows score a backtest that was "
+                                "never served (forecast_run labelled COUNTERFACTUAL), and 'all' includes them."),
+        "scoring_rule": DECOMPOSITION_SCORING_RULE, "safety_stock_note": SS_METHOD_NOTE,
+    }
+
+
+def decomposition_concentration(db: Session, start: str, end: str, limit: int = 25, tier: str = "all") -> dict:
+    """Products ranked by pesos beyond safety stock over the range, each with its share and the running
+    (cumulative) share of the whole, so the few that carry most of it show in one call. The shares are of ALL
+    products with exposure in the range, not only the `limit` listed."""
+    products = batch.rows(db, """
+        SELECT r.product_key, pd.sku_code, pd.product_name, pd.category_path,
+               MIN(r.tier) AS tier_first, MAX(r.tier) AS tier_last,
+               COALESCE(SUM(r.beyond_pesos), 0) AS beyond_pesos, SUM(r.beyond_pieces) AS beyond_pieces,
+               COUNT(*) FILTER (WHERE r.exceeds_safety_stock)::int AS exposure_months, COUNT(*)::int AS product_months
+        FROM mart.error_decomposition_row r LEFT JOIN product_dimension pd ON pd.product_key = r.product_key
+        WHERE r.principal = 'unilever' AND r.month BETWEEN :start AND :end AND (:tier = 'all' OR r.tier = :tier)
+        GROUP BY r.product_key, pd.sku_code, pd.product_name, pd.category_path
+        HAVING COALESCE(SUM(r.beyond_pesos), 0) > 0
+        ORDER BY COALESCE(SUM(r.beyond_pesos), 0) DESC, r.product_key""", {"start": start, "end": end, "tier": tier})
+    unpriced = batch.first(db, """
+        SELECT COUNT(DISTINCT r.product_key)::int AS n FROM mart.error_decomposition_row r
+        WHERE r.principal = 'unilever' AND r.month BETWEEN :start AND :end AND (:tier = 'all' OR r.tier = :tier)
+          AND r.beyond_pieces > 0 AND r.beyond_pesos IS NULL""", {"start": start, "end": end, "tier": tier})
+    total = sum(float(p["beyond_pesos"]) for p in products)
+    cum, n50, n80, listed = 0.0, None, None, []
+    for i, p in enumerate(products, 1):
+        cum += float(p["beyond_pesos"])
+        if n50 is None and cum >= 0.5 * total:
+            n50 = i
+        if n80 is None and cum >= 0.8 * total:
+            n80 = i
+        if i <= limit:
+            listed.append({
+                "rank": i, "product_key": int(p["product_key"]), "sku_code": p["sku_code"], "product_name": p["product_name"],
+                "category_path": p["category_path"],
+                "tier": p["tier_last"] if p["tier_first"] == p["tier_last"] else "mixed",
+                "beyond_pesos": round(float(p["beyond_pesos"]), 2), "beyond_pieces": round(float(p["beyond_pieces"] or 0), 2),
+                "share_of_beyond_pesos": _ratio(float(p["beyond_pesos"]), total),
+                "cumulative_share_of_beyond_pesos": _ratio(cum, total),
+                "exposure_months": p["exposure_months"], "product_months": p["product_months"],
+            })
+    return {
+        "period_start": start, "period_end": end, "products_tier": tier,
+        "total_beyond_pesos": round(total, 2), "products_with_exposure": len(products),
+        "products_for_50_percent": n50, "products_for_80_percent": n80,
+        "products_beyond_without_price": int(unpriced["n"]) if unpriced and unpriced["n"] else 0,
+        "listed": len(listed), "products": listed,
+        "basis": (f"pesos beyond safety stock (potential stockout exposure, not an observed stockout), summed over the "
+                  f"range, products of tier {tier}; shares are of every product with exposure, not only those listed. "
+                  "A product with exposure in pieces but no price in the range has no pesos and is not ranked "
+                  "(products_beyond_without_price)."),
+        "scoring_rule": DECOMPOSITION_SCORING_RULE,
+    }
