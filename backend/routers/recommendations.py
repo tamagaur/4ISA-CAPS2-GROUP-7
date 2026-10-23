@@ -229,6 +229,16 @@ _WHOLE_UNIT_EPSILON = 1e-6
 def whole_units(value: float) -> int:
     return math.ceil(value - _WHOLE_UNIT_EPSILON)
 
+
+def plan_quantity(q_i, status, decided_q_i) -> float:
+    """The quantity a row adds to the displayed plan total: the planner's accepted quantity where there is
+    one, else the LP's q_i. This is the only reader of decided_q_i besides the decision endpoints; it feeds
+    the total and count shown on /recommendations and /dashboard and nothing upstream of them."""
+    if status == "accepted" and decided_q_i is not None:
+        return float(decided_q_i)
+    return float(q_i)
+
+
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
 # stock_units.PACK_SIZE_NUMERIC is written against its own pd_pack alias;
@@ -531,6 +541,7 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         # Always the LP's own quantity, however the planner decided (migration 0062).
         recommended_q_i=float(r["q_i"]),
         decided_q_i=_opt_float(r, "decided_q_i"),
+        plan_q_i=plan_quantity(r["q_i"], r["status"], _opt_float(r, "decided_q_i")),
         decision_reason=r.get("decision_reason") if hasattr(r, "get") else None,
         decided_at=r.get("decided_at") if hasattr(r, "get") else None,
         decided_by=r.get("decided_by") if hasattr(r, "get") else None,

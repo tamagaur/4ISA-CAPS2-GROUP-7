@@ -2398,6 +2398,39 @@ def test_accepting_a_row_leaves_the_dashboard_and_the_reorder_page_in_agreement(
     assert 2 not in [r["recommendation_key"] for r in preview["rows"]]
 
 
+def test_changing_an_accepted_quantity_moves_the_dashboard_and_the_reorder_page_together():
+    """2026-10-24: a row accepted at a different quantity counts that quantity in the plan total on both
+    screens; undecided, both read the LP's q_i. The plan count does not change."""
+    from tests.backend import test_recommendations as rec_tests
+
+    def both(decided):
+        dash_rows = []
+        for k in (1, 2, 3, 4):
+            r = _reco_row(k, urgency_stock=0, rop_i=100)
+            r["q_i"] = 288.0 * k
+            r["status"] = "accepted" if (decided is not None and k == 2) else "pending"
+            r["decided_q_i"] = decided if k == 2 else None
+            dash_rows.append(r)
+        with make_client(FakeSession(reco_preview_rows=dash_rows, recommendation_count=4)) as c:
+            body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+        rec_rows = [{**r, "product_key": r["recommendation_key"], "tier": "A", "revenue_share": 0.03,
+                     "decided_at": None, "decided_by": None, "generated_at": None, "_abc_period": "2026-02"}
+                    for r in dash_rows]
+        rec_session = rec_tests.FakeSession(
+            rec_rows, stock_by_period={(k, "2026-02"): 0.0 for k in (1, 2, 3, 4)},
+            inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"})
+        app.dependency_overrides[get_db] = lambda: rec_session
+        with TestClient(app) as c:
+            reco = c.get("/recommendations?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
+        return body["reorder_preview"], reco
+
+    for decided, expected in ((None, 2880), (500.0, 2880 - 576 + 500), (0.0, 2880 - 576)):
+        preview, reco = both(decided)
+        assert preview["total_order_qty"] == sum(i["plan_q_i"] for i in reco["items"]) == expected
+        assert preview["plan_count"] == reco["count"] == 4
+        assert sum(i["q_i"] for i in reco["items"]) == 2880  # the LP's own quantity is never touched
+
+
 def test_the_dashboard_tier_cards_state_the_basis_they_were_ranked_on():
     with make_client(FakeSession()) as c:
         body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()

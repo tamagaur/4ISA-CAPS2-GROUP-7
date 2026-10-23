@@ -231,7 +231,37 @@ def test_the_row_query_reads_the_capture_columns_only_where_they_exist():
     assert "lr.decided_q_i" not in absent and "NULL::numeric AS decided_q_i" in absent
 
 
-# ---- nothing reads the capture ---------------------------------------------------------------------------
+# ---- the decided quantity feeds the displayed plan total, and nothing else -------------------------------
+# 2026-10-24: the capture-only rule is lifted narrowly. decided_q_i may feed the plan total and count
+# (plan_q_i); it must not reach the forecast, the safety stock or the LP.
+
+def test_plan_quantity_is_the_accepted_quantity_else_q_i():
+    assert rec.plan_quantity(50.0, "accepted", 40.0) == 40.0
+    assert rec.plan_quantity(50.0, "accepted", 0.0) == 0.0  # zero is a legal decision, not "no override"
+    assert rec.plan_quantity(50.0, "accepted", None) == 50.0
+    assert rec.plan_quantity(50.0, "pending", None) == 50.0
+    assert rec.plan_quantity(50.0, "dismissed", None) == 50.0  # a dismissed row stays in the plan at q_i
+
+
+def test_the_item_carries_plan_q_i_and_still_the_lp_q_i():
+    row = _item_row(current_stock=100.0, rop_i=30.0, q_i=50.0)
+    assert rec._to_item(row, None).plan_q_i == 50.0  # nothing decided: the plan reads exactly q_i
+    row.update(status="accepted", decided_q_i=40.0)
+    item = rec._to_item(row, None)
+    assert (item.q_i, item.recommended_q_i, item.plan_q_i) == (50.0, 50.0, 40.0)
+
+
+def test_only_the_displayed_plan_total_reads_the_decided_quantity():
+    dashboard = (REPO / "backend/routers/dashboard.py").read_text(encoding="utf-8")
+    assert "decided_q_i" not in dashboard and "plan_q_i" in dashboard  # it reads the derived field only
+    for root in ("analytics", "scripts", "transform", "tools"):
+        for path in (REPO / root).rglob("*.py"):
+            if any(p in path.parts for p in (".venv", "__pycache__")):
+                continue
+            assert "plan_q_i" not in path.read_text(encoding="utf-8", errors="ignore"), path
+
+
+# ---- nothing upstream reads the capture ------------------------------------------------------------------
 
 CAPTURE_NAMES = ("decided_q_i", "decision_reason", "decided_quantity")
 # The only files allowed to mention the capture columns: the endpoint, its schema, the migration, these tests.
@@ -244,6 +274,8 @@ ALLOWED = {
     "backend/routers/reorder_approval.py", "tests/backend/test_reorder_approval.py",
     "analytics/db/migrations/0067_lp_decision_reversal.sql",
     "analytics/db/migrations/0068_lp_quantity_change_approval.sql",
+    # 2026-10-24: the plan-total test feeds a decided quantity through both screens. Test code only.
+    "tests/backend/test_dashboard.py",
 }
 
 

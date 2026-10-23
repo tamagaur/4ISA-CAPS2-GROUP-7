@@ -276,6 +276,8 @@ const ReorderRecommendations = () => {
           stock: casesNote(item.current_stock, item.pack_size),
         },
         orderQty: item.q_i,
+        // What the row adds to the plan total: the accepted quantity if the planner changed it, else q_i.
+        planQty: item.plan_q_i ?? item.q_i,
         safetyStock: item.ss_i,
         urgency: item.urgency,
         planningCycleDate: item.planning_cycle_date,
@@ -399,7 +401,7 @@ const ReorderRecommendations = () => {
   // An aged tier (tierIsCurrent false) is display only: a carried-forward A is not Class A here.
   const notCategoryACount = cycleRows.filter((r) => r.tier !== 'A' || r.tierIsCurrent === false).length;
   // Summed in whole pieces, so the card equals the sum of the table's rows.
-  const totalOrderQty = cycleRows.reduce((sum, item) => sum + (wholeUnits(item.orderQty) || 0), 0);
+  const totalOrderQty = cycleRows.reduce((sum, item) => sum + (wholeUnits(item.planQty) || 0), 0);
   // Rows the allocation couldn't fully fund (short_units > 0) — the
   // allocation binds, so the total above is the allocation, not the need.
   const pendingRows = cycleRows.filter((item) => !item.actionStatus);

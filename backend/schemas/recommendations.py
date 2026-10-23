@@ -125,10 +125,14 @@ class RecommendationItem(BaseModel):
     # migration 0062). q_i stays what the LP produced; recommended_q_i repeats it under an unambiguous
     # name so a page can show "recommended X, decided Y". decided_q_i is the quantity the planner chose
     # when it differs from q_i (None = no override: pending, dismissed, or accepted as recommended).
-    # decision_reason is why (required on dismiss). Capture only: nothing in forecasting, safety stock
-    # or the LP reads these, and none of them changes a recommended value.
+    # decision_reason is why (required on dismiss). Nothing in forecasting, safety stock or the LP reads
+    # these, and none of them changes a recommended value. The one reader is the displayed plan total.
     recommended_q_i: float | None = None
     decided_q_i: float | None = None
+    # What this row contributes to the displayed plan total and count (2026-10-24, the narrow lift of the
+    # capture-only rule): decided_q_i where the planner accepted a different quantity, else q_i. Equal to
+    # q_i for every undecided row, so with nothing decided the plan total is unchanged.
+    plan_q_i: float | None = None
     decision_reason: str | None = None
     decided_at: datetime.datetime | None = None
     decided_by: str | None = None
@@ -229,6 +233,9 @@ class QuantityChange(BaseModel):
     resolved_by: str | None = None  # the admin who approved or rejected
     resolved_at: datetime.datetime | None = None
     resolution_note: str | None = None  # required on a rejection
+    # Set on an approved change whose accepted decision an admin later reversed (the state stays 'approved').
+    reversed_by: str | None = None
+    reversed_at: datetime.datetime | None = None
 
 
 class QuantityChangeOutcome(BaseModel):

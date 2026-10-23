@@ -2206,9 +2206,10 @@ def get_dashboard(
         "no_data_count": sum(1 for it in rp_items if it.urgency == NO_DATA),
         # Whole units per row, summed over the PLAN (pending + accepted + dismissed, at q_i) — the Reorder
         # page's own total, so the two screens agree before and after a decision (they differed by 123.6
-        # units 2026-09-29, and by one accepted row's pieces until 2026-10-23). pending_* is the second,
+        # units 2026-09-29, and by one accepted row's pieces until 2026-10-23). A row the planner accepted at a
+        # different quantity counts that quantity (plan_q_i, 2026-10-24); every other row counts q_i. pending_* is the second,
         # separately named number: what is still awaiting a decision.
-        "total_order_qty": sum(whole_units(it.q_i) for it in rp_items) if rp_items else 0,
+        "total_order_qty": sum(whole_units(it.plan_q_i) for it in rp_items) if rp_items else 0,
         "plan_count": len(rp_items),
         "pending_count": len(rp_open),
         "pending_order_qty": sum(whole_units(it.q_i) for it in rp_open),
