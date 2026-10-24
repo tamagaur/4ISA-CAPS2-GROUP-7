@@ -71,6 +71,21 @@ sets aside) is refused for that cycle, logged with the reason the app shows
 it. No older or later count is substituted. plan_cycle() refuses a product
 carrying any other month's stock (check_stock_periods). The count used, its
 date and any flag on it are recorded in lp_run.inputs.stock_counts.
+
+OPENING STOCK (2026-10-24, migration 0069, docs/ROLLOVER_DESIGN.md). Stock on hand is read from the view
+stock_opening_v, not straight from the count: the count that opens the cycle PLUS the receipts of accepted orders of
+EARLIER cycles that are still on the way (state expected, expected_on after the count date). A cycle's own accepted
+orders never change its plan. With nothing decided that is exactly the count and the plan is unchanged.
+
+SAFETY PROPERTY RELAXED, DELIBERATELY (decision of 2026-10-24). Until then this script refused to plan a cycle that
+had no stock count for the month before it, and no other month's stock was ever used. It now PLANS ON A PROJECTED
+OPENING when that count is simply not loaded yet: the month-before-that count, plus the receipts on the way, minus
+that month's sales (the real month if loaded, else the stored forecast). A projection is not a count. Every plan
+built that way is labelled opening_basis = 'projected' in lp_run.inputs (stock_counts.<principal>.opening_basis and
+the run's opening_basis), in the run notes, and through GET /recommendations and GET /dashboard (stock_counts[]
+.opening_basis); the screens say "projected". The look-ahead guard is kept: a later count than the opening month is
+still never used (check_stock_periods). A count a team ruling sets aside (backend/data_notes.OPENING_COUNT_RULINGS)
+is still refused, never projected over. --require-count restores the old refusal for a missing count.
   cost per piece  the stock file's unit cost per case ÷ pack size, from the
                   product's latest row that has one. It prices the order and
                   values stock for the cover rule. Falls back to
@@ -312,6 +327,42 @@ STOCK_AND_COST_QUERY = f"""
 """
 
 
+# Stock on hand per product at the cycle's opening, from the view of migration 0069 (stock_opening_v): the opening
+# count plus the receipts still on the way, or the labelled projection when that count is not loaded. in_stock_file is
+# whether the product has a row in the count used. The same three columns as STOCK_AND_COST_QUERY.
+STOCK_OPENING_PRESENT_QUERY = "SELECT to_regclass('stock_opening_v') IS NOT NULL"
+STOCK_AND_COST_FROM_VIEW_QUERY = f"""
+    SELECT pd_pack.product_key,
+           COALESCE(s.in_stock_file, false) AS in_stock_file,
+           s.opening_pieces AS stock_pieces,
+           CASE WHEN {PACK_SIZE_NUMERIC}
+                THEN c.cost_per_case / pd_pack.pack_size::numeric
+           END AS cost_per_piece
+    FROM Product_Dimension pd_pack
+    LEFT JOIN (SELECT product_key, in_stock_file, opening_pieces FROM stock_opening_v
+               WHERE principal = 'unilever' AND cycle = %(cycle)s) s ON s.product_key = pd_pack.product_key
+    LEFT JOIN LATERAL (
+        SELECT AVG(inv.unit_cost_per_case) AS cost_per_case
+        FROM inventory_fact_real inv
+        WHERE inv.product_key = pd_pack.product_key AND inv.unit_cost_per_case > 0
+        GROUP BY inv._period
+        ORDER BY inv._period DESC
+        LIMIT 1
+    ) c ON true
+    WHERE pd_pack.product_key = ANY(%(product_keys)s)
+"""
+# One row per principal planned on a projection or carrying receipts, for lp_run.inputs and the log.
+OPENING_BASIS_QUERY = """
+    SELECT principal, opening_basis, MIN(count_period) AS count_period, MIN(count_date) AS count_date,
+           COUNT(*) AS products, COALESCE(SUM(expected_receipt_pieces), 0) AS expected_receipt_pieces,
+           COALESCE(SUM(expected_receipts), 0) AS expected_receipts,
+           COUNT(*) FILTER (WHERE sales_basis = 'actual') AS sales_actual,
+           COUNT(*) FILTER (WHERE sales_basis = 'forecast') AS sales_forecast,
+           COUNT(*) FILTER (WHERE sales_basis = 'none') AS sales_none
+    FROM stock_opening_v WHERE cycle = %(cycle)s GROUP BY principal, opening_basis
+"""
+
+
 @dataclass
 class ProductInput:
     """One product's fetched inputs, before any planning rule is applied."""
@@ -327,6 +378,7 @@ class ProductInput:
     prior_year_revenue: float
     stock_period: str | None = None  # the _period of the count stock_on_hand came from
     pack_size: float | None = None   # pieces per case; None = unknown, the order is not rounded
+    opening_basis: str = "count"     # 'count', or 'projected' (migration 0069): stock_period is then the count projected from
 
 
 @dataclass
@@ -497,10 +549,21 @@ def fetch_demand_history(cur, product_keys: list[int]) -> pd.DataFrame:
     return df
 
 
-def fetch_stock_and_cost(cur, product_keys: list[int], stock_period: str) -> dict[int, tuple[bool, float | None, float | None]]:
+def stock_opening_present(cur) -> bool:
+    cur.execute(STOCK_OPENING_PRESENT_QUERY)
+    return bool(cur.fetchone()[0])
+
+
+def fetch_stock_and_cost(cur, product_keys: list[int], stock_period: str,
+                         cycle=None) -> dict[int, tuple[bool, float | None, float | None]]:
     """product_key -> (in_stock_file, stock_pieces, cost_per_piece), stock
-    at the count of `stock_period` only."""
-    cur.execute(STOCK_AND_COST_QUERY, {"product_keys": product_keys, "stock_period": stock_period})
+    at the count of `stock_period` only. With `cycle` and migration 0069 applied the stock is the cycle's opening
+    from stock_opening_v (the count plus receipts on the way, or the labelled projection); without either it is the
+    count alone, as before."""
+    if cycle is not None and stock_opening_present(cur):
+        cur.execute(STOCK_AND_COST_FROM_VIEW_QUERY, {"product_keys": product_keys, "cycle": cycle})
+    else:
+        cur.execute(STOCK_AND_COST_QUERY, {"product_keys": product_keys, "stock_period": stock_period})
     return {
         int(k): (bool(in_file), None if pieces is None else float(pieces), None if cost is None else float(cost))
         for k, in_file, pieces, cost in cur.fetchall()
@@ -521,18 +584,58 @@ def fetch_stock_counts(cur, period: str) -> dict[str, dict]:
     return {r["principal"]: r for r in (dict(zip(columns, row)) for row in cur.fetchall())}
 
 
-def opening_counts(planning_cycle_date, principals, count_rows: dict[str, dict]) -> tuple[dict[str, dict], dict[str, str]]:
+def month_before(period: str) -> str:
+    """'2026-03' -> '2026-02' (January -> the previous December)."""
+    year, month = int(period[:4]), int(period[5:7])
+    return f"{year - 1}-12" if month == 1 else f"{year}-{month - 1:02d}"
+
+
+def fetch_opening_basis(cur, planning_cycle_date) -> dict[str, dict]:
+    """principal -> its stock_opening_v summary for the cycle (basis, the count behind it, receipts counted, how the
+    projected month's sales were known). {} where migration 0069 is not applied or the cycle has no row."""
+    if not stock_opening_present(cur):
+        return {}
+    cur.execute(OPENING_BASIS_QUERY, {"cycle": planning_cycle_date})
+    columns = [d[0] for d in cur.description]
+    return {r["principal"]: r for r in (dict(zip(columns, row)) for row in cur.fetchall())}
+
+
+def projected_info(principal: str, planning_cycle_date, row: dict) -> dict:
+    """The stock_count_info of a cycle planned on a PROJECTED opening: the count it starts from (the month before
+    the opening month), labelled opening_basis = 'projected'. Never presented as a count of the opening month."""
+    year, month = planning_cycle_date.year, planning_cycle_date.month
+    return {"cycle": f"{year}-{month:02d}-01", "principal": principal, "period": row["count_period"],
+            "role": "opening", "available": True, "counted_on": row["count_date"].isoformat(),
+            "counted_on_note": None, "row_count": int(row["products"]), "flag": None, "reason": None,
+            "opening_basis": "projected",
+            "projection": {"from_count": row["count_period"], "opening_month": opening_period(planning_cycle_date),
+                           "sales_actual_products": int(row["sales_actual"]),
+                           "sales_forecast_products": int(row["sales_forecast"]),
+                           "sales_unknown_products": int(row["sales_none"]),
+                           "expected_receipt_pieces": float(row["expected_receipt_pieces"])}}
+
+
+def opening_counts(planning_cycle_date, principals, count_rows: dict[str, dict], basis_rows: dict[str, dict] | None = None,
+                   require_count: bool = False) -> tuple[dict[str, dict], dict[str, str]]:
     """({principal: stock_count_info} for the principals that can be planned,
-    {principal: reason} for those refused). A principal is refused when it
-    has no count for the month before the cycle, or that count is set aside
-    (backend/data_notes.OPENING_COUNT_RULINGS). No other month is tried."""
+    {principal: reason} for those refused). A principal with the count of the month before the cycle plans from it
+    (opening_basis 'count'). One with NO such count loaded plans on a projected opening when stock_opening_v has one
+    (basis_rows, fetch_opening_basis) unless require_count: the safety property relaxed deliberately on 2026-10-24,
+    see the module docstring. A count that is set aside (backend/data_notes.OPENING_COUNT_RULINGS) is refused and
+    never projected over. No later month's count is ever tried."""
     period = opening_period(planning_cycle_date)
     usable: dict[str, dict] = {}
     refused: dict[str, str] = {}
     for principal in sorted(principals):
         info = stock_count_info(principal, period, count_rows.get(principal), cycle=planning_cycle_date)
         if info["available"]:
+            info["opening_basis"] = "count"
             usable[principal] = info
+            continue
+        basis = (basis_rows or {}).get(principal)
+        if (count_rows.get(principal) is None and basis is not None and basis["opening_basis"] == "projected"
+                and not require_count):
+            usable[principal] = projected_info(principal, planning_cycle_date, basis)
         else:
             refused[principal] = info["reason"]
     return usable, refused
@@ -543,9 +646,12 @@ def check_stock_periods(products: list[ProductInput], planning_cycle_date) -> No
     Raises on any product whose stock came from another month's count,
     a later one above all (the bug of 2026-10-03)."""
     want = opening_period(planning_cycle_date)
-    wrong = sorted({(p.sku_id, str(p.stock_period)) for p in products if p.stock_period != want})
+    earlier = month_before(want)   # the count a PROJECTED opening starts from, never a later one
+    wrong = sorted({(p.sku_id, str(p.stock_period)) for p in products
+                    if p.stock_period != (earlier if p.opening_basis == "projected" else want)})
     if wrong:
-        raise ValueError(f"cycle {planning_cycle_date} plans from the stock count of {want}, the month before it; "
+        raise ValueError(f"cycle {planning_cycle_date} plans from the stock count of {want}, the month before it "
+                         f"(or, projected, the count of {earlier}); "
                          f"{len(wrong)} product(s) carry another month's stock: {wrong[:5]}")
 
 
@@ -604,7 +710,7 @@ def cycle_transaction(cur, dry_run: bool):
 def product_input(
     product_key: int, sku_id: str, principal: str, forecast: float, sigma_d: float,
     stock_and_cost: dict, history: pd.DataFrame, prior_year: int, stock_period: str | None = None,
-    pack_sizes: dict | None = None,
+    pack_sizes: dict | None = None, opening_basis: str = "count",
 ) -> tuple[ProductInput | None, str | None]:
     """(ProductInput, None), or (None, reason) when the stock can't be put in
     pieces. stock_period is the count stock_and_cost was read at."""
@@ -616,11 +722,13 @@ def product_input(
     return ProductInput(
         product_key=int(product_key), sku_id=str(sku_id), principal=principal,
         forecast=float(forecast), sigma_d=sigma_d,
-        stock_on_hand=pieces if in_file else 0.0, in_stock_file=in_file, cost_per_piece=cost,
+        # not in the count: 0 on hand, plus any receipts on the way (a product with a view row but no count row)
+        stock_on_hand=pieces if (in_file or pieces is not None) else 0.0, in_stock_file=in_file, cost_per_piece=cost,
         prior_year_pieces=float(year["total_quantity"].sum()),
         prior_year_revenue=float(year["total_amount"].sum()),
         stock_period=stock_period,
         pack_size=(pack_sizes or {}).get(int(product_key)),
+        opening_basis=opening_basis,
     ), None
 
 
@@ -717,7 +825,7 @@ def plan_rows(plan: CyclePlan, planning_cycle_date, stock_counts: dict[str, dict
             "need": round(s.need, 2), "order": None if q is None else round(q, 2),
             "order_before_pack_rounding": (None if plan.orders_before_pack_rounding is None
                                            else round(plan.orders_before_pack_rounding[s.sku_id], 2)),
-            "pack_size": p.pack_size,
+            "pack_size": p.pack_size, "opening_basis": p.opening_basis,
             "short": None if q is None else round(s.need - q, 2),
             "cost_per_piece": round(s.procurement_cost_per_unit, 4),
             "cost_source": "stock file" if p.cost_per_piece is not None else "placeholder",
@@ -746,12 +854,20 @@ def _code_version() -> str | None:
 
 
 # What lp_run keeps of each stock count a plan started from (stock_count_info).
-_RECORDED_COUNT_KEYS = ("period", "counted_on", "counted_on_note", "row_count", "flag")
+_RECORDED_COUNT_KEYS = ("period", "counted_on", "counted_on_note", "row_count", "flag", "opening_basis")
 
 
 def recorded_counts(stock_counts: dict[str, dict]) -> dict[str, dict]:
-    """opening_counts()' usable counts as a run records them, per principal."""
-    return {principal: {k: info[k] for k in _RECORDED_COUNT_KEYS} for principal, info in sorted(stock_counts.items())}
+    """opening_counts()' usable counts as a run records them, per principal. A projected opening also records how it
+    was projected (the count it started from, how the month's sales were known, the receipts counted)."""
+    out = {}
+    for principal, info in sorted(stock_counts.items()):
+        out[principal] = {k: info.get(k) for k in _RECORDED_COUNT_KEYS}
+        if info.get("projection") is not None:
+            out[principal]["projection"] = info["projection"]
+        if info.get("expected_receipts") is not None:
+            out[principal]["expected_receipts"] = info["expected_receipts"]
+    return out
 
 
 def run_notes(stock_counts: dict[str, dict]) -> list[str]:
@@ -765,6 +881,14 @@ def run_notes(stock_counts: dict[str, dict]) -> list[str]:
         if ruling is not None and ruling[0] == "use":
             counted = info["counted_on"] or "date not recorded"
             notes.append(f"{principal} stock count {info['period']} (counted {counted}): {ruling[1]}")
+        if info.get("opening_basis") == "projected":
+            projection = info.get("projection") or {}
+            notes.append(f"{principal}: PROJECTED OPENING, NOT A COUNT. The count of {info['period']} "
+                         f"(counted {info['counted_on'] or 'date not recorded'}) plus receipts on the way "
+                         f"({projection.get('expected_receipt_pieces', 0):,.0f} pieces) less the month's sales "
+                         f"({projection.get('sales_actual_products', 0)} products from actual sales, "
+                         f"{projection.get('sales_forecast_products', 0)} from the stored forecast). "
+                         "Re-plan from the count when it is loaded.")
         if principal in PLANNING_NOTES:
             notes.append(f"{principal}: {PLANNING_NOTES[principal]}")
     return notes
@@ -789,6 +913,8 @@ def run_record(args: argparse.Namespace, plan: CyclePlan, planning_cycle_date,
     two results; a refused principal is recorded with its reason."""
     inputs = {key: getattr(args, key) for key in PLACEHOLDERS}
     inputs["stock_counts"] = recorded_counts(stock_counts)
+    inputs["opening_basis"] = ("projected" if any(i.get("opening_basis") == "projected" for i in stock_counts.values())
+                               else "count")
     inputs["notes"] = run_notes(stock_counts)
     if refused:
         inputs["stock_refused"] = dict(sorted(refused.items()))
@@ -827,6 +953,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--source", choices=["real", "demo"], default="real",
         help="real (default): exactly the run this script has always made. demo: the Del Monte demonstration "
              "order plan only (--principal delmonte; see check_source), reading and writing schema demo only.",
+    )
+    parser.add_argument(
+        "--require-count", action="store_true",
+        help="Refuse a cycle whose opening stock count is not loaded (the behaviour before 2026-10-24). Without it the "
+             "cycle is planned on a PROJECTED opening and labelled opening_basis = projected.",
     )
     parser.add_argument(
         "--case-pack-rounding", action=argparse.BooleanOptionalAction, default=True,
@@ -1361,8 +1492,14 @@ def main():
     for planning_cycle_date in sorted(candidates_df["forecast_date"].unique()):
         cycle_df = candidates_df[candidates_df["forecast_date"] == planning_cycle_date]
         stock_period = opening_period(planning_cycle_date)
+        basis_rows = fetch_opening_basis(cur, planning_cycle_date)
         usable, refused = opening_counts(planning_cycle_date, set(cycle_df["principal"]),
-                                         fetch_stock_counts(cur, stock_period))
+                                         fetch_stock_counts(cur, stock_period), basis_rows=basis_rows,
+                                         require_count=args.require_count)
+        for principal, info in usable.items():   # receipts counted on a count-basis opening, for lp_run.inputs
+            row = basis_rows.get(principal)
+            if info.get("opening_basis") == "count" and row is not None:
+                info["expected_receipts"] = {"pieces": float(row["expected_receipt_pieces"]), "receipts": int(row["expected_receipts"])}
         counts_by_cycle[planning_cycle_date] = usable
         refused_by_cycle[planning_cycle_date] = refused
         for principal, reason in refused.items():
@@ -1372,8 +1509,14 @@ def main():
                          "Nothing is planned for it, and no other month's count is used.")
         for principal, info in usable.items():
             counted = info["counted_on"] or f"date not recorded: {info['counted_on_note']}"
-            logger.info(f"  Cycle {planning_cycle_date} · {principal}: opening stock count {info['period']} "
-                        f"(counted {counted}; {info['row_count']} rows)")
+            if info["opening_basis"] == "projected":
+                logger.warning(f"  Cycle {planning_cycle_date} · {principal}: NO COUNT FOR {opening_period(planning_cycle_date)} IS LOADED. "
+                               f"Planning on a PROJECTED opening from the count of {info['period']} (counted {counted}), "
+                               "plus receipts on the way, less that month's sales. opening_basis = projected is recorded "
+                               "on the run and shown by the app. Use --require-count to refuse instead.")
+            else:
+                logger.info(f"  Cycle {planning_cycle_date} · {principal}: opening stock count {info['period']} "
+                            f"(counted {counted}; {info['row_count']} rows)")
             if info["flag"]:
                 logger.warning(f"  Cycle {planning_cycle_date} · {principal}: that count is flagged: {info['flag']}")
         for note in run_notes(usable):
@@ -1382,7 +1525,7 @@ def main():
         if cycle_df.empty:
             continue
         cycle_keys = [int(k) for k in cycle_df["product_key"].unique()]
-        stock_and_cost = fetch_stock_and_cost(cur, cycle_keys, stock_period)
+        stock_and_cost = fetch_stock_and_cost(cur, cycle_keys, stock_period, cycle=planning_cycle_date)
         pack_sizes = fetch_pack_sizes(cur, cycle_keys)
 
         for row in cycle_df.itertuples():
@@ -1396,8 +1539,9 @@ def main():
                 continue
             product, reason = product_input(
                 row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
-                stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date), stock_period=stock_period,
-                pack_sizes=pack_sizes,
+                stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date),
+                stock_period=usable[row.principal]["period"],     # the count stock came from (earlier if projected)
+                pack_sizes=pack_sizes, opening_basis=usable[row.principal]["opening_basis"],
             )
             if product is None:
                 gate_out(row.sku_id, row.principal, reason)

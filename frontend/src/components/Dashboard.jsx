@@ -62,6 +62,10 @@ function stockCountedLine(counts) {
   const usable = (counts || []).filter((c) => c.available);
   return usable.map((c) => {
     const who = usable.length > 1 ? `${PRINCIPAL_NAMES[c.principal] || c.principal} ` : '';
+    // A plan made before the opening count was loaded starts from a projection, never a count (opening_basis).
+    if (c.opening_basis === 'projected') {
+      return `${who}PROJECTED opening stock (from the ${formatMonth(c.period)} count${c.counted_on ? `, counted ${formatDate(c.counted_on)}` : ''}, plus orders on the way, less sales)`;
+    }
     return c.counted_on
       ? `${who}stock counted ${formatDate(c.counted_on)}`
       : `${who}count month: ${formatMonth(c.period)} (exact date not recorded)`;

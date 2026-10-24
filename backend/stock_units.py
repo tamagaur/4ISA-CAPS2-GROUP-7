@@ -297,10 +297,35 @@ def stock_count_info(principal: str, period: str | None, row, cycle=None) -> dic
     return info
 
 
-def stock_counts(db, period: str | None, principals, cycle=None) -> list[dict]:
+def with_opening_basis(info: dict, recorded: dict | None) -> dict:
+    """Says how a cycle's opening stock was obtained (migration 0069). `recorded` is the stock_counts entry the run
+    for that cycle kept for this principal (lp_run.inputs.stock_counts.<principal>, scripts/run_lp.py).
+
+    opening_basis 'count': the plan started from the opening month's count.
+    opening_basis 'projected': the plan started from a PROJECTION (the earlier count + receipts on the way - the
+        month's sales), because the opening count was not loaded when it was made. `period` and `counted_on` are
+        then the count it started from, never presented as the opening month's count. `count_now_loaded` says
+        the opening count has arrived since, so the plan can be re-run from it.
+    None: no plan for this cycle, so nothing to label."""
+    info = dict(info)
+    if recorded and recorded.get("opening_basis") == "projected":
+        info.update({"opening_basis": "projected", "available": True, "reason": None,
+                     "count_now_loaded": bool(info["available"]),
+                     "projected_from_period": recorded.get("period"), "counted_on": recorded.get("counted_on"),
+                     "projection": recorded.get("projection")})
+        info["period"] = recorded.get("period")
+    else:
+        info["opening_basis"] = "count" if info["available"] else None
+    return info
+
+
+def stock_counts(db, period: str | None, principals, cycle=None, run: dict | None = None) -> list[dict]:
     """stock_count_info for each of `principals` at `period`, in that order.
-    Pass `cycle` for a plan's opening count (period = opening_period(cycle))."""
+    Pass `cycle` for a plan's opening count (period = opening_period(cycle)), and `run` (backend/lp_cycle.stored_run)
+    for the run that made that cycle's plan, so each entry says whether the plan started from a count or from a
+    projection (opening_basis, see with_opening_basis)."""
     rows = {}
     if period is not None:
         rows = {r["principal"]: r for r in batch.rows(db, STOCK_COUNTS_SQL, {"count_period": period})}
-    return [stock_count_info(p, period, rows.get(p), cycle) for p in principals]
+    recorded = (((run or {}).get("inputs") or {}).get("stock_counts") or {}) if cycle is not None else {}
+    return [with_opening_basis(stock_count_info(p, period, rows.get(p), cycle), recorded.get(p)) for p in principals]

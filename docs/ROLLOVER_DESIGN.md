@@ -42,6 +42,8 @@ When the month's count is **not yet loaded**, a clearly labelled projection: `co
 
 `run_lp` reads one new view, `stock_opening_v`, instead of the count directly. This lifts the capture-only rule (and its test) on purpose, by decision.
 
+**The safety property relaxed, plainly (built 2026-10-24).** Until now `run_lp` refused to plan a cycle with no stock count for the month before it, and used no other month's stock. It now plans on a **projected** opening when that count is not loaded yet (the earlier count + receipts on the way − that month's sales). What that costs: a projection is an estimate, not a measurement, and an order can be sized on stock that is not what the warehouse holds. What keeps it honest: every plan built that way carries `opening_basis = projected` in `lp_run.inputs`, in the run notes, in `GET /recommendations` and `GET /dashboard` (`stock_counts[].opening_basis`, with `count_now_loaded` once the real count arrives, so the plan can be re-run), and on the dashboard card text. What does not change: a later count than the opening month is never used, a count a team ruling sets aside is still refused (never projected over), receipts of a cycle's own orders never change that cycle's plan, and `--require-count` restores the old refusal. Decided quantities reach the opening stock only; the forecast, the safety stock and the LP objective still never read them (`tests/optimization/test_run_lp_projected.py`).
+
 ## d. Cycle close
 
 | Step | Exists | To build |

@@ -2177,7 +2177,7 @@ def get_dashboard(
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
     rp_open = [it for it in rp_items if it.status == "pending"]
     rp_stock_counts = (
-        stock_counts(db, rp_stock_period, sorted({r["principal"] for r in rp_rows}), cycle=lp_cycle)
+        stock_counts(db, rp_stock_period, sorted({r["principal"] for r in rp_rows}), cycle=lp_cycle, run=lp_run)
         if lp_cycle is not None else []
     )
     # Within an urgency, highest priority first — the Reorder page's own

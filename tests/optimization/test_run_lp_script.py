@@ -337,7 +337,7 @@ def test_run_record_holds_every_flag_and_the_fixed_model():
     args = _args("--allocation-pct", "108")
     plan = plan_cycle([_product(1)], args)
     record = run_record(args, plan, datetime.date(2026, 3, 1), {"unilever": _OPENING_COUNT})
-    flags = {k: v for k, v in record["inputs"].items() if k not in ("stock_counts", "notes")}
+    flags = {k: v for k, v in record["inputs"].items() if k not in ("stock_counts", "notes", "opening_basis")}
     assert flags == {key: getattr(args, key) for key in PLACEHOLDERS}
     assert record["inputs"]["allocation_pct"] == 108.0
     assert record["principal_scope"] == "both"
@@ -370,7 +370,7 @@ from scripts.run_lp import STOCK_AND_COST_QUERY, check_stock_periods, opening_co
 _COUNTED_2026_03_02 = datetime.date(2026, 3, 2)
 _COUNTED_2026_04_06 = datetime.date(2026, 4, 6)
 _OPENING_COUNT = {"period": "2026-02", "counted_on": "2026-03-02", "counted_on_note": None,
-                  "row_count": 812, "flag": None, "available": True}
+                  "row_count": 812, "flag": None, "available": True, "opening_basis": "count"}
 
 
 def _count_row(row_count, counted_on):
@@ -415,7 +415,9 @@ def test_run_record_names_the_stock_count_and_any_refusal():
     record = run_record(args, plan, CYCLE, {"unilever": _OPENING_COUNT},
                         {"delmonte": "no opening stock count for March 2026: delmonte has no stock count for February 2026"})
     assert record["inputs"]["stock_counts"] == {"unilever": {
-        "period": "2026-02", "counted_on": "2026-03-02", "counted_on_note": None, "row_count": 812, "flag": None}}
+        "period": "2026-02", "counted_on": "2026-03-02", "counted_on_note": None, "row_count": 812, "flag": None,
+        "opening_basis": "count"}}
+    assert record["inputs"]["opening_basis"] == "count"
     assert record["inputs"]["stock_refused"]["delmonte"].startswith("no opening stock count for March 2026")
     assert record["inputs"]["allocation_pct"] == 103.0
     assert record["model"]["service_level_pct"] == SERVICE_LEVEL_PCT
@@ -437,7 +439,11 @@ class _FakeDB:
     counts: {period: [(principal, row_count, counted_on)]};
     stock: {period: {product_key: pieces}}."""
 
-    def __init__(self, counts, stock, candidates=((1, "SKU1", "unilever"),), packs=None, pack_columns=True):
+    def __init__(self, counts, stock, candidates=((1, "SKU1", "unilever"),), packs=None, pack_columns=True,
+                 view=None):
+        # view: None = migration 0069 not applied (the count alone, as before); else {"basis": {principal: row},
+        # "stock": {cycle-less product_key: (in_file, pieces)}} answering stock_opening_v
+        self.view = view
         self.counts, self.stock = counts, stock
         self.packs, self.pack_columns = packs or {}, pack_columns
         self.candidates = [(k, sku, who, CYCLE, 1200.0, 0.5) for k, sku, who in candidates]
@@ -463,6 +469,15 @@ class _FakeDB:
         self.description, self._rows, self.rowcount = None, [], -1
         if "to_regclass('lp_run')" in flat:
             self._rows = [(True,)]
+        elif "to_regclass('stock_opening_v')" in flat:
+            self._rows = [(self.view is not None,)]
+        elif "FROM stock_opening_v WHERE cycle" in flat:
+            cols = ("principal", "opening_basis", "count_period", "count_date", "products", "expected_receipt_pieces",
+                    "expected_receipts", "sales_actual", "sales_forecast", "sales_none")
+            self.description = [(c,) for c in cols]
+            self._rows = [tuple(r[c] for c in cols) for r in self.view["basis"].values()]
+        elif "FROM stock_opening_v" in flat and "AS in_stock_file" in flat:
+            self._rows = [(k, *self.view["stock"].get(k, (False, None)), 10.0) for k in params["product_keys"]]
         elif "column_name IN ('q_i_before_pack_rounding', 'pack_size')" in flat:
             self._rows = [(self.pack_columns,)]
         elif "pd_pack.pack_size::numeric" in flat and "AS in_stock_file" not in flat:

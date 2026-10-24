@@ -215,6 +215,7 @@ from backend.stock_units import (
     opening_period,
     stock_count_info,
     stock_counts,
+    with_opening_basis,
 )
 from backend import planning_mart, response_cache
 from backend.response_cache import cached
@@ -744,6 +745,7 @@ def get_recommendations(
     rows: list = []
     counts: list[dict] = []
     abc_periods_shown: dict[str, str] = {}
+    current_run = stored_run(db, freshness["cycle_date"], principal, mode)   # which stock basis the current plan used
     for planning_cycle in cycles:
         # ABC anchor = this cycle's own month: the latest run at or before it.
         cycle_abc = latest_abc_periods(db, principal, str(planning_cycle)[:7])
@@ -759,7 +761,8 @@ def get_recommendations(
         # Which count each principal on the list was checked against, and
         # when it was counted, or why there is none.
         principals = sorted({r["principal"] for r in cycle_rows})
-        counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle))
+        counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle,
+                                   run=current_run if planning_cycle == freshness["cycle_date"] else None))
     items = [_to_item(r, present) for r in rows]
     return _attach_demo_unilever(_with_data_mode(RecommendationsResponse(
         items=items,
@@ -768,7 +771,7 @@ def get_recommendations(
         superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
         freshness=freshness,
         # What the run behind the current cycle used (lp_run), else the defaults, labelled.
-        lp_model=lp_model_info(stored_run(db, freshness["cycle_date"], principal, mode)),
+        lp_model=lp_model_info(current_run),
         stock_counts=counts,
         **labels,
         tier_a_periods=tier_a_periods(abc_periods_shown),
@@ -799,9 +802,14 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
     rows = got["rows"]
     # The opening count each principal's rows were checked against, per cycle (newest
     # first): the count's own figures as the mart keeps them, None when there is no count.
+    # opening_basis (migration 0069): the run behind the current cycle says whether its stock was a count or a projection.
+    run_counts = ((got["run"] or {}).get("inputs") or {}).get("stock_counts") or {}
+    run_cycle = (got["run"] or {}).get("planning_cycle_date")
     counts = [
-        stock_count_info(c["principal"], c["opening_period"], None if c["row_count"] is None else c,
-                         c["planning_cycle_date"])
+        with_opening_basis(
+            stock_count_info(c["principal"], c["opening_period"], None if c["row_count"] is None else c,
+                             c["planning_cycle_date"]),
+            run_counts.get(c["principal"]) if run_cycle == c["planning_cycle_date"] else None)
         for c in got["counts"]
     ]
     # The mart's pm.revenue_share is the exact-period `abc` join's share (never the
