@@ -29,7 +29,7 @@ class WritableSession:
             self.writes.append((sql, dict(params or {})))
             return FakeResult([{"product_key": 1, "sku_id": "U-1"}])
         if sql.lstrip().startswith("SELECT product_name, pack_size, brand, notes"):
-            return FakeResult([{"product_name": "Uni One", "pack_size": None, "brand": None, "notes": None}])
+            return FakeResult([{"product_name": "Uni One", "pack_size": None, "brand": None, "notes": None, "grain": "sku"}])
         if sql.lstrip().startswith("SELECT 1 FROM product_dimension"):
             return FakeResult([])
         return self.inner.execute(stmt, params)

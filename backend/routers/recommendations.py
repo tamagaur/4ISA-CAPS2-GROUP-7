@@ -653,6 +653,8 @@ def get_recommendations(
 ) -> RecommendationsResponse:
     # Declared as dates, so 'abc' or 2026-13-45 is a 422, not Postgres's InvalidDatetimeFormat as a 500 (QA
     # 2026-10-24 finding 4). The reads below take the ISO text.
+    if (from_date is None) != (to_date is None):
+        raise HTTPException(status_code=422, detail="from and to go together: send both or neither.")
     from_date = from_date.isoformat() if from_date else None
     to_date = to_date.isoformat() if to_date else None
     # Both principals again (2026-09-17) — see backend/principals.py.

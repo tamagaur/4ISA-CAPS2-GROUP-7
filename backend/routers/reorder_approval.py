@@ -543,14 +543,18 @@ def set_direct_apply_grant(
     target = db.execute(text("SELECT user_id, email, role FROM users WHERE user_id = :uid"), {"uid": user_id}).mappings().first()
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
+    # Audited only when something changed: a replayed grant, or a revoke for someone who never had one, writes nothing
+    # (QA 2026-10-24 finding 12; the neighbouring permission and role writes already work this way).
     if body.granted:
-        db.execute(text("""
+        changed = db.execute(text("""
             INSERT INTO lp_direct_apply_grant (user_id, granted_by) VALUES (:uid, :by)
-            ON CONFLICT (user_id) DO NOTHING
-        """), {"uid": user_id, "by": admin.email})
+            ON CONFLICT (user_id) DO NOTHING RETURNING user_id
+        """), {"uid": user_id, "by": admin.email}).first()
     else:
-        db.execute(text("DELETE FROM lp_direct_apply_grant WHERE user_id = :uid"), {"uid": user_id})
-    audit.record(db, "Direct Apply Granted" if body.granted else "Direct Apply Revoked", target["email"], actor=admin)
+        changed = db.execute(text("DELETE FROM lp_direct_apply_grant WHERE user_id = :uid RETURNING user_id"),
+                             {"uid": user_id}).first()
+    if changed is not None:
+        audit.record(db, "Direct Apply Granted" if body.granted else "Direct Apply Revoked", target["email"], actor=admin)
     db.commit()
     response_cache.invalidate()
     return DirectApplyStatus(can_apply_directly=body.granted or target["role"] == "admin",

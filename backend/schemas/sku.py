@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import datetime
 
-from pydantic import BaseModel
+import re
+
+from pydantic import BaseModel, field_validator
 
 
 class SKUItem(BaseModel):
@@ -67,7 +69,57 @@ class SKUListResponse(BaseModel):
     tier_a_periods: dict[str, str] = {}
 
 
-class SKUCreate(BaseModel):
+# The most a name, brand or note can hold, and the one shape a pack size can take. Names appear on every page and
+# GET /sku carries all of them (about 0.94 MB today); a pack size that is not a positive number silently turns off
+# the whole-case check and the stock-in-pieces conversion for that SKU (backend/stock_units.PACK_SIZE_NUMERIC).
+NAME_MAX, BRAND_MAX, NOTES_MAX = 200, 100, 2000
+_PACK = re.compile(r"[0-9]+(\.[0-9]+)?")
+
+
+class _SKUText(BaseModel):
+    """Checks shared by create and update. None and not-sent pass; text is trimmed."""
+
+    @field_validator("product_name", check_fields=False)
+    @classmethod
+    def _name(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("product_name can't be blank")
+        if len(v) > NAME_MAX:
+            raise ValueError(f"product_name is at most {NAME_MAX} characters")
+        return v
+
+    @field_validator("brand", check_fields=False)
+    @classmethod
+    def _brand(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) > BRAND_MAX:
+            raise ValueError(f"brand is at most {BRAND_MAX} characters")
+        return v or None
+
+    @field_validator("pack_size", check_fields=False)
+    @classmethod
+    def _pack_size(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not (_PACK.fullmatch(v) and float(v) > 0):
+            raise ValueError("pack_size must be a positive number of pieces per case, e.g. 24 or 144")
+        return v
+
+    @field_validator("notes", check_fields=False)
+    @classmethod
+    def _notes(cls, v):
+        if v is not None and len(v) > NOTES_MAX:
+            raise ValueError(f"notes is at most {NOTES_MAX} characters")
+        return v
+
+
+class SKUCreate(_SKUText):
     sku_code: str
     principal: str  # 'unilever' | 'delmonte'
     product_name: str
@@ -78,7 +130,7 @@ class SKUCreate(BaseModel):
     notes: str | None = None
 
 
-class SKUUpdate(BaseModel):
+class SKUUpdate(_SKUText):
     product_name: str | None = None
     pack_size: str | None = None
     brand: str | None = None

@@ -50,6 +50,9 @@ StartQuery = Query(None, pattern=PERIOD, description="'YYYY-MM': the range's fir
 
 def resolve_range(db: Session, period: str | None, start_period: str | None, scope: str) -> tuple[str, str]:
     """(start, end) exactly as GET /dashboard resolves its window."""
+    if start_period is not None and period is not None and start_period > period:
+        # YYYY-MM compares in calendar order. An inverted pair used to be answered with a different window (QA 2026-10-24, 9).
+        raise HTTPException(status_code=422, detail=f"start_period ({start_period}) is after period ({period}).")
     periods = (
         _month_range(start_period, _resolve_sales_anchor(db, period, scope))
         if start_period is not None
@@ -208,7 +211,7 @@ def get_range_accuracy(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
     principal: str | None = PrincipalQuery,
-    run_id: int | None = Query(None, ge=1, description="A forecast run (GET /dashboard/forecast-runs); "
+    run_id: int | None = Query(None, ge=1, le=2_147_483_647, description="A forecast run (GET /dashboard/forecast-runs); "
                                                        "default: the at-the-time backtest, then stored runs."),
     level: str = Query("summary", pattern="^(product|category|summary|total)$",
                        description="Detail rows: per product, per category, or none ('summary'; "

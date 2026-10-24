@@ -104,7 +104,7 @@ def get_audit_log(
         "list passes Login and Logout, which the per-user summary already covers.",
     ),
     user_email: str | None = Query(None, description="Filter to an exact user email. Omit for all."),
-    limit: int = Query(200, le=1000),
+    limit: int = Query(200, ge=0, le=1000),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("audit_log.view")),
 ) -> AuditLogListResponse:

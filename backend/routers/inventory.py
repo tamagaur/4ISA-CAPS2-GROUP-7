@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.deps import TokenPayload, get_db
@@ -103,8 +105,8 @@ def get_inventory_current(
 
 @router.get("/movement")
 def get_inventory_movement(
-    from_date: str = Query(None, alias="from"),
-    to_date: str = Query(None, alias="to"),
+    from_date: datetime.date | None = Query(None, alias="from", description="YYYY-MM-DD; send with to."),
+    to_date: datetime.date | None = Query(None, alias="to", description="YYYY-MM-DD; send with from."),
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("dashboard.view")),
@@ -117,13 +119,15 @@ def get_inventory_movement(
     # empty movement list while 'delmonte'/'all' return real rows — the
     # exact inverse of what the old hardcoded 'unilever' filter could ever
     # produce, which is why that filter always yielded nothing.
+    if (from_date is None) != (to_date is None):
+        raise HTTPException(status_code=422, detail="from and to go together: send both or neither.")
     principal_filter, params = principal_clause(principal, "principal")
     params = dict(params)
 
     period_filter = ""
     if from_date and to_date:
-        from_period = from_date[:7]
-        to_period = to_date[:7]
+        from_period = from_date.isoformat()[:7]
+        to_period = to_date.isoformat()[:7]
         period_filter = "AND _period >= :from_period AND _period <= :to_period"
         params["from_period"] = from_period
         params["to_period"] = to_period

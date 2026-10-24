@@ -187,11 +187,11 @@ class RecommendationDecision(BaseModel):
     # The quantity the planner decided to order instead of the recommendation (pieces, the unit of q_i).
     # Only on 'accepted'. Left out = accept the recommendation as it is. A value equal to q_i is stored as
     # no override. Never overwrites q_i.
-    decided_quantity: float | None = Field(default=None, ge=0, le=999_999_999_999, allow_inf_nan=False)
+    decided_quantity: float | None = Field(default=None, ge=0, le=999_999_999_999, allow_inf_nan=False, strict=True)
     # Required (true) to ACCEPT a row flagged for review (needs_review): the
     # person confirms they checked it. The page sends it only from a single
     # row's confirm dialog, never from bulk accept.
-    reviewed: bool = False
+    reviewed: bool = Field(default=False, strict=True)   # yes or 1 is not a confirmation
 
     @model_validator(mode="after")
     def _decision_shape(self):
@@ -210,10 +210,10 @@ class RecommendationDecision(BaseModel):
 
 class QuantityChangeRequest(BaseModel):
     """POST /recommendations/{key}/quantity-change."""
-    quantity: float = Field(ge=0, le=999_999_999_999, allow_inf_nan=False)  # the quantity wanted instead of q_i
+    quantity: float = Field(ge=0, le=999_999_999_999, allow_inf_nan=False, strict=True)  # the quantity wanted instead of q_i
     reason: str | None = Field(default=None, max_length=500)
     # As on PATCH: required (true) when the product is flagged for review, i.e. the person checked it.
-    reviewed: bool = False
+    reviewed: bool = Field(default=False, strict=True)   # yes or 1 is not a confirmation
 
 
 class QuantityChange(BaseModel):
@@ -226,7 +226,7 @@ class QuantityChange(BaseModel):
     recommended_q_i: float          # q_i when proposed
     proposed_q_i: float
     reason: str | None = None       # the planner's reason (becomes decision_reason when approved)
-    reviewed: bool = False
+    reviewed: bool = Field(default=False, strict=True)   # yes or 1 is not a confirmation
     state: str
     proposed_by: str
     proposed_at: datetime.datetime

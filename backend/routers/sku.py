@@ -362,11 +362,15 @@ def update_sku(
         return _to_item(row)
 
     before = db.execute(
-        text("SELECT product_name, pack_size, brand, notes FROM product_dimension WHERE product_key = :key"),
+        text("SELECT product_name, pack_size, brand, notes, grain FROM product_dimension WHERE product_key = :key"),
         {"key": product_key},
     ).mappings().first()
     if before is None:
         raise HTTPException(status_code=404, detail="SKU not found")
+    if before["grain"] != "sku":
+        # POST is Unilever-only; a Del Monte category row (DEC-03) comes from the sales data, not from a hand edit.
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Only SKU rows can be edited here; Del Monte categories come from the sales data.")
     # Only what actually changed goes in the audit entry; the edit form sends
     # every field whether or not it was touched.
     changes = ", ".join(
