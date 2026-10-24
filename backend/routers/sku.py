@@ -81,6 +81,37 @@ def stock_count_dates(rows) -> dict:
 # not a 500 from the constraint.
 UNILEVER_SKU_CODE = re.compile(r"[0-9]{8}")
 
+# Fields the request models carry but this route does not write. They used to be
+# accepted and dropped, so a 200 meant nothing (QA 2026-10-24, finding 1). They
+# are refused instead, with the reason, rather than persisted:
+#   unit_price      not read by any model; the cost the plan uses is unit_cost
+#                   (migration 0045), loaded from SSM's cost file, not typed here.
+#   lead_time_days  feeds the expected-receipt dates (backend/expected_receipts.py);
+#                   0045 loaded 3 days for every product from the 2026-09-28 SSM
+#                   meeting, marked pending_confirmation. A hand edit would move
+#                   receipt dates with no source and no revalidation.
+#   status          nothing in forecasting or the LP reads it; the only writer is the
+#                   gated scripts/clean_dead_skus.py, because disabling a product is a
+#                   decision (nobody has approved one). A DISABLED label that changes
+#                   no plan would mislead.
+# notes is plain text nothing reads, so it IS persisted.
+READ_ONLY_SKU_FIELDS = {
+    "unit_price": "the plan's cost is unit_cost, loaded from SSM's cost file",
+    "lead_time_days": "it sets expected-receipt dates and is loaded from SSM's lead times, pending their confirmation",
+    "status": "disabling a product is a gated decision (scripts/clean_dead_skus.py), not a page edit",
+}
+
+
+def reject_read_only_fields(values: dict) -> None:
+    """422 naming every read-only field the request set to a value."""
+    refused = [k for k in READ_ONLY_SKU_FIELDS if values.get(k) is not None]
+    if refused:
+        why = "; ".join(f"{k}: {READ_ONLY_SKU_FIELDS[k]}" for k in refused)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Can't be set here ({', '.join(refused)}). {why}. Only product_name, pack_size, brand and notes are saved.",
+        )
+
 # Stock is in PIECES (backend/stock_units.py), the unit reorder_point is in;
 # stock_cases rides along because it is what the warehouse counts.
 # reorder_point comes from the LP's current cycle only (backend/lp_cycle.py):
@@ -263,6 +294,7 @@ def create_sku(
     # reasoning.
     if payload.principal != "unilever":
         raise HTTPException(status_code=400, detail="principal must be 'unilever'")
+    reject_read_only_fields(payload.model_dump(exclude_unset=True))
     if not UNILEVER_SKU_CODE.fullmatch(payload.sku_code):
         raise HTTPException(status_code=400, detail="SKU code must be exactly 8 digits (e.g. 20071069)")
 
@@ -276,9 +308,9 @@ def create_sku(
     row = db.execute(
         text("""
             INSERT INTO product_dimension
-                (principal, grain, sku_code, product_name, pack_size, brand)
+                (principal, grain, sku_code, product_name, pack_size, brand, notes)
             VALUES
-                ('unilever', 'sku', :sku_code, :product_name, :pack_size, :brand)
+                ('unilever', 'sku', :sku_code, :product_name, :pack_size, :brand, :notes)
             RETURNING product_key
         """),
         {
@@ -286,6 +318,7 @@ def create_sku(
             "product_name": payload.product_name,
             "pack_size": payload.pack_size,
             "brand": payload.brand,
+            "notes": payload.notes,
         },
     ).mappings().first()
     audit.record(db, "Add SKU", f"Added SKU {payload.sku_code} ({payload.product_name})", actor=current_user)
@@ -312,10 +345,9 @@ def update_sku(
 ) -> SKUItem:
     if payload.status is not None and payload.status not in ("ACTIVE", "DISABLED"):
         raise HTTPException(status_code=400, detail="status must be 'ACTIVE' or 'DISABLED'")
+    reject_read_only_fields(payload.model_dump(exclude_unset=True))
 
-    # Only update columns that actually exist in the current schema.
-    # status/unit_price/lead_time_days/notes are not yet in product_dimension.
-    _UPDATABLE_COLUMNS = {"product_name", "pack_size", "brand"}
+    _UPDATABLE_COLUMNS = {"product_name", "pack_size", "brand", "notes"}
     fields = {
         k: v for k, v in payload.model_dump(exclude_unset=True).items()
         if k in _UPDATABLE_COLUMNS and v is not None
@@ -330,7 +362,7 @@ def update_sku(
         return _to_item(row)
 
     before = db.execute(
-        text("SELECT product_name, pack_size, brand FROM product_dimension WHERE product_key = :key"),
+        text("SELECT product_name, pack_size, brand, notes FROM product_dimension WHERE product_key = :key"),
         {"key": product_key},
     ).mappings().first()
     if before is None:
