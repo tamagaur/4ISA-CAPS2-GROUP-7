@@ -279,6 +279,7 @@ ALLOWED = {
     # 2026-10-24: the receipt ledger copies the decided quantity into expected_receipt (the accepted order as stock on
     # the way). Written by the decision endpoints only, read through stock_opening_v, never the capture columns.
     "backend/expected_receipts.py", "tests/backend/test_expected_receipts.py",
+    "tests/optimization/test_run_lp_projected.py",
     "analytics/db/migrations/0069_rollover_ledger.sql",
 }
 
