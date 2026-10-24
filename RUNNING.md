@@ -204,6 +204,14 @@ such a migration is pending on public. The clone also copies no triggers;
 public has one (`trg_inventory_fact_count_month`, 0039). Drop the scratch
 schema afterwards.
 
+**The scratch build refuses, it does not warn (2026-10-24).** `rehearse_fills --build` and every scratch migration 
+read the migrations they would apply and REFUSE, before creating anything, if any names `app.`, `public.` or `mart.` explicitly: 
+those statements run against the live schemas whatever the scratch search_path says. Apply such a migration to public first 
+(after a backup), then build. `scripts/rollover_scratch_test.py` (`ROLLOVER_SCRATCH=1 pytest tests/etl/test_rollover_scratch.py`) 
+proves the receipt ledger, settlement, the opening-stock view and `close_cycle` on `ssm_rollover_test` with a synthetic March, 
+checks that public, mart and app are byte-for-byte unchanged, and drops the schema. Switch the planning mart OFF 
+(`planning_mart.use_schema(None)`) before calling any decision endpoint against a scratch copy: it writes `mart.planning_mart`, which is live.
+
 ## Troubleshooting
 
 **The dashboard breaks after you pull.** Run this first — read-only, about ten

@@ -1603,6 +1603,42 @@ def _assert_fresh_build_no_database_wide_collision(
             )
 
 
+# HARD GUARD (2026-10-24, docs/ROLLOVER_DESIGN.md e). A migration that names `app.`, `public.` or `mart.` explicitly
+# does not obey the scratch schema's search_path: applied "to a scratch schema" it runs against the LIVE table or
+# schema (0059 and 0060 altered live app.users; 0041 onward create live mart objects). A pre-flight check protects only
+# when someone remembers to look, so the scratch build REFUSES: every migration it would apply is read, and any
+# reference to those schemas outside the scratch schema stops the build before a single statement runs.
+_LIVE_SCHEMA_REF_RE = re.compile(r'(?<![\w."])"?\b(public|app|mart)\b"?\s*\.\s*"?([A-Za-z_]\w*)', re.IGNORECASE)
+
+
+def live_schema_references(files: list[Path]) -> list[tuple[str, str]]:
+    """[(migration file name, 'schema.object')] for every explicit reference to public, app or mart in the SQL a
+    migration actually runs (comment lines are stripped first, as the runner does)."""
+    found: list[tuple[str, str]] = []
+    for f in files:
+        sql = _strip_sql_file(f.read_text(encoding="utf-8"))
+        for schema, obj in sorted({(a.lower(), b) for a, b in _LIVE_SCHEMA_REF_RE.findall(sql)}):
+            found.append((f.name, f"{schema}.{obj}"))
+    return found
+
+
+def assert_scratch_migrations_safe(files: list[Path], schema: str) -> None:
+    """Raises SystemExit, naming the file and the reference, when any migration about to be applied to scratch schema
+    `schema` names app., public. or mart. explicitly. Nothing has been applied when this runs."""
+    offenders = live_schema_references(files)
+    if offenders:
+        first = {}
+        for name, ref in offenders:
+            first.setdefault(name, []).append(ref)
+        lines = [f"  {name}: {', '.join(refs[:4])}{' ...' if len(refs) > 4 else ''}" for name, refs in first.items()]
+        raise SystemExit(
+            f"REFUSED: building or migrating scratch schema '{schema}' would apply migration(s) that name app., public. or "
+            "mart. explicitly, and those statements run against the LIVE database, not the scratch schema:\n"
+            + "\n".join(lines)
+            + "\nApply them to public first with --schema-only on public (after a backup), then build the scratch copy, "
+              "whose ledger will then have them. Nothing was applied.")
+
+
 def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_public: bool = False) -> None:
     """Brings `schema` up to date through the ledger. A brand-new schema (no
     ledger) runs schema.sql and then every migration; a ledgered schema never
@@ -1617,11 +1653,13 @@ def ensure_scratch_schema(engine: Engine, schema: str, dry_run: bool, allow_publ
 
     migrations = sorted(MIGRATIONS_DIR.glob("0*.sql"))
     _assert_no_new_number_collision(migrations)
-    with engine.begin() as conn:
-        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     # Read ONCE, before the loop. On a fresh schema this is None (0019 has not
     # run yet) so every file applies and 0019's backfill seeds the other 19.
     applied = _read_ledger(engine, schema)
+    if not allow_public:   # a scratch build: refuse before anything runs (even the empty schema) if a pending migration reaches the live schemas
+        assert_scratch_migrations_safe([f for f in migrations if applied is None or f.name not in applied], schema)
+    with engine.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
     if applied is None:
         _assert_fresh_build_no_database_wide_collision(engine, migrations, schema)
     files = ([SCHEMA_SQL] if applied is None else []) + migrations

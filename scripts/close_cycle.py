@@ -170,7 +170,7 @@ def transaction(conn, schema: str, read_only: bool = False):
     cur = conn.cursor()
     cur.execute("BEGIN")
     if schema != "public":
-        cur.execute("SELECT set_config('search_path', %s, true)", (f"{schema}, public",))
+        cur.execute("SELECT set_config('search_path', %s, true)", (schema,))   # the scratch schema ALONE: a missing table fails, never falls back to public
     if read_only:
         cur.execute("SET TRANSACTION READ ONLY")
     try:

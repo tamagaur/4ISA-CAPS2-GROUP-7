@@ -29,6 +29,7 @@ import sys
 from collections import Counter
 
 from sqlalchemy import Connection, create_engine, text
+from sqlalchemy.exc import ProgrammingError
 
 FACT_TABLES = ("sales_fact", "purchase_fact", "salesreturn_fact", "sellout_fact", "inventory_fact", "unilever_sku_demand_fact")
 REAL_VIEWS = {"sales_fact_real": "sales_fact", "purchase_fact_real": "purchase_fact", "salesreturn_fact_real": "salesreturn_fact",
@@ -99,8 +100,15 @@ def _plan(conn: Connection):
 
 
 def build(engine, schema: str, dry_run: bool = False) -> None:
-    from scripts.run_canonical_load import _require_scratch_schema, ensure_scratch_schema
+    from scripts.run_canonical_load import (
+        MIGRATIONS_DIR, _require_scratch_schema, assert_scratch_migrations_safe, ensure_scratch_schema,
+        pending_migrations,
+    )
     _require_scratch_schema(schema)
+    # HARD GUARD (2026-10-24): the clone carries public's ledger, so what is pending on public is what this build would
+    # apply to scratch next. If any of it names app., public. or mart. explicitly it would run against the LIVE schemas:
+    # refuse here, before anything is cloned or created.
+    assert_scratch_migrations_safe([MIGRATIONS_DIR / n for n in pending_migrations(engine, "public")], schema)
     with engine.connect() as conn:
         _read_only(conn)
         if conn.execute(text("SELECT count(*) FROM information_schema.schemata WHERE schema_name = :s"), {"s": schema}).scalar():
@@ -131,8 +139,21 @@ def build(engine, schema: str, dry_run: bool = False) -> None:
                              {"t": f"{schema}.{t}", "c": col, "v": last, "called": called})
             print(f"  {_qualified(src, t)}: {n} rows")
         conn.execute(text("SET LOCAL search_path TO :s").bindparams(s=schema))
-        for name, body in views:
-            conn.execute(text(f"CREATE VIEW {name} AS {body}"))
+        # A view may read another view (stock_opening_v reads unilever_sku_demand_fact_real, 0069), so they are not
+        # created in name order: each pass creates what resolves, and the rest wait for the next. Nothing resolves
+        # in a pass = a real error, raised.
+        waiting = list(views)
+        while waiting:
+            failed = []
+            for name, body in waiting:
+                try:
+                    with conn.begin_nested():
+                        conn.execute(text(f"CREATE VIEW {name} AS {body}"))
+                except ProgrammingError:
+                    failed.append((name, body))
+            if len(failed) == len(waiting):
+                raise SystemExit(f"views that cannot be created in {schema}: {', '.join(n for n, _ in failed)}")
+            waiting = failed
     ensure_scratch_schema(engine, schema, dry_run=False)
     from scripts import load_slices as ls
     with engine.begin() as conn:

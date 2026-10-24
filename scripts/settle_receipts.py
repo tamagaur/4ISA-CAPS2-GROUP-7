@@ -47,7 +47,7 @@ def main() -> int:
     conn, cur = connect(args.schema)
     try:
         if args.schema != "public":
-            cur.execute("SELECT set_config('search_path', %s, true)", (f"{args.schema}, public",))   # this transaction only
+            cur.execute("SELECT set_config('search_path', %s, true)", (args.schema,))   # this transaction only, the scratch schema alone
         if not args.write:
             cur.execute("SET TRANSACTION READ ONLY")
         period = args.period or receipt_settlement.latest_count_period(cur)
