@@ -218,3 +218,7 @@ reports/preview/series_synth.csv
 reports/simulation/synthetic_2026-10/series.csv
 reports/simulation/synthetic_2026-10/unilever_per_sku.csv
 reports/orphaned_sarima_rows_2026-08.json
+
+# Untracked 2026-10-24 (hard rule 9): per-product cost basis. The tracked copy held only cost_status; the generator
+# (reports/diagnostics/forecast_error_business_2026-10-03/run_analysis.py) still writes it beside the script and the full one to local/.
+reports/diagnostics/forecast_error_business_2026-10-03/price_and_cost_basis.csv
