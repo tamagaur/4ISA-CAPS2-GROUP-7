@@ -27,11 +27,13 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
+from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
 from backend.routers import (
@@ -111,6 +113,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # The permissions contract's error body: {"detail": <sentence>, "code": ...}
 # (backend/api_errors.py).
 app.add_exception_handler(ApiError, api_error_handler)
+# 422 without the values of password/token/secret/key fields (backend/error_redaction.py).
+app.add_exception_handler(RequestValidationError, validation_error_handler)
 
 app.include_router(auth.router)
 app.include_router(two_factor.router)
