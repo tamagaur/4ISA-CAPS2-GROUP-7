@@ -93,8 +93,8 @@ def test_a_json_non_finite_number_is_a_400_not_a_500(admin, literal):
     assert resp.status_code == 400 and "NaN" in resp.json()["detail"]
 
 
-def test_a_non_finite_decided_quantity_on_the_decision_route_is_a_400(admin):
-    resp = admin.patch("/recommendations/379", content=b'{"status":"accepted","decided_quantity": -Infinity}',
+def test_a_non_finite_number_on_the_decision_route_is_a_400(admin):
+    resp = admin.patch("/recommendations/379", content=b'{"status":"accepted","reviewed": -Infinity}',
                        headers={"content-type": "application/json"})
     assert resp.status_code == 400
 
