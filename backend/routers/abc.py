@@ -114,6 +114,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.periods import PERIOD_PATTERN
 from backend.data_mode import (
     PREVIEW,
     REAL,
@@ -427,6 +428,7 @@ def _item(r, tier_period: str | None, *, lp_visible: bool, has_cycle: bool) -> A
 def get_abc(
     classification_period: str | None = Query(
         None,
+        pattern=PERIOD_PATTERN,
         description="'YYYY-MM'. Resolves to the latest classified period at or before it, per principal; "
         "omit for the latest period present.",
     ),

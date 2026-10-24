@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from analytics.classification.fsn import (
     FAST_ADI_BELOW, FSN_LABELS, FSN_WINDOW_MONTHS, MIN_FAST_SALES_MONTHS, NON_MOVING_MONTHS, classify_fsn,
 )
+from backend.periods import PERIOD_PATTERN
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
@@ -107,7 +108,7 @@ def classify_principal(
 @cached("GET /fsn")
 def get_fsn(
     principal: str | None = PrincipalQuery,
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$", description="Window end 'YYYY-MM'; default the latest data month."),
+    period: str | None = Query(None, pattern=PERIOD_PATTERN, description="Window end 'YYYY-MM'; default the latest data month."),
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("abc.view")),

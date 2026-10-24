@@ -33,6 +33,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
 from backend.deps import check_db_connection, get_db
+from backend.input_guard import InputGuardMiddleware
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
     inventory, pareto, permissions, policy_comparison, recommendations, reorder_approval, segment, sku, two_factor, users,
@@ -88,6 +89,9 @@ app = FastAPI(
     openapi_url="/openapi.json" if _SHOW_DOCS else None,
 )
 
+# Registered first, so innermost: CORS and gzip still wrap what it answers. NUL characters and JSON NaN/Infinity
+# are refused with a 400 instead of reaching Postgres, bcrypt or the error encoder (backend/input_guard.py).
+app.add_middleware(InputGuardMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,

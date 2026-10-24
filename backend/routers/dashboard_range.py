@@ -34,6 +34,7 @@ from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, pareto_ch
 from analytics.params import DEAD_SKU_MONTHS, REVIEW_OVER_RUN_MONTHS
 from backend import batch, marts
 from backend.data_mode import PREVIEW, get_data_mode, preview_block
+from backend.periods import PERIOD_PATTERN
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
@@ -42,7 +43,7 @@ from backend.series_gaps import gap_note
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-PERIOD = r"^\d{4}-(0[1-9]|1[0-2])$"
+PERIOD = PERIOD_PATTERN
 PeriodQuery = Query(None, pattern=PERIOD, description="'YYYY-MM': the range's end month.")
 StartQuery = Query(None, pattern=PERIOD, description="'YYYY-MM': the range's first month.")
 

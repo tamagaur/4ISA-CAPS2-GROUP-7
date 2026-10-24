@@ -644,13 +644,17 @@ def get_recommendations(
             "view. See backend/lp_cycle.py."
         ),
     ),
-    from_date: str | None = Query(None, alias="from", description="'YYYY-MM-DD'. The shared date-range picker's applied start. Must be given with 'to' or not at all — filters on lr.planning_cycle_date."),
-    to_date: str | None = Query(None, alias="to", description="'YYYY-MM-DD'. The shared date-range picker's applied end. Must be given with 'from' or not at all."),
+    from_date: datetime.date | None = Query(None, alias="from", description="'YYYY-MM-DD'. The shared date-range picker's applied start. Must be given with 'to' or not at all — filters on lr.planning_cycle_date."),
+    to_date: datetime.date | None = Query(None, alias="to", description="'YYYY-MM-DD'. The shared date-range picker's applied end. Must be given with 'from' or not at all."),
     principal: str | None = PrincipalQuery,
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> RecommendationsResponse:
+    # Declared as dates, so 'abc' or 2026-13-45 is a 422, not Postgres's InvalidDatetimeFormat as a 500 (QA
+    # 2026-10-24 finding 4). The reads below take the ISO text.
+    from_date = from_date.isoformat() if from_date else None
+    to_date = to_date.isoformat() if to_date else None
     # Both principals again (2026-09-17) — see backend/principals.py.
     # lp_recommendation currently holds 430 Unilever rows and ZERO Del
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte

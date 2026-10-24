@@ -409,6 +409,7 @@ from analytics.params import POLICY_COVER_WEEKS as POLICY_WEEKS
 from analytics.params import WEEKS_PER_MONTH as AVG_WEEKS_PER_MONTH
 from backend.chart_insights import kpi_trend, portfolio_forecast_insight, sales_vs_stock_insight
 from backend.data_notes import COVER_CAVEATS, flagged_count_note, unusual_stock_snapshots
+from backend.periods import PERIOD_PATTERN
 from backend.deps import TokenPayload, get_db
 from backend.permissions import can_see_lp, require_permission
 from backend.lp_cycle import (
@@ -1243,7 +1244,7 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
 def get_dashboard(
     period: str | None = Query(
         None,
-        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        pattern=PERIOD_PATTERN,
         description=(
             "'YYYY-MM'. The shared date-range picker's applied end month/year. "
             "Anchors the sales/stock trend window kpis.sales / sales_vs_stock "
@@ -1258,7 +1259,7 @@ def get_dashboard(
     ),
     start_period: str | None = Query(
         None,
-        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        pattern=PERIOD_PATTERN,
         description=(
             "'YYYY-MM'. The shared date-range picker's applied START month/"
             "year. When given, kpis.sales / sales_vs_stock "

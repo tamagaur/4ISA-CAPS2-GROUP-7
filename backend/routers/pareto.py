@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF, classify_abc
 from backend import marts
+from backend.periods import PERIOD_PATTERN
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
@@ -130,7 +131,7 @@ def pareto_for(db: Session, principal: str, grain: str, period: str | None, mont
 def get_pareto(
     grain: str = Query("brand", pattern="^(brand|category)$"),
     principal: str | None = PrincipalQuery,
-    period: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    period: str | None = Query(None, pattern=PERIOD_PATTERN),
     months: int = Query(1, ge=1, le=36, description="1 = the ABC page's single month; 12 = trailing year."),
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),

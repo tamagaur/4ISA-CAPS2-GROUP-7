@@ -31,6 +31,7 @@ from analytics.forecasting.category_trend import (
 from backend.data_mode import (
     PREVIEW, REAL, get_data_mode, is_placeholder_period, placeholder_window, preview_block, unilever_demand,
 )
+from backend.periods import PERIOD_PATTERN
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
@@ -161,7 +162,7 @@ def trends_for(
 def get_category_trends(
     period: str | None = Query(
         None,
-        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        pattern=PERIOD_PATTERN,
         description=(
             "'YYYY-MM'. The shared date-range picker's applied end month/year. "
             "Restricts the observed history to months at or before it. Omit to "
@@ -170,7 +171,7 @@ def get_category_trends(
     ),
     start_period: str | None = Query(
         None,
-        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        pattern=PERIOD_PATTERN,
         description=(
             "'YYYY-MM'. The shared date-range picker's applied START month/year. "
             "Restricts the observed history to months at or after it. Omit to "
