@@ -170,3 +170,77 @@ def get_inventory_movement(
     movements.sort(key=lambda x: x["date"] or "", reverse=True)
 
     return movements
+
+
+_RECEIPT_SIGNALS_SQL = {
+    "by_period": """
+        SELECT settled_by_period AS period, COUNT(*)::int AS settled,
+               COUNT(*) FILTER (WHERE not_visible_in_count)::int AS not_visible,
+               COUNT(*) FILTER (WHERE stock_change_pieces IS NULL)::int AS untested,
+               COALESCE(SUM(pieces), 0) AS pieces,
+               COALESCE(SUM(pieces) FILTER (WHERE not_visible_in_count), 0) AS not_visible_pieces
+        FROM expected_receipt WHERE state = 'arrived_in_count'
+        GROUP BY settled_by_period ORDER BY settled_by_period DESC""",
+    "items": """
+        SELECT er.receipt_id, pd.sku_code, pd.product_name, er.pieces, er.settled_by_period, er.settled_by_count_date,
+               er.expected_on, er.stock_change_pieces AS implied_receipts_in_count
+        FROM expected_receipt er JOIN product_dimension pd ON pd.product_key = er.product_key
+        WHERE er.state = 'arrived_in_count' AND er.not_visible_in_count
+        ORDER BY er.settled_by_period DESC, er.pieces DESC LIMIT :limit""",
+    "open": """
+        SELECT COUNT(*)::int AS receipts, COALESCE(SUM(pieces), 0) AS pieces,
+               COUNT(*) FILTER (WHERE expected_on < CURRENT_DATE)::int AS overdue
+        FROM expected_receipt WHERE state = 'expected'""",
+    "derived": """
+        SELECT _period AS period, COUNT(*)::int AS products,
+               COUNT(*) FILTER (WHERE flag = 'negative_balance')::int AS negative_balance
+        FROM derived_receipt_fact WHERE principal = 'unilever'
+        GROUP BY _period ORDER BY _period DESC LIMIT :months""",
+}
+
+
+@router.get("/receipt-signals")
+def get_receipt_signals(
+    limit: int = Query(25, ge=1, le=200, description="How many not-visible receipts to list."),
+    months: int = Query(12, ge=1, le=60, description="How many months of the derived-receipts check to show."),
+    db: Session = Depends(get_db),
+    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+):
+    """Receipts a stock count settled that the count gives no sign of (migration 0069, docs/ROLLOVER_DESIGN.md b).
+
+    An accepted order is an expected receipt. A count dated on or after its expected date settles it as arrived, and
+    when the product's stock plus what it sold did not rise in that month (closing - opening + sold <= 0) the receipt
+    is marked not_visible_in_count: the same impossible-receipt signal the derived-receipts check computes, kept on
+    the receipt so it accumulates here instead of in a flag nobody reads. Nothing is corrected. `derived_receipts`
+    is that older check beside it (products whose derived receipt is negative, per count month). Unilever only.
+    A receipt settled before its month's sales were loaded is `untested` until they are."""
+    if not db.execute(text("SELECT to_regclass('expected_receipt') IS NOT NULL")).scalar():
+        return {"available": False, "coverage": ["unilever"], "blocked_reason": "The receipt ledger is not built on this database (migration 0069)."}
+    q = _RECEIPT_SIGNALS_SQL
+    by_period = [dict(r) for r in db.execute(text(q["by_period"])).mappings().all()]
+    for r in by_period:
+        r["not_visible_share"] = round(r["not_visible"] / (r["settled"] - r["untested"]), 4) if r["settled"] - r["untested"] else None
+        r["pieces"], r["not_visible_pieces"] = float(r["pieces"]), float(r["not_visible_pieces"])
+    items = [dict(r) for r in db.execute(text(q["items"]), {"limit": limit}).mappings().all()]
+    for i in items:
+        i["pieces"] = float(i["pieces"])
+        i["implied_receipts_in_count"] = float(i["implied_receipts_in_count"]) if i["implied_receipts_in_count"] is not None else None
+        i["settled_by_count_date"] = i["settled_by_count_date"].isoformat() if i["settled_by_count_date"] else None
+        i["expected_on"] = i["expected_on"].isoformat() if i["expected_on"] else None
+    open_ = dict(db.execute(text(q["open"])).mappings().first())
+    open_["pieces"] = float(open_["pieces"])
+    derived = [dict(r) for r in db.execute(text(q["derived"]), {"months": months}).mappings().all()]
+    for r in derived:
+        r["negative_share"] = round(r["negative_balance"] / r["products"], 4) if r["products"] else None
+    settled = sum(r["settled"] for r in by_period)
+    tested = settled - sum(r["untested"] for r in by_period)
+    not_visible = sum(r["not_visible"] for r in by_period)
+    return {
+        "available": True, "coverage": ["unilever"],
+        "definition": ("not_visible_in_count: the receipt was settled by a count, and the product's closing - opening + sold in "
+                       "that month is not above zero. A flag only; nothing is corrected."),
+        "totals": {"settled": settled, "tested": tested, "not_visible": not_visible,
+                   "not_visible_share": round(not_visible / tested, 4) if tested else None},
+        "by_period": by_period, "not_visible_receipts": items, "open_receipts": open_,
+        "derived_receipts": derived,
+    }

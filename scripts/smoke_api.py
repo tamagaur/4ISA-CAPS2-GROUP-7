@@ -50,6 +50,7 @@ ROUTES: list[tuple[str, int | None]] = [
     ("/recommendations", None),
     ("/inventory/current", 1),
     ("/inventory/movement", 1),
+    ("/inventory/receipt-signals", None),
     ("/audit-log", None),
 ]
 
