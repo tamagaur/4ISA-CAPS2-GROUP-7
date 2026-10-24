@@ -28,7 +28,9 @@ from sqlalchemy.orm import Session
 from analytics.forecasting.category_trend import (
     MANN_KENDALL_ALPHA, PROJECTION_MONTHS, TRAILING_MONTHS, method_constants, project_category,
 )
-from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
+from backend.data_mode import (
+    PREVIEW, REAL, get_data_mode, is_placeholder_period, placeholder_window, preview_block, unilever_demand,
+)
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
@@ -110,6 +112,9 @@ def trends_for(
     # Chart points only: the history marks a zero that is not a recorded zero with a
     # `reason` (backend/series_gaps.py). The values, and so the projection, are unchanged.
     absent_reason = REASON_NO_SALE if principal == "unilever" else REASON_CATEGORY_ABSENT
+    # Audit 2026-10-23 finding 8: with the demonstration switch on, preview history includes generated 2021-22
+    # months (rule 2). Each such point says so; real-mode responses never reach this and stay byte-identical.
+    generated = placeholder_window(db) if (principal == "unilever" and mode == PREVIEW) else None
     reasons_used: set[str] = set()
     categories = []
     for name, by_period in series.items():
@@ -118,6 +123,8 @@ def trends_for(
         history = []
         for m, v in zip(observed, values):
             point = {"period": m, "revenue": round(v, 2)}
+            if is_placeholder_period(m, generated):
+                point["origin"] = "backcast"
             if m not in by_period:
                 point["reason"] = absent_reason
                 reasons_used.add(absent_reason)

@@ -91,7 +91,9 @@ zero):
     — always null. lp_recommendation has no runner yet, and even once one
     exists, Q_i * unit_price needs a cost column that doesn't exist.
   recommendations.product_count
-    — real: COUNT(*) of pending LP_Recommendation rows. Needs no price,
+    — real: COUNT(*) of the PLAN's LP_Recommendation rows (pending + accepted + dismissed, the current
+    cycle: a decided row stays in the plan, the Reorder page's count). The still-pending subset is
+    reorder_preview.pending_count. Needs no price,
     so it's honestly computable even though order_value isn't.
   forecast.unreliable_count / forecast.evaluated_count / forecast.total_count
     — real: from Forecast_Result at its most recent forecast_date.
@@ -296,13 +298,14 @@ zero):
     the gate.
 
   reorder_preview
-    — real: top 5 pending LP_Recommendation rows by urgency, reusing
+    — real: top 5 pending LP_Recommendation rows by urgency (decided rows stay in the counts and totals, not in the preview), reusing
     backend.routers.recommendations._to_item / _SELECT_ONE verbatim
     (imported, not reimplemented) for the exact same urgency derivation
     GET /recommendations uses (backend/stock_status.py). critical_count /
     low_count (urgent_count: the same number under its old name) /
-    total_order_qty are computed over the FULL pending set (not just the
-    5 previewed rows) — a portfolio-wide summary next to a 5-row preview,
+    total_order_qty are computed over the FULL set (not just the
+    5 previewed rows): critical/urgent/no_data, total_order_qty and plan_count
+    over the plan, pending_order_qty / pending_count over the pending rows only — a portfolio-wide summary next to a 5-row preview,
     same relationship ABC's tier_summary has to its own items list.
     Stock is the count that opens the LP's cycle (since 2026-10-03, DEC-32),
     named with its date in reorder_preview.stock_counts; the stock card
@@ -345,14 +348,15 @@ zero):
   policy_comparison
     — {cycle_date, sku_count, lp_target_stock_units, lp_safety_stock_units,
     rule_stock_units, target_vs_rule_pct, lp_target_weeks, skus_above_rule,
-    lp_vs_rule_pct, rule_weeks, window_business_days,
+    rule_weeks, window_business_days,
     inputs_are_placeholders, blocked_reason} (rule_safety_stock_units is
     rule_stock_units under its pre-2026-09-30 name). target_vs_rule_pct is
     the headline: how much less stock the LP's per-SKU targets (rop_i, the
     order-up-to level T_i since the 2026-09-30 run) hold than the rule, as a
-    percent of the rule (negative = more). lp_vs_rule_pct is safety stock
-    alone against the rule, kept as a detail — SSM's 3 weeks is a target for
-    all stock, not a buffer, so it is not the like-for-like figure.
+    percent of the rule (negative = more). There is no safety-stock-vs-rule
+    percent (lp_vs_rule_pct, removed): SSM's 3 weeks is a target for all stock,
+    not a buffer, so it was not like-for-like and read "less" when the targets
+    hold more. lp_safety_stock_units stays as a plain sum.
     The per-SKU rows behind these sums are GET /policy-comparison
     (policy_comparison.py) — keep the two queries in step. Sums, over the latest pending planning
     cycle, the LP's rop_i and ss_i against what SSM's own stock policy would hold
@@ -390,6 +394,7 @@ from backend.data_mode import (
 from analytics.allocation import allocation_levels, basis_year as allocation_basis_year, planning_month_after
 from analytics.classification.abc import abc_rules
 from analytics.params import abc_method_sql
+from backend.abc_basis import dashboard_basis
 from analytics.params import (
     ALLOCATION_DEFAULT_PCT,
     CALENDAR_FACTOR_SIGNED_OFF,
@@ -1010,10 +1015,11 @@ def _lp_cycle_filter(lp_cycle) -> str:
 def _product_count_query(scope: str, mode: str, lp_cycle) -> tuple[str, dict]:
     lp_src, lp_params = lp_source(mode)
     return f"""
-            SELECT COUNT(*) AS product_count
+            SELECT COUNT(*) AS product_count,
+                   COUNT(*) FILTER (WHERE lr.status = 'pending') AS pending_count
             FROM {lp_src} lr
             JOIN Product_Dimension pd ON pd.product_key = lr.product_key
-            WHERE lr.status = 'pending' {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}
+            WHERE {PLAN_STATUS_SQL} {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}
         """, {"current_cycle": lp_cycle, **lp_params}
 
 
@@ -1156,7 +1162,7 @@ def _portfolio_actuals_query(mode: str, keys: list) -> tuple[str, dict]:
 
 def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_periods: dict[str, str]) -> tuple[str, dict]:
     rp_select, rp_select_params = _recommendation_select_one(mode)
-    return rp_select + f" WHERE lr.status = 'pending' {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}", {
+    return rp_select + f" WHERE {PLAN_STATUS_SQL} {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}", {
         "inv_period": stock_period,
         **abc_period_params(abc_periods),
         "current_cycle": lp_cycle,
@@ -2243,7 +2249,10 @@ def get_dashboard(
     rp_rows = batch.rows(
         db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle))
     )
+    # The whole plan: a decided row stays in it (backend/lp_cycle.PLAN_STATUSES), so the total and the
+    # count below agree with GET /recommendations after an accept. What is still open work is rp_open.
     rp_items = [_to_recommendation_item(r) for r in rp_rows]
+    rp_open = [it for it in rp_items if it.status == "pending"]
     rp_stock_counts = (
         stock_counts(db, rp_stock_period, sorted({r["principal"] for r in rp_rows}), cycle=lp_cycle)
         if lp_cycle is not None else []
@@ -2256,9 +2265,12 @@ def get_dashboard(
         rp_items,
         key=lambda it: (_URGENCY_RANK.get(it.urgency, 99), -(it.priority_score or 0)),
     )
+    rp_open_sorted = [it for it in rp_items_sorted if it.status == "pending"]
 
     reorder_preview = {
-        "rows": [item.model_dump() for item in rp_items_sorted[:5]],
+        # The five to act on first: open (pending) rows only. Every count and total below is the plan
+        # (one definition, as GET /recommendations); pending_* is the still-undecided part of it.
+        "rows": [item.model_dump() for item in rp_open_sorted[:5]],
         "critical_count": sum(1 for it in rp_items if it.urgency == CRITICAL),
         # Below the target stock (backend/stock_status.py's LOW, URGENT on the
         # reorder page). Both names, the same number: the frontend reads
@@ -2271,9 +2283,15 @@ def get_dashboard(
         # count reads as 0 on hand, as the LP treats it, and is ranked like
         # any other (recommendations._to_item, backend/stock_status.py).
         "no_data_count": sum(1 for it in rp_items if it.urgency == NO_DATA),
-        # Whole units per row, summed — the Reorder page's own total, so the
-        # two screens agree (they differed by 123.6 units, 2026-09-29).
-        "total_order_qty": sum(whole_units(it.q_i) for it in rp_items) if rp_items else 0,
+        # Whole units per row, summed over the PLAN (pending + accepted + dismissed, at q_i) — the Reorder
+        # page's own total, so the two screens agree before and after a decision (they differed by 123.6
+        # units 2026-09-29, and by one accepted row's pieces until 2026-10-23). A row the planner accepted at a
+        # different quantity counts that quantity (plan_q_i, 2026-10-24); every other row counts q_i. pending_* is the second,
+        # separately named number: what is still awaiting a decision.
+        "total_order_qty": sum(whole_units(it.plan_q_i) for it in rp_items) if rp_items else 0,
+        "plan_count": len(rp_items),
+        "pending_count": len(rp_open),
+        "pending_order_qty": sum(whole_units(it.q_i) for it in rp_open),
         # The weights the run behind this cycle used (lp_run), else the
         # current constants; lp_weights_source says which.
         "lp_weights": (lp_run["model"]["weights"] if lp_run else {
@@ -2330,8 +2348,6 @@ def get_dashboard(
                 1 for r in policy_rows
                 if float(r["rop_i"]) > POLICY_WEEKS * float(r["forecast_value"]) / AVG_WEEKS_PER_MONTH
             ),
-            # Safety stock alone against the rule — no longer the headline.
-            "lp_vs_rule_pct": round((rule_units - lp_units) / rule_units * 100, 1) if rule_units > 0 else None,
             "rule_weeks": POLICY_WEEKS,
             # The window the safety stock covers, from the same placeholder
             # dict the run takes its defaults from (lp_model_info).
@@ -2350,7 +2366,6 @@ def get_dashboard(
             "target_vs_rule_pct": None,
             "lp_target_weeks": None,
             "skus_above_rule": None,
-            "lp_vs_rule_pct": None,
             "rule_weeks": POLICY_WEEKS,
             "window_business_days": PLACEHOLDERS["review_days"] + PLACEHOLDERS["lead_days"],
             "inputs_are_placeholders": True,
@@ -2405,6 +2420,9 @@ def get_dashboard(
             "value": _to_float(soh_value),
             "weeks_of_cover": None,
             "policy_weeks": POLICY_WEEKS,
+            # The count `value` is the stock of (2026-10-23): the same entries as kpis.stock_counts.
+            "count_date": soh_count_date,
+            "stock_counts": latest_stock_counts,
         },
         "recommendations": {"order_value": None, "product_count": product_count},
         "forecast": {
@@ -2496,6 +2514,9 @@ def get_dashboard(
         # sales months it should label, from the same rows it plots.
         "sales_vs_stock_insight": svs_insight,
         "abc_mix": abc_mix,
+        # What abc_mix and tier_stock were ranked on (backend/abc_basis.py): the range's plain Pareto, not the
+        # t12m_new basis the ABC page and the plan use. Labelled, not changed (audit 2026-10-23, finding 1).
+        "abc_basis": dashboard_basis(range_text),
         # The cutoffs the ABC run applied, so the card states them from the
         # source (analytics/classification/abc.py) rather than in its copy.
         "abc_rules": abc_rules(),

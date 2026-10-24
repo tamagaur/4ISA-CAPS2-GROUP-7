@@ -114,6 +114,7 @@ def test_build_traits_flags_the_missing_month_and_writes_no_nan(monkeypatch):
     monkeypatch.setattr(seg, "_fetch_demand_matrix", lambda *a: (matrices, PERIODS))
     monkeypatch.setattr(seg, "_fetch_observed_periods", lambda *a: set(PERIODS))
     monkeypatch.setattr(seg, "_fetch_stability_and_revenue", lambda *a: ({1: 38, 2: 38}, {1: 0.1, 2: 0.2}))
+    monkeypatch.setattr(seg, "_fetch_total_periods", lambda *a: 38)
     traits, report = seg.build_traits(None, "unilever", "2025-04", "single", "2025-01", "2025-04", "test-run")
     assert report.missing_quantity == {1: ["2025-02"]}
     row = traits.set_index("product_key").loc[1]
@@ -129,6 +130,7 @@ def test_preview_traits_flag_it_and_match_the_batch_run(monkeypatch):
     monkeypatch.setattr(seg, "_fetch_demand_matrix", lambda *a: ({1: qty}, PERIODS))
     monkeypatch.setattr(seg, "_fetch_observed_periods", lambda *a: set(PERIODS))
     monkeypatch.setattr(seg, "_fetch_stability_and_revenue", lambda *a: ({1: 38}, {1: 0.1}))
+    monkeypatch.setattr(seg, "_fetch_total_periods", lambda *a: 38)
     batch = seg.build_traits(None, "unilever", "2025-04", "single", "2025-01", "2025-04", "t")[0].iloc[0]
     preview = data_mode.series_traits(qty, PERIODS, set(PERIODS))
     assert preview["missing_quantity_periods"] == ["2025-02"]

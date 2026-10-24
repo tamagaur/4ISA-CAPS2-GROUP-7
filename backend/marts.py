@@ -1018,14 +1018,16 @@ def accuracy_comparison(db: Session, summary: dict) -> dict | None:
 def accuracy_runs(db: Session) -> list[dict]:
     rows = db.execute(text("""
         SELECT r.run_id, r.kind, r.label, r.cohort, r.window_start, r.window_end, r.created_at,
-               r.source_generated_at, COUNT(v.*) AS rows
+               r.source_generated_at, r.notes, COUNT(v.*) AS rows
         FROM mart.forecast_run r LEFT JOIN mart.forecast_run_value v ON v.run_id = r.run_id
         GROUP BY r.run_id ORDER BY r.run_id
     """)).mappings().all()
     return [
         {"run_id": int(r["run_id"]), "forecast_source": r["kind"], "label": r["label"], "cohort": r["cohort"],
          "window_start": r["window_start"], "window_end": r["window_end"], "rows": int(r["rows"]),
-         "default": r["label"] == DEFAULT_BACKTEST_LABEL}
+         "default": r["label"] == DEFAULT_BACKTEST_LABEL,
+         # a backtest of a tier the live runner does not forecast (migration 0064): never deployed accuracy
+         "counterfactual": bool((r.get("notes") or {}).get("counterfactual"))}
         for r in rows
     ]
 
@@ -1343,3 +1345,238 @@ def accuracy_by_category(rows: list[dict]) -> list[dict]:
             "products": len(c["keys"]), "wape_pieces": _wape(c["abs_miss_pieces"], c["actual_pieces"])}
            for c in cats.values()]
     return sorted(out, key=lambda c: -(c["surplus_pesos"] + c["shortage_pesos"]))
+
+
+# ---------------------------------------------------------------------------
+# Error decomposition (migration 0063): the forecast miss split into over-buying, under-forecast that safety
+# stock absorbed, and under-forecast beyond safety stock. Read from mart.error_decomposition (per month x tier,
+# summed here over the range) and mart.error_decomposition_row (per product-month, for the product list).
+# Scored the as-served way (scripts/accuracy_as_served.py, docs/ACCURACY_AS_SERVED.md). A view of existing
+# data: nothing in forecasting, safety stock, targets or the LP reads it.
+# ---------------------------------------------------------------------------
+
+SERVED_TIER = "A"  # the live runner forecasts Tier A only; B and C are counterfactual backtests (migration 0064)
+DECOMPOSITION_SCORING_RULE = (
+    "Scored as the live forecast is served, the same rule as scripts/accuracy_as_served.py and "
+    "docs/ACCURACY_AS_SERVED.md: calendar-adjusted forecast with the dead-SKU rule applied; a net-negative month "
+    "counts as 0 sold; a blank-quantity month is not scored. Over-forecast = forecast above actual. Under-forecast = "
+    "actual above forecast, split into the part safety stock absorbs (up to the safety stock) and the part beyond it "
+    "(potential stockout exposure, not an observed stockout)."
+)
+SS_METHOD_NOTE = (
+    "Safety stock is the stored LP figure (lp_recommendation.ss_i) for a product and month where a plan row exists "
+    "(ss_method 'stored_lp'); otherwise it is rebuilt from the demand history before that month the way the LP builds "
+    "it (ss_method 'rebuilt'). 'mixed' means both were used in the figure's rows."
+)
+
+_DECOMP_SUMS = ("product_months", "product_months_with_ss", "ss_stored_rows", "ss_rebuilt_rows", "exceed_product_months",
+                "priced_product_months")
+_DECOMP_AMOUNTS = ("actual_pieces", "over_pieces", "absorbed_pieces", "beyond_pieces", "under_no_ss_pieces",
+                   "actual_pesos", "over_pesos", "absorbed_pesos", "beyond_pesos", "under_no_ss_pesos")
+
+
+def _ratio(num: float, den: float) -> float | None:
+    return num / den if den else None
+
+
+def decomposition_available(db: Session) -> bool:
+    return bool(db.execute(text("SELECT to_regclass('mart.error_decomposition') IS NOT NULL")).scalar())
+
+
+def _decomposition_figure(sums: dict) -> dict:
+    """One tier's range totals -> the stored figures plus their shares, from the summed components."""
+    out = {k: int(sums[k]) for k in _DECOMP_SUMS}
+    out.update({k: round(float(sums[k]), 2) for k in _DECOMP_AMOUNTS})
+    for unit in ("pieces", "pesos"):
+        parts = (out[f"over_{unit}"], out[f"absorbed_{unit}"], out[f"beyond_{unit}"], out[f"under_no_ss_{unit}"])
+        error = sum(parts)
+        out[f"error_{unit}"] = round(error, 2)
+        for name, value in zip(("over", "absorbed", "beyond"), parts):
+            out[f"{name}_share_of_error_{unit}"] = _ratio(value, error)
+            out[f"{name}_share_of_actual_{unit}"] = _ratio(value, out[f"actual_{unit}"])
+    out["exceed_share_of_product_months"] = _ratio(out["exceed_product_months"], out["product_months_with_ss"])
+    out["ss_method"] = ("none" if not (out["ss_stored_rows"] or out["ss_rebuilt_rows"])
+                        else "mixed" if out["ss_stored_rows"] and out["ss_rebuilt_rows"]
+                        else "stored_lp" if out["ss_stored_rows"] else "rebuilt")
+    return out
+
+
+def error_decomposition(db: Session, start: str, end: str, top: int = 10, tier: str = "all") -> dict:
+    """Totals (all tiers), the breakdown per ABC tier, the monthly series, and the `top` products by stockout
+    exposure (pieces beyond safety stock) for start..end, from the products of `tier` (A, B, C or all; the tier
+    each was in the month before the scored month). Unilever only."""
+    tier_rows = batch.rows(db, f"""
+        SELECT tier, {', '.join(f'SUM({c}) AS {c}' for c in _DECOMP_SUMS + _DECOMP_AMOUNTS)},
+               MIN(period) AS first_period, MAX(period) AS last_period
+        FROM mart.error_decomposition
+        WHERE principal = 'unilever' AND period BETWEEN :start AND :end
+        GROUP BY tier ORDER BY tier""", {"start": start, "end": end})
+    by_tier = {r["tier"]: {**_decomposition_figure(r), "first_period": r["first_period"], "last_period": r["last_period"]}
+               for r in tier_rows}
+    monthly = [{"period": r["period"], **_decomposition_figure(r)} for r in batch.rows(db, f"""
+        SELECT period, {', '.join(f'{c}' for c in _DECOMP_SUMS + _DECOMP_AMOUNTS)}
+        FROM mart.error_decomposition
+        WHERE principal = 'unilever' AND tier = 'all' AND period BETWEEN :start AND :end ORDER BY period""",
+        {"start": start, "end": end})]
+    products = batch.rows(db, """
+        SELECT r.product_key, pd.sku_code, pd.product_name, pd.category_path,
+               MIN(r.tier) AS tier_first, MAX(r.tier) AS tier_last,
+               SUM(r.beyond_pieces) AS beyond_pieces, COALESCE(SUM(r.beyond_pesos), 0) AS beyond_pesos,
+               COUNT(*) FILTER (WHERE r.exceeds_safety_stock)::int AS exposure_months,
+               COUNT(*)::int AS product_months,
+               SUM(r.absorbed_pieces) AS absorbed_pieces, SUM(r.over_pieces) AS over_pieces,
+               COUNT(*) FILTER (WHERE r.ss_method = 'stored_lp')::int AS ss_stored_rows,
+               COUNT(*) FILTER (WHERE r.ss_method = 'rebuilt')::int AS ss_rebuilt_rows
+        FROM mart.error_decomposition_row r LEFT JOIN product_dimension pd ON pd.product_key = r.product_key
+        WHERE r.principal = 'unilever' AND r.month BETWEEN :start AND :end AND (:tier = 'all' OR r.tier = :tier)
+        GROUP BY r.product_key, pd.sku_code, pd.product_name, pd.category_path
+        HAVING COALESCE(SUM(r.beyond_pieces), 0) > 0
+        ORDER BY SUM(r.beyond_pieces) DESC, r.product_key""", {"start": start, "end": end, "tier": tier})
+    total = sum(float(p["beyond_pieces"]) for p in products)
+    cum, n50, n80, listed = 0.0, None, None, []
+    for i, p in enumerate(products, 1):
+        before = cum
+        cum += float(p["beyond_pieces"])
+        if n50 is None and cum >= 0.5 * total:
+            n50 = i
+        if n80 is None and cum >= 0.8 * total:
+            n80 = i
+        if i <= top:
+            listed.append({
+                "rank": i, "product_key": int(p["product_key"]), "sku_code": p["sku_code"], "product_name": p["product_name"],
+                "category_path": p["category_path"],
+                "tier": p["tier_last"] if p["tier_first"] == p["tier_last"] else "mixed",
+                "beyond_pieces": round(float(p["beyond_pieces"]), 2), "beyond_pesos": round(float(p["beyond_pesos"]), 2),
+                "share_of_beyond_pieces": _ratio(float(p["beyond_pieces"]), total),
+                "cumulative_share_of_beyond_pieces": _ratio(cum, total),
+                "exposure_months": p["exposure_months"], "product_months": p["product_months"],
+                "absorbed_pieces": round(float(p["absorbed_pieces"] or 0), 2), "over_pieces": round(float(p["over_pieces"]), 2),
+                "ss_method": ("mixed" if p["ss_stored_rows"] and p["ss_rebuilt_rows"]
+                              else "stored_lp" if p["ss_stored_rows"] else "rebuilt"),
+            })
+    return {
+        "period_start": start, "period_end": end, "products_tier": tier,
+        "totals": by_tier.get("all"), "by_tier": [{"tier": t, **by_tier[t], "counterfactual": t != SERVED_TIER} for t in ("A", "B", "C") if t in by_tier],
+        "served_tier": SERVED_TIER,
+        "counterfactual_note": ("Only Tier A is forecast by the live runner. Tier B and C rows score a backtest that was "
+                                "never served (forecast_run labelled COUNTERFACTUAL), and totals / 'all' include them."),
+        "monthly": monthly,
+        "stockout_exposure_concentration": {
+            "products_with_exposure": len(products), "products_for_50_percent": n50, "products_for_80_percent": n80,
+            "basis": f"pieces beyond safety stock, summed over the range, products of tier {tier}"},
+        "top_products_by_stockout_exposure": listed,
+        "scoring_rule": DECOMPOSITION_SCORING_RULE, "safety_stock_note": SS_METHOD_NOTE,
+    }
+
+
+# Three narrower reads of the same two tables (2026-10-23): one product's months, the split by principal and tier,
+# and the products ranked by pesos beyond safety stock with a running share. Same scoring rule, same tables.
+
+def decomposition_by_product(db: Session, sku_code: str, start: str, end: str) -> dict | None:
+    """One product's scored months in start..end (None when the SKU is not in the product master)."""
+    prod = batch.first(db, """
+        SELECT pd.product_key, pd.sku_code, pd.product_name, pd.category_path FROM product_dimension pd
+        WHERE pd.sku_code = :sku
+        ORDER BY EXISTS (SELECT 1 FROM mart.error_decomposition_row r WHERE r.product_key = pd.product_key) DESC,
+                 pd.product_key LIMIT 1""", {"sku": sku_code})
+    if prod is None:
+        return None
+    months = batch.rows(db, """
+        SELECT month, tier, forecast_source, forecast_pieces, actual_pieces, price_per_piece, safety_stock_pieces,
+               ss_method, over_pieces, absorbed_pieces, beyond_pieces, exceeds_safety_stock,
+               over_pesos, absorbed_pesos, beyond_pesos
+        FROM mart.error_decomposition_row
+        WHERE principal = 'unilever' AND product_key = :pk AND month BETWEEN :start AND :end ORDER BY month""",
+                        {"pk": prod["product_key"], "start": start, "end": end})
+
+    def num(v):
+        return None if v is None else round(float(v), 2)
+
+    def total(k):
+        return round(sum(float(m[k] or 0) for m in months), 2)
+
+    amounts = ("over_pieces", "absorbed_pieces", "beyond_pieces", "over_pesos", "absorbed_pesos", "beyond_pesos")
+    return {
+        "product_key": int(prod["product_key"]), "sku_code": prod["sku_code"], "product_name": prod["product_name"],
+        "category_path": prod["category_path"], "period_start": start, "period_end": end,
+        "months": [{
+            "month": m["month"], "tier": m["tier"], "forecast_source": m["forecast_source"],
+            "counterfactual": m["tier"] != SERVED_TIER, "ss_method": m["ss_method"],
+            "exceeds_safety_stock": bool(m["exceeds_safety_stock"]),
+            **{k: num(m[k]) for k in ("forecast_pieces", "actual_pieces", "price_per_piece", "safety_stock_pieces") + amounts},
+        } for m in months],
+        "totals": {"months_scored": len(months), "exposure_months": sum(1 for m in months if m["exceeds_safety_stock"]),
+                   **{k: total(k) for k in amounts}},
+        "scoring_rule": DECOMPOSITION_SCORING_RULE, "safety_stock_note": SS_METHOD_NOTE,
+    }
+
+
+def decomposition_aggregate(db: Session, start: str, end: str) -> dict:
+    """The range's split per principal and ABC tier ('all' = every tier of that principal), summed from the
+    per-month aggregate rows. Only principals with scored product-months appear."""
+    rows = batch.rows(db, f"""
+        SELECT principal, tier, {', '.join(f'SUM({c}) AS {c}' for c in _DECOMP_SUMS + _DECOMP_AMOUNTS)}
+        FROM mart.error_decomposition WHERE period BETWEEN :start AND :end
+        GROUP BY principal, tier ORDER BY principal, tier""", {"start": start, "end": end})
+    by_principal: dict[str, list] = {}
+    for r in rows:
+        by_principal.setdefault(r["principal"], []).append(
+            {"tier": r["tier"], "counterfactual": r["tier"] not in (SERVED_TIER, "all"), **_decomposition_figure(r)})
+    return {
+        "period_start": start, "period_end": end, "served_tier": SERVED_TIER,
+        "principals": [{"principal": p, "tiers": sorted(t, key=lambda x: (x["tier"] == "all", x["tier"]))}
+                       for p, t in by_principal.items()],
+        "counterfactual_note": ("Only Tier A is forecast by the live runner. Tier B and C rows score a backtest that was "
+                                "never served (forecast_run labelled COUNTERFACTUAL), and 'all' includes them."),
+        "scoring_rule": DECOMPOSITION_SCORING_RULE, "safety_stock_note": SS_METHOD_NOTE,
+    }
+
+
+def decomposition_concentration(db: Session, start: str, end: str, limit: int = 25, tier: str = "all") -> dict:
+    """Products ranked by pesos beyond safety stock over the range, each with its share and the running
+    (cumulative) share of the whole, so the few that carry most of it show in one call. The shares are of ALL
+    products with exposure in the range, not only the `limit` listed."""
+    products = batch.rows(db, """
+        SELECT r.product_key, pd.sku_code, pd.product_name, pd.category_path,
+               MIN(r.tier) AS tier_first, MAX(r.tier) AS tier_last,
+               COALESCE(SUM(r.beyond_pesos), 0) AS beyond_pesos, SUM(r.beyond_pieces) AS beyond_pieces,
+               COUNT(*) FILTER (WHERE r.exceeds_safety_stock)::int AS exposure_months, COUNT(*)::int AS product_months
+        FROM mart.error_decomposition_row r LEFT JOIN product_dimension pd ON pd.product_key = r.product_key
+        WHERE r.principal = 'unilever' AND r.month BETWEEN :start AND :end AND (:tier = 'all' OR r.tier = :tier)
+        GROUP BY r.product_key, pd.sku_code, pd.product_name, pd.category_path
+        HAVING COALESCE(SUM(r.beyond_pesos), 0) > 0
+        ORDER BY COALESCE(SUM(r.beyond_pesos), 0) DESC, r.product_key""", {"start": start, "end": end, "tier": tier})
+    unpriced = batch.first(db, """
+        SELECT COUNT(DISTINCT r.product_key)::int AS n FROM mart.error_decomposition_row r
+        WHERE r.principal = 'unilever' AND r.month BETWEEN :start AND :end AND (:tier = 'all' OR r.tier = :tier)
+          AND r.beyond_pieces > 0 AND r.beyond_pesos IS NULL""", {"start": start, "end": end, "tier": tier})
+    total = sum(float(p["beyond_pesos"]) for p in products)
+    cum, n50, n80, listed = 0.0, None, None, []
+    for i, p in enumerate(products, 1):
+        cum += float(p["beyond_pesos"])
+        if n50 is None and cum >= 0.5 * total:
+            n50 = i
+        if n80 is None and cum >= 0.8 * total:
+            n80 = i
+        if i <= limit:
+            listed.append({
+                "rank": i, "product_key": int(p["product_key"]), "sku_code": p["sku_code"], "product_name": p["product_name"],
+                "category_path": p["category_path"],
+                "tier": p["tier_last"] if p["tier_first"] == p["tier_last"] else "mixed",
+                "beyond_pesos": round(float(p["beyond_pesos"]), 2), "beyond_pieces": round(float(p["beyond_pieces"] or 0), 2),
+                "share_of_beyond_pesos": _ratio(float(p["beyond_pesos"]), total),
+                "cumulative_share_of_beyond_pesos": _ratio(cum, total),
+                "exposure_months": p["exposure_months"], "product_months": p["product_months"],
+            })
+    return {
+        "period_start": start, "period_end": end, "products_tier": tier,
+        "total_beyond_pesos": round(total, 2), "products_with_exposure": len(products),
+        "products_for_50_percent": n50, "products_for_80_percent": n80,
+        "products_beyond_without_price": int(unpriced["n"]) if unpriced and unpriced["n"] else 0,
+        "listed": len(listed), "products": listed,
+        "basis": (f"pesos beyond safety stock (potential stockout exposure, not an observed stockout), summed over the "
+                  f"range, products of tier {tier}; shares are of every product with exposure, not only those listed. "
+                  "A product with exposure in pieces but no price in the range has no pesos and is not ranked "
+                  "(products_beyond_without_price)."),
+        "scoring_rule": DECOMPOSITION_SCORING_RULE,
+    }

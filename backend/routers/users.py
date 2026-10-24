@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 from backend import account_links, audit, avatar, mfa
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_current_user, get_db
-from backend.permissions import LAST_ADMIN, admin_count, require_permission
+from backend.permissions import LAST_ADMIN, admin_count, require_admin_for, require_permission
 from backend.schemas.auth import SendLinkResponse
 from backend.schemas.users import UserOut, UserUpdate
 from backend.sessions import revoke_user_sessions
@@ -152,6 +152,9 @@ def update_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You can't change your own role. Ask another admin to do it.",
         )
+    # Changing an admin account, or making someone an admin, takes an admin:
+    # users.manage alone could otherwise be used to become one.
+    require_admin_for(current_user, existing["role"], fields.get("role"))
     if existing["role"] == "admin" and fields.get("role", "admin") != "admin" and admin_count(db) <= 1:
         raise ApiError(409, LAST_ADMIN, code="last_admin")
     if "email" in fields:
@@ -196,6 +199,7 @@ def delete_user(
             detail="You cannot delete your own account.",
         )
     existing = _get_user(db, user_id)
+    require_admin_for(current_user, existing["role"])  # deleting an admin account takes an admin
     if existing["role"] == "admin" and admin_count(db) <= 1:
         raise ApiError(409, LAST_ADMIN, code="last_admin")
     revoke_user_sessions(db, user_id)
@@ -213,6 +217,7 @@ def send_link(
     """A fresh link for one account: a new invite while its invite is still
     pending, otherwise a password reset. Retires the account's older links."""
     user = _get_user(db, user_id)
+    require_admin_for(current_user, user["role"])  # a reset link takes the account over
     invited = user["status"] == "invited"
     purpose = "invite" if invited else "reset"
     minutes = account_links.INVITE_MINUTES if invited else account_links.ADMIN_RESET_MINUTES
@@ -251,6 +256,7 @@ def reset_mfa(
             detail="You can't reset your own two-step sign-in here. Use Account security, or ask another admin.",
         )
     user = _get_user(db, user_id)
+    require_admin_for(current_user, user["role"])  # turning off an admin's two-step sign-in
     if not mfa.mfa_ready(db) or not mfa.remove(db, user_id):
         db.rollback()
         raise HTTPException(

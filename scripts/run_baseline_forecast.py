@@ -357,8 +357,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "sales already in demo.*).")
     parser.add_argument("--calendar-factor", action="store_true", default=False,
                         help="Multiply each served forecast by the company calendar factor "
-                             "(analytics/forecasting/calendar.py). OFF by default: approved for build + dry run "
-                             "2026-10-19, not for the live forecast until Sir Catubag signs it off.")
+                             "(analytics/forecasting/calendar.py). OFF by default (opt-in), but the live "
+                             "Forecast_Result written 2026-10-19 WAS run with it (x1.0762 for March, all 175 'ok' "
+                             "rows): applied, pending Sir Catubag's sign-off. Without it the LP plans 354,975 "
+                             "pieces instead of 424,127 (-16.3%, 70 of 107 rows change).")
     parser.add_argument("--write", action="store_true", default=False,
                         help="Additionally upsert Forecast_Result for status='ok' SKUs "
                              "(rule_method pick). OFF by default - this run is report-only. With --source demo: "
@@ -1019,7 +1021,10 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) ->
             "holdout_mape": mape(a, p), "holdout_mase": mase(a, p, naive_scale(train.dropna().to_numpy(dtype=float))),
             "holdout_wape": wape(a, p), "holdout_rmse": rmse(a, p),
             "holdout_ma3_wape": wape(a, scored["ma3"].to_numpy()),
+            # additive, read only by scripts/accuracy_as_served.py: the same MASE denominator for the MA3 benchmark
+            "holdout_ma3_mase": mase(a, scored["ma3"].to_numpy(), naive_scale(train.dropna().to_numpy(dtype=float))),
             "holdout_backups": int(scored["backup_fired"].sum()), "holdout_months": int(len(scored)),
+            "holdout_scored": scored[["actual", "value", "ma3"]].to_numpy(dtype=float),
         }
     return out
 

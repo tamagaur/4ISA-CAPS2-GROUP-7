@@ -331,7 +331,8 @@ def lp_source(mode: str, real_name: str = "LP_Recommendation") -> tuple[str, dic
     return """(
         SELECT -u.product_key AS recommendation_key, u.product_key, u.planning_cycle_date,
                u.q_i, u.rop_i, u.ss_i, 'pending'::text AS status, NULL::timestamptz AS decided_at,
-               NULL::text AS decided_by, CAST(:pv_generated_at AS timestamptz) AS generated_at
+               NULL::text AS decided_by, CAST(:pv_generated_at AS timestamptz) AS generated_at,
+               NULL::bigint AS lp_run_key
         FROM unnest(
             CAST(:pv_lp_keys AS bigint[]), CAST(:pv_lp_dates AS date[]), CAST(:pv_lp_q AS numeric[]),
             CAST(:pv_lp_rop AS numeric[]), CAST(:pv_lp_ss AS numeric[])

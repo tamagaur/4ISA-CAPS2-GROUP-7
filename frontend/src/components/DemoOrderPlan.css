@@ -1,0 +1,108 @@
+/* The synthetic demonstration's order plans (DemoOrderPlan.jsx). An amber dashed frame, the same "not SSM's data"
+   language as the synthetic forecast line, so a plan here can never be read as part of a real list. */
+.demo-plan {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 2px dashed #B45309;
+  border-radius: 10px;
+  background: rgba(180, 83, 9, 0.05);
+}
+
+.demo-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.demo-plan-title {
+  margin: 0;
+  color: #92400E;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.demo-plan-lead,
+.demo-plan-summary,
+.demo-plan-note,
+.demo-plan-dead p,
+.demo-plan-details p {
+  margin: 0;
+  color: var(--color-text-muted, #64748B);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.demo-plan-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--color-text-muted, #64748B);
+  font-size: 13px;
+}
+
+.demo-plan-table-wrap {
+  overflow-x: auto;
+}
+
+.demo-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.demo-plan-table th,
+.demo-plan-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(180, 83, 9, 0.2);
+  text-align: left;
+}
+
+.demo-plan-table th {
+  color: #92400E;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.demo-plan-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-plan-order {
+  font-weight: 700;
+}
+
+.demo-plan-toggle {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #92400E;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.demo-plan-dead {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(180, 83, 9, 0.4);
+}
+
+.demo-plan-dead h5 {
+  margin: 0;
+  color: #92400E;
+  font-size: 13px;
+}
+
+.demo-plan-details summary {
+  cursor: pointer;
+  color: var(--color-text-muted, #64748B);
+  font-size: 12.5px;
+}

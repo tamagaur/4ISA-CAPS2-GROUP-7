@@ -783,6 +783,10 @@ def load_fit_review(payload: dict) -> dict:
 
     if not os.path.isfile(FIT_REVIEW):
         raise SystemExit(f"fit review missing: {FIT_REVIEW}\n"
+                         f"It is a git-ignored per-product file (hard rule 9), so a fresh clone does not have "
+                         f"it. No script in the repo writes it (it was produced 2026-09-23, commit fe39ba9, "
+                         f"and untracked in 97e564d); on a machine that has the repo history, restore it with\n"
+                         f"  git show 97e564d^:reports/diagnostics/fit_review_common_2026-09-23.csv\n"
                          f"The Unfit view cannot be built without it and this build will not "
                          f"produce a page that quietly omits the verdicts.")
     with open(FIT_REVIEW, encoding="utf-8-sig", newline="") as fh:

@@ -30,7 +30,15 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 def test_the_cycle_anchor_counts_decided_rows():
     sql, _ = lp_cycle.current_cycle_query("unilever")
     assert "'accepted'" in sql and "'dismissed'" in sql and "'pending'" in sql
-    assert "lr.status = 'pending'" not in sql
+    # Not pending-only: pending is one arm of the plan predicate, decided rows are the other.
+    assert lp_cycle.PLAN_STATUS_SQL in sql
+
+
+def test_a_decided_row_with_no_lp_run_is_not_the_plan():
+    """2026-10-22: recommendation 4 (Tier C, accepted 2026-08-24, lp_run_key NULL) was counted in the 2026-03
+    plan. A decided row is plan only when an LP run produced it; a pending row always is."""
+    for sql in (lp_cycle.PLAN_STATUS_SQL, lp_cycle.PLAN_STATUS_SQL_BARE, lp_cycle.CURRENT_CYCLE_CLAUSE):
+        assert "lp_run_key IS NOT NULL" in sql and "= 'pending' OR" in sql
 
 
 def test_freshness_and_the_stored_run_read_the_whole_cycle_not_only_pending():
@@ -38,7 +46,7 @@ def test_freshness_and_the_stored_run_read_the_whole_cycle_not_only_pending():
     run, _ = lp_cycle.stored_run_query(datetime.date(2026, 3, 1), "unilever")
     for sql in (fresh, run):
         assert "'accepted'" in sql and "'dismissed'" in sql
-        assert "status = 'pending'" not in sql
+        assert lp_cycle.PLAN_STATUS_SQL in sql
 
 
 def test_open_action_counts_stay_pending_only():
@@ -59,10 +67,12 @@ def test_every_plan_read_uses_the_plan_statuses():
     src = inspect.getsource(abc_router)
     assert src.count("PLAN_STATUS_SQL_BARE} AND planning_cycle_date = :current_cycle") == 2
     q, _ = dashboard._policy_rows_query("unilever", "real", datetime.date(2026, 3, 1))
-    assert "'accepted'" in q and "status = 'pending'" not in q
-    # ...while the dashboard's "awaiting a decision" count keeps meaning open work.
+    assert "'accepted'" in q and lp_cycle.PLAN_STATUS_SQL in q
+    # The dashboard's product count is the plan too (2026-10-23); the still-pending subset is a separate column.
     q, _ = dashboard._product_count_query("unilever", "real", datetime.date(2026, 3, 1))
-    assert "lr.status = 'pending'" in q
+    assert lp_cycle.PLAN_STATUS_SQL in q and "FILTER (WHERE lr.status = 'pending') AS pending_count" in q
+    q, _ = dashboard._reorder_preview_query("unilever", "real", datetime.date(2026, 3, 1), "2026-02", {})
+    assert lp_cycle.PLAN_STATUS_SQL in q
 
 
 def test_the_planning_mart_anchors_on_the_same_statuses():
@@ -89,6 +99,8 @@ class _PatchDB:
         self.sql.append((sql, dict(params or {})))
         if "to_regclass('review_flag')" in sql:
             return FakeResult([{"review_flag": False, "on_order": True, "decision_cols": self.decision_cols}])
+        if "AS pack FROM lp_recommendation lr" in sql:
+            return FakeResult([{"q_i": 50.0, "pack": None}])
         if "UPDATE lp_recommendation" in sql:
             return FakeResult([{"sku": "U-1", "planning_cycle_date": datetime.date(2026, 3, 1)}] if self.updated else [])
         if "AS current_cycle" in sql:
@@ -219,7 +231,37 @@ def test_the_row_query_reads_the_capture_columns_only_where_they_exist():
     assert "lr.decided_q_i" not in absent and "NULL::numeric AS decided_q_i" in absent
 
 
-# ---- nothing reads the capture ---------------------------------------------------------------------------
+# ---- the decided quantity feeds the displayed plan total, and nothing else -------------------------------
+# 2026-10-24: the capture-only rule is lifted narrowly. decided_q_i may feed the plan total and count
+# (plan_q_i); it must not reach the forecast, the safety stock or the LP.
+
+def test_plan_quantity_is_the_accepted_quantity_else_q_i():
+    assert rec.plan_quantity(50.0, "accepted", 40.0) == 40.0
+    assert rec.plan_quantity(50.0, "accepted", 0.0) == 0.0  # zero is a legal decision, not "no override"
+    assert rec.plan_quantity(50.0, "accepted", None) == 50.0
+    assert rec.plan_quantity(50.0, "pending", None) == 50.0
+    assert rec.plan_quantity(50.0, "dismissed", None) == 50.0  # a dismissed row stays in the plan at q_i
+
+
+def test_the_item_carries_plan_q_i_and_still_the_lp_q_i():
+    row = _item_row(current_stock=100.0, rop_i=30.0, q_i=50.0)
+    assert rec._to_item(row, None).plan_q_i == 50.0  # nothing decided: the plan reads exactly q_i
+    row.update(status="accepted", decided_q_i=40.0)
+    item = rec._to_item(row, None)
+    assert (item.q_i, item.recommended_q_i, item.plan_q_i) == (50.0, 50.0, 40.0)
+
+
+def test_only_the_displayed_plan_total_reads_the_decided_quantity():
+    dashboard = (REPO / "backend/routers/dashboard.py").read_text(encoding="utf-8")
+    assert "decided_q_i" not in dashboard and "plan_q_i" in dashboard  # it reads the derived field only
+    for root in ("analytics", "scripts", "transform", "tools"):
+        for path in (REPO / root).rglob("*.py"):
+            if any(p in path.parts for p in (".venv", "__pycache__")):
+                continue
+            assert "plan_q_i" not in path.read_text(encoding="utf-8", errors="ignore"), path
+
+
+# ---- nothing upstream reads the capture ------------------------------------------------------------------
 
 CAPTURE_NAMES = ("decided_q_i", "decision_reason", "decided_quantity")
 # The only files allowed to mention the capture columns: the endpoint, its schema, the migration, these tests.
@@ -227,6 +269,13 @@ ALLOWED = {
     "backend/routers/recommendations.py", "backend/schemas/recommendations.py",
     "analytics/db/migrations/0062_lp_recommendation_decision_capture.sql",
     "tests/backend/test_recommendation_decisions.py",
+    # 2026-10-23: the reversal and approval flow is part of the decision endpoint (it writes, copies and reads the
+    # same columns to keep or restore a decision). Still nothing in forecasting, safety stock or the LP.
+    "backend/routers/reorder_approval.py", "tests/backend/test_reorder_approval.py",
+    "analytics/db/migrations/0067_lp_decision_reversal.sql",
+    "analytics/db/migrations/0068_lp_quantity_change_approval.sql",
+    # 2026-10-24: the plan-total test feeds a decided quantity through both screens. Test code only.
+    "tests/backend/test_dashboard.py",
 }
 
 

@@ -56,7 +56,7 @@ from backend.data_mode import REAL, forecast_source, lp_source
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
 # concatenate into a query string alongside the principal clause.
-CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
+CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle AND (lr.status = 'pending' OR lr.lp_run_key IS NOT NULL)"
 
 # WHICH ROWS ARE "THE PLAN" (2026-10-21). Until this date every plan read
 # said `status = 'pending'`, so deciding a row removed it from the plan: an
@@ -74,9 +74,16 @@ CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle"
 # differs is the OPEN-ACTION reads (dashboard pending count, pending keys,
 # reorder preview totals, superseded_count), which stay PENDING_ONLY: they
 # count work still to do, and accepted/dismissed rows are done.
+#
+# A decided row belongs to the plan only if an LP run produced it (lp_run_key set, 2026-10-22). Row 4 of the
+# 2026-03 cycle is a Tier C product accepted 2026-08-24, before runs were recorded (migration 0037): it has no
+# run and no current forecast, so it is not this cycle's plan, though it stays in the table. A pending row is
+# always plan (a legacy cycle's pending rows have no run key and must stay readable).
 PLAN_STATUSES = ("pending", "accepted", "dismissed")
-PLAN_STATUS_SQL = "lr.status IN ('pending', 'accepted', 'dismissed')"
-PLAN_STATUS_SQL_BARE = "status IN ('pending', 'accepted', 'dismissed')"  # for subqueries with no `lr` alias
+PLAN_STATUS_SQL = ("(lr.status IN ('pending', 'accepted', 'dismissed') "
+                   "AND (lr.status = 'pending' OR lr.lp_run_key IS NOT NULL))")
+PLAN_STATUS_SQL_BARE = ("(status IN ('pending', 'accepted', 'dismissed') "
+                        "AND (status = 'pending' OR lp_run_key IS NOT NULL))")  # for subqueries with no `lr` alias
 
 # The solver's fixed settings (LP_WEIGHTS, LP_SERVICE_Z, LP_SERVICE_LEVEL_PCT,
 # imported above) come from analytics.params, the module analytics/

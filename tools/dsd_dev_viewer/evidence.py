@@ -36,6 +36,22 @@ DRAWN = {
 }
 
 
+# Per-product CSVs that are git-ignored (hard rule 9: no per-product sales in git), so a fresh
+# clone does not have them. Named here so the build error says which script writes each one.
+GENERATORS = {
+    "reports/evidence/ch01_sku_series.csv": "python scripts/evidence/ch01_models.py",
+    "reports/evidence/ch06_months.csv": "python scripts/evidence/ch06_unfit.py",
+    "reports/evidence/ch06_skus.csv": "python scripts/evidence/ch06_unfit.py",
+    "reports/evidence/ch10_curve.csv": "python scripts/evidence/lp_charts.py",
+}
+
+
+def _missing_note(rel) -> str:
+    gen = GENERATORS.get(str(rel).replace("\\", "/"))
+    return (f" - git-ignored per-product file; regenerate it with `{gen}` (needs the live database)"
+            if gen else "")
+
+
 def _cell(v: str):
     if v == "":
         return None
@@ -80,7 +96,7 @@ def load(repo: str) -> dict:
         for key, cols in DRAWN.get(n, {}).items():
             rel = meta["files"].get(key)
             if not rel or not os.path.isfile(os.path.join(repo, rel)):
-                problems.append(f"chart {n}: file '{key}' ({rel}) missing")
+                problems.append(f"chart {n}: file '{key}' ({rel}) missing{_missing_note(rel)}")
                 continue
             data[key] = _table(os.path.join(repo, rel), cols)
         # Chart 6's "what we tried" panel: a tally of stored per-product results (scripts/evidence/ch06_rescue.py).

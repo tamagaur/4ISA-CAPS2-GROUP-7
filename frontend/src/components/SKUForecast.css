@@ -1016,3 +1016,46 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Synthetic demonstration forecast (GET /forecast `demonstration: true`, CLAUDE.md rule 2): the label lives IN the
+   plot as well as in the banner, legend and tooltip, so a screenshot of the chart alone still says so. */
+.forecast-synthetic-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px dashed #B45309;
+  border-radius: 8px;
+  background: rgba(180, 83, 9, 0.06);
+}
+
+.forecast-synthetic-banner p {
+  margin: 0;
+  color: var(--color-text, #1F2937);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chart-wrapper.chart-synthetic {
+  position: relative;
+}
+
+.chart-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #B45309;
+  opacity: 0.16;
+  font-size: clamp(28px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  transform: rotate(-12deg);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}

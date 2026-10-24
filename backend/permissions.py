@@ -154,6 +154,17 @@ def require_ready(db: Session) -> None:
 LAST_ADMIN = "There must be at least one admin."
 
 
+ADMIN_REQUIRED = "Only an admin can create an admin account, grant admin, or change an admin account."
+
+
+def require_admin_for(current_user: TokenPayload, *roles: str | None) -> None:
+    """403 admin_required unless the caller is an admin, when any of `roles`
+    (the target account's current role and/or the role being set) is 'admin'.
+    users.manage alone must not be a way to become, or take over, an admin."""
+    if "admin" in roles and current_user.role != "admin":
+        raise ApiError(403, ADMIN_REQUIRED, code="admin_required")
+
+
 def admin_count(db: Session) -> int:
     """How many admins there are, with their rows locked until the caller
     commits, so two admins demoting each other at the same moment can't both

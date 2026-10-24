@@ -337,7 +337,8 @@ class ABCClassification(Base):
     __table_args__ = (
         CheckConstraint("principal IN ('unilever', 'delmonte')", name="ck_abc_classification_principal"),
         CheckConstraint("tier IN ('A', 'B', 'C')", name="ck_abc_classification_tier"),
-        CheckConstraint("method IN ('single', 't3m')", name="ck_abc_classification_method"),
+        # t12m_new added by migration 0044 (DEC-38, the Unilever Tier A basis).
+        CheckConstraint("method IN ('single', 't3m', 't12m_new')", name="ck_abc_classification_method"),
         # Widened by migration 0017: 'single' and 't3m' legitimately coexist for
         # the same (product_key, classification_period), so the pre-0017
         # two-column key no longer describes the live table. Constraint name
@@ -361,6 +362,9 @@ class ABCClassification(Base):
     boundary_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     method: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'single'"))
     run_id: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'legacy_pre_0017'"))
+    # added_as_new: migration 0044. True on a row made Class A by the t12m_new
+    # new-product rule rather than by the 12-month 80% cut.
+    added_as_new: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     computed_at: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

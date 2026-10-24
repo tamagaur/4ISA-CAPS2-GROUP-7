@@ -40,8 +40,9 @@ import PageHeader from './ui/PageHeader';
 import ProductName from './ProductName';
 import './SKUForecast.css';
 import GapNote from './GapNote';
-import { DemoCategoryForecast, SyntheticTag } from './DemoForecasts';
+import { DemoCategoryForecast, SyntheticForecastBanner, SyntheticTag } from './DemoForecasts';
 import { gapLabel, originLabel } from '../utils/gapReasons';
+import { forecastLabels, SYNTHETIC_FORECAST_LABELS } from '../utils/syntheticForecast';
 import { isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { calendarSignoffText } from '../utils/calendarAdjustment';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
@@ -991,12 +992,22 @@ const SKUForecast = () => {
   // Direct label at the projection's end — the number the page is FOR,
   // repeated where the dashed line stops. Skipped when the point leaves
   // the zoom window.
+  // GET /forecast answers with `demonstration: true` when the Topbar's synthetic-data switch is on and the
+  // server's DM_DEMO_ENABLED is too: the forecast is then demo.unilever_sku_forecast, a generated figure. The
+  // chart says so in four places a viewer cannot miss: the banner, the watermark inside the plot, the amber
+  // dotted line with its own name, and the label at the line's end.
+  // isDemonstration (from the response body, also true for data_source 'synthetic_demonstration') and the
+  // labels must agree, so the response's own flag decides which label set is used.
+  const labels = isDemonstration ? SYNTHETIC_FORECAST_LABELS : forecastLabels(forecastResult);
+  const isDemoForecast = labels.isDemo;
+  const forecastName = labels.name;
+  const forecastColor = isDemoForecast ? CHART_COLORS.syntheticForecast : COLORS.forecast;
   const forecastEndLabels = useMemo(() => {
     const end = [...zoom.view].reverse().find((pt) => pt.forecast != null && pt.actual == null);
     return pointLabels(zoom.view, end
-      ? [{ period: end.label, text: `Forecast ${formatAxisQty(end.forecast)}` }]
+      ? [{ period: end.label, text: `${labels.endLabel} ${formatAxisQty(end.forecast)}` }]
       : [], { key: 'label' });
-  }, [zoom.view]);
+  }, [zoom.view, labels]);
 
   // The last month the chart plots an actual for — the end of what the
   // partial-range banner reports as "Showing …". Not skuCoverage.end: when
@@ -1649,14 +1660,13 @@ const SKUForecast = () => {
                         name is in "How this forecast was made". */}
                     <div className="forecast-stat-block">
                       <span className="forecast-stat-label">
-                        {derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Forecast'}
-                        {isDemonstration ? ' (synthetic)' : ''}
+                        {isDemoForecast ? labels.statLabel : derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Forecast'}
                         {derivedForecast ? ` for ${formatPeriod(derivedForecast.period)}` : ''}
                       </span>
                       <span className="forecast-stat-value forecast-stat-value-forecast">
                         {derivedForecast ? (
                           <>
-                            <span className="forecast-stat-swatch" style={{ backgroundColor: COLORS.forecast }} aria-hidden="true" />
+                            <span className="forecast-stat-swatch" style={{ backgroundColor: forecastColor }} aria-hidden="true" />
                             <span className="forecast-stat-number">
                               {Math.round(derivedForecast.value).toLocaleString()}
                             </span>
@@ -1957,6 +1967,9 @@ const SKUForecast = () => {
                   {/* Chart, or its table twin. The legend sits ABOVE the
                       plot (under the stat rows), so the key is met before
                       the marks — same order as the dashboard's charts. */}
+                  {isDemoForecast && (
+                    <SyntheticForecastBanner />
+                  )}
                   <div className="forecast-chart-tools">
                     <ChartViewToggle view={chartView} onChange={setChartView} label="Forecast: chart or table" />
                   </div>
@@ -1971,7 +1984,7 @@ const SKUForecast = () => {
                           align: 'left',
                         },
                         { key: 'actualV', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'forecastV', label: `Forecast${isDemonstration ? ', synthetic' : ''} (pieces)`, format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'forecastV', label: `${forecastName} (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                         { key: 'lastYearV', label: 'Same month last year (pieces)', format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciLow', label: `${bandLabel} low (pieces)`, format: (v) => Math.round(v).toLocaleString() },
                         { key: 'ciHigh', label: `${bandLabel} high (pieces)`, format: (v) => Math.round(v).toLocaleString() },
@@ -2014,9 +2027,9 @@ const SKUForecast = () => {
                     {chartData.some((pt) => pt.forecast != null) && (
                       <div className="legend-item">
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={COLORS.forecast} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4" />
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={forecastColor} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={isDemoForecast ? '2 4' : '6 4'} />
                         </svg>
-                        <span className="legend-label">{isDemonstration ? 'Forecast (synthetic)' : 'Forecast'}</span>
+                        <span className="legend-label">{labels.legend}</span>
                       </div>
                     )}
                     {chartData.some((pt) => Array.isArray(pt.ci) && pt.ci[0] !== pt.ci[1]) && (
@@ -2040,7 +2053,10 @@ const SKUForecast = () => {
                       </div>
                     )}
                   </div>
-                  <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
+                  <div className={`chart-wrapper${zoom.canPan ? ' chart-pannable' : ''}${isDemoForecast ? ' chart-synthetic' : ''}`} ref={zoom.containerRef} {...zoom.panHandlers}>
+                    {isDemoForecast && (
+                      <div className="chart-watermark" aria-hidden="true">{labels.watermark}</div>
+                    )}
                     {/* The X axis is 44px tall so its "Month" title sits
                         under the tick row instead of on it; the bottom
                         margin keeps the title off the SVG's edge (with
@@ -2161,12 +2177,12 @@ const SKUForecast = () => {
                         <Line
                           type="linear"
                           dataKey="forecast"
-                          stroke={COLORS.forecast}
+                          stroke={forecastColor}
                           strokeWidth={2}
-                          strokeDasharray="5 5"
-                          dot={seriesDot({ color: COLORS.forecast, r: 4, skip: (p) => p?.actual != null })}
+                          strokeDasharray={isDemoForecast ? '2 5' : '5 5'}
+                          dot={seriesDot({ color: forecastColor, r: 4, skip: (p) => p?.actual != null })}
                           activeDot={{ r: 6 }}
-                          name="Forecast"
+                          name={forecastName}
                           label={forecastEndLabels}
                           {...zoom.zoomAnim(2)}
                           connectNulls

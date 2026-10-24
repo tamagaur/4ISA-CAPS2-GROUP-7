@@ -24,7 +24,7 @@ anywhere in the source data, so this column stays null rather than
 guessing a fiscal quarter. Confirm with Yuan, then backfill for real
 via a separate, explicit update - not by inventing a rule here.
 
-Default range: 2021-01-01 through 2026-12-31. Covers the full ~5-year
+Default range: 2021-01-01 through 2028-12-31 (extended from 2026-12-31 by migration 0065, 2026-10-22). Covers the full ~5-year
 source corpus (data/raw/ spans 2021-2025) plus the Unilever La Union
 file's known extent into 2026-02, with headroom for the SARIMA forecast
 horizon. Re-run with --end to extend further later; this is additive
@@ -48,7 +48,7 @@ DATE_DIMENSION_COLUMNS = [
 ]
 
 DEFAULT_START = "2021-01-01"
-DEFAULT_END = "2026-12-31"
+DEFAULT_END = "2028-12-31"
 
 
 @dataclass

@@ -152,7 +152,7 @@ def net_need(monthly_demand: float, target: float, stock_on_hand: float) -> floa
 
 
 FILL_LAYERS = ("demand", "safety_stock", "rest_of_target")
-HOLD_SLACK_REL = 1e-6   # solve_lp's retry only: CBC's own feasibility tolerance; 1e-6 of ~208,000 pieces = 0.2 piece
+HOLD_SLACK_REL = 1e-7   # solve_lp's retry only: below CBC's own 1e-6 feasibility tolerance; 1e-7 of ~208,000 pieces = 0.02 piece
 
 
 def fill_layers(sku: SKUInput) -> tuple[float, float, float]:
@@ -266,6 +266,97 @@ def build_lp_model(
     problem.sku_orders = variables  # type: ignore[attr-defined]
     problem.stages = stages  # type: ignore[attr-defined]
     return problem
+
+
+PACK_TOLERANCE = 1e-6   # pieces: a quantity within this of a whole pack counts as whole
+
+
+def _packs(quantity: float, pack: float) -> tuple[float, float]:
+    """(whole packs at or below, whole packs at or above) `quantity`, in pieces.
+    A quantity within PACK_TOLERANCE of a whole pack is that pack, both ways."""
+    packs = quantity / pack
+    nearest = round(packs)
+    if abs(packs - nearest) * pack <= PACK_TOLERANCE:
+        return nearest * pack, nearest * pack
+    below = float(int(packs))
+    return below * pack, (below + 1.0) * pack
+
+
+def constraint_slacks(
+    skus: list[SKUInput], orders: dict[str, float], warehouse_capacity: float, supplier_ceilings: dict[str, float],
+) -> dict[str, float]:
+    """Room left under each hard constraint of build_lp_model, in pieces:
+    'warehouse' and 'allocation:<principal>'. Zero means binding."""
+    stock = sum(s.stock_on_hand for s in skus)
+    slacks = {"warehouse": warehouse_capacity - stock - sum(orders[s.sku_id] for s in skus)}
+    for principal in sorted({s.principal for s in skus}):
+        slacks[f"allocation:{principal}"] = supplier_ceilings[principal] - sum(
+            orders[s.sku_id] for s in skus if s.principal == principal)
+    return slacks
+
+
+def round_to_case_packs(
+    skus: list[SKUInput],
+    orders: dict[str, float],
+    pack_sizes: dict[str, float | None],
+    warehouse_capacity: float,
+    supplier_ceilings: dict[str, float],
+) -> tuple[dict[str, float], list[dict]]:
+    """Round each order to whole case packs INSIDE the ceilings the LP solved
+    under, not after them. Returns ({sku_id: rounded order}, one audit row per
+    SKU).
+
+    A SKU with no pack size, or a pack size of 1 or less, is unchanged, and so
+    is an order of 0 or one already in whole packs. Every other order goes UP
+    to the next whole pack, unless that would take the warehouse
+    (sum(S_i + Q_i) <= W) or its principal's allocation (sum(Q_i) <= A_p) over
+    its ceiling, and then that row goes DOWN to the whole pack below (possibly
+    0). Rows are tried in descending revenue_weight (the LP's own priority),
+    then sku_id, so the result does not depend on input order. need_i, the
+    target and the safety stock are not touched: a rounded-up row can end above
+    its need by less than one pack.
+
+    The rounded total never exceeds a ceiling the unrounded one was inside of:
+    every row starts at its pack below (which only lowers the totals), and a
+    row is raised only while the room that leaves covers the raise."""
+    rounded: dict[str, float] = {}
+    audit: dict[str, dict] = {}
+    movable: list[tuple[SKUInput, float, float, float]] = []   # sku, pack, below, above
+    for s in skus:
+        q = orders[s.sku_id]
+        pack = pack_sizes.get(s.sku_id)
+        row = {"sku_id": s.sku_id, "pack_size": pack, "before": q, "after": q, "action": "unchanged"}
+        audit[s.sku_id] = row
+        rounded[s.sku_id] = q
+        if pack is None or pack <= 1:
+            row["reason"] = "no pack size" if pack is None else "pack size 1"
+            continue
+        if q <= PACK_TOLERANCE:
+            row["reason"] = "order is 0"
+            continue
+        below, above = _packs(q, pack)
+        if above == below:
+            rounded[s.sku_id] = row["after"] = below   # snaps solver noise onto the pack
+            row["reason"] = "already whole packs"
+            continue
+        rounded[s.sku_id] = below
+        movable.append((s, pack, below, above))
+
+    stock = sum(s.stock_on_hand for s in skus)
+    room_warehouse = warehouse_capacity - stock - sum(rounded.values())
+    room_principal = {p: supplier_ceilings[p] - sum(rounded[s.sku_id] for s in skus if s.principal == p)
+                      for p in {s.principal for s in skus}}
+    for s, pack, below, above in sorted(movable, key=lambda m: (-m[0].revenue_weight, m[0].sku_id)):
+        raise_by = above - below
+        if raise_by <= room_warehouse + 1e-9 and raise_by <= room_principal[s.principal] + 1e-9:
+            rounded[s.sku_id] = above
+            room_warehouse -= raise_by
+            room_principal[s.principal] -= raise_by
+    for s, pack, below, above in movable:
+        row = audit[s.sku_id]
+        row["after"] = rounded[s.sku_id]
+        row["action"] = "rounded_up" if rounded[s.sku_id] == above else "rounded_down_at_ceiling"
+    return rounded, [audit[s.sku_id] for s in skus]
 
 
 def solve_lp(model: pulp.LpProblem) -> dict[str, float] | None:

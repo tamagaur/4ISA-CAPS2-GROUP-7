@@ -34,6 +34,18 @@ export const SyntheticTag = () => (
   <span className="demo-tag"><FlaskConical size={12} aria-hidden="true" /> Synthetic data</span>
 );
 
+// Forecast page, Unilever: above the chart whenever GET /forecast sends `demonstration: true`.
+export const SyntheticForecastBanner = () => (
+  <div className="forecast-synthetic-banner" role="note">
+    <SyntheticTag />
+    <p>
+      <strong>Synthetic demonstration forecast.</strong> This is not SSM&apos;s stored forecast: it is the 3-month
+      average of the demonstration series, which includes generated months. No accuracy is measured and no range is
+      drawn. It never feeds SSM&apos;s real orders.
+    </p>
+  </div>
+);
+
 // Dashboard, step 4, Del Monte: GET /dashboard's demonstration.forecasts.
 export const DemoForecastList = ({ forecasts = [], canOpenForecast = false }) => {
   const navigate = useNavigate();

@@ -113,7 +113,7 @@ import subprocess
 import sys
 from collections import Counter
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -129,7 +129,8 @@ from analytics.allocation import basis_year, monthly_allocation
 from analytics.config import long_read_db_url
 from analytics.demo.prescriptive import plan_category, sigma_d_for_category
 from analytics.optimization.lp import (
-    SKUInput, build_lp_model, compute_safety_stock, solve_lp, target_stock, weekly_demand,
+    SKUInput, build_lp_model, compute_safety_stock, constraint_slacks, round_to_case_packs, solve_lp, target_stock,
+    weekly_demand,
 )
 from analytics.params import (
     COVER_RULES, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION, SERVICE_LEVEL_PCT, SERVICE_Z,
@@ -170,6 +171,37 @@ UPSERT_QUERY = """
         status = 'pending',
         generated_at = now()
     WHERE LP_Recommendation.status = 'pending'
+"""
+
+# The same upsert for a database that has migration 0066: it also keeps the order before
+# case-pack rounding and the pack size, so the rounding stays auditable row by row.
+UPSERT_QUERY_PACK = """
+    INSERT INTO LP_Recommendation
+    (product_key, planning_cycle_date, q_i, rop_i, ss_i, status, lp_run_key, q_i_before_pack_rounding, pack_size)
+    VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s, %s)
+    ON CONFLICT (product_key, planning_cycle_date)
+    DO UPDATE SET
+        q_i = EXCLUDED.q_i,
+        rop_i = EXCLUDED.rop_i,
+        ss_i = EXCLUDED.ss_i,
+        lp_run_key = EXCLUDED.lp_run_key,
+        q_i_before_pack_rounding = EXCLUDED.q_i_before_pack_rounding,
+        pack_size = EXCLUDED.pack_size,
+        status = 'pending',
+        generated_at = now()
+    WHERE LP_Recommendation.status = 'pending'
+"""
+PACK_COLUMNS_PRESENT_QUERY = """
+    SELECT count(*) = 2 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'lp_recommendation'
+      AND column_name IN ('q_i_before_pack_rounding', 'pack_size')
+"""
+
+# Pack size in pieces per case, only where backend/stock_units trusts it (a positive number).
+PACK_SIZE_QUERY = f"""
+    SELECT pd_pack.product_key, pd_pack.pack_size::numeric
+    FROM Product_Dimension pd_pack
+    WHERE pd_pack.product_key = ANY(%s) AND {PACK_SIZE_NUMERIC}
 """
 
 # --retire-stale-pending. The cycle's rows, read inside the cycle's
@@ -294,6 +326,7 @@ class ProductInput:
     prior_year_pieces: float
     prior_year_revenue: float
     stock_period: str | None = None  # the _period of the count stock_on_hand came from
+    pack_size: float | None = None   # pieces per case; None = unknown, the order is not rounded
 
 
 @dataclass
@@ -307,6 +340,12 @@ class CyclePlan:
     cover_rule: str
     target_weeks: float
     warehouse_capacity: float
+    # Case-pack rounding (round_to_case_packs). orders above are the rounded
+    # quantities; these keep what the LP solved before it and one audit row per SKU.
+    orders_before_pack_rounding: dict[str, float] | None = None
+    pack_audit: list[dict] = field(default_factory=list)
+    slacks_before_pack_rounding: dict[str, float] = field(default_factory=dict)
+    slacks_after_pack_rounding: dict[str, float] = field(default_factory=dict)
 
     def summary(self) -> dict:
         """The cycle's totals, for the log and the tests."""
@@ -468,6 +507,12 @@ def fetch_stock_and_cost(cur, product_keys: list[int], stock_period: str) -> dic
     }
 
 
+def fetch_pack_sizes(cur, product_keys: list[int]) -> dict[int, float]:
+    """product_key -> pieces per case, for the products whose pack size is a positive number."""
+    cur.execute(PACK_SIZE_QUERY, (list(product_keys),))
+    return {int(k): float(v) for k, v in cur.fetchall()}
+
+
 def fetch_stock_counts(cur, period: str) -> dict[str, dict]:
     """principal -> its STOCK_COUNTS_SQL row at `period` (row_count,
     first_date, last_date); a principal with no count there is absent."""
@@ -559,6 +604,7 @@ def cycle_transaction(cur, dry_run: bool):
 def product_input(
     product_key: int, sku_id: str, principal: str, forecast: float, sigma_d: float,
     stock_and_cost: dict, history: pd.DataFrame, prior_year: int, stock_period: str | None = None,
+    pack_sizes: dict | None = None,
 ) -> tuple[ProductInput | None, str | None]:
     """(ProductInput, None), or (None, reason) when the stock can't be put in
     pieces. stock_period is the count stock_and_cost was read at."""
@@ -574,6 +620,7 @@ def product_input(
         prior_year_pieces=float(year["total_quantity"].sum()),
         prior_year_revenue=float(year["total_amount"].sum()),
         stock_period=stock_period,
+        pack_size=(pack_sizes or {}).get(int(product_key)),
     ), None
 
 
@@ -633,10 +680,22 @@ def plan_cycle(products: list[ProductInput], args: argparse.Namespace, planning_
     if orders is not None:
         # Solver noise only: Q_i is bounded to [0, need_i] in the model.
         orders = {s.sku_id: min(max(orders[s.sku_id], 0.0), s.need) for s in skus}
+    before = None
+    audit: list[dict] = []
+    slacks_before: dict[str, float] = {}
+    slacks_after: dict[str, float] = {}
+    if orders is not None and getattr(args, "case_pack_rounding", True):
+        before = dict(orders)
+        slacks_before = constraint_slacks(skus, before, args.warehouse_capacity, allocation)
+        orders, audit = round_to_case_packs(
+            skus, before, {p.sku_id: p.pack_size for p in products}, args.warehouse_capacity, allocation)
+        slacks_after = constraint_slacks(skus, orders, args.warehouse_capacity, allocation)
     return CyclePlan(
         products=products, skus=skus, allocation=allocation, orders=orders,
         infeasible_reasons=[] if orders is not None else _diagnose_infeasibility(skus, args.warehouse_capacity),
         cover_rule=args.cover_rule, target_weeks=args.target_weeks, warehouse_capacity=args.warehouse_capacity,
+        orders_before_pack_rounding=before, pack_audit=audit,
+        slacks_before_pack_rounding=slacks_before, slacks_after_pack_rounding=slacks_after,
     )
 
 
@@ -656,6 +715,9 @@ def plan_rows(plan: CyclePlan, planning_cycle_date, stock_counts: dict[str, dict
             "safety_stock": round(s.safety_stock, 2), "target_stock": round(s.target_stock, 2),
             "target_weeks_of_sales": round(s.target_stock / weekly_demand(s.demand), 2) if s.demand > 0 else None,
             "need": round(s.need, 2), "order": None if q is None else round(q, 2),
+            "order_before_pack_rounding": (None if plan.orders_before_pack_rounding is None
+                                           else round(plan.orders_before_pack_rounding[s.sku_id], 2)),
+            "pack_size": p.pack_size,
             "short": None if q is None else round(s.need - q, 2),
             "cost_per_piece": round(s.procurement_cost_per_unit, 4),
             "cost_source": "stock file" if p.cost_per_piece is not None else "placeholder",
@@ -765,6 +827,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--source", choices=["real", "demo"], default="real",
         help="real (default): exactly the run this script has always made. demo: the Del Monte demonstration "
              "order plan only (--principal delmonte; see check_source), reading and writing schema demo only.",
+    )
+    parser.add_argument(
+        "--case-pack-rounding", action=argparse.BooleanOptionalAction, default=True,
+        help="Round each order to whole case packs inside the warehouse and allocation ceilings (up to the next "
+             "pack, down where up would breach a ceiling). Products with no pack size, or 1, are unchanged. "
+             "ON by default; --no-case-pack-rounding keeps the LP's quantities as solved.",
     )
     parser.add_argument(
         "--write", action="store_true", default=False,
@@ -1212,10 +1280,30 @@ def main():
             return
         logger.warning("lp_run is missing (migration 0037): a real run would refuse until it is applied.")
 
-    def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i, run_key) -> bool:
+    # Case-pack rounding keeps the order before it (migration 0066). Without the
+    # columns a real run could not show what rounding did, so it refuses.
+    cur.execute(PACK_COLUMNS_PRESENT_QUERY)
+    pack_columns = bool(cur.fetchone()[0])
+    if args.case_pack_rounding and not pack_columns:
+        if not args.dry_run:
+            logger.error("lp_recommendation.q_i_before_pack_rounding / pack_size are missing: apply "
+                         "analytics/db/migrations/0066_lp_case_pack_rounding.sql before a real run, so the rounding "
+                         "stays auditable (or pass --no-case-pack-rounding). Nothing was written.")
+            conn.close()
+            return
+        logger.warning("migration 0066 is not applied: a real run with case-pack rounding would refuse until it is.")
+
+    def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i, run_key,
+                    q_before_rounding=None, pack_size=None) -> bool:
         """Upsert one row. False when it hit a decided row and changed nothing."""
-        cur.execute(UPSERT_QUERY, (int(product_key), planning_cycle_date, float(q_i), float(rop_i), float(ss_i),
-                                   int(run_key)))
+        if pack_columns:
+            cur.execute(UPSERT_QUERY_PACK, (int(product_key), planning_cycle_date, float(q_i), float(rop_i),
+                                            float(ss_i), int(run_key),
+                                            None if q_before_rounding is None else float(q_before_rounding),
+                                            None if pack_size is None else float(pack_size)))
+        else:
+            cur.execute(UPSERT_QUERY, (int(product_key), planning_cycle_date, float(q_i), float(rop_i), float(ss_i),
+                                       int(run_key)))
         return cur.rowcount > 0
 
     def save_run(record: dict) -> int:
@@ -1293,7 +1381,9 @@ def main():
         cycle_df = cycle_df[cycle_df["principal"].isin(list(usable))]
         if cycle_df.empty:
             continue
-        stock_and_cost = fetch_stock_and_cost(cur, [int(k) for k in cycle_df["product_key"].unique()], stock_period)
+        cycle_keys = [int(k) for k in cycle_df["product_key"].unique()]
+        stock_and_cost = fetch_stock_and_cost(cur, cycle_keys, stock_period)
+        pack_sizes = fetch_pack_sizes(cur, cycle_keys)
 
         for row in cycle_df.itertuples():
             product_demand = demand_df[demand_df["product_key"] == row.product_key]
@@ -1307,6 +1397,7 @@ def main():
             product, reason = product_input(
                 row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
                 stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date), stock_period=stock_period,
+                pack_sizes=pack_sizes,
             )
             if product is None:
                 gate_out(row.sku_id, row.principal, reason)
@@ -1367,7 +1458,9 @@ def main():
                                 f"{f' (short {short:,.0f})' if short > 0.5 else ''} · target {sku.target_stock:,.0f} "
                                 f"(SS {ss_i:,.0f}) · stock {sku.stock_on_hand:,.0f} · forecast {sku.demand:,.0f}"
                                 f"{'  (decided row — would be kept as is)' if decided else ''}")
-                elif not save_result(product.product_key, planning_cycle_date, q_i, sku.target_stock, ss_i, run_key):
+                elif not save_result(product.product_key, planning_cycle_date, q_i, sku.target_stock, ss_i, run_key,
+                                     None if plan.orders_before_pack_rounding is None
+                                     else plan.orders_before_pack_rounding[sku.sku_id], product.pack_size):
                     decided = True
                 if decided:
                     cycle_kept += 1

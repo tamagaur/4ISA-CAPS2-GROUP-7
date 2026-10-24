@@ -32,6 +32,7 @@ import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { DemoForecastList } from './DemoForecasts';
+import { DemoOrderPlanCard } from './DemoOrderPlan';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { calendarFactorText, calendarSignoffText, calendarYearsText } from '../utils/calendarAdjustment';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
@@ -217,6 +218,14 @@ const safetyStockMetricType = (rate) => {
 // of those two figures yet, so they can't be shown side by side from data.
 // The widget and its props are untouched; set this to true to bring it back.
 const SHOW_POLICY_CARD = false;
+
+// Why the "Suggested orders" card is empty for Del Monte. The card used to say only "No pending recommendations",
+// which reads like a fault. Checked against SellOut_Fact_Real, 2026-10-20: no Del Monte category has three
+// consecutive real months ending at its latest month (Dec 2025; the best any category has is 1), and the
+// moving-average-3 model needs three, so no real forecast exists to plan an order from.
+const DEL_MONTE_NO_ORDERS_REASON =
+  'Del Monte has no real forecast, so nothing is recommended to order. No category has three consecutive months '
+  + 'of real sales ending at its latest month, and the 3-month moving average needs three.';
 // The sentences that describe or interpret a chart are hidden for now
 // (Audrey, 2026-10-13): the line under each card's title, the generated
 // takeaways and the how-to-read notes, leaving a card its title, switches,
@@ -925,6 +934,9 @@ const Dashboard = () => {
   // (GET /dashboard's demonstration.forecasts), shown under the empty card.
   const demoForecasts = preview && pagePrincipal === 'delmonte' && data.demonstration?.demonstration
     ? data.demonstration.forecasts || [] : [];
+  // ...and its order plan and dead stock (the same block), shown under the empty "Suggested orders" card.
+  const demoPlan = preview && pagePrincipal === 'delmonte' && data.demonstration?.demonstration
+    ? data.demonstration : null;
   const forecastReliability = data.forecast || null;
   // A real-only forecast card in preview has nothing in the placeholder
   // months by construction — dropped rather than drawn as a blank run.
@@ -1123,7 +1135,11 @@ const Dashboard = () => {
       detail: `${FOLLOWS_RANGE} Jan to Dec across, one line per calendar year: the range's months, and the `
         + '"Compare with" period\'s months on their own years\' lines.',
     },
-    abc: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.` },
+    abc: {
+      ...rangeBasis,
+      detail: `${FOLLOWS_RANGE} Classes are ranked on sales over the whole range.`
+        + (data.abc_basis ? ` ${data.abc_basis.label}. ${data.abc_basis.note}` : ''),
+    },
     classChanges: {
       label: 'Range vs a year earlier',
       follows: true,
@@ -1297,9 +1313,13 @@ const Dashboard = () => {
   });
   const openingCount = stockCountedLine(reorderPreview.stock_counts);
   const pendingTooltip = lpHidden ? null : [
-    `Order recommendations in the ${planLabel || 'current plan'} that nobody has accepted or dismissed yet. `
-      + 'Rows already decided, and undecided rows from earlier plans, are not counted.',
-    'Critical: stock below safety stock. Urgent: below the target stock. Routine: at or above the target stock. '
+    `Order recommendations in the ${planLabel || 'current plan'}: the whole plan, as the Reorder page counts it. `
+      + 'A row that has been accepted or dismissed stays in it. '
+      + (reorderPreview.pending_count != null
+        ? `${reorderPreview.pending_count.toLocaleString()} of them still wait for a decision `
+          + `(${(reorderPreview.pending_order_qty ?? 0).toLocaleString()} pieces). ` : '')
+      + 'Undecided rows from earlier plans are not counted.',
+    'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
       + `Stock is the count that opens the plan${openingCount ? ` (${openingCount})` : ''}; a SKU missing from that `
       + 'count is read as 0 on hand.',
     'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',
@@ -1688,7 +1708,11 @@ const Dashboard = () => {
                     countLabel={countLabel}
                     calendarNote={planCalendarNote}
                     inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
+                    emptyReason={pagePrincipal === 'delmonte' ? DEL_MONTE_NO_ORDERS_REASON : undefined}
                   />
+                  {demoPlan?.order_plan && (
+                    <DemoOrderPlanCard plan={demoPlan.order_plan} kind="delmonte" deadStock={demoPlan.dead_stock || null} />
+                  )}
                 </Slot>
               )}
               {data.idle_stock && (

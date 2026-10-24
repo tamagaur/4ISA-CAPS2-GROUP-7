@@ -38,7 +38,7 @@ from backend.api_errors import ApiError, api_error_handler
 from backend.deps import get_current_user, get_db
 from backend.main import app
 from backend.permissions import (
-    ALL_KEYS, CATALOG, MISSING_PERMISSION, NOT_READY, PRESETS, effective, normalize, preset, require_permission,
+    ADMIN_REQUIRED, ALL_KEYS, CATALOG, MISSING_PERMISSION, NOT_READY, PRESETS, effective, normalize, preset, require_permission,
 )
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -325,10 +325,10 @@ def _routes():
 # (2026-10-15, behind DM_DEMO_ENABLED, default off); 48 since POST /users/me/avatar (2026-10-17,
 # migration 0058); plus the 9 two-step sign-in routes (/auth/login/verify, /auth/login/setup[/confirm],
 # /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
-# page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /dashboard/stock-detail
-# (the lists behind the stock cards, 2026-10-19), counted when Main-BE's POST /users/me/avatar met it
-# in one merge. Change it when a route is added or removed.
-ROUTE_COUNT = 59
+# page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 67 since the reorder
+# approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23); 70 since the three
+# /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23). Change it when a route is added or removed.
+ROUTE_COUNT = 70
 
 
 def test_the_walk_finds_every_route():
@@ -364,7 +364,14 @@ ADMIN_ONLY_BEFORE = {
 }
 NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
               ("PUT", "/admin/users/{user_id}/permissions"),
-              ("POST", "/users/{user_id}/mfa/reset")}  # 2026-10-02, users.manage like the rest of /users
+              ("POST", "/users/{user_id}/mfa/reset"),  # 2026-10-02, users.manage like the rest of /users
+              # 2026-10-23, backend/routers/reorder_approval.py. Admin-only on top of the key, so a staff preset opens none.
+              ("POST", "/recommendations/{recommendation_key}/quantity-change"), ("GET", "/recommendations/changes"),
+              ("POST", "/recommendations/changes/{change_key}/approve"),
+              ("POST", "/recommendations/changes/{change_key}/reject"),
+              ("POST", "/recommendations/{recommendation_key}/reverse"),
+              ("GET", "/recommendations/direct-apply-grants/me"), ("GET", "/recommendations/direct-apply-grants"),
+              ("PUT", "/recommendations/direct-apply-grants/{user_id}")}
 
 
 def test_the_staff_preset_opens_exactly_what_staff_could_open_before():
@@ -583,8 +590,10 @@ def test_one_of_two_admins_can_be_demoted():
 
 @pytest.mark.real_permission_store
 def test_the_last_admin_cannot_be_demoted_or_deleted():
-    """users.manage can be given to someone who isn't an admin; they still
-    can't remove the only admin, by any of the three routes."""
+    """users.manage can be given to someone who isn't an admin. They can't
+    touch an admin account at all any more (403 admin_required, see the
+    escalation tests below), deleting included. An admin still can't delete
+    or demote the only admin (409 last_admin)."""
     store = FakeStore(team(), overrides={2: {"users.manage": True}})
     manager_of_users = auth(2, "staff")
     last_admin = {"detail": "There must be at least one admin.", "code": "last_admin"}
@@ -593,8 +602,111 @@ def test_the_last_admin_cannot_be_demoted_or_deleted():
         patch = c.patch("/users/1", json={"role": "staff"}, headers=manager_of_users)
         delete = c.delete("/users/1", headers=manager_of_users)
     for resp in (put, patch, delete):
-        assert resp.status_code == 409 and resp.json() == last_admin
+        assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
     assert store.users[1]["role"] == "admin" and store.commits == 0
+    with client_for(store) as c:   # an admin (a second one, so not self) still hits the last-admin rule
+        solo = FakeStore([user(1, "admin"), user(2, "staff")])
+    with client_for(solo) as c:
+        assert c.delete("/users/1", headers=auth(1, "admin")).status_code == 400   # can't delete yourself
+
+
+# ═══ ADMIN ESCALATION: users.manage ALONE CANNOT MAKE OR CHANGE AN ADMIN ═════
+# Creating an admin account, granting admin, and modifying an existing admin
+# account all take an admin. Each path is checked for a non-admin holding
+# users.manage (denied, nothing written) and for an admin (let through).
+
+ADMIN_REQUIRED_BODY = {"detail": ADMIN_REQUIRED, "code": "admin_required"}
+
+
+def _manager_store(extra_admin: bool = False) -> FakeStore:
+    users = team() + ([user(4, "admin")] if extra_admin else [])
+    return FakeStore(users, overrides={2: {"users.manage": True}})
+
+
+@pytest.mark.real_permission_store
+def test_users_manage_alone_cannot_create_an_admin_account():
+    store = _manager_store()
+    with client_for(store) as c:
+        resp = c.post("/auth/register", headers=auth(2, "staff"),
+                      json={"email": "new.admin@ssmcapstone.com", "full_name": "New Admin", "role": "admin"})
+    assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
+    assert store.commits == 0 and store.audit == [] and len(store.users) == 3
+    assert not any(q.startswith("INSERT INTO users") for q in store.queries)
+
+
+@pytest.mark.real_permission_store
+@pytest.mark.parametrize("call", ["patch", "put"])
+def test_users_manage_alone_cannot_grant_admin(call):
+    """Promote another staff account (3) to admin, by the Edit User form
+    (PATCH /users) or by the permissions page (PUT /admin/users/{id}/permissions)."""
+    store = _manager_store()
+    with client_for(store) as c:
+        if call == "patch":
+            resp = c.patch("/users/3", json={"role": "admin"}, headers=auth(2, "staff"))
+        else:
+            resp = c.put("/admin/users/3/permissions", json={"role": "admin", "overrides": {}},
+                         headers=auth(2, "staff"))
+    assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
+    assert store.users[3]["role"] == "staff" and store.commits == 0 and store.revoked == [] and store.audit == []
+
+
+@pytest.mark.real_permission_store
+@pytest.mark.parametrize("method,url,body", [
+    ("PATCH", "/users/4", {"full_name": "Renamed By Staff"}),
+    ("PATCH", "/users/4", {"email": "takeover@ssmcapstone.com"}),
+    ("PATCH", "/users/4", {"role": "staff"}),
+    ("PUT", "/admin/users/4/permissions", {"role": "staff", "overrides": {}}),
+    ("PUT", "/admin/users/4/permissions", {"role": "admin", "overrides": {"lp.view": False}}),
+    ("POST", "/users/4/send-link", None),       # a reset link is a way into the account
+    ("POST", "/users/4/mfa/reset", None),       # and so is turning off its two-step sign-in
+])
+def test_users_manage_alone_cannot_modify_an_existing_admin(method, url, body):
+    store = _manager_store(extra_admin=True)
+    with client_for(store) as c:
+        resp = c.request(method, url, json=body, headers=auth(2, "staff"))
+    assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
+    assert store.users[4]["role"] == "admin" and store.users[4]["email"] == "user4@ssmcapstone.com"
+    assert store.commits == 0 and store.revoked == [] and store.audit == []
+
+
+@pytest.mark.real_permission_store
+def test_users_manage_alone_cannot_delete_an_admin_account():
+    store = _manager_store(extra_admin=True)
+    with client_for(store) as c:
+        resp = c.delete("/users/4", headers=auth(2, "staff"))
+    assert resp.status_code == 403 and resp.json() == ADMIN_REQUIRED_BODY
+    assert 4 in store.users and store.commits == 0 and store.revoked == [] and store.audit == []
+
+
+@pytest.mark.real_permission_store
+def test_users_manage_can_still_delete_a_staff_account():
+    store = FakeStore(team(), overrides={2: {"users.manage": True}}, strict=False)
+    with client_for(store) as c:
+        resp = c.delete("/users/3", headers=auth(2, "staff"))
+    assert resp.status_code != 403   # the guard is about admin accounts only
+
+
+@pytest.mark.real_permission_store
+def test_an_admin_can_still_grant_admin_and_demote_another_admin():
+    store = FakeStore(team() + [user(4, "admin")])
+    with client_for(store) as c:
+        grant = c.put("/admin/users/3/permissions", json={"role": "admin", "overrides": {}}, headers=auth(1, "admin"))
+        demote = c.put("/admin/users/4/permissions", json={"role": "staff", "overrides": {}}, headers=auth(1, "admin"))
+    assert grant.status_code == 200 and demote.status_code == 200
+    assert store.users[3]["role"] == "admin" and store.users[4]["role"] == "staff"
+
+
+@pytest.mark.real_permission_store
+def test_users_manage_still_reaches_the_non_admin_routes():
+    """Nothing else moved: the same holder still lists accounts and still
+    edits a staff account's permissions (PUT) without hitting admin_required."""
+    store = _manager_store()
+    with client_for(store) as c:
+        listed = c.get("/admin/users/3/permissions", headers=auth(2, "staff"))
+        saved = c.put("/admin/users/3/permissions", json={"role": "staff", "overrides": {"lp.view": False}},
+                      headers=auth(2, "staff"))
+    assert listed.status_code == 200
+    assert saved.status_code == 200 and store.overrides[3] == {"lp.view": False}
 
 
 # ═══ POSTMAN-STYLE: TOKENS ═══════════════════════════════════════════════════

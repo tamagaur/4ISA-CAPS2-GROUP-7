@@ -147,6 +147,7 @@ from backend.stock_units import STOCK_AT_LATEST_SQL
 from backend.routers.sku import STOCK_COUNT_DATE_SQL, stock_count_dates
 from analytics.classification.abc import abc_rules, pareto_check
 from analytics.params import abc_method_sql
+from backend.abc_basis import abc_page_basis
 from backend.schemas.abc import ABCItem, ABCResponse, ABCRules, ParetoCheck, TierSummary
 from backend.response_cache import cached
 
@@ -302,6 +303,7 @@ def _summarize(items: list[ABCItem], periods: dict[str, str]) -> tuple[list[Tier
     one principal — two principals' shares are fractions of two different
     totals, and their running totals interleave."""
     summary: dict[str, TierSummary] = {}
+    one_principal = len({i.principal for i in items if i.tier_period == periods.get(i.principal)}) == 1
     # "Current" is each row's OWN principal's run: under 'all' the two
     # principals' latest runs differ (Unilever 2026-02, Del Monte 2025-12).
     def is_current(i: ABCItem) -> bool:
@@ -311,17 +313,18 @@ def _summarize(items: list[ABCItem], periods: dict[str, str]) -> tuple[list[Tier
     for item in items:
         entry = summary.setdefault(item.tier, TierSummary(tier=item.tier, sku_count=0, revenue_share_total=0.0))
         entry.sku_count += 1
-        if is_current(item):
+        if is_current(item) and one_principal:
             entry.revenue_share_total += item.revenue_share or 0.0
         else:
             entry.carried_forward_count += 1
-    one_principal = len({i.principal for i in current}) == 1
     shares = _tier_shares(current) if one_principal else None
     for entry in summary.values():
         ranked_here = entry.sku_count - entry.carried_forward_count
         entry.sku_share = round(ranked_here / len(current), 6) if current and one_principal else None
         if shares is not None:
             entry.revenue_share_total = shares.get(entry.tier, 0.0)
+        elif not one_principal:  # audit 2026-10-23 finding 5: a sum over two principals is ~200%, not a share
+            entry.revenue_share_total = None
     check = _pareto(current) if one_principal else None
     return sorted(summary.values(), key=lambda t: t.tier), check
 
@@ -495,7 +498,8 @@ def _get_abc_period(
             periods = {"unilever": month}
             abc_source, source_params = abc_relation(computed, with_stored=False)
     if period is None:
-        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()))
+        return ABCResponse(items=[], count=0, classification_period=None, tier_summary=[], basis=abc_page_basis(principal),
+                           rules=ABCRules(**abc_rules()))
     # The target stock each row's stock status is judged against: the LP's
     # own, or in preview with built outputs the five-year what-if's.
     lp_src, lp_params = lp_source(mode, "lp_recommendation")
@@ -556,6 +560,7 @@ def _get_abc_period(
         classification_period=period,
         tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,
+        basis=abc_page_basis(principal),
         rules=ABCRules(**abc_rules()),
         pareto_check=check,
         stock_count_dates=stock_count_dates(rows),
@@ -633,8 +638,8 @@ def _get_abc_last_known(
 
     if period is None:
         return ABCResponse(
-            items=[], count=0, classification_period=None, tier_summary=[], rules=ABCRules(**abc_rules()),
-            unclassified_count=unclassified_count,
+            items=[], count=0, classification_period=None, tier_summary=[], basis=abc_page_basis(principal),
+            rules=ABCRules(**abc_rules()), unclassified_count=unclassified_count,
         )
 
     ac_scope_sql, ac_scope_params = principal_clause(principal, "principal")
@@ -712,6 +717,7 @@ def _get_abc_last_known(
         classification_period=period,
         tier_a_periods=tier_a_periods(periods),
         tier_summary=tier_summary,
+        basis=abc_page_basis(principal),
         unclassified_count=unclassified_count,
         rules=ABCRules(**abc_rules()),
         pareto_check=check,

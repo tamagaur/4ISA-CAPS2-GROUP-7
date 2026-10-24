@@ -71,7 +71,8 @@ class TierSummary(BaseModel):
     # adding them would push the tiers past 100% combined. Read off the
     # stored running total at the tier's boundary, not summed from per-row
     # shares that were each rounded to 4 dp (routers/abc.py's _tier_shares).
-    revenue_share_total: float
+    # None when the response spans two principals: their shares are fractions of two different totals.
+    revenue_share_total: float | None
     # How many of sku_count are carried forward (view=last_known); always 0
     # in the default view.
     carried_forward_count: int = 0
@@ -118,6 +119,9 @@ class ABCResponse(BaseModel):
     # {principal display name: 'YYYY-MM'} — each principal's own run (they differ).
     tier_a_periods: dict[str, str] = {}
     tier_summary: list[TierSummary] = []
+    # Which Tier A basis the tiers were counted on, per principal (backend/abc_basis.py), so a count of 189 here
+    # and 175 on the Dashboard's tier cards each say what they are. None only on an empty response.
+    basis: dict | None = None
     rules: ABCRules | None = None
     # None when nothing was ranked, or when the rows span both principals —
     # their shares are fractions of two different revenues and can't be

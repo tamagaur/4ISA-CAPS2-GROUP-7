@@ -107,6 +107,11 @@ def _call(schema: str | None, case) -> dict | None:
                 if not planning_mart.usable(db, REAL):
                     raise SystemExit(f"{schema}.planning_mart does not exist")
                 out = rec._from_mart(db, status, cycle, from_date, to_date, principal)
+                if out is not None:  # the endpoint adds the page's period labels after _from_mart (recommendations.py)
+                    newest = max((c["cycle"] for c in out.stock_counts if c.get("cycle")), default=None)
+                    out = out.model_copy(update=rec.label_context(
+                        db, rec.opening_period(newest) if newest else None,
+                        rec.latest_abc_period(db, principal), principal))
             return None if out is None else jsonable_encoder(out)
         finally:
             db.rollback()

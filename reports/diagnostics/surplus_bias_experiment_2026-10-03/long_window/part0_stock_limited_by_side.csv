@@ -1,5 +1,0 @@
-group,product_months,over_forecast_pct,median_sales_vs_12m_avg,surplus_pesos_per_month,shortage_pesos_per_month
-both counts low,365,51.7808,0.9964,481899.4627,600150.3809
-closing count low only,375,50.9333,0.9847,344052.0452,412918.4176
-not stock-limited,1277,52.6233,0.9735,1537541.9881,1331014.4530
-opening count low only,402,49.0050,1.0036,560625.8625,453819.0116
