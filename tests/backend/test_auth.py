@@ -259,8 +259,10 @@ def test_decode_tampered_signature_raises(monkeypatch):
         auth_utils.decode_access_token(token)
 
 
-@pytest.mark.skip(reason="Fix later")
 def test_missing_secret_key_raises(monkeypatch):
+    # _secret() calls load_dotenv(override=False), which puts the key back from a developer's .env right after the
+    # delenv; the server's real environment is "no key and no .env", so the .env read is switched off here.
+    monkeypatch.setattr(auth_utils, "load_dotenv", lambda *a, **k: False)
     monkeypatch.delenv("JWT_SECRET_KEY", raising=False)
     with pytest.raises(RuntimeError):
         auth_utils.create_access_token(
