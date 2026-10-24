@@ -562,7 +562,7 @@ def _migration(name: str) -> str:
 def test_the_migrations_are_additive_and_the_numbers_are_free():
     names = sorted(p.name for p in (REPO / "analytics/db/migrations").glob("0*.sql"))
     numbers = [n[:4] for n in names]
-    assert numbers.count("0067") == 1 and numbers.count("0068") == 1 and "0069" not in numbers
+    assert numbers.count("0067") == 1 and numbers.count("0068") == 1 and numbers.count("0069") == 1 and "0070" not in numbers
     for name in ("0067_lp_decision_reversal.sql", "0068_lp_quantity_change_approval.sql"):
         sql = "\n".join(l for l in _migration(name).splitlines() if not l.strip().startswith("--"))
         assert not re.search(r"\b(DELETE|TRUNCATE|UPDATE|ALTER\s+TABLE\s+\w+\s+DROP)\b", sql, re.I)

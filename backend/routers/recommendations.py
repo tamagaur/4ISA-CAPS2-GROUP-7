@@ -181,7 +181,7 @@ from sqlalchemy import text
 from analytics.params import abc_method_sql
 from sqlalchemy.orm import Session
 
-from backend import audit, demo_data
+from backend import audit, demo_data, expected_receipts
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
@@ -355,7 +355,8 @@ _PRESENT_SQL = """
            ) AS decision_cols,
            (to_regclass('lp_quantity_change') IS NOT NULL
             AND to_regclass('lp_direct_apply_grant') IS NOT NULL) AS approval,
-           to_regclass('lp_decision_reversal') IS NOT NULL AS reversal
+           to_regclass('lp_decision_reversal') IS NOT NULL AS reversal,
+           to_regclass('expected_receipt') IS NOT NULL AS receipts
 """
 # Migration 0062's columns. Where it isn't applied the row query reads the same names as NULLs.
 _DECISION_COLS_SQL = ("lr.decided_q_i AS decided_q_i, lr.decision_reason AS decision_reason, "
@@ -380,7 +381,8 @@ def _present(db: Session) -> dict:
     row = db.execute(text(_PRESENT_SQL)).mappings().first()
     return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"]),
             "decision_cols": bool(row and row.get("decision_cols")),
-            "approval": bool(row and row.get("approval")), "reversal": bool(row and row.get("reversal"))}
+            "approval": bool(row and row.get("approval")), "reversal": bool(row and row.get("reversal")),
+            "receipts": bool(row and row.get("receipts"))}
 
 
 def _with_present(sql: str, present: dict) -> str:
@@ -987,6 +989,14 @@ def decide_row(db: Session, present: dict, *, key: int, status: str, reason: str
         raise refusal_for(why, open_change)
     # The planning mart's row for this decision, in the same transaction (migration 0046).
     planning_mart.decide(db, decision_params)
+    # The receipt ledger (migration 0069), in the same transaction: an accepted order is stock on the way, whose
+    # pieces are the decided quantity, so every path that decides a quantity (a plain accept, a direct apply, an
+    # approved change) keeps its receipt in step here. A dismissal cancels any live receipt.
+    if present.get("receipts"):
+        if status == "accepted":
+            expected_receipts.record(db, key)
+        else:
+            expected_receipts.void(db, key, "dismissed")
     return decided
 
 

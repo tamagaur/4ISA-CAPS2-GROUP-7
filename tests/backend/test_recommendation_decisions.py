@@ -276,6 +276,10 @@ ALLOWED = {
     "analytics/db/migrations/0068_lp_quantity_change_approval.sql",
     # 2026-10-24: the plan-total test feeds a decided quantity through both screens. Test code only.
     "tests/backend/test_dashboard.py",
+    # 2026-10-24: the receipt ledger copies the decided quantity into expected_receipt (the accepted order as stock on
+    # the way). Written by the decision endpoints only, read through stock_opening_v, never the capture columns.
+    "backend/expected_receipts.py", "tests/backend/test_expected_receipts.py",
+    "analytics/db/migrations/0069_rollover_ledger.sql",
 }
 
 

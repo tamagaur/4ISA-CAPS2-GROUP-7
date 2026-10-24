@@ -57,7 +57,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import audit, planning_mart, response_cache
+from backend import audit, expected_receipts, planning_mart, response_cache
 from backend.api_errors import ApiError
 from backend.case_pack import PACK_SQL, check_whole_cases
 from backend.deps import TokenPayload, get_db
@@ -475,11 +475,17 @@ def reverse_decision(
     db.execute(text(_RESET_SQL.format(decision_columns=_RESET_COLUMNS if present["decision_cols"] else "")),
                {"key": recommendation_key})
     planning_mart.undecide(db, recommendation_key)
-    quantity = f", quantity {_fmt(prior['decided_q_i'])}" if prior["decided_q_i"] is not None else ""
+    receipt_note = None
+    if present.get("receipts"):
+        # The accepted order is no longer on its way (0069). A receipt a count has already settled is kept: the
+        # stock is in that count whatever the decision now says.
+        if not expected_receipts.void(db, recommendation_key, "reversed"):
+            receipt_note = expected_receipts.settled_note(db, recommendation_key)
+    quantity =f", quantity {_fmt(prior['decided_q_i'])}" if prior["decided_q_i"] is not None else ""
     audit.record(
         db, "Reorder Decision Reversed",
         f"SKU {prior['sku']}: {prior['status']} (decided by {prior['decided_by']} at {_stamp(prior['decided_at'])}"
-        f"{quantity}) reversed to pending: {reason}",
+        f"{quantity}) reversed to pending: {reason}" + (f" [{receipt_note}]" if receipt_note else ""),
         actor=admin,
     )
     db.commit()
