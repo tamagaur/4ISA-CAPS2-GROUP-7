@@ -88,6 +88,10 @@ ROLES = ("admin", "staff")
 
 NOT_READY = ("Two-step sign-in isn't set up on this server yet "
              "(migration 0035_user_two_factor.sql isn't applied).")
+# Paused is the usual cause of "not available" (the code default since 2026-10-03), and it is not a missing
+# migration: say which it is, so nobody applies a migration that is already applied (QA 2026-10-24).
+PAUSED = ("Two-step sign-in is switched off on this server (it is paused unless the server's environment sets "
+          "MFA_ENABLED=true). Nothing needs to be migrated.")
 NOT_CONFIGURED = "Two-step sign-in isn't available on this server right now. Ask your administrator."
 
 

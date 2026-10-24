@@ -600,6 +600,7 @@ def test_the_user_list_shows_who_has_it(client, db):
 
 # ── Before migration 0035 ──────────────────────────────────────────────────
 def test_before_the_migration_nothing_changes(client, db, monkeypatch):
+    monkeypatch.setattr(mfa, "mfa_paused", lambda: False)     # not paused: the table really is missing
     monkeypatch.setattr(mfa, "mfa_ready", lambda db: False)
     monkeypatch.setenv("MFA_REQUIRED_ROLES", "admin,staff")
     assert password_step(client).json()["access_token"]
@@ -607,6 +608,16 @@ def test_before_the_migration_nothing_changes(client, db, monkeypatch):
     assert status["available"] is False and status["enabled"] is False
     res = client.post("/auth/mfa/setup", headers=bearer(db.users[1]))
     assert res.status_code == 503 and res.json()["code"] == "mfa_not_ready"
+    assert "0035" in res.json()["detail"]
+
+
+def test_a_paused_server_says_it_is_paused_not_that_a_migration_is_missing(client, db, monkeypatch):
+    """0035 is applied on live; the 503 there came from MFA_PAUSED / an unset MFA_ENABLED (QA 2026-10-24)."""
+    monkeypatch.setattr(mfa, "mfa_paused", lambda: True)
+    res = client.post("/auth/mfa/setup", headers=bearer(db.users[1]))
+    assert res.status_code == 503 and res.json()["code"] == "mfa_paused"
+    assert "MFA_ENABLED" in res.json()["detail"] and "0035" not in res.json()["detail"]
+    assert "migrat" in res.json()["detail"].lower() and "Nothing needs to be migrated" in res.json()["detail"]
 
 
 def test_paused_means_password_only_even_for_an_account_with_it_on(monkeypatch):

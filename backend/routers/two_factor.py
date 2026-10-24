@@ -37,6 +37,8 @@ REQUIRED = "Two-step sign-in is required for your role, so it can't be turned of
 
 
 def _require_available(db: Session) -> None:
+    if mfa.mfa_paused():
+        raise ApiError(503, mfa.PAUSED, code="mfa_paused")
     if not mfa.mfa_ready(db):
         raise ApiError(503, mfa.NOT_READY, code="mfa_not_ready")
     if not mfa.encryption_configured():
