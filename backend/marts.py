@@ -22,6 +22,7 @@ import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from analytics import actuals_version as _av
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF
 from backend import batch
 from backend.data_mode import PREVIEW, REAL
@@ -1221,6 +1222,18 @@ _DECOMP_AMOUNTS = ("actual_pieces", "over_pieces", "absorbed_pieces", "beyond_pi
 
 def _ratio(num: float, den: float) -> float | None:
     return num / den if den else None
+
+
+ACTUALS_VERSION_SQL = _av.ACTUALS_VERSION_SQL
+
+
+def actuals_version(db: Session) -> dict | None:
+    """The stamp every accuracy figure carries: which actuals (and which mart refresh) it was computed on
+    (analytics/actuals_version.py). None when the mart schema is not built (the key needs mart.refresh_log)."""
+    if not present(db):
+        return None
+    row = batch.first(db, ACTUALS_VERSION_SQL)
+    return _av.from_row(row) if row else None
 
 
 def decomposition_available(db: Session) -> bool:

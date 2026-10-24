@@ -197,6 +197,11 @@ def _flag_counterfactual(body: dict) -> dict:
     return {**body, "counterfactual": flagged, "counterfactual_warning": COUNTERFACTUAL_WARNING if flagged else None}
 
 
+def _stamped(db: Session, body: dict) -> dict:
+    """The body plus `actuals_version`: the actuals (and mart refresh) the figures were computed on."""
+    return {**body, "actuals_version": marts.actuals_version(db)}
+
+
 @router.get("/accuracy")
 def get_range_accuracy(
     period: str | None = PeriodQuery,
@@ -240,7 +245,7 @@ def get_range_accuracy(
                 "run_length", "price_per_piece", "miss_pesos", "abs_miss_pesos", "surplus_pesos",
                 "shortage_pesos", "opening_pieces", "closing_pieces", "possibly_stock_limited", "method", "bin")
         detail = [{k: (float(r[k]) if hasattr(r.get(k), "is_finite") else r.get(k)) for k in keep} for r in rows]
-    return _flag_counterfactual({**summary, "level": level, "rows": detail, "coverage": ["unilever"]})
+    return _stamped(db, _flag_counterfactual({**summary, "level": level, "rows": detail, "coverage": ["unilever"]}))
 
 
 @router.get("/error-decomposition")

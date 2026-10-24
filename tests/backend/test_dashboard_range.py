@@ -61,7 +61,12 @@ class FakeSession:
 
     def __init__(self, routes, snapshot=None):
         default = [snap("sales", "unilever", "2026-02", 1.0)]
-        self.routes = [("'sales' AS src", default if snapshot is None else snapshot)] + routes
+        # the stamp every accuracy figure carries (analytics/actuals_version.py): marts present, one version row
+        stamp = [{"latest_actual_month": "2026-02", "demand_rows": 10, "demand_pieces": 100.0, "fingerprint": "ab" * 16,
+                  "latest_load_event_key": 7, "mart_refresh_id": 3, "mart_refreshed_at": "2026-10-22T14:25:29+00:00"}]
+        self.routes = [("'sales' AS src", default if snapshot is None else snapshot),
+                       ("to_regclass('mart.refresh_log')", [{"present": False}]),
+                       ("AS fingerprint", stamp)] + routes
         self.calls: list[tuple[str, dict]] = []
         self.info: dict = {}
 
@@ -380,3 +385,19 @@ def test_accuracy_headline_figures_are_null_not_missing_when_nothing_is_scored()
     body = get(FakeSession([("FROM mart.accuracy_mart a", [])]), "/dashboard/accuracy?principal=unilever")
     assert body["company_total"]["value"] is None and body["typical_product_weighted"]["value"] is None
     assert body["company_total"]["label"] and body["typical_product_weighted"]["label"]
+
+
+def test_actuals_version_stamps_the_data_behind_a_figure(monkeypatch):
+    """A published accuracy figure carries the key of the actuals it used (2026-10-24)."""
+    from backend import marts as m
+    monkeypatch.setattr(m, "present", lambda db: True)
+    row = {"latest_actual_month": "2026-02", "demand_rows": 24906, "demand_pieces": 100888220.0,
+           "fingerprint": "0123456789abcdef0123456789abcdef", "latest_load_event_key": 382, "mart_refresh_id": 41,
+           "mart_refreshed_at": "2026-10-22T14:25:29+00:00"}
+    session = FakeSession([])
+    session.routes.insert(0, ("AS fingerprint", [row]))
+    stamp = m.actuals_version(session)
+    assert stamp["key"] == "actuals-2026-02-0123456789ab"
+    assert (stamp["demand_rows"], stamp["mart_refresh_id"]) == (24906, 41)
+    monkeypatch.setattr(m, "present", lambda db: False)
+    assert m.actuals_version(session) is None

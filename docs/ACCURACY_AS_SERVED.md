@@ -2,6 +2,8 @@
 
 Computed 2026-10-22 from code version `3cfee40` (uncommitted changes in:  M scripts/run_baseline_forecast.py) by `scripts/accuracy_as_served.py`. Quote the **as served** rows, and quote them together with this version.
 
+Actuals version `actuals-2026-02-b31bf58d9b5e` (Unilever per-SKU sales through 2026-02, 24,906 rows; stamp added 2026-10-24 to figures computed 2026-10-22 on the same sales: `scripts/snapshot_published_figures.py --verify` reproduces them). Pinned in `PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json`.
+
 Window 2023-10 to 2026-02, Unilever Tier A the month before each test month (basis `t12m_new`), one month ahead, the router as the live forecast runs it. Latest demand month: 2026-02.
 
 ## Headline (quote these)

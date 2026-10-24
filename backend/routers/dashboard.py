@@ -1212,6 +1212,8 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
                   _scoped_forecast_count_query(scope, mode, forecast_date)]
     if scope != "delmonte":
         wave2.append(marts.accuracy_summary_query(range_start, range_end))
+        if marts.present_known():
+            wave2.append((marts.ACTUALS_VERSION_SQL, {}))   # the accuracy card's stamp, in the same round trip
     if idle_period is not None:
         wave2 += [marts.idle_head_query(idle_period), marts.idle_items_query(idle_period, 10)]
     if marts.present(db):
@@ -2314,6 +2316,9 @@ def get_dashboard(
             range_start, range_end, REVIEW_OVER_RUN_MONTHS,
         )
     forecast_accuracy["coverage"] = [] if scope == "delmonte" else ["unilever"]
+    # Which actuals the figures were computed on (analytics/actuals_version.py): a published figure moves when a
+    # month loads or is corrected, so it names the data behind it.
+    forecast_accuracy["actuals_version"] = None if scope == "delmonte" else marts.actuals_version(db)
 
     # ---- idle_stock ---------------------------------------------------------
     # Unilever only: Del Monte has no product-level real sales to show a product

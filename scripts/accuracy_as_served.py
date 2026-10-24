@@ -42,6 +42,7 @@ import psycopg2
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from analytics import actuals_version  # noqa: E402
 import analytics.forecasting.global_model as gm  # noqa: E402
 from analytics.classification.fsn import no_sale_in_last_months  # noqa: E402
 from analytics.forecasting.calendar import company_totals  # noqa: E402
@@ -349,6 +350,11 @@ def render(res: dict, ver: dict, today: str) -> str:
         + (f" (uncommitted changes in: {', '.join(ver['dirty_code_paths'])})" if ver["dirty_code_paths"] else " (no uncommitted change in the forecasting code)")
         + f" by `scripts/accuracy_as_served.py`. Quote the **as served** rows, and quote them together with this version.",
         "",
+        (f"Actuals version `{ver['actuals']['key']}`: Unilever per-SKU sales through {ver['actuals']['latest_actual_month']}, "
+         f"{ver['actuals']['demand_rows']:,} rows (analytics/actuals_version.py). A figure here is tied to that data; "
+         "recompute after a month loads and it is a different figure.") if ver.get("actuals") else
+        "Actuals version: not recorded.",
+        "",
         f"Window {ym(WINDOW[0])} to {ym(WINDOW[-1])}, Unilever Tier A the month before each test month "
         f"(basis `{abc_method('unilever')}`), one month ahead, the router as the live forecast runs it. Latest demand month: {res['latest']}.",
         "",
@@ -557,6 +563,14 @@ def main() -> int:
         ids = write_runs(db_url, {"as_served": bt, "as_served_calendar": btc}, checks)
         print(f"[write-run] run ids {ids}")
     ver = code_version()
+    conn = psycopg2.connect(db_url)
+    try:
+        cur = conn.cursor()
+        cur.execute("SET TRANSACTION READ ONLY")
+        ver["actuals"] = actuals_version.read(cur)
+        conn.rollback()
+    finally:
+        conn.close()
     today = datetime.date.today().isoformat()
     doc = render(res, ver, today)
     print(doc)
