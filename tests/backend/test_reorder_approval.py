@@ -451,7 +451,7 @@ def test_the_state_filter_is_checked():
 def _prior(**over):
     row = {"recommendation_key": 1, "q_i": 384.80, "status": "accepted", "decided_at": PROPOSED_AT,
            "decided_by": "planner@ssmcapstone.com", "decided_q_i": 390.0, "decision_reason": "Truck is full",
-           "sku": "U-1", "planning_cycle_date": CYCLE}
+           "sku": "U-1", "planning_cycle_date": CYCLE, "lp_run_key": 6}
     return {**row, **over}
 
 
@@ -482,6 +482,23 @@ def test_a_reversal_is_audited_with_who_when_and_why():
     assert entry["action"] == "Reorder Decision Reversed" and entry["user_email"] == "admin@ssmcapstone.com"
     assert "dismissed" in entry["details"] and "planner@ssmcapstone.com" in entry["details"]
     assert "2026-10-23 09:00 UTC" in entry["details"] and "Dismissed by mistake" in entry["details"]
+
+
+def test_a_decided_row_with_no_lp_run_cannot_be_reversed_into_the_plan():
+    """Row 4 (SKU 20292811, accepted 2026-08-24, lp_run_key NULL) is outside the plan at 109 rows. Reversing it would
+    make it pending, and a pending row is always plan (backend/lp_cycle.PLAN_STATUS_SQL), so the plan would read 110
+    (QA 2026-10-24 finding 2). It is refused, and nothing is written."""
+    db = _DB(status="accepted", prior=_prior(recommendation_key=4, sku="20292811", lp_run_key=None, decided_q_i=None,
+                                              decided_by="planner@ssmcapstone.com"))
+    with pytest.raises(HTTPException) as err:
+        ra.reverse_decision(4, ReverseRequest(reason="qa"), db=db, admin=ADMIN)
+    assert err.value.status_code == 409 and "not part of the current plan" in err.value.detail
+    assert db.run("INSERT INTO lp_decision_reversal") == [] and db.run("SET status = 'pending'") == []
+    assert db.audit == [] and db.commits == 0 and db.rolled_back
+
+
+def test_the_reversal_lookup_reads_the_lp_run_key():
+    assert "lr.lp_run_key" in ra._REVERSAL_ROW_SQL
 
 
 def test_a_pending_row_has_nothing_to_reverse():

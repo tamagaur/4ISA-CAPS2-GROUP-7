@@ -158,7 +158,7 @@ _RESOLVE_SQL = """
 
 # The decision to reverse, locked, only when it is a decision and the row is in the current cycle.
 _REVERSAL_ROW_SQL = """
-    SELECT lr.recommendation_key, lr.q_i, lr.status, lr.decided_at, lr.decided_by{decision_columns},
+    SELECT lr.recommendation_key, lr.q_i, lr.status, lr.decided_at, lr.decided_by, lr.lp_run_key{decision_columns},
            COALESCE(pd.sku_code, pd.category_path) AS sku, lr.planning_cycle_date
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
@@ -464,6 +464,14 @@ def reverse_decision(
         raise HTTPException(status_code=409, detail=(
             f"This decision belongs to the {why['planning_cycle_date']} cycle, which a newer LP run "
             f"({why['current_cycle']}) has superseded, so it is history and is not reversed."))
+    if prior["lp_run_key"] is None:
+        # Same rule as the plan (backend/lp_cycle.PLAN_STATUS_SQL): a decided row with no LP run is outside the plan,
+        # but a PENDING row is always inside it, so resetting this one would put it into the plan (row 4: 109 -> 110
+        # rows, QA 2026-10-24 finding 2). It stays as decided history.
+        db.rollback()
+        raise HTTPException(status_code=409, detail=(
+            "This decision was made before LP runs were recorded, so the row is not part of the current plan and "
+            "can't be returned to pending. It stays as history."))
     reason = body.reason.strip()
     now = datetime.datetime.utcnow()
     db.execute(text(_LOG_REVERSAL_SQL), {
