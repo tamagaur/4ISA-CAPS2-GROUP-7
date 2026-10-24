@@ -87,6 +87,8 @@ class _DB:
         if "INSERT INTO audit_log" in sql:
             self.audit.append(params)
             return FakeResult([])
+        if "lp_direct_apply_grant" in sql and ("INSERT" in sql or "DELETE" in sql):   # a grant or revoke that changes a row
+            return FakeResult([{"user_id": params["uid"]}])
         if "FROM lp_direct_apply_grant WHERE user_id" in sql:
             return FakeResult([{"one": 1}] if params["uid"] in self.grants else [])
         if "SELECT lr.recommendation_key, lr.q_i, lr.status, lr.planning_cycle_date" in sql:
