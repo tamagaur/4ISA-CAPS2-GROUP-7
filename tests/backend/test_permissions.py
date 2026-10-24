@@ -328,7 +328,7 @@ def _routes():
 # page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 67 since the reorder
 # approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23); 70 since the three
 # /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23). Change it when a route is added or removed.
-ROUTE_COUNT = 70
+ROUTE_COUNT = 71  # +GET /inventory/receipt-signals (2026-10-24)
 
 
 def test_the_walk_finds_every_route():

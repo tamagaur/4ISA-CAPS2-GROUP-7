@@ -41,6 +41,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from analytics import receipt_settlement  # noqa: E402
+from analytics.params import abc_method  # noqa: E402
 
 PRINCIPAL = "unilever"          # Del Monte has no per-product plan to close
 
@@ -52,7 +53,7 @@ CHECKS = {
                      "SELECT EXISTS (SELECT 1 FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month = %(period)s)"),
     "abc_run": ("the ABC run for that month is stored",
                 "SELECT EXISTS (SELECT 1 FROM abc_classification WHERE principal = %(principal)s "
-                "AND classification_period = %(period)s)"),
+                "AND classification_period = %(period)s AND method = %(method)s)"),
     "forecast_next": ("the forecast for the next cycle is written",
                       "SELECT EXISTS (SELECT 1 FROM forecast_result WHERE forecast_date = %(next_cycle)s)"),
     "lp_next": ("the LP run for the next cycle is written",
@@ -123,7 +124,7 @@ STEPS = ("settle_receipts", "close_plan")
 
 def cycle_params(cycle: datetime.date, principal: str = PRINCIPAL) -> dict:
     nxt = datetime.date(cycle.year + (cycle.month == 12), cycle.month % 12 + 1, 1)
-    return {"principal": principal, "cycle": cycle, "next_cycle": nxt, "period": f"{cycle.year}-{cycle.month:02d}"}
+    return {"method": abc_method(principal), "principal": principal, "cycle": cycle, "next_cycle": nxt, "period": f"{cycle.year}-{cycle.month:02d}"}
 
 
 def parse_cycle(text_: str) -> datetime.date:

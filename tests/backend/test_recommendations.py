@@ -598,6 +598,7 @@ def test_rows_are_checked_against_the_cycles_opening_count(session):
         "cycle": "2026-03-01", "principal": "unilever", "period": "2026-02", "role": "opening", "available": True,
         "counted_on": "2026-03-02", "counted_on_note": None, "row_count": 812,
         "flag": data_notes.OPENING_COUNT_RULINGS[("unilever", "2026-02")][1], "reason": None,
+        "opening_basis": "count",
     }]
 
 
