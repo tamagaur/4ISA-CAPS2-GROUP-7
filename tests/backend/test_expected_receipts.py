@@ -38,6 +38,8 @@ class _LedgerDB(_DB):
             self.sql.append((str(stmt), p))
             assert self.sim_status == "accepted", "a receipt is written only for an accepted row, after the decision"
             pieces = self.sim_decided if self.sim_decided is not None else self.row["q_i"]
+            if not pieces > 0:                      # the statement's own `> 0` guard
+                return FakeResult([])
             live = self.ledger.get(p["key"])
             if live is None:
                 self.ledger[p["key"]] = {"pieces": pieces, "state": "expected", "revisions": 0}
@@ -109,6 +111,20 @@ def test_an_approved_change_records_the_proposed_quantity():
     _in_transaction(db)
 
 
+def test_accepting_a_row_that_plans_zero_pieces_records_no_receipt():
+    """36 of 109 rows in lp_run 6 plan 0: a 0-piece 'expected' receipt would count as open (QA 2026-10-24, finding 3)."""
+    db = _LedgerDB(q_i=0.0)
+    _patch(db, ADMIN, status="accepted")
+    assert db.sim_status == "accepted" and db.ledger == {}
+    assert db.commits == 1                    # the decision itself is still recorded
+
+
+def test_a_quantity_change_to_zero_that_is_approved_records_no_receipt():
+    db = _LedgerDB(q_i=384.80, change=_change_row(proposed_q_i=0.0))
+    ra.approve_change(7, None, db=db, admin=ADMIN)
+    assert db.sim_status == "accepted" and db.ledger == {}
+
+
 def test_a_held_change_writes_no_receipt_until_it_is_approved():
     db = _LedgerDB(q_i=384.80, change=_change_row())
     _propose(db, user=PLANNER, quantity=390.0)
@@ -172,6 +188,7 @@ def test_the_receipt_is_the_accepted_quantity_with_the_plans_own_lead_time():
     sql = " ".join(expected_receipts.UPSERT_SQL.split())
     assert "COALESCE(lr.decided_q_i, lr.q_i)" in sql                    # plan_q_i
     assert "lr.status = 'accepted'" in sql
+    assert "COALESCE(lr.decided_q_i, lr.q_i) > 0" in sql                # an order of 0 pieces has nothing to arrive
     assert "COALESCE(pd.lead_time_days, CAST(:placeholder_lead_days AS numeric))" in sql
     assert "CASE WHEN pd.lead_time_days IS NULL THEN 'placeholder' ELSE 'product' END" in sql
     assert "ON CONFLICT (recommendation_key) WHERE state <> 'cancelled' DO UPDATE" in sql

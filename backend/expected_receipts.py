@@ -4,7 +4,12 @@ Written in the decision's OWN transaction, by the one place that decides (recomm
 place that undoes a decision (reorder_approval.reverse_decision). The caller commits. Nothing here commits.
 
     accepted              one live receipt: pieces = plan_q_i (the accepted quantity, else q_i),
-                          expected_on = decision date + the product's lead time (days)
+                          expected_on = decision date + the product's lead time (days).
+                          NONE when that quantity is 0: nothing is on its way, and a 0-piece "expected" receipt
+                          counted as open and was flagged not_visible_in_count once a count settled it (QA
+                          2026-10-24 finding 3). 36 of the 109 rows of lp_run 6 plan 0. A decided row cannot be
+                          re-decided without a reversal, which cancels its receipt, so no live receipt is ever left
+                          at a quantity that has since become 0.
     accepted, again       the live receipt is UPDATED to the decided quantity (revision_count, revised_at); a receipt a
                           stock count has already settled is never changed
     dismissed / reversed  the live receipt is cancelled (state cancelled, voided_by_decision), never deleted
@@ -39,6 +44,7 @@ UPSERT_SQL = """
     CROSS JOIN LATERAL (SELECT COALESCE(pd.lead_time_days, CAST(:placeholder_lead_days AS numeric)) AS days,
                                CASE WHEN pd.lead_time_days IS NULL THEN 'placeholder' ELSE 'product' END AS source) lead
     WHERE lr.recommendation_key = :key AND lr.status = 'accepted'
+      AND COALESCE(lr.decided_q_i, lr.q_i) > 0
     ON CONFLICT (recommendation_key) WHERE state <> 'cancelled' DO UPDATE
     SET pieces = EXCLUDED.pieces,
         revision_count = expected_receipt.revision_count
@@ -63,7 +69,8 @@ SETTLED_SQL = """
 
 
 def record(db: Session, key: int) -> dict | None:
-    """Create or update the live receipt of the ACCEPTED recommendation `key` (inside the caller's transaction)."""
+    """Create or update the live receipt of the ACCEPTED recommendation `key` (inside the caller's transaction).
+    None when it has no quantity to receive (an order of 0 pieces)."""
     row = db.execute(text(UPSERT_SQL), {"key": key, "placeholder_lead_days": PLACEHOLDERS["lead_days"]}).mappings().first()
     return dict(row) if row else None
 
