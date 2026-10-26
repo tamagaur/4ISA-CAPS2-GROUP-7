@@ -1604,7 +1604,7 @@ const SKUForecast = () => {
             old prompt only when there is no plan to list. */}
         {!isDelMonte && !selectedSKU && !listLoading && !listError && sourceSKUs.length > 0 && planLoaded && plan.items.length > 0 && (
           <div className="forecast-plan-card">
-            <h3 className="forecast-card-title">Products in the current order plan</h3>
+            <h3 className="forecast-card-title ui-card-title">Products in the current order plan</h3>
             <SectionLede>
               {selectedCategory === PINNED_FILTER
                 ? `${planRows.length.toLocaleString()} pinned of ${plan.items.length.toLocaleString()} products`
@@ -1764,7 +1764,7 @@ const SKUForecast = () => {
               key={`chart-${selectedSKU?.code || 'none'}`}
               aria-busy={isForecastRefreshing}
             >
-              <h3 className="forecast-card-title">Next month</h3>
+              <h3 className="forecast-card-title ui-card-title">Next month</h3>
               {/* First load for this SKU: the headline stat row, the "how
                   this forecast was made" box and the 420px chart, in the
                   loaded card's own classes. */}
@@ -2059,7 +2059,7 @@ const SKUForecast = () => {
                 forecast and why the plan leaves it out. */}
             {showingThisSKU && !isForecastColdLoad && !forecastError && (
               <section className="forecast-order-card" aria-label="What to order">
-                <h3 className="forecast-card-title">What to order</h3>
+                <h3 className="forecast-card-title ui-card-title">What to order</h3>
                 {!planLoaded ? (
                   <LoadingStatus>Loading the order plan…</LoadingStatus>
                 ) : plan.failed ? (
@@ -2161,7 +2161,7 @@ const SKUForecast = () => {
             {/* The chart, in its own card under What to order (2026-10-20). */}
             {!isForecastColdLoad && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
               <div className="forecast-chart-container forecast-chart-card" key={`chartcard-${selectedSKU.code}`}>
-                <h3 className="forecast-card-title">Past sales and the forecast</h3>
+                <h3 className="forecast-card-title ui-card-title">Past sales and the forecast</h3>
                   {/* Chart, or its table twin. The legend sits ABOVE the
                       plot (under the stat rows), so the key is met before
                       the marks — same order as the dashboard's charts. */}
@@ -2458,7 +2458,7 @@ const SKUForecast = () => {
                 the backtest source and the pesos basis, the sales-pattern
                 measures and the top-seller rule with its adviser caveat. */}
             {showingThisSKU && !isForecastColdLoad && !forecastError && forecastResult && (
-              <details className="forecast-details">
+              <details className="forecast-details ui-details">
                 <summary>Show details: how this forecast was made</summary>
                 <div className="forecast-details-body">
                   {/* How this forecast was made — the stored number's

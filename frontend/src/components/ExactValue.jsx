@@ -6,9 +6,12 @@ import InfoTip from './InfoTip';
 import { formatApprox } from '../utils/formatNumber';
 import './ExactValue.css';
 
-const ExactValue = ({ value, unit = 'pcs', label = 'Exact figure', note = null, children = null }) => {
+// `exact` (2026-10-25): the exact figure's own text, for a unit that goes
+// before the number ("₱97,385,224"); `unit` is then not added.
+const ExactValue = ({ value, unit = 'pcs', label = 'Exact figure', note = null, exact: exactText = null, children = null }) => {
   if (value == null) return '—';
-  const exact = Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const exact = exactText ?? Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (exactText != null) unit = null;
   return (
     <InfoTip label={label} trigger={children ?? formatApprox(value)} triggerClassName="exact-value" className="exact-value-wrap">
       Exact: {exact}{unit ? ` ${unit}` : ''}.{note ? ` ${note}` : ''}

@@ -5,6 +5,7 @@
 // GapNote.jsx, so the words are written once, in the backend.
 export const GAP_LABEL = {
   no_sale: 'No sale this month',
+  returns_exceeded_sales: 'Returns matched or exceeded sales',
   blank_capture: 'Quantity not recorded',
   outside_product_lifespan: 'Not on sale then',
   not_collected: 'Not collected',

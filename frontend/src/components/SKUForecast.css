@@ -1019,12 +1019,6 @@
 
 /* ── SKU Forecast product view, 2026-10-19 ─────────────────────────────── */
 /* A card's own title (the chart card, What to order, the plan table). */
-.forecast-card-title {
-  margin: 0 0 0.25rem;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
 
 /* "· likely X–Y" beside the forecast number. */
 .forecast-stat-likely {
@@ -1208,23 +1202,6 @@
 }
 
 /* "Show details": closed by default, everything technical inside. */
-.forecast-details {
-  margin-top: 1.25rem;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 0.9rem 2rem;
-}
-
-.forecast-details > summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.forecast-details[open] > summary {
-  margin-bottom: 0.75rem;
-}
 
 .forecast-details-body {
   display: flex;

@@ -258,3 +258,232 @@
   text-transform: none;
   color: var(--color-text-muted);
 }
+
+/* ── 2026-10-25: plain table, sparkline, products, details ─────────────── */
+.ct-dash {
+  cursor: help;
+}
+
+.ct-small-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.ct-unclassified-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.ct-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-info, #2563eb);
+  cursor: pointer;
+}
+
+.ct-link-btn:hover {
+  text-decoration: underline;
+}
+
+.ct-products-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-info, #2563eb);
+  cursor: pointer;
+}
+
+.ct-products-btn:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+
+.ct-details-table {
+  margin-top: 1rem;
+}
+
+.ct-details-title {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+/* The Trend badge opens its trend pop-up (InfoTip, 2026-10-25). */
+.ct-trend-trigger .badge {
+  white-space: nowrap;
+  cursor: help;
+}
+
+.info-tip.ct-trend-tip {
+  margin-left: 0;
+}
+
+.ct-trend-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ct-trend-pop svg {
+  display: block;
+  overflow: visible;
+}
+
+.ct-trend-pop-mark {
+  font-size: 9px;
+  fill: #E2E8F0;
+}
+
+.ct-trend-pop-axis {
+  font-size: 9px;
+  fill: #CBD5E1;
+}
+
+.ct-trend-pop-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: #CBD5E1;
+}
+
+.ct-trend-pop-key {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid #7DD3C7;
+}
+
+.ct-trend-pop-key.is-trend {
+  margin-left: 0.5rem;
+  border-top: 2px dashed #FFFFFF;
+}
+
+.ct-trend-pop-text {
+  font-size: 0.85rem;
+}
+
+/* The two projected-change columns, centred (2026-10-25): figures keep their
+   even-width digits. */
+.ct-table .ct-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every header title on one line (2026-10-25): cells align to the top, so a
+   one-line title (Category, Trend, How sure…) sits level with the two-line
+   ones, whose date line drops beneath. Horizontal alignment is unchanged. */
+.ct-table thead th {
+  vertical-align: top;
+}
+
+/* 2026-10-25: hovers on the header months, "Sure / Not sure" and the small-
+   category tag read as text, with the dotted underline other hovers use. */
+.ct-th-trigger,
+.ct-sure-trigger {
+  text-decoration: underline dotted #98A2B3;
+  text-underline-offset: 0.2em;
+}
+
+.info-tip.ct-small-tip {
+  margin-left: 0;
+}
+
+.ct-small-tag {
+  cursor: help;
+}
+
+.ct-month-notes p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+/* The big chart (2026-10-25): the key sits above the plot, and the months
+   the trend line is fitted over are lightly shaded. */
+.ct-chart .ct-legend {
+  margin: 0 0 0.5rem;
+}
+
+.ct-swatch-fit {
+  width: 14px;
+  height: 10px;
+  border: none;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.18);
+  outline: 1px solid rgba(148, 163, 184, 0.45);
+  vertical-align: middle;
+}
+
+.ct-tooltip .ct-tooltip-sub {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+/* The chart's table view (2026-10-25): two sections in one box of limited
+   height; each section's header row stays in view while the box scrolls. */
+.ct-table-view {
+  max-height: 440px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.ct-table-view-title {
+  margin: 0;
+  padding: 0.55rem 0.75rem 0.35rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.ct-table-view-table {
+  width: 100%;
+}
+
+.ct-table-view-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface-sunken, #f3f5f8);
+  vertical-align: top;
+}
+
+.ct-table-view-table tbody tr.ct-row-fit {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.ct-fit-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
