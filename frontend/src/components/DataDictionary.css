@@ -614,3 +614,37 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* "Technical details" inside "How it's computed" (2026-10-26): closed by
+   default; formulas, model names and figures for reviewers. */
+.dict-tech {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.dict-tech > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.dict-tech[open] > summary {
+  margin-bottom: 0.35rem;
+}
+
+.dict-tech p {
+  font-size: 0.88rem;
+  color: var(--color-text-body);
+}
+
+/* The Technical details row spans both columns of the panel's grid, under
+   the "How it's computed" label and its text. */
+.dict-method-inner > .dict-tech {
+  grid-column: 1 / -1;
+}
+
+.dict-method-inner > .dict-tech p {
+  font-size: 13px;
+}

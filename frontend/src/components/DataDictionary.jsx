@@ -5,217 +5,308 @@
 // whose definition is always visible and whose methodology opens on demand
 // (a quick glossary for staff, the full method for reviewers).
 //
-// The entries below are the page's only content. The definitions and
-// methodologies are Maica's text, unchanged; `tags` and `caveat` are
-// display-only labels (a caveat repeats, in a few words, a limitation its
-// own methodology already states, so it stays visible while the methodology
-// is closed). Nothing on this page reads the principal, range or data mode:
+// The entries below are the page's only content: Maica's definitions and
+// methods, split on 2026-10-26 into a plain "How it's computed" and a closed
+// "Technical details" (her method text), with `caveat` as a short badge. Nothing on this page reads the principal, range or data mode:
 // it explains them, so the top bar's principal switch is not shown here.
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowLeft, BarChart3, BookOpen, Calculator, ChevronDown, ClipboardCheck, Database, Info, Lightbulb,
-  Search, SearchX, Star, TrendingUp, X,
+  AlertTriangle, ArrowLeft, BarChart3, BookOpen, Calculator, ChartLine, ChevronDown, ClipboardCheck, Database, Info,
+  Lightbulb, Search, SearchX, Star, TrendingUp, X,
 } from 'lucide-react';
+import { NOT_CONFIRMED } from '../labels';
 import './DataDictionary.css';
 
 // In alphabetical order (Audrey, 2026-10-18), for the pills and the sections.
+// Each section has its own one-line description (2026-10-26).
 const sections = [
-  { id: 'forecasts', label: 'Forecasts', icon: TrendingUp, blurb: 'The SKU Forecast page and the forecast cards.' },
-  { id: 'reorder-planning', label: 'Reorder Planning', icon: ClipboardCheck, blurb: 'The Reorder Recommendations page and the order plan.' },
-  { id: 'sales-stock', label: 'Sales & Stock', icon: Database, blurb: 'The sales, stock and purchases charts.' },
-  { id: 'summary', label: 'Summary', icon: BarChart3, blurb: 'The cards at the top of the dashboard.' },
-  { id: 'top-products', label: 'Top Products', icon: Star, blurb: 'How products are ranked into classes.' },
+  { id: 'category-trends', label: 'Category Trends', icon: ChartLine, blurb: 'Which way each product category is heading, and how sure the trend is.' },
+  { id: 'forecasts', label: 'Forecasts', icon: TrendingUp, blurb: 'How next month’s sales forecast is made, and how far to trust it.' },
+  { id: 'reorder-planning', label: 'Reorder Planning', icon: ClipboardCheck, blurb: 'How the order plan decides what to order and how urgently.' },
+  { id: 'sales-stock', label: 'Sales & Stock', icon: Database, blurb: 'What the sales, stock and purchases charts show, and how gaps are handled.' },
+  { id: 'summary', label: 'Summary', icon: BarChart3, blurb: 'What each card at the top of the Dashboard measures.' },
+  { id: 'top-products', label: 'Top Products', icon: Star, blurb: 'How products are ranked into top, middle and low sellers.' },
 ];
 
+// Each entry (2026-10-26): `definition` (always visible), `plain` ("How it's
+// computed": one or two sentences for SSM's purchasing staff, no formulas,
+// model names or acronyms) and `technical` (closed "Technical details": the
+// formulas, model names and figures, for reviewers). `caveat` is a short
+// badge. Page names are the sidebar's. The words follow src/labels.js.
+const TBC = 'To be confirmed';
 const entries = {
-  // Forecasts and Reorder Planning: added 2026-10-18. Each entry states what
-  // the code does, from the file named beside it; numbers that are
-  // placeholders say so (analytics/params.PLACEHOLDERS).
+  'category-trends': [
+    {
+      // analytics/forecasting/category_trend.py (Theil–Sen, Mann–Kendall).
+      term: 'Growing, Declining and No clear trend',
+      definition: 'Which way a category’s revenue has been moving over the last two years.',
+      plain: 'A straight trend line is drawn through the last 24 months of sales. Growing or Declining is shown only when the direction is unlikely to be chance; otherwise the category shows No clear trend.',
+      technical: 'A Theil–Sen line through the last 24 months of revenue with data, starting at the category’s first sale. The direction counts as real only when a Mann–Kendall test gives p < 0.05. The line is extended 12 months as the projection; its likely range uses the slope’s 95% confidence bounds. A trend projection, not a validated forecast.',
+    },
+    {
+      term: 'How sure is this trend?',
+      definition: 'Whether a category’s direction is unlikely to be chance.',
+      plain: 'Sure means the rise or fall has been steady enough to trust. Not sure means it could be normal ups and downs.',
+      technical: 'Sure when the Mann–Kendall test gives p < 0.05; Not sure otherwise. Each category’s p-value is in Show details on the Category Trends page.',
+    },
+    {
+      term: 'Projected change (% and ₱)',
+      definition: 'How much the trend line’s next 12 months differ from its last 12 months.',
+      plain: 'Shown only for Growing or Declining categories. The ₱ figure is the same comparison in pesos.',
+      technical: 'The trend line’s total over the next 12 months minus its total over the last 12 months on the same line; the % divides that by the last-12-month total, so the % and the ₱ always agree. The range in brackets uses the slope’s 95% confidence bounds.',
+    },
+    {
+      term: 'Small category',
+      definition: 'A category that earned under 1% of the principal’s revenue over the last 12 months.',
+      plain: 'A large % change on such a small base is a small amount of money, so the tag warns against over-reading it.',
+      technical: 'The category’s revenue over the last 12 months ÷ the revenue of all the principal’s categories over the same months, under 1%.',
+    },
+    {
+      term: 'Unclassified',
+      definition: 'Products listed under the category “Unclassified” in the product list.',
+      plain: 'They have no real category yet. Assign them one on the SKU Management page.',
+      technical: '“UNCLASSIFIED” is a value stored as the product’s category, not an empty field. Category Trends groups these products’ sales as one row.',
+    },
+    {
+      term: 'Why some categories have no projection',
+      definition: 'A category shows no projected change when it doesn’t have enough history, or when its trend line has reached zero.',
+      plain: 'A category needs 12 months with sales, counted from its first sale, before its trend is projected. A category whose trend line has fallen to ₱0 has nothing to compare against, so it shows its direction but no change.',
+      technical: 'At least 12 months with data from the first sale. No % (and no ₱) when the trend line’s total over the last 12 months is 0.',
+    },
+  ],
   forecasts: [
     {
       // analytics/forecasting/router.py (LIVE_MODEL, the history-length bins);
       // backend/routers/forecast.py (Unilever Tier A only).
       term: 'Forecast',
-      tags: ['Forecasting'],
-      caveat: 'Unilever Class A only',
-      definition: 'The number of pieces a top-selling product is expected to sell in the planning month.',
-      method: 'Made for Unilever’s Class A products only; Del Monte’s sales have no product column, so it has no product forecasts. The model depends on how many months of sales the product has: under 3 months, a provisional trailing average; 3 to 11 months, a 3-month moving average (MA3); 12 to 23 months, TSB, a method for products that do not sell every month; 24 months or more, the average of a machine-learning model (XGBoost) and MA3. MA3 is the benchmark every model is scored against and the fallback when another cannot be used. On SSM’s data the other models tie with MA3; they are used because they draw on the product’s full history, not because they proved more accurate.',
+      caveat: 'Unilever top sellers only',
+      definition: 'The number of pieces a top seller is expected to sell in the planning month.',
+      plain: 'Each top seller’s own sales history is used to estimate next month. Products with a longer history use a more detailed method, and every forecast is checked against simply repeating last month’s sales.',
+      technical: 'Made for Unilever’s top sellers (Class A) only; Del Monte’s sales have no product column, so it has no product forecasts. The model depends on how many months of sales the product has: under 3 months, a provisional trailing average; 3 to 11 months, a 3-month moving average (MA3); 12 to 23 months, TSB, a method for products that do not sell every month; 24 months or more, the average of a machine-learning model (XGBoost) and MA3. MA3 is the benchmark every model is scored against and the fallback when another cannot be used. On SSM’s data the other models tie with MA3; they are used because they draw on the product’s full history, not because they proved more accurate.',
     },
     {
       // scripts/run_baseline_forecast.py (_confidence_band, CONFIDENCE_Z =
       // analytics.params.FORECAST_INTERVAL_Z = 1.645).
-      term: 'Likely range',
-      tags: ['Forecasting'],
-      definition: 'The band around a forecast where actual sales are expected to land about 9 times in 10.',
-      method: 'The forecast plus or minus 1.645 times the product’s own forecast error (RMSE) on its most recent months held back for testing, for the model actually used. It is an approximate band from a short test window. When that error cannot be measured, no band is drawn rather than an invented one.',
+      term: 'Most likely between X and Y',
+      definition: 'The range where actual sales should land about 9 times in 10.',
+      plain: 'The range is set by how far this product’s forecasts have missed on recent months: a product whose forecasts missed more gets a wider range.',
+      technical: 'The forecast plus or minus 1.645 times the product’s own forecast error (RMSE) on its most recent months held back for testing, for the model actually used. It is an approximate band from a short test window. When that error cannot be measured, no band is drawn rather than an invented one.',
     },
     {
       // analytics/forecasting/diagnostic_metrics.py (mase, naive_scale);
       // analytics/params.MASE_GATE = 1.0; scripts/run_lp.py (candidate pool).
-      term: 'MASE (forecast error score)',
-      tags: ['Forecasting', 'Accuracy'],
-      definition: 'How large a forecast’s errors are compared with simply guessing that next month will equal this month.',
-      method: 'The average absolute error on the held-back months, divided by the average month-to-month change in the product’s real sales history. Below 1 means the forecast beats that simple guess. Only products scoring below 1 go into the order plan. It is computed on real months only, never on synthetic data.',
+      term: 'Suitable / Not yet suitable for ordering',
+      definition: 'Whether a product’s forecast is reliable enough for the order plan to use.',
+      plain: 'Suitable means the forecast has been closer to actual sales than simply repeating last month’s sales. Only suitable products are put in the order plan.',
+      technical: 'MASE (forecast error score): the average absolute error on the held-back months, divided by the average month-to-month change in the product’s real sales history. Below 1 means the forecast beats that simple guess (Suitable); 1 or more, Not yet suitable. Only products scoring below 1 go into the order plan. It is computed on real months only, never on sample data.',
+    },
+    {
+      // SKUForecast.jsx productAccuracy; RangeCards.jsx (per product, company).
+      term: 'Usually off by about X%',
+      definition: 'How far a product’s past forecasts were from actual sales, as a share of the forecast.',
+      plain: 'Past forecasts are compared with what actually sold, month by month. The misses are added up and shown as a share of the forecasts.',
+      technical: 'WAPE (weighted absolute percentage error). On the SKU Forecast page: the total of the monthly misses ÷ the total forecast over the months scored in the date range. On the Dashboard: per product (weighted by sales) and for the company total, which is lower because misses on different products partly cancel out. Uses the forecasts as they were made at the time.',
+    },
+    {
+      // SkuDemandPatternPanel.jsx CV_BAND_META; backend/routers/segment.py.
+      term: 'How steady are sales? (Steady, Up and down, Very unpredictable)',
+      definition: 'How much a product’s monthly sales swing around its average month.',
+      plain: 'Steady: a typical month stays within about half of the average. Up and down: between half and the full average. Very unpredictable: more than that.',
+      technical: 'The coefficient of variation (CV) of monthly pieces: under 0.5 is low volatility (Steady), 0.5 to under 1.0 medium (Up and down), 1.0 or more high (Very unpredictable).',
+    },
+    {
+      // analytics/forecasting/calendar.py; analytics/params
+      // CALENDAR_FACTOR_SIGNED_OFF = False.
+      term: 'Calendar adjustment',
+      caveat: TBC,
+      definition: 'An adjustment for the time of year, applied to the stored forecast.',
+      plain: 'Each forecast is raised or lowered by how that month has usually sold compared with the months before it in earlier years. Until it is confirmed, the SKU Forecast page shows the forecast without it; the order plan uses the adjusted figure.',
+      technical: 'The factor is how the calendar month sold against the 3 months before it in earlier years, for the company total in pieces, averaged over those years (geometric mean) and moved halfway toward no change. A month with no earlier year on record is left as it is. The forecast is multiplied by the factor after the model’s own checks. To be confirmed.',
     },
   ],
   'reorder-planning': [
     {
-      // backend/stock_status.py (CRITICAL / LOW / IN STOCK -> CRITICAL /
-      // URGENT / PLANNED).
-      term: 'Critical, Urgent and Planned',
-      tags: ['Reorder', 'Risk'],
+      // backend/stock_status.py; utils/urgency.js (the pills' hover text).
+      term: 'CRITICAL, URGENT, PLANNED and NO DATA',
       definition: 'How pressing each suggested order is.',
-      method: 'Critical: stock is below the product’s safety stock. Urgent: stock is at or above safety stock but below the target stock. Planned: stock is at or above the target stock. Stock is the count that opens the planning month, in pieces.',
+      plain: 'CRITICAL: below safety stock, order now. URGENT: below target stock, order soon. PLANNED: at or above target stock, can wait. NO DATA: no usable pack size for this product, so its stock can’t be read.',
+      technical: 'CRITICAL: stock is below the product’s safety stock. URGENT: stock is at or above safety stock but below the target stock. PLANNED: stock is at or above the target stock. NO DATA: the stock row has no pack size to turn cases into pieces. Stock is the count that opens the planning month, in pieces (cases × pack size + loose pieces).',
     },
     {
       // scripts/run_lp.py (_sigma_d_for_product, safety_stock_for);
       // analytics/params (SERVICE_Z 1.28, SERVICE_LEVEL_PCT 90,
       // PLACEHOLDERS review_days 5, lead_days 3).
       term: 'Safety stock',
-      tags: ['Reorder', 'Stock'],
-      caveat: 'Inputs are placeholders',
+      caveat: TBC,
       definition: 'Extra stock kept so a product does not run out if sales come in higher than forecast before the next delivery.',
-      method: '1.28 (for a 90% service level) times the product’s daily demand variability times the square root of the review period plus the lead time, in pieces. The review period (weekly orders, 5 business days) and lead time (3 business days) are placeholders until SSM confirms them. Unilever has no daily sales, so its daily variability is worked out from monthly sales (the monthly variation divided by the square root of the average business days in a month); that assumption awaits the adviser’s ruling.',
+      plain: 'The extra stock grows with how much a product’s sales swing, and with how long it takes to reorder and receive it.',
+      technical: `1.28 (for a 90% service level) times the product’s daily demand variability times the square root of the review period plus the lead time, in pieces. The review period (weekly orders, 5 business days) and lead time (3 business days) are ${NOT_CONFIRMED}. Unilever has no daily sales, so its daily variability is worked out from monthly sales (the monthly variation divided by the square root of the average business days in a month); that assumption is to be confirmed.`,
     },
     {
-      // analytics/optimization/lp.py (target_stock: T_i = w_i x (R + L) / 5
-      // + SS_i); scripts/run_lp.py (stored as rop_i).
+      // analytics/optimization/lp.py (target_stock: T_i = w_i x (R + L) / 5 + SS_i).
       term: 'Target stock',
-      tags: ['Reorder', 'Stock'],
       definition: 'The stock level an order tops a product back up to.',
-      method: 'The weekly forecast times (review days plus lead days) divided by 5, plus the safety stock: the sales expected before the next delivery arrives, plus the safety buffer. In pieces. It is stored in a database column named “rop”, but it is a target level, not a reorder point.',
+      plain: 'Enough stock to cover the sales expected before the next delivery arrives, plus the safety stock.',
+      technical: 'The weekly forecast times (review days plus lead days) divided by 5, plus the safety stock: the sales expected before the next delivery arrives, plus the safety buffer. In pieces.',
     },
     {
       // analytics/optimization/lp.py (need_i, the three layers, stage 1).
       term: 'Suggested order',
-      tags: ['Reorder', 'Planning'],
       definition: 'How many pieces to order for the month, which SSM splits into weekly purchase orders.',
-      method: 'The need is the month’s forecast plus the target stock, minus the stock on hand, and never below zero, so an overstocked product orders nothing. The plan orders the whole need when the supplier allocation allows. When it does not, it cuts in this order: the rest of the target first, then the safety stock, and this month’s expected sales last.',
+      plain: 'Enough to cover next month’s expected sales and bring stock back up to the target, minus what is already on hand. If the supplier’s allocation is short, the extra buffer is cut first and this month’s expected sales last.',
+      technical: 'The need is the month’s forecast plus the target stock, minus the stock on hand, and never below zero, so an overstocked product orders nothing. The plan orders the whole need when the supplier allocation allows. When it does not, it cuts in this order: the rest of the target first, then the safety stock, and this month’s expected sales last.',
     },
     {
       // analytics/params.LP_WEIGHTS; analytics/optimization/lp.py (stage 3).
       term: 'Order weights (45 / 35 / 20)',
-      tags: ['Reorder', 'Planning'],
-      caveat: 'Costs are placeholders',
+      caveat: 'Costs not yet confirmed by SSM',
       definition: 'How the plan decides which products give way when the supplier allocation cannot cover every order.',
-      method: 'Cost 45%, service level 35% (the share of the need met, weighted by each product’s sales value) and storage 20%. They only matter when the allocation is short; with enough allocation every need is ordered in full. The procurement and storage costs behind them are placeholders until SSM supplies its figures.',
+      plain: 'When the supplier can’t fill every order, the plan decides which products get less by weighing cost, how much of each product’s need is met, and storage.',
+      technical: `Cost 45%, need met 35% (the share of the need met, weighted by each product’s sales value) and storage 20%. They only matter when the allocation is short; with enough allocation every need is ordered in full. The procurement and storage costs behind them are ${NOT_CONFIRMED}.`,
     },
     {
       // analytics/allocation.monthly_allocation; scripts/run_lp.py
       // (allocation_ceilings); analytics/params ALLOCATION_DEFAULT_PCT.
       term: 'Monthly supplier allocation',
-      tags: ['Reorder', 'Planning'],
       definition: 'The most pieces the plan may order from a principal in a month.',
-      method: 'Last year’s sales in pieces times the allocation percentage (103% by default; 105% or 108%), divided by 12, for each principal. The percentage is the rule SSM described in the September 2026 client meeting; which level applies is still to be confirmed by SSM.',
+      plain: 'A monthly ceiling on how much the plan may order from each principal, based on last year’s sales.',
+      technical: 'Last year’s sales in pieces times the allocation percentage (103% by default; 105% or 108%), divided by 12, for each principal. The percentage is the rule SSM described in the September 2026 client meeting; which level applies is to be confirmed by SSM.',
     },
     {
-      // backend/stock_status.py (COUNT_OMITS_ZERO_STOCK, NO DATA);
-      // scripts/run_lp.py (stock on hand: no row counts as 0).
+      // backend/stock_status.py (COUNT_OMITS_ZERO_STOCK); scripts/run_lp.py
+      // (stock on hand: no row counts as 0).
       term: 'Not in the stock count',
-      tags: ['Stock', 'Data quality'],
       definition: 'A planned product that does not appear in the stock count that opens the plan.',
-      method: 'For Unilever it is read as 0 on hand, because its stock files never list a product with zero stock. For Del Monte a missing product says nothing about its stock, so it is shown as no data instead.',
+      plain: 'Unilever’s stock files never list a product with zero stock, so a missing product is treated as out of stock. For Del Monte, a missing product says nothing about its stock, so it is shown as no data.',
+      technical: 'The plan reads a missing Unilever product as 0 pieces on hand, so it can be CRITICAL; the Reorder Recommendations page marks it “not in count”.',
+    },
+    {
+      // SKUForecast.jsx (togglePinSKU, PINNED_FILTER, planRows): browser
+      // localStorage only.
+      term: 'Pinned',
+      definition: 'A product you marked on the SKU Forecast page so it is easy to find again.',
+      plain: 'On the SKU Forecast page, pinned products have their own “Pinned products” list at the top of the search suggestions, come first in the “Products in the current order plan” table, and “Show: Pinned” lists only them. Pin or unpin with the pin button on a product, in the search list or at the start of a table row.',
+      technical: 'Pins are saved in this web browser only, not on the server: they don’t follow you to another computer, and people who share a browser share the same pins. They stay after you sign out.',
     },
   ],
   summary: [
     {
       term: 'Annual sales and allocation',
-      tags: ['Sales', 'KPI'],
-      definition: 'Sales recorded for the displayed financial year, alongside the selected supplier-allocation level.',
-      method: 'The target is the prior year’s sales multiplied by the selected 103%, 105%, or 108% level. The pace compares average monthly sales so far with that level’s monthly amount. Year-to-date sales are compared with the same months in the prior year; if the months on record differ, the page marks the comparison as not like-for-like.',
+      definition: 'Sales for the financial year (FY, January to December) so far, next to the supplier-allocation level you picked.',
+      plain: 'The allocation is last year’s sales times the level you choose (103%, 105% or 108%). The card shows whether this year’s sales are on pace to reach it.',
+      technical: 'The target is the prior year’s sales multiplied by the selected 103%, 105%, or 108% level. The pace compares average monthly sales so far with that level’s monthly amount. Year-to-date sales are compared with the same months in the prior year; if the months on record differ, the page marks the comparison as not like-for-like. FY is the calendar year.',
     },
     {
       term: 'Inventory value',
-      tags: ['Inventory', 'Stock'],
       definition: 'The value of stock in the latest available count on or before the selected date range ends.',
-      method: 'Stock is valued using each product’s last purchase price. This is a stock snapshot, not the value of purchases or sales during the selected range.',
+      plain: 'The stock counted, valued at what SSM last paid for each product.',
+      technical: 'Stock is valued using each product’s last purchase price. This is a stock snapshot, not the value of purchases or sales during the selected range.',
     },
     {
-      term: 'Stock cover',
-      tags: ['Inventory', 'KPI'],
+      term: 'Weeks of stock (Stock cover card)',
       caveat: 'Provisional for Unilever',
       definition: 'An estimate of how long the counted stock would last at the recent sales rate.',
-      method: 'Stock value is compared with average weekly sales over the 12 months up to the stock count. The card compares the result with SSM’s three-week policy. Stock is valued at purchase price while sales are at selling price, so the bases differ. Unilever’s figure is marked provisional because its stock and sales sources do not yet have a confirmed location match.',
+      plain: 'The counted stock is compared with average weekly sales over the last 12 months, and with SSM’s 3-week rule.',
+      technical: 'Stock value is compared with average weekly sales over the 12 months up to the stock count. The card compares the result with SSM’s 3-week rule. Stock is valued at purchase price while sales are at selling price, so the bases differ. Unilever’s figure is marked provisional because its stock and sales sources do not yet have a confirmed location match.',
     },
     {
-      term: 'Below safety stock',
-      tags: ['Inventory', 'Risk'],
-      definition: 'Counted top sellers whose available stock is below their calculated safety-stock level.',
-      method: 'Only products with both a usable stock count and a safety-stock target can be compared. The displayed total is not a count of every product in the catalogue.',
+      term: 'Running low (Below safety stock card)',
+      definition: 'Top sellers whose counted stock is below their safety stock.',
+      plain: 'Only products with both a stock count and a safety stock can be checked, so the total is not a count of every product.',
+      technical: 'The plan’s safety stock against the latest stock count. A planned product missing from the count is left out here; the Reorder Recommendations page reads it as 0 on hand, so its CRITICAL count can be higher.',
     },
     {
       term: 'Pending reorders',
-      tags: ['Reorder', 'Planning'],
       definition: 'Reorder recommendations that are still waiting for a decision.',
-      method: 'This reflects the current reorder-plan cycle. It is separate from the number of products below safety stock.',
+      plain: 'Suggested orders in the current plan that nobody has accepted or dismissed yet.',
+      technical: 'This reflects the current reorder-plan cycle, split by status: CRITICAL, URGENT, PLANNED and NO DATA. It is separate from the number of products below safety stock.',
     },
   ],
   'sales-stock': [
     {
       term: 'Sales',
-      tags: ['Sales'],
       definition: 'Recorded sales value for the selected principal and period, shown in pesos.',
-      method: 'Sales use the source’s recorded selling values. The comparison and range totals only cover months with sales on record; gaps are not silently treated alike for both principals.',
+      plain: 'The selling value recorded in SSM’s sales files. Totals and comparisons count only the months that have sales on record.',
+      technical: 'Sales use the source’s recorded selling values. The comparison and range totals only cover months with sales on record; gaps are not silently treated alike for both principals (see Missing months).',
     },
     {
       term: 'Stock on hand',
-      tags: ['Inventory', 'Stock'],
       definition: 'The value of stock recorded in an inventory count for a month.',
-      method: 'The chart labels stock by its count date when available. Del Monte’s records may identify only the count month, not the exact day. Inventory value uses last purchase price; this is not a unit count.',
+      plain: 'The value of the stock counted for the month, at what SSM last paid for each product.',
+      technical: 'The chart labels stock by its count date when available. Del Monte’s records may identify only the count month, not the exact day. Inventory value uses last purchase price; this is not a unit count.',
     },
     {
       term: 'Purchases received',
-      tags: ['Stock', 'Purchases'],
       caveat: 'May be estimated',
       definition: 'The value of recorded stock receipts for a month, shown in the Purchases view.',
-      method: 'Where purchase records are unavailable, receipts may be estimated from stock counts and sales. The chart marks estimates explicitly; estimated receipts are not a dashboard KPI.',
+      plain: 'What arrived in the month. Where SSM’s purchase records are missing, it is estimated from the stock counts and sales, and the chart marks it as estimated.',
+      technical: 'The estimate is the closing count minus the opening count plus the month’s sales. Estimated receipts are never a summary card figure.',
     },
     {
       term: 'Returns',
-      tags: ['Sales'],
       definition: 'The value of returns present in the source records.',
-      method: 'The Returns view uses recorded returns only. It does not fill missing return data with an estimate.',
+      plain: 'Only returns recorded in SSM’s files are shown; missing returns are never estimated.',
+      technical: 'The Returns view uses recorded returns only. It does not fill missing return data with an estimate.',
     },
     {
       term: 'Annual sales',
-      tags: ['Sales'],
-      definition: 'Sales grouped by calendar year in the annual view.',
-      method: 'A partial year is labelled with the months on record. In demonstration mode, generated months are visibly identified and are not presented as real results.',
+      definition: 'Sales for each financial year (FY), January to December.',
+      plain: 'Each bar is one year’s total sales. A year with only some months on record is labelled with those months.',
+      technical: 'FY is the calendar year, the same as on the Annual sales and allocation card. With sample data on, sample-data months are hatched and are not presented as real results.',
     },
     {
       term: 'Missing months and estimates',
-      tags: ['Data quality'],
       caveat: 'Means different things per principal',
       definition: 'A missing data point can mean different things depending on the source.',
-      method: 'For Unilever, a month without a sales row is treated as zero sales. For Del Monte, a missing category month means the data was not collected, not that sales were zero. Any demonstration estimates are labelled; generated data does not feed real KPIs, forecasts, ABC classifications, or the real order plan.',
+      plain: 'For Unilever, a month without a sales row is zero sales. For Del Monte, a missing category month means the data was not collected, not that sales were zero.',
+      technical: 'Sample data, when it is on, is labelled; it does not feed the summary cards, forecasts, ABC classes, or the real order plan.',
+    },
+    {
+      // Charts.jsx WEEKS_UNDER / WEEKS_NEAR / WEEKS_OVER, WEEKS_NEAR_BAND 0.5.
+      term: 'Weeks of stock (month by month)',
+      definition: 'How many weeks each month’s stock would last at that month’s sales rate.',
+      plain: 'Each month’s stock value is divided by that month’s average weekly sales. Bars under SSM’s 3-week rule are blue, bars within half a week of it are grey, and bars over it are orange.',
+      technical: 'Weekly sales = the month’s sales ÷ 4.35 weeks (365.25 ÷ 12 ÷ 7). Blue under 2.5 weeks, grey 2.5 to 3.5 weeks, orange over 3.5 weeks; the dashed line is the 3-week rule. Stock is at last purchase price and sales at selling price. Only months with a real stock count are shown, and a count that needs checking is outlined.',
+    },
+    {
+      term: 'SSM’s 3-week rule',
+      definition: 'SSM’s practice of keeping about 3 weeks of sales in stock.',
+      plain: 'The Dashboard compares stock with this rule so overstock and shortfalls stand out. The order plan sets its own level for each product instead (see Target stock).',
+      technical: 'The rule is set at 3 weeks of sales. The Dashboard’s “plan vs SSM’s 3-week rule” card compares how much stock each would hold across the planned products.',
+    },
+    {
+      term: 'Sample data',
+      definition: 'Generated figures for months SSM has no data for, shown only when “Include sample data” is on.',
+      plain: 'They fill 2021–22 and other gaps so the charts can be shown in full. They are always marked, and never used for the summary cards, forecasts, top-seller ranking or the real order plan.',
+      technical: 'Kept apart from SSM’s own data. Four kinds, never mixed: copied from a real month, filled between two real months, carried across Del Monte’s January 2025 category change, and back-cast before 2023. No accuracy figures are worked out for sample data.',
     },
   ],
   'top-products': [
     {
       term: 'ABC classification',
-      tags: ['ABC', 'Ranking'],
-      definition: 'A ranking that groups products by their share of recorded revenue.',
-      method: 'Items are sorted from highest to lowest revenue and assigned using cumulative revenue share: Class A through 80%, Class B from 80% to 95%, and Class C from 95% onward. These are ranking cutoffs, not a promise that a fixed number of items falls into each class.',
+      definition: 'A ranking that groups products into top, middle and low sellers by their share of recorded revenue.',
+      plain: 'Products are sorted from highest to lowest revenue. Those making up the first 80% of revenue are top sellers, the next 15% middle sellers, and the rest low sellers.',
+      technical: 'Items are sorted from highest to lowest revenue and assigned using cumulative revenue share: Class A through 80%, Class B from 80% to 95%, and Class C from 95% onward. These are ranking cutoffs, not a promise that a fixed number of items falls into each class.',
     },
     {
-      term: 'Top products / Class A',
-      tags: ['ABC'],
-      caveat: 'Basis pending adviser confirmation',
-      definition: 'The high-revenue items in the most recent applicable ABC classification run.',
-      method: 'Unilever uses Class A over the latest 12 months, plus products first sold within 12 months that are Class A over the latest three months. This basis is pending Technical Adviser confirmation. Del Monte remains classified on the single-month basis; its ranked items are categories, not individual SKUs.',
+      term: 'Top, middle and low sellers (Class A / B / C)',
+      caveat: TBC,
+      definition: 'The three groups of the ABC ranking: top sellers (Class A), middle sellers (Class B) and low sellers (Class C).',
+      plain: 'Top sellers bring in most of the revenue, and only they get forecasts and order plans. Middle and low sellers are watched on the Dashboard only.',
+      technical: 'Unilever uses Class A over the latest 12 months, plus products first sold within 12 months that are Class A over the latest three months. This basis is to be confirmed. Del Monte remains classified on the single-month basis; its ranked items are categories, not individual products.',
     },
     {
       term: 'Classification period',
-      tags: ['ABC'],
       definition: 'The month for which the ABC classes were calculated.',
-      method: 'The classification period is shown separately from the dashboard’s selected sales range because a saved ABC run may be for a different period. Check the displayed period before comparing classes with the range.',
+      plain: 'The month the classes were worked out for, which can differ from the Dashboard’s date range.',
+      technical: 'The classification period is shown separately from the dashboard’s selected sales range because a saved ABC run may be for a different period. A product not ranked in the latest run keeps its last class, shown faded with that month.',
     },
     {
       term: 'Revenue share and cumulative share',
-      tags: ['ABC', 'Sales'],
       definition: 'Revenue share is one item’s portion of total ranked revenue; cumulative share is the running total down the revenue ranking.',
-      method: 'These shares determine ABC class. They describe historical revenue contribution and are not a forecast, stock-risk score, or order quantity.',
+      plain: 'These shares set the classes. They describe past revenue, not a forecast, a stock risk or an order quantity.',
+      technical: 'Share = the item’s revenue ÷ total ranked revenue; cumulative share is the running sum from the top of the ranking. A month where returns exceeded sales counts as 0.',
     },
   ],
 };
@@ -241,20 +332,16 @@ function Highlight({ text, query }) {
   return <>{parts}</>;
 }
 
-// One glossary row: the term, its tags and any caveat; the definition; the
-// methodology behind a toggle.
-function GlossaryEntry({ entryKey, entry, query, open, onToggle }) {
+// One glossary row: the term and any caveat; the definition; "How it's
+// computed" behind a toggle, and inside it the closed "Technical details"
+// (2026-10-26). A search that matches the technical text opens both.
+function GlossaryEntry({ entryKey, entry, query, open, techHit, onToggle }) {
   const panelId = `method-${entryKey.replace(/[^a-z0-9]+/gi, '-')}`;
   return (
     <article className={`dict-entry${open ? ' is-open' : ''}`}>
       <div className="dict-entry-main">
         <div className="dict-entry-term">
           <h4><Highlight text={entry.term} query={query} /></h4>
-          <div className="dict-tags">
-            {entry.tags.map((t) => (
-              <span key={t} className="dict-tag"><Highlight text={t} query={query} /></span>
-            ))}
-          </div>
           {entry.caveat && (
             <span className="dict-caveat">
               <AlertTriangle size={12} aria-hidden="true" />
@@ -271,17 +358,21 @@ function GlossaryEntry({ entryKey, entry, query, open, onToggle }) {
           onClick={onToggle}
         >
           <Calculator size={15} aria-hidden="true" />
-          <span>{open ? 'Hide methodology' : 'View methodology'}</span>
+          <span>{open ? 'Hide how it’s computed' : 'How it’s computed'}</span>
           <ChevronDown size={16} className="dict-chevron" aria-hidden="true" />
         </button>
       </div>
-      <div className="dict-method" id={panelId} role="region" aria-label={`Methodology: ${entry.term}`} hidden={!open}>
+      <div className="dict-method" id={panelId} role="region" aria-label={`How it’s computed: ${entry.term}`} hidden={!open}>
         <div className="dict-method-inner">
           <span className="dict-method-label">
             <Calculator size={14} aria-hidden="true" />
-            Methodology
+            How it&apos;s computed
           </span>
-          <p><Highlight text={entry.method} query={query} /></p>
+          <p><Highlight text={entry.plain} query={query} /></p>
+          <details className="dict-tech" key={techHit ? 'hit' : 'closed'} open={techHit || undefined}>
+            <summary>Technical details</summary>
+            <p><Highlight text={entry.technical} query={query} /></p>
+          </details>
         </div>
       </div>
     </article>
@@ -324,25 +415,17 @@ const DataDictionary = () => {
     setQuery(text);
   };
 
-  // A shorter placeholder where the long one would be cut off.
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 600px)').matches);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 600px)');
-    const onChange = (e) => setNarrow(e.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-
   // Every entry with what the search matched in it.
   const matches = useMemo(() => {
     const out = {};
     sections.forEach(({ id }) => {
       out[id] = entries[id]
         .map((entry) => {
-          if (!q) return { entry, methodHit: false };
-          const inHead = [entry.term, entry.definition, ...entry.tags].some((t) => norm(t).includes(q));
-          const methodHit = norm(entry.method).includes(q);
-          return inHead || methodHit ? { entry, methodHit } : null;
+          if (!q) return { entry, methodHit: false, techHit: false };
+          const inHead = [entry.term, entry.definition, entry.caveat].some((t) => norm(t).includes(q));
+          const techHit = norm(entry.technical).includes(q);
+          const methodHit = techHit || norm(entry.plain).includes(q);
+          return inHead || methodHit ? { entry, methodHit, techHit } : null;
         })
         .filter(Boolean);
     });
@@ -390,7 +473,7 @@ const DataDictionary = () => {
         <div className="dict-notice is-info">
           <Info size={18} aria-hidden="true" />
           <div>
-            <strong>Figures depend on the selected principal, date range, and data mode.</strong>
+            <strong>Figures depend on the selected principal, date range, and whether sample data is on.</strong>
             <p>
               Where data is unavailable or a basis is still provisional, the dashboard labels the limitation
               rather than treating it as a measured value.
@@ -418,7 +501,7 @@ const DataDictionary = () => {
             value={query}
             onChange={(e) => search(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); search(''); } }}
-            placeholder={narrow ? 'Search terms or metrics…' : 'Search terms or metrics (e.g., sales, inventory, ABC, returns...)'}
+            placeholder="Search a term (e.g. safety stock, ABC)"
             aria-label="Search the reference guide"
           />
           {query && (
@@ -455,7 +538,7 @@ const DataDictionary = () => {
         </span>
         {shownCount > 0 && (
           <span className="dict-status-actions">
-            <button type="button" onClick={() => setAll(true)}>Open all methodologies</button>
+            <button type="button" onClick={() => setAll(true)}>Open all</button>
             <button type="button" onClick={() => setAll(false)}>Close all</button>
           </span>
         )}
@@ -484,14 +567,14 @@ const DataDictionary = () => {
                 <span className="dict-section-icon" aria-hidden="true"><Icon size={18} /></span>
                 <div>
                   <h3 id={`${id}-title`}>{label}</h3>
-                  <p>{blurb} Definitions and how the dashboard figures are formed.</p>
+                  <p>{blurb}</p>
                 </div>
                 <span className="dict-section-count">
                   {matches[id].length} {matches[id].length === 1 ? 'term' : 'terms'}
                 </span>
               </header>
               <div className="dict-entries">
-                {matches[id].map(({ entry, methodHit }) => {
+                {matches[id].map(({ entry, methodHit, techHit }) => {
                   const key = keyOf(id, entry.term);
                   return (
                     <GlossaryEntry
@@ -500,6 +583,7 @@ const DataDictionary = () => {
                       entry={entry}
                       query={q}
                       open={isOpen(key, methodHit)}
+                      techHit={Boolean(q) && techHit}
                       onToggle={() => toggle(key, methodHit)}
                     />
                   );

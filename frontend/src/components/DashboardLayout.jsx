@@ -497,7 +497,11 @@ const DashboardLayout = () => {
         <Topbar
           toggleSidebar={toggleSidebar}
           isSidebarOpen={isSidebarOpen}
-          rightSlot={<DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
+          // Not on the Reference Guide (2026-10-26): it explains the figures
+          // and loads none, so "Updated / Refresh" means nothing there.
+          rightSlot={location.pathname === '/data-dictionary'
+            ? null
+            : <DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
           startMonth={startMonth}
           startYear={startYear}
           endMonth={endMonth}
