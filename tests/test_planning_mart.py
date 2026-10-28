@@ -209,13 +209,36 @@ def _head(**overrides) -> dict:
             "superseded": 5, "planning_stale": False, "in_step": True, "basis_current": True, **overrides}
 
 
+class _StubDb:
+    """A session that answers every statement with no rows and counts them. The mart path now runs one extra statement
+    per cycle (rec._attach_avg_pieces: the mart stores sales in pesos only, so cover's pieces side is read live)."""
+
+    def __init__(self):
+        self.statements = []
+
+    def execute(self, statement, params=None):
+        self.statements.append(str(statement))
+        return self
+
+    def mappings(self):
+        return self
+
+    def __iter__(self):
+        return iter(())
+
+    def all(self):
+        return []
+
+
 def test_mart_rows_become_the_same_items_the_joined_rows_do(monkeypatch):
     rows = [_mart_row(), _mart_row(recommendation_key=2, sku_id="S2", in_stock_count=False, current_stock=None,
                                    current_stock_cases=None, stock_value_pesos=None, needs_review=None,
                                    review_reasons=None)]
     monkeypatch.setattr(planning_mart, "read",
                         lambda *a: {"head": _head(), "rows": rows, "counts": [_count()], "run": None})
-    out = rec._from_mart(object(), "pending", "current", None, None, "unilever")
+    db = _StubDb()
+    out = rec._from_mart(db, "pending", "current", None, None, "unilever")
+    assert sum("avg_monthly_pieces" in q for q in db.statements) == 1, "one pieces statement per cycle, not removed"
     assert [i.model_dump() for i in out.items] == [rec._to_item(r, rec._MART_PRESENT).model_dump() for r in rows]
     first, second = out.items
     assert (first.urgency, first.current_stock, first.needs_review) == ("URGENT", 240.0, True)
@@ -234,7 +257,7 @@ def test_a_principal_with_no_opening_count_says_so(monkeypatch):
     no_count = _count(first_date=None, last_date=None, row_count=None)
     monkeypatch.setattr(planning_mart, "read",
                         lambda *a: {"head": _head(), "rows": [row], "counts": [no_count], "run": None})
-    out = rec._from_mart(object(), None, "current", None, None, None)
+    out = rec._from_mart(_StubDb(), None, "current", None, None, None)
     assert out.items[0].urgency == "NO DATA" and "no opening stock count" in out.items[0].stock_blocked_reason
     assert out.stock_counts[0]["available"] is False and "no opening stock count" in out.stock_counts[0]["reason"]
 
@@ -252,7 +275,9 @@ def test_all_cycles_list_each_cycles_own_count_newest_first_and_withhold_nothing
     counts = [_count(), _count(planning_cycle_date=datetime.date(2026, 2, 1), opening_period="2026-01")]
     monkeypatch.setattr(planning_mart, "read",
                         lambda *a: {"head": _head(), "rows": [_mart_row(), older], "counts": counts, "run": None})
-    out = rec._from_mart(object(), None, "all", None, None, None)
+    db = _StubDb()
+    out = rec._from_mart(db, None, "all", None, None, None)
+    assert sum("avg_monthly_pieces" in q for q in db.statements) == 2, "one pieces statement per cycle listed"
     assert [c["period"] for c in out.stock_counts] == ["2026-02", "2026-01"]
     assert out.superseded_count == 0 and out.count == 2
 
@@ -272,7 +297,7 @@ def test_a_served_mart_response_names_the_abc_run_its_tiers_are_from(monkeypatch
     monkeypatch.setattr(rec, "latest_abc_periods",
                         lambda db, principal, at=None: anchors.append(at) or {"unilever": "2026-02"})
     out = rec.get_recommendations(status="pending", cycle="current", from_date=None, to_date=None,
-                                  principal="unilever", mode=REAL, db=object(), current_user=None)
+                                  principal="unilever", mode=REAL, db=_StubDb(), current_user=None)
     assert out.tier_a_periods == {"Unilever": "2026-02"} and anchors == ["2026-03"]
     assert out.stock_period == "2026-02" and out.count == 1
 
