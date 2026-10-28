@@ -1,3 +1,35 @@
+## Standing rules
+
+Read STATE.md first. Update it before finishing.
+
+REPO. Canonical repo 4ISA-Capstone-Group-7/SSM_DSD, remote newrepo, my branch
+Main-BE. No new branches. Never touch origin or group7. Never push unless the
+prompt says so. No force, no history rewrite. Stage files by name.
+
+DATABASE. Writes to public only through numbered migrations plus the runner.
+Read-only access via transaction-scoped READ ONLY; never a session-level SET on
+the :6543 pooler. Back up before anything destructive.
+
+SCOPE FENCE. Only what the prompt names is in scope. Never touch the forecast,
+the LP objective, migrations or frontend files unless told to. Log a side
+finding in one line; do not investigate it.
+
+NUMERIC GATE. Plan invariant: 109 rows, 435,988 pieces, nothing decided. If a
+change moves either, STOP and report. Pinned manuscript figures are verified,
+never recomputed into new values.
+
+BLOCKED, DON'T INVENT. A figure must trace to a query, a file or a commit.
+Otherwise name it unresolved and say what would settle it. Skipped is not
+passed; a test that did not run is not coverage.
+
+ANTI-LOOP. One verification pass, at the end. Separate what passed, what is
+still tuning, and what is blocked on someone else. No second round of checks.
+
+REPORT. End with these, each under five lines, "none" when there is none:
+  ## Figures that moved
+  ## Decisions needed
+  ## Contradictions found
+
 # SSM Decision Support Dashboard (DSD) — Capstone Group 7
 
 **Read `STATE.md` first, and update it in the same commit as anything that changes it** (the plan, Main-BE's commit, the next migration number, the pinned figures, what is blocked). It holds current state only; this file holds the rules. Its `plan:` line is checked against the live database by `scripts/check.sh`.
