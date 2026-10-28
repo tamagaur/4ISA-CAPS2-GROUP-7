@@ -1014,11 +1014,11 @@ def test_every_page_works_for_each_preset_with_any_one_box_unticked(role, monkey
 @pytest.mark.parametrize("only", sorted(ALL_KEYS))
 def test_each_page_works_on_its_own_permission_alone(only, monkeypatch):
     """The strongest form of any-of: a staff account with every box
-    unticked but one still gets that one page (and button) whole."""
+    unticked but one still gets that one page (and button) whole, plus what that key implies (lp.decide: lp.view)."""
     overrides = {key: key == only for key in ALL_KEYS}
     monkeypatch.setattr(permissions, "load_overrides", lambda db, user_id: overrides)
     with client_for(FakeStore([], strict=False), raise_errors=False) as c:
-        assert _smoke(c, {only}, auth(9, "staff")) == []
+        assert _smoke(c, permissions.with_implied({only}), auth(9, "staff")) == []   # lp.decide brings lp.view
 
 
 @pytest.mark.real_permission_store
@@ -1038,3 +1038,15 @@ def test_the_product_list_needs_one_of_the_pages_that_read_it():
         with client_for(FakeStore(team(), overrides={2: overrides}), raise_errors=False) as c:
             resp = c.get("/sku", headers=auth(2, "staff"))
         assert resp.status_code != 403, keep
+
+
+def test_lp_decide_implies_lp_view():
+    """A user who can accept or dismiss a recommendation sees the figures behind it (2026-10-28): lp.decide brings lp.view,
+    even when lp.view was removed from the account, in the rule (effective) and in a set already built for the request."""
+    assert "lp.view" in permissions.effective("staff", {"lp.decide": True, "lp.view": False})
+    assert "lp.view" not in permissions.effective("staff", {"lp.view": False})
+    user = auth_utils.TokenPayload(user_id=2, email="s@x", role="staff", full_name="S", permissions=frozenset({"dashboard.view", "lp.decide"}))
+    assert "lp.view" in permissions.permissions_for(None, user)
+    assert permissions.can_see_lp(None, user) is True
+    assert "lp.view" not in permissions.permissions_for(None, auth_utils.TokenPayload(
+        user_id=3, email="t@x", role="staff", full_name="T", permissions=frozenset({"dashboard.view"})))

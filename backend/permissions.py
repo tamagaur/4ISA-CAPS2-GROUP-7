@@ -181,8 +181,17 @@ def preset(role: str) -> set[str]:
     return set(PRESETS.get(role, ()))
 
 
+# A key that carries others with it (2026-10-28): whoever can accept or dismiss a recommendation must be able to see
+# the figures behind it, so lp.decide brings lp.view even where lp.view itself was removed for that account.
+IMPLIES = {"lp.decide": ("lp.view",)}
+
+
+def with_implied(keys: set[str]) -> set[str]:
+    return keys | {implied for key in keys for implied in IMPLIES.get(key, ())}
+
+
 def effective(role: str, overrides: dict[str, bool]) -> set[str]:
-    """role preset + grants - removals; an admin has everything."""
+    """role preset + grants - removals, then what the grants imply; an admin has everything."""
     keys = preset(role)
     if role == "admin":
         return keys
@@ -193,7 +202,7 @@ def effective(role: str, overrides: dict[str, bool]) -> set[str]:
             keys.add(key)
         else:
             keys.discard(key)
-    return keys
+    return with_implied(keys)
 
 
 def normalize(role: str, overrides: dict[str, bool]) -> dict[str, bool]:
@@ -233,7 +242,7 @@ def permissions_for(db: Session, user: TokenPayload) -> set[str]:
         return set(ALL_KEYS)
     # Read with the session check on this request (backend/deps.py), when it could.
     if getattr(user, "permissions", None) is not None:
-        return set(user.permissions)
+        return with_implied(set(user.permissions))
     return effective(user.role, load_overrides(db, user.user_id))
 
 
