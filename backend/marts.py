@@ -576,17 +576,16 @@ RANGE_REVENUE_SQL = """
 
 def _unranked_side(row: dict | None, prefix: str, principal: str, principal_collected: bool) -> tuple[float | None, str]:
     """(revenue, why it has no class) for a product pareto() did not rank in a range.
-    months == 0 can mean two different things: Unilever genuinely sold nothing (0.0 is
-    correct), or — Del Monte's 2024-03..2025-02 taxonomy-break gap — nothing was collected
-    for the WHOLE principal that range, so 0.0 would be fabricated (the product's real
-    revenue, wherever it is ranked, would then read as 100% growth/decline). `not_collected`
-    only fires when `principal_collected` says the principal has no real month at all in
-    this range; a Del Monte category simply missing from an otherwise-reported range is
-    still a real, counted zero."""
+    months == 0 means a different thing per principal. Unilever: it genuinely sold nothing, so 0.0 is
+    correct. Del Monte: a missing month is a collection failure, never a zero (CLAUDE.md, "Why data is
+    missing"), so revenue is None either way: `not_collected` when the principal has no real month at all
+    in the range (the 2024-03..2025-02 taxonomy-break gap), `category_absent` when the range was reported
+    but this category was not in it (the Jan-2025 renaming: 5 new categories "entering" from ₱0 and old
+    paths "leaving" to ₱0 was audit finding BE-2, 2026-10-20; fixed 2026-10-28)."""
     months = int(row[f"{prefix}months"] or 0) if row else 0
     if months == 0:
-        if principal == "delmonte" and not principal_collected:
-            return None, "not_collected"
+        if principal == "delmonte":
+            return None, "category_absent" if principal_collected else "not_collected"
         return 0.0, "no sales in the range"
     if row[f"{prefix}has_blank"]:
         return None, "a month with a blank sales amount, so it is not ranked"

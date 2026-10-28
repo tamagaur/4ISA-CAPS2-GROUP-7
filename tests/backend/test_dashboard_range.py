@@ -352,6 +352,15 @@ def test_class_changes_say_why_a_side_has_no_class():
     assert params["keys"] == [1, 8, 9]
 
 
+def test_a_del_monte_category_missing_from_a_reported_range_is_not_a_zero():
+    """BE-2 (audit 2026-10-20, fixed 2026-10-28): the Jan-2025 renaming made categories absent from one side; they were
+    counted as 0.0 so new categories 'entered' from P0. Del Monte's missing month is a collection failure, never a zero."""
+    from backend.marts import _unranked_side
+    assert _unranked_side(None, "", "delmonte", True) == (None, "category_absent")
+    assert _unranked_side({"compare_months": 0}, "compare_", "delmonte", False) == (None, "not_collected")
+    assert _unranked_side(None, "", "unilever", True) == (0.0, "no sales in the range"), "Unilever: no row is a real zero"
+
+
 def test_class_changes_refuse_a_compare_start_without_its_end():
     app.dependency_overrides[get_db] = lambda: FakeSession([])
     app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
