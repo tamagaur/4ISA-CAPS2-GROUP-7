@@ -249,15 +249,21 @@ def test_endpoint_is_blocked_for_del_monte_and_says_when_the_mart_is_missing():
     assert body["available"] is False and "0063" in body["blocked_reason"]
 
 
-def test_endpoint_uses_the_same_permission_as_the_accuracy_card():
+def test_error_decomposition_routes_need_lp_view_and_dashboard_view_unlike_the_accuracy_card():
+    """The accuracy card is dashboard.view alone. The four error-decomposition routes read the stored LP safety stock
+    (ss_i), so each carries TWO permission dependencies, dashboard.view AND lp.view, and require_permission passes any
+    one of the keys it is given, so two single-key dependencies are what makes it AND. Removing either one fails here."""
     from backend.routers import dashboard_range as dr
-    perms = {}
-    for route in dr.router.routes:
-        if route.path in ("/dashboard/accuracy", "/dashboard/error-decomposition"):
-            perms[route.path] = [d.call.__qualname__ for d in route.dependant.dependencies if "permission" in d.call.__qualname__.lower()]
-    assert perms["/dashboard/accuracy"] == perms["/dashboard/error-decomposition"] != []
-    src = Path(dr.__file__).read_text(encoding="utf-8")
-    assert src.count('require_permission("dashboard.view")') >= 2
+
+    def keys(route):
+        return sorted(k for d in route.dependant.dependencies if hasattr(d.call, "permission_keys") for k in d.call.permission_keys)
+
+    by_path = {route.path: keys(route) for route in dr.router.routes if hasattr(route, "dependant")}
+    assert by_path["/dashboard/accuracy"] == ["dashboard.view"]
+    decomposition = {p: k for p, k in by_path.items() if p.startswith("/dashboard/error-decomposition")}
+    assert len(decomposition) == 4
+    for path, got in decomposition.items():
+        assert got == ["dashboard.view", "lp.view"], f"{path} carries {got}"
 
 
 # ---- live, read only ---------------------------------------------------------------
