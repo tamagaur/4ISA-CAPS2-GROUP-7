@@ -1,3 +1,5 @@
 # SQL files are LF on every checkout: the migration ledger (schema_migrations.checksum) hashes file bytes,
 # so a CRLF working copy (core.autocrlf=true on Windows) made the runner refuse 0023/0031 on 2026-09-30.
 *.sql text eol=lf
+# Shell scripts are LF on every checkout: bash refuses a CRLF script (scripts/check.sh, the Stop hook runs it).
+*.sh text eol=lf
