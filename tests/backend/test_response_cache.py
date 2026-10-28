@@ -192,3 +192,24 @@ def test_get_requests_read_through_the_autocommit_pool(monkeypatch):
     assert session_for(None).info["read_request"] is False
     assert deps._get_engine().pool._pre_ping is False
     assert deps._get_read_engine().pool._pre_ping is False
+
+
+def test_every_dashboard_range_card_is_cached_and_keyed_by_endpoint_and_permissions():
+    """D4 (2026-10-28): GET /dashboard/<card> took 0.4 to 10 s a request. Each route in dashboard_range is behind
+    @cached, whose key is endpoint + every query/path parameter + the effective permission set (tests above), so a
+    response built for a user with lp.view is never served to one without it."""
+    from backend.routers import dashboard_range
+    routes = [r for r in dashboard_range.router.routes if hasattr(r, "endpoint")]
+    assert len(routes) == 11
+    uncached = [r.path for r in routes if not hasattr(r.endpoint, "cache_endpoint")]
+    assert not uncached, f"range cards served without the cache: {uncached}"
+    assert len({r.endpoint.cache_endpoint for r in routes}) == len(routes), "two cards share one cache endpoint name"
+
+
+def test_the_data_version_the_cache_clears_on_moves_with_an_etl_load_and_an_lp_run():
+    """The version is the marts' refresh status as JSON (backend/deps.DATA_VERSION_COLUMN); mart.refresh_status carries
+    latest_load (etl_load_event) and latest_lp_run (lp_run), so a new load or LP run changes it and clears every entry."""
+    assert "row_to_json(r)::text FROM mart.refresh_status r" in deps.DATA_VERSION_COLUMN
+    view = open("analytics/db/migrations/0061_planning_stale_review_flags.sql", encoding="utf-8").read()
+    assert "SELECT MAX(finished_at) FROM etl_load_event" in view and "SELECT MAX(created_at) FROM lp_run" in view
+    assert "src.latest_load" in view and "src.latest_lp_run" in view

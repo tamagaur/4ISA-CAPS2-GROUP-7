@@ -93,5 +93,6 @@ def cached(endpoint: str):
                     while len(_entries) > MAX_ENTRIES:
                         _entries.popitem(last=False)
             return result
+        wrapper.cache_endpoint = endpoint
         return wrapper
     return decorate

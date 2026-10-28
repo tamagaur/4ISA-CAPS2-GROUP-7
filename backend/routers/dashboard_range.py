@@ -38,6 +38,7 @@ from backend.periods import PERIOD_PATTERN
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
+from backend.response_cache import cached
 from backend.routers.dashboard import _last_12_periods, _month_range, _resolve_sales_anchor
 from backend.series_gaps import gap_note
 
@@ -66,6 +67,7 @@ def _principals(scope: str) -> list[str]:
 
 
 @router.get("/pareto")
+@cached("GET /dashboard/pareto")
 def get_range_pareto(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -113,6 +115,7 @@ def get_range_pareto(
 
 
 @router.get("/yoy")
+@cached("GET /dashboard/yoy")
 def get_range_yoy(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -149,6 +152,7 @@ def get_range_yoy(
 
 
 @router.get("/class-changes")
+@cached("GET /dashboard/class-changes")
 def get_class_changes(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -207,6 +211,7 @@ def _stamped(db: Session, body: dict) -> dict:
 
 
 @router.get("/accuracy")
+@cached("GET /dashboard/accuracy")
 def get_range_accuracy(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -253,6 +258,7 @@ def get_range_accuracy(
 
 
 @router.get("/error-decomposition")
+@cached("GET /dashboard/error-decomposition")
 def get_error_decomposition(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -304,6 +310,7 @@ def _decomposition_range(db: Session, period: str | None, start_period: str | No
 
 
 @router.get("/error-decomposition/product/{sku_code}")
+@cached("GET /dashboard/error-decomposition/product/{sku_code}")
 def get_error_decomposition_product(
     sku_code: str,
     period: str | None = PeriodQuery,
@@ -328,6 +335,7 @@ def get_error_decomposition_product(
 
 
 @router.get("/error-decomposition/aggregate")
+@cached("GET /dashboard/error-decomposition/aggregate")
 def get_error_decomposition_aggregate(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -349,6 +357,7 @@ def get_error_decomposition_aggregate(
 
 
 @router.get("/error-decomposition/concentration")
+@cached("GET /dashboard/error-decomposition/concentration")
 def get_error_decomposition_concentration(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -372,6 +381,7 @@ def get_error_decomposition_concentration(
 
 
 @router.get("/idle-stock")
+@cached("GET /dashboard/idle-stock")
 def get_idle_stock(
     period: str | None = PeriodQuery,
     principal: str | None = PrincipalQuery,
@@ -391,6 +401,7 @@ def get_idle_stock(
 
 
 @router.get("/product-sales")
+@cached("GET /dashboard/product-sales")
 def get_product_sales(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
@@ -408,6 +419,7 @@ def get_product_sales(
 
 
 @router.get("/forecast-runs")
+@cached("GET /dashboard/forecast-runs")
 def get_forecast_runs(
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("dashboard.view")),
