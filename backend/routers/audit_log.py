@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
+from backend.sessions import SESSION_IDLE_MINUTES
 from backend.schemas.audit_log import (
     AuditLogEntry,
     AuditLogListResponse,
@@ -37,19 +38,32 @@ router = APIRouter(prefix="/audit-log", tags=["audit-log"])
 # signed in shows 0 — and still keeps the history of an account since
 # deleted. Name and role come from users when the account still exists,
 # else from its most recent sign-in. Longest session first.
+# A session's length is capped at its last activity + SESSION_IDLE_MINUTES (D1, 2026-10-28), computed here at read
+# time: closing the stale rows would be a write to public. Why it is needed: the 57 audit_log_backfill rows have no
+# last_seen_at, and REVOKE_USER_SESSIONS_SQL stamps ended_at = now() on every open row, so a login from 2026-08-23
+# revoked on 2026-10-15 read as 1,277 hours. A row with no recorded activity is untimed (its end is unknown), not
+# given an invented length.
 USER_SUMMARY_SQL = """
-    WITH s AS (
+    WITH timed AS (
+        SELECT user_email, user_name, role, started_at,
+               CASE WHEN last_seen_at IS NULL THEN NULL
+                    ELSE LEAST(COALESCE(ended_at, last_seen_at),
+                               last_seen_at + make_interval(mins => :cap_minutes))
+               END AS end_at
+        FROM user_session
+    ),
+    s AS (
         SELECT user_email,
                COUNT(*) AS login_count,
-               COUNT(COALESCE(ended_at, last_seen_at)) AS timed_session_count,
-               MAX(EXTRACT(EPOCH FROM COALESCE(ended_at, last_seen_at) - started_at)) AS longest_session_seconds,
-               (ARRAY_AGG(started_at ORDER BY COALESCE(ended_at, last_seen_at) - started_at DESC NULLS LAST))[1]
+               COUNT(end_at) AS timed_session_count,
+               MAX(EXTRACT(EPOCH FROM end_at - started_at)) AS longest_session_seconds,
+               (ARRAY_AGG(started_at ORDER BY end_at - started_at DESC NULLS LAST))[1]
                    AS longest_session_started_at,
                MAX(started_at) AS last_login_at,
                MIN(started_at) AS first_login_at,
                (ARRAY_AGG(user_name ORDER BY started_at DESC))[1] AS user_name,
                (ARRAY_AGG(role ORDER BY started_at DESC))[1] AS role
-        FROM user_session
+        FROM timed
         GROUP BY user_email
     )
     SELECT COALESCE(u.email, s.user_email) AS user_email,
@@ -75,7 +89,7 @@ def get_audit_user_summary(
     current_user: TokenPayload = Depends(require_permission("audit_log.view")),
 ) -> AuditUserSummaryResponse:
     try:
-        rows = db.execute(text(USER_SUMMARY_SQL)).mappings().all()
+        rows = db.execute(text(USER_SUMMARY_SQL), {"cap_minutes": SESSION_IDLE_MINUTES}).mappings().all()
     except SQLAlchemyError as exc:
         db.rollback()
         raise HTTPException(

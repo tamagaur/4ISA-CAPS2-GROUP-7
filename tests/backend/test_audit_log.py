@@ -231,3 +231,12 @@ def test_summary_query_reads_each_users_first_sign_in():
     _get(session, {"Authorization": f"Bearer {admin_token()}"})
     sql = next(s for s, _ in session.calls if "FROM user_session" in s)
     assert "MIN(started_at) AS first_login_at" in sql and "s.first_login_at" in sql
+
+
+def test_session_length_sql_caps_at_last_activity_plus_the_idle_limit():
+    """D1 (2026-10-28): a revoked or backfilled row read as 1,277 hours. The summary caps a session at its last
+    activity + SESSION_IDLE_MINUTES and leaves a row with no recorded activity untimed."""
+    from backend.routers.audit_log import USER_SUMMARY_SQL
+    assert "last_seen_at + make_interval(mins => :cap_minutes)" in USER_SUMMARY_SQL
+    assert "WHEN last_seen_at IS NULL THEN NULL" in USER_SUMMARY_SQL
+    assert "COALESCE(ended_at, last_seen_at) - started_at" not in USER_SUMMARY_SQL, "the uncapped length is back"
