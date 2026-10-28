@@ -6,6 +6,7 @@ plan: rows=109 pieces=435988 cycle=2026-03-01 lp_run=6
 
 Main-BE: 894b27d on newrepo (checked 2026-10-28). kelvin/freeze-package is ahead, none pushed (894b27d..HEAD = 41 commits on 2026-10-28).
   Latest 4: D3 per-SKU cover in pieces, D2/BE-2 Del Monte class changes, D1 audit-log session cap, D4 range-card cache.
+  Then (2026-10-28): lp.view gate on error-decomposition + /inventory/current + the /dashboard demonstration plan; lp.decide implies lp.view (permissions.IMPLIES).
 Next free migration: 0070 (0069 rollover ledger is applied to public; 0068 before it).
 
 Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, frozen rows in
