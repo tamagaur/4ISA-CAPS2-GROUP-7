@@ -1,5 +1,7 @@
 # SSM Decision Support Dashboard (DSD) — Capstone Group 7
 
+**Read `STATE.md` first, and update it in the same commit as anything that changes it** (the plan, Main-BE's commit, the next migration number, the pinned figures, what is blocked). It holds current state only; this file holds the rules. Its `plan:` line is checked against the live database by `scripts/check.sh`.
+
 ## Project
 3ISA/4ISA Group 7, IS-BA Track, UST CICS. SSM Decision Support Dashboard for San San Marketing (SSM), FMCG distributor, Urdaneta, Pangasinan. Two principals only: Unilever Philippines, Del Monte Philippines. Magnolia is OUT OF SCOPE — ignore Magnolia refs in old files. Never call it "DSS" — it's DSD.
 
