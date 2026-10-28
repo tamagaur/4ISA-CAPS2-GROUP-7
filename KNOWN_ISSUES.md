@@ -15,6 +15,7 @@ minus what is already fixed. Status is `open` or `won't-fix (reason)`; nothing h
 | A12 | Low | "109 pending" counts 36 rows that plan a zero order; only 73 are orders and no field says so. | open (re-checked: no orders-only count in the payload) |
 | A13 | Low | Legacy accepted row 4 (no `lp_run_key`) is in the cycle table (110 rows) but outside the plan (109); `cycle=all` shows it. | open (re-checked 110 vs 109). Reversal can no longer put it back into the plan (7bc7e19) |
 | Q15 | Low | Dismiss accepts a 1-character reason; only blank and over-500 are refused. Needs a ruling on a minimum. | open (a decision) |
+| C1 | Low | `/recommendations` on the mart path runs three statements per cycle instead of two: `mart.planning_mart` stores sales in pesos only, and weeks of cover is now computed in pieces (D3, 2026-10-28), so `recommendations._attach_avg_pieces` reads `quantity_sold` live. The proper fix is a migration adding average monthly pieces to the mart. | open (low severity; needs a migration, out of scope so far) |
 
 ## Closed since the reports (kept so the numbering stays traceable)
 
