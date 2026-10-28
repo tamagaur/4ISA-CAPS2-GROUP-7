@@ -144,6 +144,10 @@ DEC-01 through DEC-10+ live in ARCHITECTURE.md. Check there before assuming beha
 15. **Report findings in tables, not narrative.** One row per item, with counts. Prose only for the decision that needs making.
 16. **Drop the scratch schema after a verified public apply.** Once counts match and the write lands in `public`, the scratch copy is done — `DROP SCHEMA <name> CASCADE` it rather than leaving it to accumulate storage (2026-09-18: five stale scratch schemas hit 548MB before cleanup).
 
+## Checks
+- `scripts/check.sh --fast` (about 30 s: lint, the pinned-figure verification, the five cross-endpoint invariants in `tests/invariants/`) is what runs constantly; `--full` adds the whole pytest suite and the frontend build. It is read-only against the live database. **Skipped is not passed:** a check that cannot run fails the script and names the missing variable.
+- The Stop hook that runs `check.sh --fast` when a session ends its turn is **local and not pushed** (`.claude/hooks/stop-check.sh` + `.claude/settings.local.json`, both git-ignored). The shared thing is `scripts/check.sh`; run it by hand if you do not have the hook. The hook blocks the first failing stop and lets the second through with a warning, so a failure it cannot fix does not trap a session.
+
 ## Working style
 - Plain language; spell out jargon and acronyms. Compact responses, no long prose recaps.
 - Ask only if something fails or a decision isn't covered; otherwise follow the pre-approved thresholds in the prompt.
