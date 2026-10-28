@@ -177,3 +177,21 @@ def test_inventory_movement_keeps_units_and_pesos_apart_and_never_turns_unknown_
     assert by_ref["S1"]["amount_pesos"] == 9000.0
     assert all(r["sku"] is None and r["product"] is None and "qty" not in r for r in body)
     assert all("ORDER BY invoice_date DESC" in sql for sql in session.calls), "LIMIT 50 takes the newest, not arbitrary rows"
+
+
+def test_inventory_current_needs_lp_view_because_its_status_is_judged_against_the_lp():
+    """status comes from lp_recommendation.ss_i / rop_i, so dashboard.view alone is refused (2026-10-28)."""
+    who = {}
+    app.dependency_overrides[get_db] = lambda: _InventorySession([])
+    app.dependency_overrides[get_current_user] = lambda: who["user"]
+    try:
+        with TestClient(app) as c:
+            who["user"] = auth_utils.TokenPayload(2, "s@x", "staff", "S", permissions=frozenset({"dashboard.view"}))
+            resp = c.get("/inventory/current?principal=unilever")
+            assert resp.status_code == 403 and resp.json()["permission"] == "lp.view"
+            who["user"] = auth_utils.TokenPayload(2, "s@x", "staff", "S", permissions=frozenset({"lp.view"}))
+            assert c.get("/inventory/current?principal=unilever").status_code == 403, "lp.view alone is not the dashboard"
+            who["user"] = auth_utils.TokenPayload(2, "s@x", "staff", "S", permissions=frozenset({"dashboard.view", "lp.view"}))
+            assert c.get("/inventory/current?principal=unilever").status_code == 200
+    finally:
+        app.dependency_overrides.clear()

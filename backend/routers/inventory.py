@@ -13,11 +13,13 @@ from backend.stock_units import COUNT_DATE_NOT_LOADED, STOCK_AT_LATEST_SQL
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
-@router.get("/current")
+# Each row's `status` is judged against the stored LP safety stock and target (lp_recommendation.ss_i, rop_i), an
+# LP-derived field, so the route needs lp.view as well as dashboard.view (2026-10-28; Staff's preset holds both).
+@router.get("/current", dependencies=[Depends(require_permission("dashboard.view"))])
 def get_inventory_current(
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ):
     # Both principals again (2026-09-17) — see backend/principals.py.
     # Del Monte has 5,164 real inventory rows, so this endpoint returns
