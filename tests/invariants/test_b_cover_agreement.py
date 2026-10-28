@@ -13,8 +13,7 @@ the stock side and the sales side moves the figure with no error anywhere.
 import pytest
 
 from backend import marts
-from backend.routers.dashboard import AVG_WEEKS_PER_MONTH
-from backend.routers.recommendations import AVG_DAYS_PER_MONTH
+from analytics.params import DAYS_PER_MONTH as AVG_DAYS_PER_MONTH, WEEKS_PER_MONTH as AVG_WEEKS_PER_MONTH  # the single source, not the endpoints own alias
 
 
 def test_sku_days_of_cover_reproduces_from_the_planning_mart(plan, sql):
