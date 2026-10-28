@@ -10,7 +10,6 @@ minus what is already fixed. Status is `open` or `won't-fix (reason)`; nothing h
 |---|---|---|---|
 | A6 | Medium | `/dashboard/error-decomposition` (and its three siblings) default to `tier=all`; B and C are COUNTERFACTUAL backtests never served, so the headline mixes them in. Now labelled (`counterfactual_note`, `by_tier`), default unchanged; two concentration answers (pieces vs pesos) still coexist. | open (re-checked: default still `all`) |
 | A7 | Medium | With `DM_DEMO_ENABLED` on and `X-Data-Mode: preview`, a real Unilever SKU's forecast response marks its real months `demonstration: true` and swaps in the demo MA3 forecast. | open (no commit has touched the forecast route; not re-reproduced, needs the flag) |
-| Q8 | Medium-Low | A user with `lp.decide` but not `lp.view` can decide, and the response returns the whole LP row. Needs a ruling: `lp.decide` implies `lp.view`, or the write responses drop the figures. | open (a decision, not a code defect) |
 | A11 | Low | Preview mode with no preview files describes real LP rows as default parameters (`lp_model.run` None, `inputs_source: defaults`). | open (re-checked) |
 | A12 | Low | "109 pending" counts 36 rows that plan a zero order; only 73 are orders and no field says so. | open (re-checked: no orders-only count in the payload) |
 | A13 | Low | Legacy accepted row 4 (no `lp_run_key`) is in the cycle table (110 rows) but outside the plan (109); `cycle=all` shows it. | open (re-checked 110 vs 109). Reversal can no longer put it back into the plan (7bc7e19) |
@@ -25,4 +24,5 @@ minus what is already fixed. Status is `open` or `won't-fix (reason)`; nothing h
 | A8 | 7ff277d | Generated category-trend months are labelled |
 | A9 | 7ff277d | A quantity change on a superseded cycle is closed, not left pending |
 | A10 | 7ff277d | An approval later reversed says so |
+| Q8 | a7b707d | `lp.decide` implies `lp.view` (`permissions.IMPLIES`), so whoever can decide can see the figures behind the decision |
 | Q9-Q14 | fb11477 | Inverted range 422; SKU text bounded; audit-log limit; grant audit only on change; typed dates; strict types (`tests/backend/test_qa_findings_8_15.py`) |
