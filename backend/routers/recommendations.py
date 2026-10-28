@@ -61,13 +61,13 @@ same data the split becomes 185 CRITICAL / 13 URGENT / 20 PLANNED.
                   is a gap instead — DEC-29 — which is why the window only
                   takes months the table has.) Until 2026-09-29 those months
                   were averaged out, which overstated the daily rate and
-                  understated cover for 24 of the 250 current rows. Exactly
-                  the peso basis GET /dashboard's Unilever weeks_of_cover
-                  already uses, at SKU grain. Caveat: stock is valued at
-                  last purchase cost while sales are at selling price, so
-                  cover is understated by the margin — a known bias in one
-                  direction, disclosed in the UI tooltip. None (with
-                  cover_blocked_reason) when the stock row or its valuation
+                  understated cover for 24 of the 250 current rows. Since 2026-10-28 (D3) it is PIECES
+                  over PIECES: current_stock / average daily pieces (the same window,
+                  quantity_sold), the basis of GET /dashboard's Unilever
+                  weeks_of_cover. The earlier stock-at-cost over sales-at-selling-price
+                  version understated cover by the margin (portfolio 6.21 weeks
+                  against 7.06 in pieces, queried 2026-10-28). None (with
+                  cover_blocked_reason) when the stock row (in pieces)
                   is missing, when the product sold nothing in the window,
                   or when the daily rate is 0 or below. The sales source is
                   Unilever-only, so a Del Monte LP row (none exist live) is
@@ -277,6 +277,7 @@ _SELECT_ONE = f"""
         abc_last.classification_period AS tier_period,
         (abc.product_key IS NOT NULL) AS tier_is_current,
         sales.avg_monthly_sales_pesos AS avg_monthly_sales_pesos,
+        sales.avg_monthly_pieces AS avg_monthly_pieces,
         fr.forecast_value AS forecast_units,
         oo.on_order_pieces AS on_order_pieces,
         oo.on_order_cases AS on_order_cases,
@@ -313,9 +314,10 @@ _SELECT_ONE = f"""
         ORDER BY ac.product_key, ac.classification_period DESC
     ) abc_last ON abc_last.product_key = lr.product_key
     LEFT JOIN (
-        SELECT recent.product_key, SUM(recent.month_total) / MAX(sales_window.months) AS avg_monthly_sales_pesos
+        SELECT recent.product_key, SUM(recent.month_total) / MAX(sales_window.months) AS avg_monthly_sales_pesos,
+               SUM(recent.month_pieces) / MAX(sales_window.months) AS avg_monthly_pieces
         FROM (
-            SELECT product_key, calendar_month, SUM(net_amount) AS month_total
+            SELECT product_key, calendar_month, SUM(net_amount) AS month_total, SUM(quantity_sold) AS month_pieces
             FROM unilever_sku_demand_fact_real
             WHERE calendar_month IN (
                 SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
@@ -425,16 +427,49 @@ def _opt_float(row, key) -> float | None:
     return None if val is None else float(val)
 
 
-def _cover(stock_value: float | None, avg_monthly_sales: float | None) -> tuple[float | None, str | None]:
-    if stock_value is None:
-        return None, "no stock valuation in the cycle's opening stock count (no row, or no unit cost)"
-    if avg_monthly_sales is None:
+def _cover(stock_pieces: float | None, avg_monthly_pieces: float | None) -> tuple[float | None, str | None]:
+    """Days of cover in PIECES over PIECES, the basis of the Dashboard's kpis.weeks_of_cover (D3, 2026-10-28). It was stock
+    at purchase cost over sales at selling price, which understated cover by the margin (portfolio: 6.21 weeks against
+    7.06 in pieces, both queried 2026-10-28); stock_value_pesos and avg_monthly_sales_pesos are no longer read for it."""
+    if stock_pieces is None:
+        return None, "no stock in pieces in the cycle's opening stock count (no row, or no usable pack size)"
+    if avg_monthly_pieces is None:
         return None, (f"no sales rows for this SKU in the {SKU_COVER_HISTORY_MONTHS} sales months "
                       "up to the stock snapshot")
-    if avg_monthly_sales <= 0:
-        return None, "average recent sales value is zero or negative — cannot divide"
-    daily = avg_monthly_sales / AVG_DAYS_PER_MONTH
-    return round(stock_value / daily, 1), None
+    if avg_monthly_pieces <= 0:
+        return None, "average recent sales quantity is zero or negative — cannot divide"
+    daily = avg_monthly_pieces / AVG_DAYS_PER_MONTH
+    return round(stock_pieces / daily, 1), None
+
+
+_AVG_PIECES_SQL = f"""
+    SELECT pd.sku_code AS sku_id, SUM(d.quantity_sold) / MAX(w.months) AS avg_monthly_pieces
+    FROM unilever_sku_demand_fact_real d
+    JOIN product_dimension pd ON pd.product_key = d.product_key
+    CROSS JOIN (
+        SELECT COUNT(*) AS months FROM (
+            SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
+            WHERE calendar_month <= :inv_period ORDER BY calendar_month DESC LIMIT {SKU_COVER_HISTORY_MONTHS}
+        ) window_months
+    ) w
+    WHERE pd.sku_code = ANY(:skus) AND d.calendar_month IN (
+        SELECT DISTINCT calendar_month FROM unilever_sku_demand_fact_real
+        WHERE calendar_month <= :inv_period ORDER BY calendar_month DESC LIMIT {SKU_COVER_HISTORY_MONTHS})
+    GROUP BY pd.sku_code
+"""
+
+
+def _attach_avg_pieces(db: Session, rows: list[dict]) -> None:
+    """The planning mart stores sales in pesos only, so the pieces side of cover is read here, one statement per
+    cycle on the page, over the same SKU_COVER_HISTORY_MONTHS window as the row query's sales join."""
+    by_cycle: dict = {}
+    for r in rows:
+        by_cycle.setdefault(r["planning_cycle_date"], []).append(r)
+    for cycle, group in by_cycle.items():
+        got = {x["sku_id"]: x["avg_monthly_pieces"] for x in db.execute(text(_AVG_PIECES_SQL), {
+            "inv_period": opening_period(cycle), "skus": sorted({r["sku_id"] for r in group})}).mappings()}
+        for r in group:
+            r["avg_monthly_pieces"] = got.get(r["sku_id"])
 
 
 def _to_item(r, present: dict | None = None) -> RecommendationItem:
@@ -445,7 +480,6 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
     # and they are reported apart rather than both as a bare "NO DATA".
     stock = None if r["current_stock"] is None else float(r["current_stock"])
     stock_cases = _opt_float(r, "current_stock_cases")
-    stock_value = _opt_float(r, "stock_value_pesos")
     # Absent from a stock count that did happen. Where the principal's count
     # never lists a zero-stock item (Unilever: backend/stock_status.py's
     # COUNT_OMITS_ZERO_STOCK) that is 0 on hand, the LP's own reading (see
@@ -457,7 +491,7 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
     in_count = r.get("in_stock_count") if hasattr(r, "get") else None
     stock_not_in_count = in_count is False and r["principal"] in COUNT_OMITS_ZERO_STOCK
     if stock_not_in_count:
-        stock, stock_value = 0.0, 0.0
+        stock = 0.0
     rop = float(r["rop_i"])
     stock_blocked_reason = None
     if stock is None:
@@ -488,7 +522,7 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         if revenue_share is not None and stockout_gap is not None
         else None
     )
-    days_of_cover, cover_reason = _cover(stock_value, _opt_float(r, "avg_monthly_sales_pesos"))
+    days_of_cover, cover_reason = _cover(stock, _opt_float(r, "avg_monthly_pieces"))
 
     # The LP's own arithmetic since the 2026-09-30 run (scripts/run_lp.py):
     # need = the cycle month's forecast + target stock (rop_i) - stock on
@@ -828,6 +862,7 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
     details = _decision_details(db, [r["recommendation_key"] for r in rows if r["status"] != "pending"])
     for r in rows:
         r.update(details.get(r["recommendation_key"], {}))
+    _attach_avg_pieces(db, rows)
     items = [_to_item(r, _MART_PRESENT) for r in rows]
     # Same anchor as the join path (recommendations.py's own loop above): the newest
     # displayed cycle's own month, never the mart's stored (unanchored) tier_period —

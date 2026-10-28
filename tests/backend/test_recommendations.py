@@ -310,7 +310,7 @@ def test_not_in_stock_count_is_zero_as_the_lp_reads_it():
 
     item = _to_item(_item_row(
         in_stock_count=False, current_stock=None, forecast_units=3456.0, rop_i=3364.96, q_i=5549.27,
-        revenue_share=0.0025, avg_monthly_sales_pesos=90000.0, pack_size=48,
+        revenue_share=0.0025, avg_monthly_pieces=900.0, pack_size=48,
     ))
     assert item.stock_not_in_count is True
     assert item.current_stock == 0.0
