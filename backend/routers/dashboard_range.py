@@ -22,8 +22,8 @@ the `mart` schema (migration 0041, backend/marts.py).
 Every endpoint takes the same range as GET /dashboard: `period` (the picker's end month) and
 `start_period` (its start); without a start, the 12 months ending at `period`; without
 `period`, ending at the scope's latest month of real sales. Real rows only, except where a
-row says data_kind / estimated. Nothing here is derived from LP_Recommendation, so none of
-it needs lp.view.
+row says data_kind / estimated. Nothing here except the four /error-decomposition routes is derived from
+LP_Recommendation. Those read the stored safety stock (ss_i), so they need lp.view as well as dashboard.view.
 """
 from __future__ import annotations
 
@@ -257,7 +257,7 @@ def get_range_accuracy(
     return _stamped(db, _flag_counterfactual({**summary, "level": level, "rows": detail, "coverage": ["unilever"]}))
 
 
-@router.get("/error-decomposition")
+@router.get("/error-decomposition", dependencies=[Depends(require_permission("dashboard.view"))])
 @cached("GET /dashboard/error-decomposition")
 def get_error_decomposition(
     period: str | None = PeriodQuery,
@@ -267,7 +267,7 @@ def get_error_decomposition(
     tier: str = Query("all", pattern="^(all|A|B|C)$", description="Whose products the exposure list and its concentration "
                                                                    "cover; totals and by_tier always show every tier."),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> dict:
     """The forecast miss for the range, split into over-buying, under-forecast that safety stock absorbed, and
     under-forecast beyond safety stock (potential stockout exposure), in pieces and pesos, each as a share of the
@@ -309,7 +309,7 @@ def _decomposition_range(db: Session, period: str | None, start_period: str | No
     return start, end, None
 
 
-@router.get("/error-decomposition/product/{sku_code}")
+@router.get("/error-decomposition/product/{sku_code}", dependencies=[Depends(require_permission("dashboard.view"))])
 @cached("GET /dashboard/error-decomposition/product/{sku_code}")
 def get_error_decomposition_product(
     sku_code: str,
@@ -317,7 +317,7 @@ def get_error_decomposition_product(
     start_period: str | None = StartQuery,
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> dict:
     """One product's forecast miss month by month over the range, split into over, absorbed and beyond safety
     stock, in pieces and pesos, with the range totals. 404 for a SKU not in the product master; a known SKU with no
@@ -334,14 +334,14 @@ def get_error_decomposition_product(
             "blocked_reason": None if out["months"] else "No scored months for this product in this range."}
 
 
-@router.get("/error-decomposition/aggregate")
+@router.get("/error-decomposition/aggregate", dependencies=[Depends(require_permission("dashboard.view"))])
 @cached("GET /dashboard/error-decomposition/aggregate")
 def get_error_decomposition_aggregate(
     period: str | None = PeriodQuery,
     start_period: str | None = StartQuery,
     principal: str | None = PrincipalQuery,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> dict:
     """The range's split per principal and per ABC tier (each tier's row plus an 'all' row), summed from
     mart.error_decomposition. Only Unilever has scored product-months, so Del Monte is unavailable. Tier B and C
@@ -356,7 +356,7 @@ def get_error_decomposition_aggregate(
             "blocked_reason": None if out["principals"] else "No scored product-months in this range."}
 
 
-@router.get("/error-decomposition/concentration")
+@router.get("/error-decomposition/concentration", dependencies=[Depends(require_permission("dashboard.view"))])
 @cached("GET /dashboard/error-decomposition/concentration")
 def get_error_decomposition_concentration(
     period: str | None = PeriodQuery,
@@ -365,7 +365,7 @@ def get_error_decomposition_concentration(
     limit: int = Query(25, ge=1, le=500, description="How many products to list."),
     tier: str = Query("all", pattern="^(all|A|B|C)$", description="Whose products are ranked."),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("dashboard.view")),
+    current_user: TokenPayload = Depends(require_permission("lp.view")),
 ) -> dict:
     """Products ranked by pesos beyond safety stock (potential stockout exposure) over the range, with each
     one's share and the running cumulative share of the total, plus how many products make up 50% and 80%. Shares are

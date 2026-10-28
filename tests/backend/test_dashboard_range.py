@@ -410,3 +410,29 @@ def test_actuals_version_stamps_the_data_behind_a_figure(monkeypatch):
     assert (stamp["demand_rows"], stamp["mart_refresh_id"]) == (24906, 41)
     monkeypatch.setattr(m, "present", lambda db: False)
     assert m.actuals_version(session) is None
+
+
+ERROR_DECOMPOSITION_ROUTES = ("/dashboard/error-decomposition", "/dashboard/error-decomposition/product/ABC1",
+                              "/dashboard/error-decomposition/aggregate", "/dashboard/error-decomposition/concentration")
+
+
+@pytest.mark.parametrize("path", ERROR_DECOMPOSITION_ROUTES)
+def test_error_decomposition_needs_lp_view_not_just_dashboard_view(path):
+    """The decomposition reads the stored LP safety stock (marts.SS_METHOD_NOTE, lp_recommendation.ss_i), so dashboard.view
+    alone is refused with the missing lp.view named, and a user holding both is let through to the handler."""
+    from backend.auth_utils import TokenPayload
+    who = {}
+    app.dependency_overrides[get_db] = lambda: FakeSession([])
+    app.dependency_overrides[get_current_user] = lambda: who["user"]
+    try:
+        with TestClient(app, raise_server_exceptions=False) as c:
+            who["user"] = TokenPayload(2, "s@x", "staff", "S", permissions=frozenset({"dashboard.view"}))
+            refused = c.get(path + "?principal=unilever")
+            assert refused.status_code == 403, path
+            assert refused.json()["permission"] == "lp.view"
+            who["user"] = TokenPayload(2, "s@x", "staff", "S", permissions=frozenset({"lp.view"}))
+            assert c.get(path + "?principal=unilever").status_code == 403, "lp.view alone is not the dashboard"
+            who["user"] = TokenPayload(2, "s@x", "staff", "S", permissions=frozenset({"dashboard.view", "lp.view"}))
+            assert c.get(path + "?principal=unilever").status_code != 403, path   # past the gate; the fake session then has no mart to answer
+    finally:
+        app.dependency_overrides.clear()
