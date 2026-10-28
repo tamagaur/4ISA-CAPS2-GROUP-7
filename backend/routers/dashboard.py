@@ -2493,8 +2493,10 @@ def get_dashboard(
             "monthly_totals": demo_data.monthly_totals(db)["months"],
             "forecasts": demo_data.forecasts(db),
             "stock": demo_data.stock(db),
-            "order_plan": demo_data.order_plan(db),
-            "policy_comparison": demo_data.policy_comparison(db),
+            # The order plan and policy comparison are LP-derived (demo.dm_category_lp), so they follow lp.view like
+            # their real counterparts (_strip_lp_fields above): left out, not zero, for a user without it (audit BE-13).
+            "order_plan": None if payload["lp_hidden"] else demo_data.order_plan(db),
+            "policy_comparison": None if payload["lp_hidden"] else demo_data.policy_comparison(db),
             "dead_stock": demo_data.dead_stock(db),
         })
     return payload
