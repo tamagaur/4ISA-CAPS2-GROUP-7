@@ -389,7 +389,7 @@ def test_before_migration_0068_a_quantity_edit_applies_as_it_did():
 def test_a_row_with_a_change_awaiting_approval_cannot_be_decided_directly():
     db = _DB(decide_matches=False, open_change={"change_key": 7, "proposed_by": "planner@ssmcapstone.com"})
     with pytest.raises(HTTPException) as err:
-        rec.update_recommendation(1, RecommendationDecision(status="dismissed", reason="no"), db=db, current_user=PLANNER)
+        rec.update_recommendation(1, RecommendationDecision(status="dismissed", reason="no longer needed"), db=db, current_user=PLANNER)
     assert err.value.status_code == 409 and "awaiting approval" in err.value.detail and "change 7" in err.value.detail
     assert db.rolled_back
 

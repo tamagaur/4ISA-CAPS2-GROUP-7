@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from analytics import receipt_settlement  # noqa: E402
-from analytics.params import abc_method  # noqa: E402
+from analytics.params import MASE_GATE, abc_method  # noqa: E402
 
 PRINCIPAL = "unilever"          # Del Monte has no per-product plan to close
 
@@ -66,6 +66,20 @@ CHECKS = {
                 "SELECT EXISTS (SELECT 1 FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key "
                 "WHERE pd.principal = %(principal)s AND lr.planning_cycle_date = %(next_cycle)s AND lr.lp_run_key IS NOT NULL)"),
 }
+
+# A COMPLETE PLAN (P5b, decided by Kelvin 2026-10-31): one LP row, from a run, for every forecast row of the cycle with
+# status ok and MASE below the gate. Both sides are stored, so this needs no migration and no new logging. The
+# check compares the two counts and names both when they differ.
+PLAN_COUNTS_SQL = """
+    SELECT (SELECT COUNT(DISTINCT fr.product_key) FROM forecast_result fr
+            JOIN product_dimension pd ON pd.product_key = fr.product_key
+            WHERE pd.principal = %(principal)s AND fr.forecast_date = %(plan_cycle)s
+              AND fr.status = 'ok' AND fr.mase < %(mase_gate)s),
+           (SELECT COUNT(DISTINCT lr.product_key) FROM lp_recommendation lr
+            JOIN product_dimension pd ON pd.product_key = lr.product_key
+            WHERE pd.principal = %(principal)s AND lr.planning_cycle_date = %(plan_cycle)s
+              AND lr.lp_run_key IS NOT NULL)
+"""
 
 CYCLE_SQL = """
     SELECT state, steps_done, closing_started_by, closing_started_at, closed_by, closed_at, reopened_by, reopened_at, reopen_count
@@ -149,6 +163,11 @@ def read_status(cur, params: dict) -> dict:
     for name, (_, sql) in CHECKS.items():
         cur.execute(sql, params)
         checks[name] = bool(cur.fetchone()[0])
+    plan_counts = {}
+    for name in ("cycle", "next_cycle"):
+        cur.execute(PLAN_COUNTS_SQL, {**params, "plan_cycle": params[name], "mase_gate": MASE_GATE})
+        forecast_rows, lp_rows = cur.fetchone()
+        plan_counts[name] = (int(forecast_rows), int(lp_rows))
     cur.execute("SELECT to_regclass('planning_cycle') IS NOT NULL")
     present = bool(cur.fetchone()[0])
     row = None
@@ -163,12 +182,23 @@ def read_status(cur, params: dict) -> dict:
                    FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key
                    WHERE pd.principal = %(principal)s AND lr.planning_cycle_date = %(cycle)s""", params)
     rows, closed_rows, decided = cur.fetchone()
-    return {"checks": checks, "cycle_row": row, "ledger_present": present, "rows": rows, "closed_rows": closed_rows,
+    return {"checks": checks, "plan_counts": plan_counts, "cycle_row": row, "ledger_present": present, "rows": rows, "closed_rows": closed_rows,
             "decided_rows": decided}
 
 
-def missing_checks(status: dict) -> list[str]:
-    return [CHECKS[k][0] for k, ok in status["checks"].items() if not ok]
+def plan_mismatches(status: dict, params: dict) -> list[str]:
+    """A refusal line when the cycle BEING CLOSED has LP rows that do not equal its forecast rows that are ok with MASE
+    below the gate. Names the count on each side. The next cycle is only reported (describe), never a refusal."""
+    forecast_rows, lp_rows = status.get("plan_counts", {}).get("cycle", (0, 0))
+    if forecast_rows == lp_rows:
+        return []
+    return [f"the plan for {params['cycle']:%Y-%m} is not complete: {lp_rows} LP row(s) against "
+            f"{forecast_rows} forecast row(s) with status ok and MASE below {MASE_GATE:g}"]
+
+
+def missing_checks(status: dict, params: dict | None = None) -> list[str]:
+    missing = [CHECKS[k][0] for k, ok in status["checks"].items() if not ok]
+    return missing + (plan_mismatches(status, params) if params else [])
 
 
 @contextlib.contextmanager
@@ -195,6 +225,9 @@ def describe(status: dict, params: dict) -> list[str]:
         lines.append(f"  [{'done' if status['checks'][name] else 'MISSING'}] {label}")
     row = status["cycle_row"]
     lines.append(f"  cycle row: {row['state'] + ', steps done ' + str(row['steps_done']) if row else 'none yet (open)'}")
+    for name, note in (("cycle", ""), ("next_cycle", " [forward look, not a refusal]")):
+        forecast_rows, lp_rows = status.get("plan_counts", {}).get(name, (None, None))
+        lines.append(f"  plan completeness {params[name]:%Y-%m}: {lp_rows} LP rows vs {forecast_rows} forecast rows (ok, MASE < {MASE_GATE:g}){note}")
     lines.append(f"  plan rows: {status['rows']} ({status['decided_rows']} decided, {status['closed_rows']} already closed)")
     return lines
 
@@ -213,7 +246,7 @@ def close(conn, schema: str, params: dict, by: str, write: bool, out=print) -> d
         result.update(action="already_closed", changed=False)
         out(f"already closed by {row['closed_by']} at {row['closed_at']}: nothing changed")
         return result
-    missing = missing_checks(status)
+    missing = missing_checks(status, params)
     if missing:
         result.update(action="refused", reason=missing)
         out("REFUSED: " + "; ".join(missing) + ". A close verifies the pipeline has run, it does not run it.")
@@ -304,10 +337,11 @@ def main() -> int:
     conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
     try:
         params = cycle_params(args.cycle)
-        (reopen if args.reopen else close)(conn, args.schema, params, args.approved_by or "", write)
+        result = (reopen if args.reopen else close)(conn, args.schema, params, args.approved_by or "", write)
     finally:
         conn.close()
-    return 0
+    # A refusal exits 2 whether or not it was a write (a dry run that says REFUSED must not report success).
+    return 2 if result.get("action") == "refused" else 0
 
 
 if __name__ == "__main__":

@@ -34,4 +34,5 @@ def test_both_runners_expose_the_escape_flags():
     lp = pathlib.Path("scripts/run_lp.py").read_text(encoding="utf-8")
     fc = pathlib.Path("scripts/run_baseline_forecast.py").read_text(encoding="utf-8")
     assert '"--replan"' in lp and '"--allow-stale-abc"' in lp and '"--allow-stale-abc"' in fc
-    assert "sys.exit(2)" in lp and "sys.exit(2)" in fc
+    assert "EXIT_OK, EXIT_ERROR, EXIT_REFUSED = 0, 1, 2" in lp
+    assert "sys.exit(EXIT_REFUSED)" in lp and "sys.exit(2)" in fc

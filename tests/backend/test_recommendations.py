@@ -840,3 +840,17 @@ def test_reorder_sql_reads_shares_from_the_exact_run_and_the_tier_from_the_carri
     assert "abc.revenue_share AS revenue_share" in _SELECT_ONE  # exact-period join, never abc_last
     assert "abc_last.revenue_share" not in _SELECT_ONE
     assert "ac.classification_period <= CASE ac.principal" in _SELECT_ONE  # carried: at or before, per principal
+
+
+def test_a_decided_row_no_lp_run_produced_is_labelled_outside_the_plan():
+    """A13 (2026-10-31): row 4 of cycle 2026-03 stays visible in cycle=all but is flagged and explained; the plan
+    clauses (lp_cycle.PLAN_STATUS_SQL) that exclude it, and so keep 109 / 435,988, are untouched."""
+    import inspect
+    from backend.routers import recommendations as rec
+    src = inspect.getsource(rec)
+    assert "(lr.status <> 'pending' AND lr.lp_run_key IS NULL) AS outside_plan" in src
+    assert "recommendation outside the current plan" in src
+    from backend import lp_cycle
+    assert "lr.lp_run_key IS NOT NULL" in lp_cycle.PLAN_STATUS_SQL
+    from backend.schemas.recommendations import RecommendationItem
+    assert RecommendationItem.model_fields["outside_plan"].default is False

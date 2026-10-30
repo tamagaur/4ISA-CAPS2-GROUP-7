@@ -7,8 +7,7 @@ Sources: findings 5-13 of `reports/AUDIT_2026-10-23.md` (A#), 8-15 of `reports/Q
 
 **Tally.** Open at the start of 2026-10-30: 17 (7 carried in this file; 10 in `QA_PIPELINE_2026-10-30.md`, not yet in it).
 First session that day: 8 left the list (5 fixed: A11 P5-forecast-half P7 P8 P10; 2 already fixed: P4 P9; 1 not a defect: P6); one row
-added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **Now: 12 of the 17 are closed, 5 of the 17 are left (A7 A13 Q15 C1 P3),
-plus P5b, so the table holds 6.** Each has an owner: Kelvin's decision (A13 Q15 P5b), a migration (C1 P3), won't-fix with a reason (A7).
+added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3).** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7).
 Four client items are closed with a written limitation (L1-L4); they were not rows before.
 
 ## Open
@@ -16,11 +15,8 @@ Four client items are closed with a written limitation (L1-L4); they were not ro
 | ID | Sev | What it is | Why it is not fixed | Owner |
 |---|---|---|---|---|
 | A7 | Med | With `DM_DEMO_ENABLED` on and `X-Data-Mode: preview`, a real Unilever SKU's forecast marks its `real_copy` months `demonstration: true` and shows the demo MA3 forecast. | It is the sanctioned demonstration path as built: CLAUDE.md rule 2 (Kelvin, 2026-10-15/16) wires the Unilever demo forecast into `GET /forecast/{sku}` behind the flag AND the preview header, labelled at top level and per row, with `origin: real_copy` telling real from generated. Nothing reaches a `_Real` view or the real forecast. | **won't-fix (by recorded decision, rule 2)**; reopen if you read the rule differently |
-| A13 | Low | Legacy accepted row 4 (no `lp_run_key`) is in the cycle table (110) but outside the plan (109); `cycle=all` shows it. | See "Surfaced for decision" below. | **needs Kelvin's decision** |
-| Q15 | Low | Dismiss accepts a 1-character reason; only blank and over-500 are refused. | A minimum length is a product ruling, not a bug. | **needs Kelvin's decision** |
 | C1 | Low | `/recommendations` on the mart path runs three statements per cycle, not two: the mart has pesos only and weeks of cover is in pieces (D3), so `_attach_avg_pieces` reads `quantity_sold` live. | The fix adds a column to `mart.planning_mart`: a migration on planning data. Out of scope, as the brief says. | **needs a migration** (next free 0070) |
 | P3 | Med-Low | After a second ABC re-run, cached `GET /abc` keeps the old classes: the cache's data version (`mart.refresh_status`) does not carry `abc_classification.computed_at`. | Adding `MAX(computed_at)` to the per-request version query costs about 23 ms a read on 75,430 rows (measured on the local copy) because no index covers it; the cheap fix is an index or a view change, i.e. a migration. Bites only on an ABC run on its own. | **needs a migration** |
-| P5b | Low | `close_cycle`'s `lp_next` check still tests existence only. | The forecast half is fixed (P5). "Complete" for the LP has no definition on record: it plans 107-109 of 175 `ok` forecasts by design, so a count check would be invented. | **needs Kelvin's decision** (what the LP must have planned before a close) |
 
 ## Surfaced for decision (item 3 of the brief): effect on the published figures
 
@@ -34,7 +30,16 @@ plan = 109 rows, 435,988.00 pieces; of them 73 have q_i > 0 (sum 435,988.00) and
 | **A13** | Bring row 4 into the plan. | 109 becomes 110 rows and 435,988 becomes 437,319.24 pieces (a non-integer, since it predates case-pack rounding). That breaks the plan invariant and is a gate stop. | |
 | **A13** | Leave it out of `cycle=all` (hide or delete the row). | The cycle table reads 109 and nothing in the plan changes; the accepted decision's audit trail is the cost. | |
 
-A12 was then done as the additive field only (second session; see Closed). A13 is unchanged. Recommendation (not applied): leave row 4 as it is and label it in `cycle=all`.
+A12 was then done as the additive field only (second session; see Closed). A13 was then done as the label (2026-10-31, see Closed on 2026-10-31): row 4 stays out of the plan.
+
+## Closed on 2026-10-31 (Kelvin's decisions, implemented; not committed)
+
+| ID | How | Evidence |
+|---|---|---|
+| Q15 | Dismiss reason is 8 to 500 characters after trimming, server-side (`DISMISS_REASON_MIN/MAX`, `backend/schemas/recommendations.py`); matches section 4.2.3.3. | `tests/backend/test_recommendation_decisions.py` (7, 8, 500, 501 and whitespace-padded cases) |
+| P5b | A complete plan = one run-keyed LP row for every forecast row of the cycle with status ok and MASE below 1. `close_cycle` refuses when the counts differ and names both; checked for the cycle being closed only; the next cycle is a reported forward-look line, never a refusal. Live, read-only: 2026-03 = 109 against 109. | `tests/test_close_cycle.py`; `scripts/close_cycle.py` `PLAN_COUNTS_SQL` |
+| A13 | Row 4 in `cycle=all` carries `outside_plan: true` and `plan_note` ("Accepted recommendation outside the current plan ..."). Plan clauses untouched: 109 and 435,988 do not move. | `tests/backend/test_recommendations.py` |
+| Exit codes | `run_lp` now exits with `main()`'s return (it dropped it before); refusals exit 2, errors 1. `close_cycle` exits 2 on any refusal, dry run included. | `tests/optimization/test_run_lp_script.py`, `tests/test_close_cycle.py` |
 
 ## Closed on 2026-10-30
 

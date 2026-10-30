@@ -266,6 +266,7 @@ _SELECT_ONE = f"""
         lr.rop_i,
         lr.ss_i,
         lr.status,
+        (lr.status <> 'pending' AND lr.lp_run_key IS NULL) AS outside_plan,
         inv.stock_pieces AS current_stock,
         inv.stock_cases AS current_stock_cases,
         inv.stock_value_pesos AS stock_value_pesos,
@@ -582,6 +583,10 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         decision_reason=r.get("decision_reason") if hasattr(r, "get") else None,
         decided_at=r.get("decided_at") if hasattr(r, "get") else None,
         decided_by=r.get("decided_by") if hasattr(r, "get") else None,
+        outside_plan=bool(r.get("outside_plan")) if hasattr(r, "get") else False,
+        plan_note=(f"{str(r['status']).capitalize()} recommendation outside the current plan: no LP run produced it, "
+                   "so it is not in the plan count or the plan total.")
+        if hasattr(r, "get") and r.get("outside_plan") else None,
     )
 
 

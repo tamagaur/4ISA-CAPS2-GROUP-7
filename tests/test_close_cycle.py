@@ -40,11 +40,12 @@ class _Conn:
         return [s for s in self.sql if s.split()[0] in ("UPDATE", "INSERT", "DELETE")]
 
 
-def _status(state=None, steps=(), checks=None, rows=110, closed_rows=0):
+def _status(state=None, steps=(), checks=None, rows=110, closed_rows=0, plan_counts=None):
     row = None if state is None else {"state": state, "steps_done": list(steps), "closed_by": "Y", "closed_at": "t",
                                       "closing_started_by": "Y", "closing_started_at": "t", "reopened_by": None,
                                       "reopened_at": None, "reopen_count": 0}
-    return {"checks": checks or dict(ALL_OK), "cycle_row": row, "ledger_present": True, "rows": rows,
+    return {"checks": checks or dict(ALL_OK), "plan_counts": plan_counts or {"cycle": (109, 109), "next_cycle": (107, 107)},
+            "cycle_row": row, "ledger_present": True, "rows": rows,
             "closed_rows": closed_rows, "decided_rows": 1}
 
 
@@ -183,3 +184,46 @@ def test_forecast_check_is_completeness_not_existence():
     Behaviour on a database: scripts/local_pg run (deleting one forecast row flips forecast_next to False)."""
     sql = cc.CHECKS["forecast_next"][1]
     assert "NOT EXISTS" in sql and "a.tier = 'A'" in sql and "%(method)s" in sql
+
+
+def test_an_incomplete_plan_refuses_and_names_the_count_on_each_side(monkeypatch, settled):
+    short = {"cycle": (109, 108), "next_cycle": (107, 107)}
+    monkeypatch.setattr(cc, "read_status", lambda cur, params: _status(plan_counts=short))
+    conn = _Conn()
+    lines = []
+    with pytest.raises(SystemExit) as exc:
+        cc.close(conn, "public", P, "Yuan", True, out=lines.append)
+    assert exc.value.code == 2 and conn.writes() == [] and settled == []
+    assert any("2026-03 is not complete: 108 LP row(s) against 109 forecast row(s)" in line for line in lines)
+
+
+def test_a_complete_plan_109_against_109_does_not_refuse(monkeypatch, settled):
+    conn, result, out = _run(monkeypatch, _status(plan_counts={"cycle": (109, 109), "next_cycle": (107, 107)}))
+    assert result["action"] == "closed" and cc.plan_mismatches(_status(), P) == []
+
+
+def test_an_incomplete_next_cycle_is_reported_never_a_refusal(monkeypatch, settled):
+    ahead = {"cycle": (109, 109), "next_cycle": (107, 0)}
+    assert cc.plan_mismatches(_status(plan_counts=ahead), P) == []
+    conn, result, out = _run(monkeypatch, _status(plan_counts=ahead))
+    assert result["action"] == "closed"
+    assert any("2026-04: 0 LP rows vs 107 forecast rows" in l and "forward look" in l for l in cc.describe(_status(plan_counts=ahead), P))
+
+
+def test_the_plan_count_is_ok_forecasts_under_the_mase_gate_against_run_keyed_lp_rows():
+    sql = " ".join(cc.PLAN_COUNTS_SQL.split())
+    assert "fr.status = 'ok'" in sql and "fr.mase < %(mase_gate)s" in sql and "lr.lp_run_key IS NOT NULL" in sql
+    assert cc.MASE_GATE == 1.0
+
+
+def test_main_exits_2_on_a_refusal_even_for_a_dry_run(monkeypatch):
+    class _C:
+        def close(self): pass
+    import psycopg2
+    monkeypatch.setattr(psycopg2, "connect", lambda *_a, **_k: _C())
+    monkeypatch.setattr(cc, "close", lambda *a, **k: {"action": "refused"})
+    monkeypatch.setattr(sys, "argv", ["close_cycle", "--cycle", "2026-03"])
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://x")
+    assert cc.main() == 2
+    monkeypatch.setattr(cc, "close", lambda *a, **k: {"action": "dry_run"})
+    assert cc.main() == 0

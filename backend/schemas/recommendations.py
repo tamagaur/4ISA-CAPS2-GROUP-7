@@ -134,6 +134,11 @@ class RecommendationItem(BaseModel):
     # q_i for every undecided row, so with nothing decided the plan total is unchanged.
     plan_q_i: float | None = None
     decision_reason: str | None = None
+    # A13 (2026-10-31): a decided row that no LP run produced (lp_run_key NULL: row 4 of cycle 2026-03, accepted
+    # 2026-08-24, before runs were recorded). Shown by cycle=all, labelled; never in the plan count or total
+    # (backend/lp_cycle.PLAN_STATUS_SQL), which is why 109 and 435,988 do not move.
+    outside_plan: bool = False
+    plan_note: str | None = None
     decided_at: datetime.datetime | None = None
     decided_by: str | None = None
 
@@ -182,11 +187,16 @@ class RecommendationsResponse(BaseModel):
     tier_a_periods: dict[str, str] = {}
 
 
+DISMISS_REASON_MIN = 8      # Q15 (2026-10-31); measured after trimming, so spaces do not count
+DISMISS_REASON_MAX = 500
+
+
 class RecommendationDecision(BaseModel):
     status: str  # 'accepted' | 'dismissed'
     # Why. It is stored on the row (migration 0062) and goes into the audit log entry. REQUIRED, non-blank,
-    # when status is 'dismissed'; optional when accepting with a different quantity.
-    reason: str | None = Field(default=None, max_length=500)
+    # when status is 'dismissed' (DISMISS_REASON_MIN to DISMISS_REASON_MAX characters once trimmed, the range the
+    # manuscript's section 4.2.3.3 publishes); optional when accepting with a different quantity.
+    reason: str | None = Field(default=None, max_length=DISMISS_REASON_MAX)
     # The quantity the planner decided to order instead of the recommendation (pieces, the unit of q_i).
     # Only on 'accepted'. Left out = accept the recommendation as it is. A value equal to q_i is stored as
     # no override. Never overwrites q_i.
@@ -201,6 +211,8 @@ class RecommendationDecision(BaseModel):
         if self.status == "dismissed":
             if not (self.reason and self.reason.strip()):
                 raise ValueError("a reason is required to dismiss a recommendation")
+            if len(self.reason.strip()) < DISMISS_REASON_MIN:
+                raise ValueError(f"a dismissal reason needs at least {DISMISS_REASON_MIN} characters")
             if self.decided_quantity is not None:
                 raise ValueError("decided_quantity applies to an accepted recommendation, not a dismissed one")
         return self

@@ -179,7 +179,23 @@ def test_a_decided_quantity_must_be_a_finite_non_negative_number(bad):
 
 def test_a_quantity_on_a_dismissal_is_rejected():
     with pytest.raises(ValidationError):
-        RecommendationDecision(status="dismissed", reason="no", decided_quantity=10)
+        RecommendationDecision(status="dismissed", reason="no longer stocked", decided_quantity=10)
+
+
+@pytest.mark.parametrize("reason", ["x", "seven77", "  seven77  ", "a" * 7, "       a       "])
+def test_a_dismissal_reason_under_8_characters_is_rejected(reason):
+    with pytest.raises(ValidationError):
+        RecommendationDecision(status="dismissed", reason=reason)
+
+
+@pytest.mark.parametrize("reason", ["eight888", "  eight888  ", "a" * 500])
+def test_a_dismissal_reason_of_8_to_500_characters_is_accepted(reason):
+    assert RecommendationDecision(status="dismissed", reason=reason).reason == reason
+
+
+def test_a_dismissal_reason_over_500_characters_is_rejected():
+    with pytest.raises(ValidationError):
+        RecommendationDecision(status="dismissed", reason="a" * 501)
 
 
 def test_zero_is_a_legal_decided_quantity_and_the_reason_is_optional_for_an_override():

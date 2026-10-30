@@ -1177,10 +1177,10 @@ def _run_demo_lp(write: bool) -> int:
 
     if not write:
         print("[dry] nothing written (pass --write)")
-        return 0
+        return EXIT_OK
     if not plans:
-        print("[write] nothing to write")
-        return 0
+        print("[write] nothing to write: the run asked to write and had no plan to write")
+        return EXIT_REFUSED
     wconn = psycopg2.connect(db_url, connect_timeout=20)
     try:
         wcur = wconn.cursor()
@@ -1330,10 +1330,10 @@ def _run_demo_lp_unilever(write: bool, new_run: bool = False) -> int:
 
     if not write:
         print("[dry] nothing written (pass --write)")
-        return 0
+        return EXIT_OK
     if not rows:
-        print("[write] nothing to write")
-        return 0
+        print("[write] nothing to write: the run asked to write and had no plan to write")
+        return EXIT_REFUSED
     wconn = psycopg2.connect(db_url, connect_timeout=20)
     try:
         wcur = wconn.cursor()
@@ -1379,6 +1379,11 @@ def _run_demo_lp_unilever(write: bool, new_run: bool = False) -> int:
     return 0
 
 
+# Exit codes (2026-10-31): 0 = the run did what was asked; 2 = a refusal (nothing, or not everything, was planned
+# or written, on purpose); 1 = an error (missing configuration, or an uncaught exception / a SystemExit message).
+EXIT_OK, EXIT_ERROR, EXIT_REFUSED = 0, 1, 2
+
+
 def main():
     args = build_parser().parse_args()
     check_source(args.source, args.principal)
@@ -1393,7 +1398,7 @@ def main():
     db_url = os.environ.get("SUPABASE_DB_URL")
     if not db_url:
         logger.error("SUPABASE_DB_URL not set in .env")
-        return
+        return EXIT_ERROR
 
     conn = psycopg2.connect(db_url)
     # Each cycle's upserts commit immediately (autocommit). A dry run instead
@@ -1419,7 +1424,7 @@ def main():
             logger.error("lp_run is missing: apply analytics/db/migrations/0037_lp_run.sql before a real "
                          "run, so the app can show what this run used. Nothing was written.")
             conn.close()
-            return
+            return EXIT_REFUSED
         logger.warning("lp_run is missing (migration 0037): a real run would refuse until it is applied.")
 
     # Case-pack rounding keeps the order before it (migration 0066). Without the
@@ -1432,7 +1437,7 @@ def main():
                          "analytics/db/migrations/0066_lp_case_pack_rounding.sql before a real run, so the rounding "
                          "stays auditable (or pass --no-case-pack-rounding). Nothing was written.")
             conn.close()
-            return
+            return EXIT_REFUSED
         logger.warning("migration 0066 is not applied: a real run with case-pack rounding would refuse until it is.")
 
     def save_result(product_key, planning_cycle_date, q_i, rop_i, ss_i, run_key,
@@ -1481,9 +1486,9 @@ def main():
         logger.info(f"--principal={args.principal}: scoped from {before} to {len(candidates_df)} product(s).")
 
     if candidates_df.empty:
-        logger.warning("No candidates after gating. Nothing to do.")
+        logger.error("No candidates after gating: no plan was made. Nothing was written.")
         conn.close()
-        return
+        return EXIT_REFUSED
 
     # ---- Refusals before anything is computed or written (audit P1, P2; scripts/run_guards.py) ----
     cur.execute("SELECT MAX(classification_period) FROM ABC_Classification WHERE principal = 'unilever' AND "
@@ -1493,7 +1498,7 @@ def main():
         if not args.allow_stale_abc:
             logger.error(f"REFUSED: {stale} Nothing was written.")
             conn.close()
-            sys.exit(2)
+            sys.exit(EXIT_REFUSED)
         logger.warning(f"--allow-stale-abc: {stale}")
     planned = cycles_with_a_plan(cur, list(candidates_df["forecast_date"].unique()), set(candidates_df["principal"]))
     if planned:
@@ -1504,7 +1509,7 @@ def main():
             logger.error(f"REFUSED: cycle(s) already planned: {said}. A second run moves a plan that was reviewed; "
                          "pass --replan to plan again on purpose. Nothing was written.")
             conn.close()
-            sys.exit(2)
+            sys.exit(EXIT_REFUSED)
         else:
             logger.warning(f"--replan: planning again over {said}.")
 
@@ -1732,7 +1737,14 @@ def main():
     if args.dry_run:
         logger.info("  DRY RUN — nothing was written.")
     logger.info(LOUD_RULE)
+    # A cycle with no usable opening count, or no feasible plan, wrote nothing for those products: the run did
+    # not do what was asked, so it must not report success (a dry run included: the real run would refuse).
+    if refused_products or infeasible_cycles:
+        logger.error(f"EXIT {EXIT_REFUSED}: {refused_products} product(s) refused for want of an opening count, "
+                     f"{len(infeasible_cycles)} infeasible cycle(s). What was plannable is written; the rest is not.")
+        return EXIT_REFUSED
+    return EXIT_OK
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

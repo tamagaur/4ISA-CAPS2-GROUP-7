@@ -521,7 +521,7 @@ def _run_main(monkeypatch, db, *flags):
     monkeypatch.setattr(run_lp, "load_dotenv", lambda **kwargs: None)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://fake")
     monkeypatch.setattr(sys, "argv", ["run_lp.py", *flags])
-    run_lp.main()
+    return run_lp.main()
 
 
 def test_main_refuses_a_cycle_without_its_opening_count(monkeypatch, caplog):
@@ -671,3 +671,57 @@ def test_main_refuses_an_already_planned_cycle_and_a_stale_abc_period(monkeypatc
     with pytest.raises(SystemExit) as e:
         _run_main(monkeypatch, db)
     assert e.value.code == 2
+
+
+# ---- exit codes (2026-10-31): 0 = did what was asked, 2 = a refusal, 1 = an error -------------------------------
+
+def test_the_script_exits_with_what_main_returns():
+    import scripts.run_lp as run_lp
+    src = open(run_lp.__file__, encoding="utf-8").read()
+    assert "sys.exit(main())" in src.split('if __name__ == "__main__":')[-1]
+    assert (run_lp.EXIT_OK, run_lp.EXIT_ERROR, run_lp.EXIT_REFUSED) == (0, 1, 2)
+
+
+def test_a_clean_run_exits_0(monkeypatch):
+    db = _FakeDB(counts={"2026-02": [("unilever", 812, _COUNTED_2026_03_02)]}, stock={"2026-02": {1: 2000.0}})
+    assert _run_main(monkeypatch, db) == 0
+
+
+def test_a_cycle_refused_for_want_of_its_opening_count_exits_2(monkeypatch):
+    db = _FakeDB(counts={"2026-03": [("unilever", 785, _COUNTED_2026_04_06)]}, stock={"2026-03": {1: 500.0}})
+    assert _run_main(monkeypatch, db) == 2
+
+
+def test_one_principal_refused_and_the_other_planned_still_exits_2(monkeypatch):
+    db = _FakeDB(counts={"2026-02": [("unilever", 812, _COUNTED_2026_03_02)]}, stock={"2026-02": {1: 2000.0}},
+                 candidates=((1, "SKU1", "unilever"), (2, "DM2", "delmonte")))
+    assert _run_main(monkeypatch, db) == 2
+    assert any(s.startswith("INSERT INTO LP_Recommendation") for s, _ in db.statements)   # what was plannable was written
+
+
+def test_a_missing_lp_run_table_exits_2_and_writes_nothing(monkeypatch):
+    class _NoRunTable(_FakeDB):
+        def execute(self, sql, params=None):
+            super().execute(sql, params)
+            if "to_regclass('lp_run')" in " ".join(sql.split()):
+                self._rows = [(False,)]
+    db = _NoRunTable(counts={"2026-02": [("unilever", 812, _COUNTED_2026_03_02)]}, stock={"2026-02": {1: 2000.0}})
+    assert _run_main(monkeypatch, db) == 2
+    assert not any(s.startswith("INSERT") for s, _ in db.statements)
+
+
+def test_missing_0066_columns_exit_2(monkeypatch):
+    assert _run_main(monkeypatch, _opening_db(packs={1: 24.0}, pack_columns=False)) == 2
+
+
+def test_no_candidates_exits_2(monkeypatch):
+    db = _FakeDB(counts={}, stock={}, candidates=())
+    assert _run_main(monkeypatch, db) == 2
+
+
+def test_a_missing_database_url_exits_1(monkeypatch):
+    import scripts.run_lp as run_lp
+    monkeypatch.setattr(run_lp, "load_dotenv", lambda **kwargs: None)
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    monkeypatch.setattr(sys, "argv", ["run_lp.py"])
+    assert run_lp.main() == 1
