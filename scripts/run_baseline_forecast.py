@@ -1084,6 +1084,20 @@ def _keep_forecast_history(conn) -> None:
         vacuum_marts(os.environ["SUPABASE_DB_URL"])
 
 
+def _flag_retired_own_cycle(cur, planning_date, target_keys, run_meta) -> int:
+    """Flag (never delete) this cycle's existing rows whose product is not in the current Tier A set.
+    Scoped to forecast_date = planning_date; the LP's candidate query already joins the current Tier A,
+    so a flagged row cannot reach a plan. Returns the number flagged."""
+    cur.execute("""
+        UPDATE forecast_result
+        SET model_params = COALESCE(model_params, '{}'::jsonb) || %s::jsonb
+        WHERE forecast_date = %s AND NOT (product_key = ANY(%s))
+    """, (json.dumps({"retired": {"reason": "not in the Tier A set of a later run of this cycle",
+                                   "at": run_meta["written_at"], "code_version": run_meta["code_version"]}}),
+          planning_date, target_keys))
+    return cur.rowcount
+
+
 def _write_forecast_result(cur, df, calendar: bool = False):
     """--write path (atomic): upsert Forecast_Result for every real Tier A SKU.
 
@@ -1143,48 +1157,12 @@ def _write_forecast_result(cur, df, calendar: bool = False):
     conn = cur.connection
     prev_autocommit = conn.autocommit
     conn.autocommit = False
-    counts = {"ok": 0, "insufficient_data": 0, "dead_sku": 0, "skipped_no_demand": 0, "orphans_deleted": 0}
-    orphan_dump_path = None
+    counts = {"ok": 0, "insufficient_data": 0, "dead_sku": 0, "skipped_no_demand": 0, "flagged_retired": 0}
     try:
-        # --- orphaned rows: any existing Forecast_Result row whose product_key is
-        #     NOT in the current real Tier A target set. On this DB these are the
-        #     SARIMA rows keyed to a synthetic-inclusive ABC period (2026-08).
-        #     Dump them in FULL (recoverable) before deleting, in this same txn.
-        cur.execute("""
-            SELECT fr.forecast_key, fr.product_key, pd.sku_code, pd.principal, pd.product_name,
-                   fr.forecast_date::text, fr.forecast_value::float, fr.confidence_lower::float,
-                   fr.confidence_upper::float, fr.mape::float, fr.mase::float, fr.status,
-                   fr.model_params, fr.generated_at::text
-            FROM forecast_result fr JOIN product_dimension pd ON pd.product_key = fr.product_key
-            WHERE NOT (fr.product_key = ANY(%s))
-            ORDER BY fr.product_key, fr.forecast_date
-        """, (target_keys,))
-        cols = [d[0] for d in cur.description]
-        orphans = [dict(zip(cols, row)) for row in cur.fetchall()]
-        if orphans:
-            # name the dump by the period run_sarima.py's unconditional MAX() resolved
-            # to (the synthetic-inclusive period these orphans were keyed to)
-            cur.execute("SELECT MAX(classification_period) FROM abc_classification WHERE principal = %s",
-                        (PRINCIPAL,))
-            stale_period = cur.fetchone()[0]
-            orphan_dump_path = os.path.join(REPORTS_DIR, f"orphaned_sarima_rows_{stale_period}.json")
-            os.makedirs(REPORTS_DIR, exist_ok=True)
-            with open(orphan_dump_path, "w", encoding="utf-8") as fh:
-                json.dump({
-                    "dumped_at": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-                    "reason": (f"Forecast_Result rows for product_keys not in the real "
-                               f"{df['abc_period_used'].iloc[0]} Unilever Tier A set — SARIMA output "
-                               f"keyed to the ABC period {stale_period} (run_sarima.py's unconditional "
-                               f"MAX(classification_period), which resolves to a synthetic-inclusive "
-                               f"catalog ranking). Deleted by run_baseline_forecast.py --write in the "
-                               f"same transaction as the MA3 upsert."),
-                    "count": len(orphans),
-                    "restore_hint": "re-INSERT these into Forecast_Result (drop forecast_key; it is identity-generated)",
-                    "rows": orphans,
-                }, fh, indent=2, default=str)
-            logger.warning(f"--write: dumped {len(orphans)} orphaned rows -> {orphan_dump_path}, deleting them.")
-            cur.execute("DELETE FROM forecast_result WHERE NOT (product_key = ANY(%s))", (target_keys,))
-            counts["orphans_deleted"] = cur.rowcount
+        # --- a run writes its own cycle only. Rows of an earlier cycle are never touched, even for a
+        #     product that has since left Tier A (a published figure may rest on them). A row of THIS
+        #     cycle for a product outside the current Tier A set is flagged, never deleted.
+        counts["flagged_retired"] = _flag_retired_own_cycle(cur, planning_date, target_keys, run_meta)
 
         for _, r in df.iterrows():
             p_key = int(r["product_key"])
@@ -1298,10 +1276,7 @@ def _write_forecast_result(cur, df, calendar: bool = False):
         conn.commit()
     except Exception:
         conn.rollback()
-        # the delete never happened -> the dump would be misleading, remove it
-        if orphan_dump_path and os.path.exists(orphan_dump_path):
-            os.remove(orphan_dump_path)
-        logger.error("--write: transaction rolled back, nothing written (orphan dump removed).")
+        logger.error("--write: transaction rolled back, nothing written.")
         raise
     finally:
         conn.autocommit = prev_autocommit
@@ -1310,8 +1285,7 @@ def _write_forecast_result(cur, df, calendar: bool = False):
     print(f"--write: committed {total} rows at {planning_date} — "
           f"ok={counts['ok']}, insufficient_data={counts['insufficient_data']}, "
           f"dead_sku={counts['dead_sku']}, skipped(no demand)={counts['skipped_no_demand']}; "
-          f"orphaned SARIMA rows deleted={counts['orphans_deleted']}"
-          + (f" (dump: {os.path.relpath(orphan_dump_path)})" if orphan_dump_path else "") + ".")
+          f"this-cycle rows flagged retired (not deleted)={counts['flagged_retired']}; other cycles untouched.")
 
 
 if __name__ == "__main__":
