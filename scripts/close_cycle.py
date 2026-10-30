@@ -54,8 +54,14 @@ CHECKS = {
     "abc_run": ("the ABC run for that month is stored",
                 "SELECT EXISTS (SELECT 1 FROM abc_classification WHERE principal = %(principal)s "
                 "AND classification_period = %(period)s AND method = %(method)s)"),
-    "forecast_next": ("the forecast for the next cycle is written",
-                      "SELECT EXISTS (SELECT 1 FROM forecast_result WHERE forecast_date = %(next_cycle)s)"),
+    # Complete, not merely present (QA finding 5, 2026-10-30): every Tier A product of the cycle's ABC run has a
+    # forecast row at the next cycle. The runner writes one row per Tier A product (ok, insufficient_data or dead_sku).
+    "forecast_next": ("the forecast for the next cycle is written for every Tier A product",
+                      "SELECT EXISTS (SELECT 1 FROM forecast_result WHERE forecast_date = %(next_cycle)s) "
+                      "AND NOT EXISTS (SELECT 1 FROM abc_classification a WHERE a.principal = %(principal)s "
+                      "AND a.classification_period = %(period)s AND a.method = %(method)s AND a.tier = 'A' "
+                      "AND NOT EXISTS (SELECT 1 FROM forecast_result f WHERE f.product_key = a.product_key "
+                      "AND f.forecast_date = %(next_cycle)s))"),
     "lp_next": ("the LP run for the next cycle is written",
                 "SELECT EXISTS (SELECT 1 FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key "
                 "WHERE pd.principal = %(principal)s AND lr.planning_cycle_date = %(next_cycle)s AND lr.lp_run_key IS NOT NULL)"),

@@ -583,6 +583,8 @@ def test_kpis_weeks_of_cover_real_value():
     wc = resp.json()["kpis"]["weeks_of_cover"]
     assert wc["value"] == pytest.approx(10.0)
     assert wc["blocked_reason"] is None
+    # QA finding 10 (2026-10-30): the pesos value is labelled and the pieces the ratio used are beside it.
+    assert wc["basis"] == "pieces" and wc["stock_value_unit"] == "pesos" and wc["stock_pieces"] == pytest.approx(100.0)
 
 
 def test_kpis_weeks_of_cover_null_when_weekly_demand_is_zero():

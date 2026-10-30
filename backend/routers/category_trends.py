@@ -128,6 +128,10 @@ def trends_for(
                 point["origin"] = "backcast"
             if m not in by_period:
                 point["reason"] = absent_reason
+                if principal != "unilever":
+                    # Del Monte: a missing category month is a collection gap, not a zero (QA finding 7,
+                    # 2026-10-30). The projection above still reads 0.0; only the plotted value is withheld.
+                    point["revenue"] = None
                 reasons_used.add(absent_reason)
             elif m in returns_exceeded.get(name, ()):
                 point["reason"] = REASON_RETURNS_EXCEEDED_SALES

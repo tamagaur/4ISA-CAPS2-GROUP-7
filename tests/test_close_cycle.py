@@ -176,3 +176,10 @@ def test_writing_needs_both_flags_the_same_cycle_and_target_public(monkeypatch, 
 
 def test_the_docstring_says_what_happens_when_a_step_fails():
     assert "IF A STEP FAILS MIDWAY" in cc.__doc__ and "--reopen" in cc.__doc__ and "without a database restore" in cc.__doc__
+
+
+def test_forecast_check_is_completeness_not_existence():
+    """QA finding 5 (2026-10-30): one forecast row must not pass the gate; every Tier A product needs its row.
+    Behaviour on a database: scripts/local_pg run (deleting one forecast row flips forecast_next to False)."""
+    sql = cc.CHECKS["forecast_next"][1]
+    assert "NOT EXISTS" in sql and "a.tier = 'A'" in sql and "%(method)s" in sql

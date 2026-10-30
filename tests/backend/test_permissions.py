@@ -1050,3 +1050,9 @@ def test_lp_decide_implies_lp_view():
     assert permissions.can_see_lp(None, user) is True
     assert "lp.view" not in permissions.permissions_for(None, auth_utils.TokenPayload(
         user_id=3, email="t@x", role="staff", full_name="T", permissions=frozenset({"dashboard.view"})))
+
+
+def test_normalize_drops_a_removal_that_an_implied_grant_undoes():
+    """QA finding 8 (2026-10-30): lp.view:false beside lp.decide:true is stored as nothing, since lp.view holds anyway."""
+    assert permissions.normalize("staff", {"lp.view": False, "lp.decide": True}) == {"lp.decide": True}
+    assert permissions.normalize("staff", {"lp.view": False}) == {"lp.view": False}

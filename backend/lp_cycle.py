@@ -52,7 +52,7 @@ from analytics.params import LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_A
 from analytics.params import SERVICE_LEVEL_PCT as LP_SERVICE_LEVEL_PCT
 from analytics.params import SERVICE_Z as LP_SERVICE_Z
 from backend import batch
-from backend.data_mode import REAL, forecast_source, lp_source
+from backend.data_mode import REAL, forecast_source, lp_source, predictive_preview
 
 # Applied to every LP read. Bound (not interpolated) so it is safe to
 # concatenate into a query string alongside the principal clause.
@@ -96,10 +96,11 @@ def stored_run(db: Session, cycle: datetime.date | None, principal: str | None =
                mode: str = REAL) -> dict | None:
     """The lp_run row (migration 0037) behind `cycle`'s pending rows in the
     selected scope: what that LP run actually used. None when there is
-    nothing to look up — preview mode, no cycle, the table not applied yet
+    nothing to look up — rows served from preview files, no cycle, the table not applied yet
     (checked with to_regclass first, so a missing table never aborts the
     request's transaction), or rows written before runs were recorded."""
-    if mode != REAL or cycle is None:
+    # Preview with no preview files still serves the real rows (audit 2026-10-23 finding 11), so it names their run.
+    if predictive_preview(mode) or cycle is None:
         return None
     if not lp_run_present(db):
         return None

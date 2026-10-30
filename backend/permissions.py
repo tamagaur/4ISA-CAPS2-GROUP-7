@@ -211,7 +211,11 @@ def normalize(role: str, overrides: dict[str, bool]) -> dict[str, bool]:
     if role == "admin":
         return {}
     base = preset(role)
-    return {key: bool(granted) for key, granted in overrides.items() if (key in base) != bool(granted)}
+    stored = {key: bool(granted) for key, granted in overrides.items() if (key in base) != bool(granted)}
+    # A removal that an implied grant undoes (lp.view:false beside lp.decide:true) changes nothing; storing it
+    # would show the admin a revoke that does not hold.
+    held = effective(role, stored)
+    return {key: granted for key, granted in stored.items() if granted or key not in held}
 
 
 def load_overrides(db: Session, user_id: int) -> dict[str, bool]:

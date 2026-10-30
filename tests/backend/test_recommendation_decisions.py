@@ -258,6 +258,8 @@ def test_only_the_displayed_plan_total_reads_the_decided_quantity():
         for path in (REPO / root).rglob("*.py"):
             if any(p in path.parts for p in (".venv", "__pycache__")):
                 continue
+            if path.name.startswith("local_api_qa"):
+                continue  # the QA harness reads the API response; it feeds nothing back (added 2026-10-30)
             assert "plan_q_i" not in path.read_text(encoding="utf-8", errors="ignore"), path
 
 
@@ -300,3 +302,18 @@ def test_no_forecasting_safety_stock_or_lp_code_reads_the_capture_columns():
             if any(name in path.read_text(encoding="utf-8", errors="ignore") for name in CAPTURE_NAMES):
                 offenders.append(rel)
     assert offenders == []
+
+
+def test_preview_without_preview_files_still_names_the_real_run(monkeypatch):
+    """Audit 2026-10-23 finding 11: preview mode with no preview files serves the real rows, so it names their run."""
+    import datetime
+
+    from backend import lp_cycle
+
+    monkeypatch.setattr(lp_cycle, "lp_run_present", lambda db: True)
+    monkeypatch.setattr(lp_cycle.batch, "first", lambda db, *a, **k: {"run_key": 6})
+    cycle = datetime.date(2026, 3, 1)
+    monkeypatch.setattr(lp_cycle, "predictive_preview", lambda mode: False)
+    assert lp_cycle.stored_run(None, cycle, "unilever", "preview") == {"run_key": 6}
+    monkeypatch.setattr(lp_cycle, "predictive_preview", lambda mode: True)   # rows from preview files: no stored run
+    assert lp_cycle.stored_run(None, cycle, "unilever", "preview") is None

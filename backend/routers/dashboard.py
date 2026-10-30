@@ -1813,6 +1813,10 @@ def get_dashboard(
             "months_used": sum(1 for v in cover_demand.values() if v is not None),
             "stock_period": count_period,
             "stock_value": _to_float(stock),
+            # stock_value is always pesos (cost). On basis "pieces" the ratio's numerator is stock_pieces,
+            # so dividing stock_value by the weekly demand would reproduce the retired pesos basis.
+            "stock_value_unit": "pesos",
+            "stock_pieces": _to_float(stock_pieces) if in_pieces else None,
             "basis": "pieces" if in_pieces else "pesos",
             "stock_count_date": (_stock_count_dates(db, [count_period], cover_scope).get(count_period)
                                  if count_period is not None else None),
