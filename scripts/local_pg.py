@@ -1,0 +1,173 @@
+"""
+scripts/local_pg.py - a throwaway local Postgres for destructive QA (never live).
+
+    python -m scripts.local_pg start                  # initdb (once) + start on 127.0.0.1:55432
+    python -m scripts.local_pg restore BACKUP_DIR     # create db, load structure/*.sql and data/**/*.parquet
+    python -m scripts.local_pg run -- CMD ARGS...     # run CMD with the local DB as its database
+    python -m scripts.local_pg stop
+
+The connection lives in LOCAL_PG_URL, which no project code reads. `run` copies it into SUPABASE_DB_URL and
+SUPABASE_DIRECT_URL for the CHILD process only (the repo's .env otherwise falls back to live), and refuses unless the
+host is 127.0.0.1/localhost on the throwaway port. The data directory is local/pg_throwaway (git-ignored).
+"""
+from __future__ import annotations
+
+import csv
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+import pandas as pd
+
+pd_NA = pd.NA
+from pathlib import Path
+from urllib.parse import urlparse
+
+REPO = Path(__file__).resolve().parents[1]
+PGBIN = Path(os.environ.get("PG_BIN", r"C:\Program Files\PostgreSQL\17\bin"))
+DATA = REPO / "local" / "pg_throwaway"
+PORT = 55432
+DB = "ssm_local"
+DEFAULT_URL = f"postgresql://postgres@127.0.0.1:{PORT}/{DB}"
+
+
+def local_url() -> str:
+    url = os.environ.get("LOCAL_PG_URL", DEFAULT_URL)
+    u = urlparse(url)
+    if u.hostname not in ("127.0.0.1", "localhost") or u.port != PORT:
+        sys.exit(f"REFUSED: LOCAL_PG_URL must be 127.0.0.1:{PORT}, got {u.hostname}:{u.port}")
+    return url
+
+
+def _run(*cmd, **kw):
+    return subprocess.run([str(c) for c in cmd], check=kw.pop("check", True), **kw)
+
+
+def start() -> None:
+    if not (DATA / "PG_VERSION").exists():
+        _run(PGBIN / "initdb.exe", "-D", DATA, "-U", "postgres", "-A", "trust", "-E", "UTF8", stdout=subprocess.DEVNULL)
+    if not (DATA / "server.crt").exists():   # the code under test connects with sslmode=require (backend/deps.py:71)
+        _run("openssl", "req", "-new", "-x509", "-days", "30", "-nodes", "-subj", "/CN=localhost",
+             "-out", DATA / "server.crt", "-keyout", DATA / "server.key", capture_output=True)
+    opts = f"-p {PORT} -c listen_addresses=127.0.0.1 -c fsync=off -c synchronous_commit=off -c ssl=on"
+    subprocess.Popen([str(PGBIN / "pg_ctl.exe"), "-D", str(DATA), "-o", opts, "-l", str(REPO / "local" / "pg_throwaway.log"), "start"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(60):
+        if _run(PGBIN / "pg_isready.exe", "-h", "127.0.0.1", "-p", PORT, check=False, stdout=subprocess.DEVNULL).returncode == 0:
+            print(f"up on 127.0.0.1:{PORT}")
+            return
+        time.sleep(1)
+    sys.exit("did not come up")
+
+
+def stop() -> None:
+    _run(PGBIN / "pg_ctl.exe", "-D", DATA, "-m", "fast", "stop", check=False)
+
+
+def _psql(db, sql=None, file=None):
+    cmd = [PGBIN / "psql.exe", "-h", "127.0.0.1", "-p", PORT, "-U", "postgres", "-d", db, "-X", "-q"]
+    cmd += ["-c", sql] if sql else ["-f", file]
+    return _run(*cmd, capture_output=True, text=True, check=False)
+
+
+def _pg_array(v):
+    if v is None or v is pd_NA:
+        return None
+    if isinstance(v, str):
+        v = json.loads(v)
+    return "{" + ",".join('"' + str(x).replace("\\", "\\\\").replace('"', '\\"') + '"' for x in v) + "}"
+
+
+def restore(backup: Path) -> None:
+    import pandas as pd
+    import psycopg2
+    t0 = time.time()
+    _psql("postgres", f"DROP DATABASE IF EXISTS {DB} WITH (FORCE)")
+    _psql("postgres", f"CREATE DATABASE {DB}")
+    pre = ("DO $$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role','supabase_admin'] LOOP "
+           "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=r) THEN EXECUTE format('CREATE ROLE %I', r); END IF; END LOOP; END $$;")
+    _psql(DB, pre)
+    _psql(DB, "CREATE SCHEMA IF NOT EXISTS extensions; CREATE SCHEMA IF NOT EXISTS vault; "
+              "CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA extensions;")
+    errors = []
+    for pass_no in (1, 2):   # pass 2 creates what pass 1 could not (views over a schema loaded later); only its errors count
+        for name in ("app", "public", "demo", "mart"):
+            r = _psql(DB, file=str(backup / "structure" / f"{name}.sql"))
+            if pass_no == 2:
+                errors += [f"{name}: {l}" for l in r.stderr.splitlines() if "ERROR" in l and "already exists" not in l and "multiple primary keys" not in l]
+    print(f"structure loaded, {len(errors)} errors")
+    for e in errors[:15]:
+        print("  ", e)
+
+    conn = psycopg2.connect(local_url())
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("SET session_replication_role = replica")   # local superuser only: skip FK/trigger checks while loading
+    counts = {}
+    for schema in ("public", "app", "demo", "mart"):
+        manifest = json.loads((backup / "data" / schema / "manifest.json").read_text(encoding="utf-8"))
+        for table, info in manifest["tables"].items():
+            f = backup / "data" / schema / info["file"]
+            df = pd.read_parquet(f).convert_dtypes()
+            if df.empty:
+                counts[f"{schema}.{table}"] = 0
+                continue
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name=%s AND is_generated='NEVER' "
+                        "AND identity_generation='ALWAYS'", (schema, table))
+            ident = [r[0] for r in cur.fetchall()]
+            for c in ident:
+                cur.execute(f'ALTER TABLE "{schema}"."{table}" ALTER COLUMN "{c}" SET GENERATED BY DEFAULT')
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name=%s AND data_type='ARRAY'", (schema, table))
+            for (c,) in cur.fetchall():
+                df[c] = df[c].map(_pg_array)
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_schema=%s AND table_name=%s AND is_generated='ALWAYS'", (schema, table))
+            df = df.drop(columns=[c for (c,) in cur.fetchall() if c in df.columns])
+            cols = [c for c in df.columns]
+            buf = io.StringIO()
+            df.to_csv(buf, index=False, header=False, quoting=csv.QUOTE_MINIMAL, na_rep="\\N")
+            buf.seek(0)
+            collist = ", ".join(f'"{c}"' for c in cols)
+            cur.copy_expert(f"COPY \"{schema}\".\"{table}\" ({collist}) FROM STDIN WITH (FORMAT csv, NULL '\\N')", buf)
+            for c in ident:
+                cur.execute(f'SELECT setval(pg_get_serial_sequence(%s, %s), GREATEST((SELECT COALESCE(MAX("{c}"),0) FROM "{schema}"."{table}"),1))',
+                            (f'"{schema}"."{table}"', c))
+                cur.execute(f'ALTER TABLE "{schema}"."{table}" ALTER COLUMN "{c}" SET GENERATED ALWAYS')
+            cur.execute(f'SELECT count(*) FROM "{schema}"."{table}"')
+            counts[f"{schema}.{table}"] = cur.fetchone()[0]
+            exp = info["row_count"]
+            if counts[f"{schema}.{table}"] != exp:
+                print(f"  MISMATCH {schema}.{table}: loaded {counts[f'{schema}.{table}']} expected {exp}")
+    print(f"restored {len(counts)} tables, {sum(counts.values()):,} rows in {time.time() - t0:.1f}s")
+
+
+def run(cmd: list[str]) -> int:
+    url = local_url()
+    env = dict(os.environ, LOCAL_PG_URL=url, SUPABASE_DB_URL=url, SUPABASE_DIRECT_URL=url, SUPABASE_KEY="local-dummy",
+               DATABASE_URL=url, PYTHONIOENCODING="utf-8", PYTHONPATH=str(REPO))
+    # belt and braces: the child must resolve to the throwaway server before anything else runs
+    chk = subprocess.run([sys.executable, "-c",
+                          "from analytics.config import get_settings;from urllib.parse import urlparse;u=urlparse(get_settings().supabase_db_url);"
+                          f"import sys;sys.exit(0 if (u.hostname,u.port)==('127.0.0.1',{PORT}) else 7)"], cwd=REPO, env=env)
+    if chk.returncode != 0:
+        sys.exit("REFUSED: child process would not resolve to the throwaway database")
+    return subprocess.call(cmd, cwd=REPO, env=env)
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if not a:
+        sys.exit(__doc__)
+    if a[0] == "start":
+        start()
+    elif a[0] == "stop":
+        stop()
+    elif a[0] == "restore":
+        restore(Path(a[1]))
+    elif a[0] == "run":
+        sys.exit(run(a[a.index("--") + 1:] if "--" in a else a[1:]))
+    elif a[0] == "url":
+        print(local_url())

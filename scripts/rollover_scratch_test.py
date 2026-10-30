@@ -40,6 +40,11 @@ TAG = "rollover_test"
 CYCLE = datetime.date(2026, 3, 1)
 NEXT_CYCLE = datetime.date(2026, 4, 1)
 EXPECTED_PLAN = (109, 435988.0)    # rows, pieces: the live plan, nothing decided (the hard constraint of 2026-10-24)
+# A restored backup older than the live plan reads a different (correct for its date) plan: scripts/local_pg.py runs set
+# ROLLOVER_EXPECTED_PLAN="rows,pieces" to say so. The default, and every run against live, stays the line above.
+if os.environ.get("ROLLOVER_EXPECTED_PLAN"):
+    _r, _p = os.environ["ROLLOVER_EXPECTED_PLAN"].split(",")
+    EXPECTED_PLAN = (int(_r), float(_p))
 
 PUBLIC_FINGERPRINT_TABLES = (
     "lp_recommendation", "lp_run", "expected_receipt", "planning_cycle", "lp_quantity_change", "lp_decision_reversal",
@@ -176,7 +181,7 @@ def main(keep: bool = False) -> int:
         before = fingerprints(pg)
         check("3 baseline fingerprints taken", len(before) == len(PUBLIC_FINGERPRINT_TABLES))
         n_rows, pieces = plan_figures()
-        check("6 the live plan before", (n_rows, pieces) == EXPECTED_PLAN, f"{n_rows} rows, {pieces:,.0f} pieces")
+        check("6 the live plan before", (n_rows, round(pieces, 2)) == EXPECTED_PLAN, f"{n_rows} rows, {pieces:,.0f} pieces")
 
         # ---- build ------------------------------------------------------------------------------------------------
         with engine.connect() as c:
@@ -378,7 +383,8 @@ def main(keep: bool = False) -> int:
                            cumulative_share, computed_at, boundary_flag, method, run_id, added_as_new)
                            SELECT product_key, principal, '2026-03', tier, revenue_share, cumulative_share, now(), boundary_flag,
                                   method, 'rollover_test', added_as_new FROM abc_classification
-                           WHERE classification_period = '2026-02' AND principal = 'unilever' LIMIT 3""")
+                           WHERE classification_period = '2026-02' AND principal = 'unilever' AND method = %s
+                           ORDER BY product_key LIMIT 3""", (cc.cycle_params(CYCLE)["method"],))
             cur.execute("""INSERT INTO forecast_result (product_key, forecast_date, forecast_value, confidence_lower, confidence_upper, mape,
                            model_params, generated_at, mase, status)
                            SELECT product_key, '2026-04-01', forecast_value, confidence_lower, confidence_upper, mape,
@@ -477,7 +483,7 @@ def main(keep: bool = False) -> int:
         hits = tag_scan(pg)
         check("4 no table in public, mart, app or demo contains the scratch tag", hits == [], str(hits))
         n_rows2, pieces2 = plan_figures()
-        check("6 the live plan is unchanged", (n_rows2, pieces2) == EXPECTED_PLAN, f"{n_rows2} rows, {pieces2:,.0f} pieces")
+        check("6 the live plan is unchanged", (n_rows2, round(pieces2, 2)) == EXPECTED_PLAN, f"{n_rows2} rows, {pieces2:,.0f} pieces")
     finally:
         for n, f in real_refresh.items():
             setattr(analytics_marts, n, f)
