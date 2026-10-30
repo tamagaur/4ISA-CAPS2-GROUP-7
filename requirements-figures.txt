@@ -1,0 +1,4 @@
+# Manuscript figures only (scripts/manuscript_figures.py). Kept out of requirements.txt so the Render backend
+# does not install a plotting library it never imports. Install on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-figures.txt
+matplotlib==3.9.4

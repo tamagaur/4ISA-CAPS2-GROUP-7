@@ -153,6 +153,8 @@ reports/*
 !reports/experiment_artifacts/
 !reports/experiments/
 !reports/simulation/
+# Chapter 4 figures (scripts/manuscript_figures.py): rendered charts and their manifest, no product identifiers.
+!reports/figures/
 
 # Per-product quantity / stock / forecast / plan files (hard rule 9; untracked 2026-10-22). The working copies stay on disk.
 # Listed after the reports/ negations above so they win.
