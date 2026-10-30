@@ -142,6 +142,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from analytics.etl.granularity import business_days_in_month, resolve_delmonte_category_grain, resolve_unilever_sku_grain
 from analytics.allocation import basis_year, monthly_allocation
 from analytics.config import long_read_db_url
+from scripts.run_guards import cycles_with_a_plan, stale_abc_refusal
 from analytics.demo.prescriptive import plan_category, sigma_d_for_category
 from analytics.optimization.lp import (
     SKUInput, build_lp_model, compute_safety_stock, constraint_slacks, round_to_case_packs, solve_lp, target_stock,
@@ -1031,6 +1032,16 @@ def build_parser() -> argparse.ArgumentParser:
              "dismissed rows and other cycles are never touched. With --dry-run, only reports what it would retire.",
     )
     parser.add_argument(
+        "--replan", action="store_true",
+        help="Plan a cycle that already has a plan (rows from an earlier run). Without it a real run refuses "
+             "(exit 2): a second run moves figures that were already reviewed. A dry run only warns.",
+    )
+    parser.add_argument(
+        "--allow-stale-abc", action="store_true",
+        help="Go on when the ABC period the plan reads is older than the latest real sales month. Without it "
+             "the run refuses (exit 2).",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Compute and report everything, write nothing: the database session is read-only.",
     )
@@ -1473,6 +1484,29 @@ def main():
         logger.warning("No candidates after gating. Nothing to do.")
         conn.close()
         return
+
+    # ---- Refusals before anything is computed or written (audit P1, P2; scripts/run_guards.py) ----
+    cur.execute("SELECT MAX(classification_period) FROM ABC_Classification WHERE principal = 'unilever' AND "
+                + abc_method_sql())
+    stale = stale_abc_refusal(cur, cur.fetchone()[0]) if "unilever" in set(candidates_df["principal"]) else None
+    if stale:
+        if not args.allow_stale_abc:
+            logger.error(f"REFUSED: {stale} Nothing was written.")
+            conn.close()
+            sys.exit(2)
+        logger.warning(f"--allow-stale-abc: {stale}")
+    planned = cycles_with_a_plan(cur, list(candidates_df["forecast_date"].unique()), set(candidates_df["principal"]))
+    if planned:
+        said = ", ".join(f"{c} ({n} rows)" for c, n in planned)
+        if args.dry_run:
+            logger.warning(f"Cycle(s) already planned: {said}. A real run would refuse without --replan.")
+        elif not args.replan:
+            logger.error(f"REFUSED: cycle(s) already planned: {said}. A second run moves a plan that was reviewed; "
+                         "pass --replan to plan again on purpose. Nothing was written.")
+            conn.close()
+            sys.exit(2)
+        else:
+            logger.warning(f"--replan: planning again over {said}.")
 
     # ---- Step B: sales history ------------------------------------------
     product_keys = [int(k) for k in candidates_df["product_key"].unique()]

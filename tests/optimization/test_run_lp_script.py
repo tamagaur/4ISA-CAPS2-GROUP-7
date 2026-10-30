@@ -444,6 +444,8 @@ class _FakeDB:
         # view: None = migration 0069 not applied (the count alone, as before); else {"basis": {principal: row},
         # "stock": {cycle-less product_key: (in_file, pieces)}} answering stock_opening_v
         self.view = view
+        # the run guards (scripts/run_guards.py): a current ABC period and no cycle planned yet, unless a test says otherwise
+        self.abc_period, self.planned = "2026-02", []
         self.counts, self.stock = counts, stock
         self.packs, self.pack_columns = packs or {}, pack_columns
         self.candidates = [(k, sku, who, CYCLE, 1200.0, 0.5) for k, sku, who in candidates]
@@ -469,6 +471,12 @@ class _FakeDB:
         self.description, self._rows, self.rowcount = None, [], -1
         if "to_regclass('lp_run')" in flat:
             self._rows = [(True,)]
+        elif "MAX(classification_period) FROM ABC_Classification" in flat:
+            self._rows = [(self.abc_period,)]
+        elif "MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real" in flat:
+            self._rows = [("2026-02",)]
+        elif "lr.lp_run_key IS NOT NULL AND pd.principal = ANY" in flat:
+            self._rows = list(self.planned)
         elif "to_regclass('stock_opening_v')" in flat:
             self._rows = [(self.view is not None,)]
         elif "FROM stock_opening_v WHERE cycle" in flat:
@@ -646,3 +654,20 @@ def test_without_the_0066_columns_the_old_behaviour_is_available_by_flag(monkeyp
     (params,) = [p for s, p in db.statements if s.startswith("INSERT INTO LP_Recommendation")]
     assert len(params) == 6   # the pre-0066 upsert: no extra columns
 
+
+
+def test_main_refuses_an_already_planned_cycle_and_a_stale_abc_period(monkeypatch):
+    """Audit P1 and P2 (2026-10-30): exit 2 without the flag, nothing written; the flag lets the run through."""
+    import pytest
+
+    db = _FakeDB(counts={"2026-02": [("unilever", 812, datetime.date(2026, 3, 2))]}, stock={"2026-02": {1: 100.0}})
+    db.planned = [(CYCLE, 5)]
+    with pytest.raises(SystemExit) as e:
+        _run_main(monkeypatch, db)
+    assert e.value.code == 2 and not any(s.startswith("INSERT INTO lp_run") for s, _ in db.statements)
+
+    db = _FakeDB(counts={"2026-02": [("unilever", 812, datetime.date(2026, 3, 2))]}, stock={"2026-02": {1: 100.0}})
+    db.abc_period = "2026-01"
+    with pytest.raises(SystemExit) as e:
+        _run_main(monkeypatch, db)
+    assert e.value.code == 2

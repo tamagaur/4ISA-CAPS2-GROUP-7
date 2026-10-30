@@ -141,6 +141,9 @@ class RecommendationItem(BaseModel):
 class RecommendationsResponse(BaseModel):
     items: list[RecommendationItem]
     count: int
+    # Of `count`, how many items plan an order above zero (audit A12, 2026-10-30): 73 of 109 in cycle 2026-03,
+    # the other 36 plan a zero order. Additive; `count` and the plan total are unchanged.
+    order_count: int | None = None
     # The LP cycle these rows belong to, and how many pending rows from
     # earlier runs were withheld so a superseded cycle can't be acted on
     # (backend/lp_cycle.py). Optional so older fixtures still validate.

@@ -205,6 +205,21 @@ def _flag_counterfactual(body: dict) -> dict:
     return {**body, "counterfactual": flagged, "counterfactual_warning": COUNTERFACTUAL_WARNING if flagged else None}
 
 
+def _decomposition_basis(start: str, end: str, *, tier_filter: str, applies_to: list[str],
+                         counterfactual_included: bool) -> dict:
+    """What a decomposition response is made of (audit A6, 2026-10-30): the range, which tier filter applies to
+    which part, and whether COUNTERFACTUAL rows (tiers B and C, backtests never served) are in the figures.
+    Only Tier A was ever served; the default tier=all is unchanged."""
+    return {
+        "window": {"start": start, "end": end},
+        "tier_filter": tier_filter,
+        "tier_filter_applies_to": applies_to,
+        "served_tiers": [marts.SERVED_TIER],
+        "counterfactual_tiers": [t for t in ("A", "B", "C") if t != marts.SERVED_TIER],
+        "counterfactual_rows_included": counterfactual_included,
+    }
+
+
 def _stamped(db: Session, body: dict) -> dict:
     """The body plus `actuals_version`: the actuals (and mart refresh) the figures were computed on."""
     return {**body, "actuals_version": marts.actuals_version(db)}
@@ -289,9 +304,17 @@ def get_error_decomposition(
     if not marts.decomposition_available(db):
         return {"available": False, "coverage": ["unilever"], "totals": None, "by_tier": [], "monthly": [],
                 "top_products_by_stockout_exposure": [], "period_start": start, "period_end": end,
+                "figures_basis": _decomposition_basis(start, end, tier_filter=tier, applies_to=[], counterfactual_included=False),
                 "blocked_reason": "The error decomposition mart is not built on this database (migration 0063)."}
     out = marts.error_decomposition(db, start, end, top, tier)
-    return {"available": out["totals"] is not None, "coverage": ["unilever"], **out,
+    # totals and by_tier always cover every tier, so counterfactual rows are always in the headline; the filter
+    # only narrows the product list and its concentration.
+    basis = _decomposition_basis(start, end, tier_filter=tier,
+                                 applies_to=["top_products_by_stockout_exposure", "stockout_exposure_concentration"],
+                                 counterfactual_included=True)
+    basis["totals_cover_tiers"] = ["A", "B", "C"]
+    basis["product_list_includes_counterfactual"] = tier != marts.SERVED_TIER
+    return {"available": out["totals"] is not None, "coverage": ["unilever"], **out, "figures_basis": basis,
             "blocked_reason": None if out["totals"] is not None else "No scored product-months in this range."}
 
 
@@ -305,6 +328,8 @@ def _decomposition_range(db: Session, period: str | None, start_period: str | No
     start, end = resolve_range(db, period, start_period, "unilever")
     if not marts.decomposition_available(db):
         return start, end, {"available": False, "coverage": ["unilever"], "period_start": start, "period_end": end,
+                            "figures_basis": _decomposition_basis(start, end, tier_filter="none", applies_to=[],
+                                                                  counterfactual_included=False),
                             "blocked_reason": "The error decomposition mart is not built on this database (migration 0063)."}
     return start, end, None
 
@@ -330,7 +355,9 @@ def get_error_decomposition_product(
     out = marts.decomposition_by_product(db, sku_code, start, end)
     if out is None:
         raise HTTPException(status_code=404, detail=f"SKU {sku_code} is not in the product master")
-    return {"available": bool(out["months"]), "coverage": ["unilever"], **out,
+    basis = _decomposition_basis(start, end, tier_filter="one product", applies_to=[],
+                                 counterfactual_included=any(m.get("counterfactual") for m in out["months"]))
+    return {"available": bool(out["months"]), "coverage": ["unilever"], **out, "figures_basis": basis,
             "blocked_reason": None if out["months"] else "No scored months for this product in this range."}
 
 
@@ -352,7 +379,9 @@ def get_error_decomposition_aggregate(
     if blocked:
         return blocked
     out = marts.decomposition_aggregate(db, start, end)
-    return {"available": bool(out["principals"]), "coverage": ["unilever"], **out,
+    basis = _decomposition_basis(start, end, tier_filter="none (every tier, one row each plus 'all')", applies_to=[],
+                                 counterfactual_included=True)
+    return {"available": bool(out["principals"]), "coverage": ["unilever"], **out, "figures_basis": basis,
             "blocked_reason": None if out["principals"] else "No scored product-months in this range."}
 
 
@@ -376,7 +405,9 @@ def get_error_decomposition_concentration(
     if blocked:
         return blocked
     out = marts.decomposition_concentration(db, start, end, limit, tier)
-    return {"available": out["products_with_exposure"] > 0, "coverage": ["unilever"], **out,
+    basis = _decomposition_basis(start, end, tier_filter=tier, applies_to=["the ranked products and their shares"],
+                                 counterfactual_included=tier != marts.SERVED_TIER)
+    return {"available": out["products_with_exposure"] > 0, "coverage": ["unilever"], **out, "figures_basis": basis,
             "blocked_reason": None if out["products_with_exposure"] else "No product has exposure beyond safety stock in this range."}
 
 

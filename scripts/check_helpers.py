@@ -2,8 +2,8 @@
 
     python scripts/check_helpers.py env
         The live database must be configured AND reachable (read-only probe). Names the missing variable.
-    python scripts/check_helpers.py junit <junit.xml>
-        Fails if any test was skipped (or none ran), and prints each skip reason with the variable it names.
+    python scripts/check_helpers.py junit <junit.xml> [--allow-listed]
+        Fails if any test was skipped that is not on scripts/known_opt_in_skips.txt (exact id and reason), or none ran.
         Skipped is not passed: a suite where tests vanish when an environment variable is unset looks healthy
         while the live integration is broken.
 """
@@ -44,31 +44,57 @@ def cmd_env() -> int:
     return 0
 
 
-def cmd_junit(path: str) -> int:
+ALLOWED_SKIPS = REPO / "scripts" / "known_opt_in_skips.txt"
+
+
+def load_allowed(path: Path = ALLOWED_SKIPS) -> dict[str, str]:
+    """{test id: exact skip reason} from the allow-list file (comments and blank lines ignored)."""
+    allowed: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.startswith("#"):
+            name, _, reason = line.partition("	")
+            allowed[name.strip()] = reason.strip()
+    return allowed
+
+
+def cmd_junit(path: str, allowed: dict[str, str] | None = None) -> int:
+    """Fails on any skip not on the allow-list, by exact test id AND exact reason; also fails when an allow-list entry
+    names a test that was not collected (the list must stay exactly the known set). Allow-listed skips are named and
+    counted as NOT RUN: they are never reported as passed."""
+    allowed = {} if allowed is None else allowed   # no allow-list unless the caller passes one (only the whole suite does)
     root = ET.parse(path).getroot()
     cases = list(root.iter("testcase"))
+    ids = {c.get("classname", "") + "::" + c.get("name", "") for c in cases}
     skipped = [(c.get("classname", "") + "::" + c.get("name", ""), (c.find("skipped").get("message") or "")) for c in cases
                if c.find("skipped") is not None]
     print(f"{len(cases)} tests collected, {len(skipped)} skipped")
     if not cases:
         print("FAIL: no tests ran")
         return 1
-    if not skipped:
-        return 0
-    by_reason = Counter(msg for _, msg in skipped)
-    print(f"FAIL: {len(skipped)} skipped test(s). Skipped is not passed. Reasons:")
-    for msg, n in by_reason.most_common():
-        names = sorted(set(re.findall(r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b", msg)))
-        print(f"  {n:3d} x {msg}" + (f"   [variable: {', '.join(names)}]" if names else ""))
-    for name, _ in skipped[:5]:
-        print(f"      e.g. {name}")
-    return 1
+    unknown = [(n, m) for n, m in skipped if allowed.get(n) != m]
+    gone = sorted(n for n in allowed if n not in ids)
+    known = [(n, m) for n, m in skipped if allowed.get(n) == m]
+    if known:
+        print(f"NOT RUN (allow-listed opt-in, not coverage): {len(known)} of {len(allowed)} listed")
+    if gone:
+        print(f"FAIL: {len(gone)} allow-list entr(y/ies) name a test that no longer exists; remove them from {ALLOWED_SKIPS.name}:")
+        for n in gone[:5]:
+            print(f"      {n}")
+    if unknown:
+        by_reason = Counter(msg for _, msg in unknown)
+        print(f"FAIL: {len(unknown)} skipped test(s) not on the allow-list. Skipped is not passed. Reasons:")
+        for msg, k in by_reason.most_common():
+            names = sorted(set(re.findall(r"[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+", msg)))
+            print(f"  {k:3d} x {msg}" + (f"   [variable: {', '.join(names)}]" if names else ""))
+        for name, _ in unknown[:5]:
+            print(f"      e.g. {name}")
+    return 1 if (unknown or gone) else 0
 
 
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "env":
         sys.exit(cmd_env())
-    if len(sys.argv) == 3 and sys.argv[1] == "junit":
-        sys.exit(cmd_junit(sys.argv[2]))
+    if len(sys.argv) in (3, 4) and sys.argv[1] == "junit":
+        sys.exit(cmd_junit(sys.argv[2], load_allowed() if sys.argv[3:] == ["--allow-listed"] else None))
     print(__doc__)
     sys.exit(2)

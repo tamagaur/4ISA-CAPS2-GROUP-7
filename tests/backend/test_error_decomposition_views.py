@@ -241,3 +241,14 @@ def test_live_views_agree_with_the_stored_tables():
     (uni,) = [p for p in agg["principals"] if p["principal"] == "unilever"]
     allrow = next(t for t in uni["tiers"] if t["tier"] == "all")
     assert allrow["beyond_pesos"] == pytest.approx(float(stored), abs=0.5)
+
+
+def test_every_decomposition_response_states_its_figures_basis():
+    """Audit A6 (2026-10-30): window, tier filter and counterfactual inclusion are stated; the default tier is unchanged."""
+    from backend.routers import dashboard_range as dr
+
+    b = dr._decomposition_basis("2025-03", "2026-02", tier_filter="all", applies_to=["x"], counterfactual_included=True)
+    assert b["window"] == {"start": "2025-03", "end": "2026-02"} and b["tier_filter"] == "all"
+    assert b["served_tiers"] == ["A"] and b["counterfactual_tiers"] == ["B", "C"] and b["counterfactual_rows_included"] is True
+    import inspect
+    assert inspect.signature(dr.get_error_decomposition).parameters["tier"].default.default == "all"

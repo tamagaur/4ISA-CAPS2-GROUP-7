@@ -807,6 +807,7 @@ def get_recommendations(
     return _attach_demo_unilever(_with_data_mode(RecommendationsResponse(
         items=items,
         count=len(items),
+        order_count=_order_count(items),
         planning_cycle_date=freshness["cycle_date"],
         superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
         freshness=freshness,
@@ -875,6 +876,7 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
     return RecommendationsResponse(
         items=items,
         count=len(items),
+        order_count=_order_count(items),
         planning_cycle_date=freshness["cycle_date"],
         superseded_count=freshness["superseded_pending_count"] if cycle == "current" else 0,
         freshness=freshness,
@@ -882,6 +884,11 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
         stock_counts=counts,
         tier_a_periods=tier_a_periods(abc_periods_shown),
     )
+
+
+def _order_count(items) -> int:
+    """Items whose planned order is above zero (plan_q_i, which is q_i until a quantity is decided)."""
+    return sum(1 for i in items if (i.plan_q_i if i.plan_q_i is not None else i.q_i or 0) > 0)
 
 
 _DECISION_COLS_SEEN = {"value": False}

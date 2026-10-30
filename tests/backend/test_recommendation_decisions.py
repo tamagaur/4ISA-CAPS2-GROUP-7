@@ -317,3 +317,11 @@ def test_preview_without_preview_files_still_names_the_real_run(monkeypatch):
     assert lp_cycle.stored_run(None, cycle, "unilever", "preview") == {"run_key": 6}
     monkeypatch.setattr(lp_cycle, "predictive_preview", lambda mode: True)   # rows from preview files: no stored run
     assert lp_cycle.stored_run(None, cycle, "unilever", "preview") is None
+
+
+def test_order_count_counts_only_items_planning_an_order():
+    """Audit A12 (2026-10-30): 109 rows, 73 of them ordering. The count is additive; it is not the plan's row count."""
+    zero = rec._to_item(_item_row(current_stock=100.0, rop_i=30.0, q_i=0.0), None)
+    order = rec._to_item(_item_row(current_stock=100.0, rop_i=30.0, q_i=50.0), None)
+    assert rec._order_count([zero, order, order]) == 2
+    assert rec._order_count([]) == 0

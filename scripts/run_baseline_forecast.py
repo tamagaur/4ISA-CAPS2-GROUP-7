@@ -40,6 +40,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scripts.report_target import report_path
+from scripts.run_guards import stale_abc_refusal
 from analytics.forecasting.split import train_holdout_split
 from analytics.classification.fsn import no_sale_in_last_months
 from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION, abc_method
@@ -362,6 +363,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "Forecast_Result written 2026-10-19 WAS run with it (x1.0762 for March, all 175 'ok' "
                              "rows): applied, pending Sir Catubag's sign-off. Without it the LP plans 354,975 "
                              "pieces instead of 424,127 (-16.3%, 70 of 107 rows change).")
+    parser.add_argument("--allow-stale-abc", action="store_true", default=False,
+                        help="Go on when the resolved ABC period is older than the latest real sales month. Without it "
+                             "the run refuses (exit 2): it would forecast the wrong Tier A.")
     parser.add_argument("--write", action="store_true", default=False,
                         help="Additionally upsert Forecast_Result for status='ok' SKUs "
                              "(rule_method pick). OFF by default - this run is report-only. With --source demo: "
@@ -400,6 +404,12 @@ def main():
     abc_period = resolve_abc_period(cur)
     latest_demand_month = _scalar(cur, "SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real")
     logger.info(f"ABC period resolved: {abc_period}  (latest real demand month: {latest_demand_month})")
+    stale = stale_abc_refusal(cur, abc_period)
+    if stale:
+        if not args.allow_stale_abc:
+            logger.error(f"REFUSED: {stale}")
+            sys.exit(2)
+        logger.warning(f"--allow-stale-abc: {stale}")
 
     tier_a = fetch_tier_a(cur, abc_period)
     demand = fetch_demand(cur)
