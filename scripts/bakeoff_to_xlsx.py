@@ -28,6 +28,7 @@ warnings.simplefilter("ignore")
 load_dotenv()
 
 import scripts.model_bakeoff as mb   # reuse the 17 model fns
+from scripts.report_target import report_path
 from analytics.forecasting.diagnostic_metrics import (
     is_mape_unstable, mape, mase, naive_scale, smape, wape,
 )
@@ -130,7 +131,7 @@ for i, pk in enumerate(pks):
     if (i + 1) % 20 == 0:
         print(f"  {i+1}/{len(pks)}  ({time.time()-t0:.0f}s)")
 df = pd.DataFrame(rows)
-df.to_csv(os.path.join(REPORTS, "model_bakeoff_unilever_tierA_allmetrics.csv"), index=False)
+df.to_csv(report_path(os.path.join(REPORTS, "model_bakeoff_unilever_tierA_allmetrics.csv")), index=False)
 print("computed; building workbook")
 
 # ---- workbook ----
@@ -239,5 +240,5 @@ lg.cell(row=8, column=1).fill = red
 for j, w in enumerate([12, 60, 16, 16, 95], 1):
     lg.column_dimensions[get_column_letter(j)].width = w
 
-wb.save(OUT)
+wb.save(report_path(OUT))
 print(f"wrote {OUT}  ({len(wb.sheetnames)} sheets: {wb.sheetnames})")

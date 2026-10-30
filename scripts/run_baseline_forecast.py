@@ -39,6 +39,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from scripts.report_target import report_path
 from analytics.forecasting.split import train_holdout_split
 from analytics.classification.fsn import no_sale_in_last_months
 from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION, abc_method
@@ -920,10 +921,11 @@ def _write_md(df, abc_period, latest_demand_month):
         lines.append(f"| {name} ({n}) | {nv} | {m3} | {sb} | {cr} | {ts} |")
     lines.append("\nMA3 is never the #1 method in any single class, so a class-conditional rule never selects it.\n")
 
-    os.makedirs(REPORTS_DIR, exist_ok=True)
-    with open(RUN_MD, "w", encoding="utf-8") as fh:
+    run_md = report_path(RUN_MD)  # the tracked file describes live; a local-database run goes to local/
+    os.makedirs(os.path.dirname(run_md), exist_ok=True)
+    with open(run_md, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
-    print(f"Wrote {RUN_MD}")
+    print(f"Wrote {run_md}")
 
 
 # MA3 is the benchmark and the fallback for every SKU, and the served model for

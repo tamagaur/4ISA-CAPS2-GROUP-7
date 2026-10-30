@@ -36,6 +36,7 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
+from scripts.report_target import report_path  # noqa: E402
 
 SNAP_DATE = "2026-10-24"
 SNAP_DIR = REPO / "local" / f"published_snapshot_{SNAP_DATE}"
@@ -179,7 +180,7 @@ def cmd_write() -> int:
         "figures": figures,
         "published_doc_sections_verbatim": {"source": "docs/ACCURACY_AS_SERVED.md", "doc_sha256": sha256(DOC), **published},
     }
-    SNAP_JSON.write_text(json.dumps(out, indent=1, default=str), encoding="utf-8")
+    report_path(SNAP_JSON).write_text(json.dumps(out, indent=1, default=str), encoding="utf-8")
     t = figures["error_decomposition"]["A"]
     print(f"wrote {SNAP_JSON.relative_to(REPO)} ; inputs in {SNAP_DIR.relative_to(REPO)}")
     print(f"actuals version {stamp['key']}")

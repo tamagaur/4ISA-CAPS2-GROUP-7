@@ -51,6 +51,7 @@ from analytics.params import DEAD_SKU_MONTHS, abc_method  # noqa: E402
 from psycopg2.extras import execute_values  # noqa: E402
 from scripts.backtest_forecast_run import WINDOW, headline, read_tier_a, ym  # noqa: E402
 from scripts.run_baseline_forecast import build_series, fetch_demand  # noqa: E402
+from scripts.report_target import report_path  # noqa: E402
 
 CODE_PATHS = ["analytics", "scripts/run_baseline_forecast.py", "scripts/backtest_forecast_run.py",
               "scripts/accuracy_as_served.py"]
@@ -576,7 +577,7 @@ def main() -> int:
     print(doc)
     if args.write:
         (REPO / "docs").mkdir(exist_ok=True)
-        (REPO / "docs" / "ACCURACY_AS_SERVED.md").write_text(doc, encoding="utf-8")
+        report_path(REPO / "docs" / "ACCURACY_AS_SERVED.md").write_text(doc, encoding="utf-8")
         (REPO / "local").mkdir(exist_ok=True)
         pd.concat([bt.assign(run="as_served"), btc.assign(run="as_served_calendar")]).to_csv(
             REPO / "local" / "accuracy_as_served_rows.csv", index=False)

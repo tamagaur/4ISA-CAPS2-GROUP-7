@@ -37,6 +37,7 @@ from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+from scripts.report_target import report_path  # noqa: E402
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
 
 SEAS = 12
@@ -207,7 +208,7 @@ def main():
     R = {pk: _series(g) for pk, g in raw[~raw["is_demo"]].groupby("pk")}
     S = {pk: _series(g) for pk, g in raw.groupby("pk")} if args.with_synthetic else R
     pks = [pk for pk in tier_a if pk in R]
-    out_path = args.out or (OUT.replace(".csv", "_withsynth.csv") if args.with_synthetic else OUT)
+    out_path = args.out or report_path(OUT.replace(".csv", "_withsynth.csv") if args.with_synthetic else OUT)
     print(f"Tier A ({ABC_PERIOD}): {len(pks)} SKUs   with_synthetic={args.with_synthetic}")
 
     rows = []

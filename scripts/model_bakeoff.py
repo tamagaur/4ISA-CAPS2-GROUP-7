@@ -68,6 +68,7 @@ from statsmodels.tsa.forecasting.theta import ThetaModel
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
+from scripts.report_target import report_path  # noqa: E402
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, smape, wape  # noqa: E402
 from analytics.params import abc_method  # noqa: E402
 
@@ -405,11 +406,11 @@ def main() -> None:
             print(f"  {i + 1}/{len(pks)}  ({time.time() - t0:.0f}s)")
 
     df = pd.DataFrame(rows)
-    out = args.out or os.path.join(
+    out = args.out or report_path(os.path.join(
         REPORTS,
         f"model_bakeoff_unilever_{args.cohort}"
         f"{'_withsynth' if args.with_synthetic else ''}.csv",
-    )
+    ))
     df.to_csv(out, index=False)
     print(f"\nwrote {out}  ({len(df)} SKUs)")
 
