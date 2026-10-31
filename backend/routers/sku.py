@@ -71,6 +71,23 @@ STOCK_COUNT_DATE_SQL = """
 """
 
 
+# The MONTH of each principal's latest stock count (2026-10-21, audit NEW-FE-1): the same
+# latest-_period-per-principal rule STOCK_AT_LATEST_SQL takes the stock from, so it names the count
+# beside the figure. Every principal, Del Monte included: its count DAY is withheld above (a 1st-of-
+# month placeholder), but the month is real, and without it the page put Unilever's "counted Apr 6,
+# 2026" over Del Monte rows too, the only date it had.
+STOCK_COUNT_PERIOD_SQL = """
+    SELECT principal, MAX(_period) AS count_period
+    FROM inventory_fact_real
+    GROUP BY principal
+"""
+
+
+def stock_count_periods(rows) -> dict:
+    """{principal: 'YYYY-MM' of its latest stock count} for the principals in the list."""
+    return {r["principal"]: r.get("stock_count_period") for r in rows if r.get("stock_count_period") is not None}
+
+
 def stock_count_dates(rows) -> dict:
     """{principal: count date} from rows carrying stock_count_date — one
     entry per principal present, so an 'all' list states both counts."""
@@ -92,6 +109,7 @@ _SELECT_ONE = f"""
         COALESCE(pd.sku_code, pd.category_path) AS sku_id,
         pd.product_name,
         pd.principal,
+        pd.category_path,
         pd.grain,
         pd.pack_size,
         pd.brand,
@@ -105,10 +123,12 @@ _SELECT_ONE = f"""
         rop.rop_i AS reorder_point,
         abc.tier AS tier,
         abc.classification_period AS tier_period,
-        stock_count.count_date AS stock_count_date
+        stock_count.count_date AS stock_count_date,
+        stock_period.count_period AS stock_count_period
     FROM product_dimension pd
     LEFT JOIN ({STOCK_AT_LATEST_SQL}) inv ON inv.product_key = pd.product_key
     LEFT JOIN ({STOCK_COUNT_DATE_SQL}) stock_count ON stock_count.principal = pd.principal
+    LEFT JOIN ({STOCK_COUNT_PERIOD_SQL}) stock_period ON stock_period.principal = pd.principal
     LEFT JOIN (
         SELECT product_key, rop_i
         FROM lp_recommendation
@@ -157,6 +177,7 @@ def _to_item(r) -> SKUItem:
         sku_id=r["sku_id"] or "",
         product_name=r["product_name"],
         principal=r["principal"],
+        category_path=r.get("category_path"),
         grain=r.get("grain"),
         pack_size=r.get("pack_size"),
         brand=r.get("brand"),
@@ -173,6 +194,7 @@ def _to_item(r) -> SKUItem:
         tier=r.get("tier"),
         tier_period=r.get("tier_period"),
         stock_count_date=r.get("stock_count_date"),
+        stock_count_period=r.get("stock_count_period"),
     )
 
 
@@ -242,6 +264,7 @@ def get_skus(
         items=items,
         count=len(items),
         stock_count_dates=stock_count_dates(rows),
+        stock_count_periods=stock_count_periods(rows),
         # The cycle the target stock comes from ("Mar 2026 plan"); an LP
         # fact, so it follows lp.view like reorder_point.
         planning_cycle_date=cycle if lp_visible else None,

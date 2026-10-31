@@ -24,10 +24,13 @@ const PAGE_RULES = {
   },
   '/forecast': {
     follows: true,
-    text: 'The chart follows the date range unless you set its own range on the page; Clear goes back to this one.',
+    text: 'The chart follows the date range unless you set its own range on the page; “Back to the Dashboard’s range” goes back to this one.',
   },
   '/category-trends': {
     follows: 'partly',
+    // Drawn like the Sales forecast page's strip (2026-10-25); the text still
+    // says which part of the range it follows.
+    look: 'follows',
     text: 'Trends are fitted as of the end of the date range, on the 24 months of sales up to it. The start of the range does not shorten that history.',
   },
 };
@@ -39,7 +42,8 @@ const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
   const compareText = compare === COMPARE_MODES.NONE || !versus
     ? 'no comparison'
     : `compared with ${compare === COMPARE_MODES.YEAR ? 'the same months last year' : 'the previous period'} (${versus.label})`;
-  const tone = rule.follows === true ? 'is-follows' : rule.follows === 'partly' ? 'is-partly' : 'is-fixed';
+  const look = rule.look ?? rule.follows;
+  const tone = look === true || look === 'follows' ? 'is-follows' : look === 'partly' ? 'is-partly' : 'is-fixed';
   return (
     <div className={`period-strip ${tone}`} role="note">
       <span className="period-strip-filters">
@@ -48,7 +52,7 @@ const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
         <span className="period-strip-compare">· {compareText}</span>
       </span>
       <span className="period-strip-rule">
-        {rule.follows !== true && <Pin size={12} aria-hidden="true" />}
+        {tone !== 'is-follows' && <Pin size={12} aria-hidden="true" />}
         {rule.text}
       </span>
       <Link to={{ pathname: '/', search: window.location.search }} className="period-strip-link">

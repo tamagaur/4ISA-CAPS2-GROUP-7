@@ -6,23 +6,27 @@
 // range route's) as served; nothing here recomputes one.
 import React, { useEffect, useState } from 'react';
 import SectionLede from './ui/SectionLede';
-import { ArrowRight, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, X } from 'lucide-react';
 import {
   Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import Modal from './Modal';
 import ProductName from './ProductName';
 import InfoTip from './InfoTip';
+import { ClassBadge } from './ui/StatusBadge';
 import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { GRID_PROPS } from './ChartZoom';
 import { pesoTicks } from '../utils/pesoTicks';
+import { categoryLabel } from '../utils/categoryLabel';
+import { MISS_STATUS_LABEL, missStatus } from '../utils/forecastHighlights';
 import { BAR_FADE_FLOOR, Fade, endDot } from './ui/ChartParts';
 import { getForecastAccuracy } from '../api/dashboard';
 import { CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarSignoffText } from '../utils/calendarAdjustment';
 import { CHART_COLORS, COLORS } from '../theme/colors';
 import { formatCompactPesos, isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
+import { formatCount, missShare } from '../utils/missTotals';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import './AtRiskProductsModal.css';
 import './PendingCards.css';
@@ -111,13 +115,16 @@ const Stat = ({ label, value, sub }) => (
 
 // scope: the principals a figure covers when narrower than the page's filter
 // ("Unilever only" under All principals), from the payload's coverage.
-const CardShell = ({ title, lede, lead, scope, children, blocked }) => (
-  <div className={`chart-widget${blocked ? ' chart-widget-empty' : ''}`}>
+// leadVisible: the lead states the card's periods or count date, so it stays
+// on the plain dashboard (Dashboard.css .keep-visible; Technical Adviser,
+// 2 Oct 2026: every number with its period).
+const CardShell = ({ title, lede, lead, leadVisible = false, scope, children, blocked, className = '' }) => (
+  <div className={`chart-widget${className ? ` ${className}` : ''}${blocked ? ' chart-widget-empty' : ''}`}>
     <div className="chart-header">
       <div className="chart-title-area">
         <h4>{title}</h4>
         {lede && <SectionLede>{lede}</SectionLede>}
-        {lead && <p>{lead}</p>}
+        {lead && <p className={leadVisible ? 'keep-visible' : undefined}>{lead}</p>}
         {scope && <p className="chart-placeholder-note">{scope}</p>}
       </div>
     </div>
@@ -145,9 +152,12 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
     && (prior.count_date || prior.count_period)
     && (prior.count_date !== idle.count_date || prior.count_period !== idle.count_period);
   const priorChange = priorUsable ? idle.products - prior.products : 0;
-  const priorLine = priorUsable
-    ? `At the earlier stock count (${prior.count_date ? formatDate(prior.count_date) : formatMonth(prior.count_period)}): `
-      + `${prior.products.toLocaleString()} products${prior.pesos != null ? ` worth ${formatCompactPesos(prior.pesos)}` : ''}, `
+  // Two parts of one sentence, the first set in bold on the card.
+  const priorLead = priorUsable
+    ? `At the earlier stock count (${prior.count_date ? formatDate(prior.count_date) : formatMonth(prior.count_period)}):`
+    : null;
+  const priorRest = priorUsable
+    ? `${prior.products.toLocaleString()} products${prior.pesos != null ? ` worth ${formatCompactPesos(prior.pesos)}` : ''}, `
       + (priorChange === 0 ? 'the same number as now.'
         : `${Math.abs(priorChange).toLocaleString()} ${priorChange < 0 ? 'more' : 'fewer'} than now.`)
     : null;
@@ -158,7 +168,7 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
     : idle.count_period ? `${formatMonth(idle.count_period)} count` : null;
   if (idle.blocked_reason) {
     return (
-      <CardShell title={title} lede="Money stuck in stock that isn't moving" blocked>
+      <CardShell title={title} lede="Money stuck in stock that isn't moving" blocked className="dash-action-card idle-card">
         <p className="range-blocked">{idle.blocked_reason}</p>
       </CardShell>
     );
@@ -169,8 +179,13 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
       lede="Money stuck in stock that isn't moving"
       scope={scope}
       lead={`Products on hand in the stock ${counted || 'count'} that sold nothing in ${window}.`}
+      leadVisible
+      className="dash-action-card idle-card"
     >
-      <div className="range-stat-row">
+      {/* Two KPI blocks side by side, stacked when the card is narrow
+          (RangeCards.css .idle-kpis; its own class, so the other range
+          cards' .range-stat-row and its phone rules are untouched). */}
+      <div className="idle-kpis">
         {/* The finding first (2026-10-19): most of these products have never
             sold at all, which is the question for SSM (why were they bought?). */}
         <Stat
@@ -185,31 +200,45 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
             ? ` · ${idle.products - idle.products_with_value} without a price, not in the sum` : ''}`}
         />
       </div>
-      {priorLine && <p className="range-stat-sub">{priorLine}</p>}
+      {priorLead && (
+        <p className="idle-prior"><strong>{priorLead}</strong> {priorRest}</p>
+      )}
+      {/* What to do with it (Technical Adviser, 2 Oct 2026: what to order,
+          and what to do with stock that stopped selling). 2026-10-22. */}
       {/* The largest few by value (the payload's items, already sorted
-          largest first): which products the money is in, before the list. */}
+          largest first): which products the money is in, before the list.
+          Ranked 01-05; the name first, then its SKU code and when it last
+          sold on one muted line, the value at the right. */}
       {idle.items?.length > 0 && (
         <>
           <p className="range-list-title">Largest by stock value</p>
-          <ol className="range-product-list">
-            {idle.items.slice(0, IDLE_PREVIEW).map((r) => (
+          <ol className="idle-rank-list">
+            {idle.items.slice(0, IDLE_PREVIEW).map((r, i) => (
               <li key={r.product_key ?? r.sku_id}>
-                <span className="range-product-name">
-                  <ProductName name={r.product_name} code={r.sku_id} />
-                  <span className="range-product-sub">
-                    {r.never_sold ? 'Never sold' : r.last_sale_period ? `Last sold ${formatMonth(r.last_sale_period)}` : 'No sale in the window'}
+                <span className="idle-rank-num" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+                <span className="idle-rank-body">
+                  <ProductName name={r.product_name || r.sku_id} className="idle-rank-name" />
+                  <span className="idle-rank-meta">
+                    {r.product_name && r.sku_id != null && <span className="idle-rank-code">{r.sku_id}</span>}
+                    <span className={`idle-rank-status${r.never_sold ? ' is-never' : ''}`}>
+                      {r.never_sold ? 'Never sold' : r.last_sale_period ? `Last sold ${formatMonth(r.last_sale_period)}` : 'No sale in the window'}
+                    </span>
                   </span>
                 </span>
-                <span className="range-product-value">{r.pesos == null ? 'No price' : formatCompactPesos(r.pesos)}</span>
+                <span className={`idle-rank-value${r.pesos == null ? ' is-missing' : ''}`}>
+                  {r.pesos == null ? 'No price' : formatCompactPesos(r.pesos)}
+                </span>
               </li>
             ))}
           </ol>
         </>
       )}
       {idle.products > 0 && (
-        <button type="button" className="range-card-action" onClick={onOpenList}>
-          See all {idle.products.toLocaleString()} products <ArrowRight size={12} aria-hidden="true" />
-        </button>
+        <div className="dash-card-footer">
+          <button type="button" className="range-card-action" onClick={onOpenList}>
+            See all {idle.products.toLocaleString()} products <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </div>
       )}
     </CardShell>
   );
@@ -230,17 +259,23 @@ const pesosText = (v) => (v == null ? '—' : formatCompactPesos(v));
 export const STOCK_VALUE_COLUMNS = [
   { key: 'pieces', label: 'Stock (pieces)', render: (r) => (r.pieces == null ? '—' : formatUnits(r.pieces)) },
   { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
-  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+  { key: 'cover', label: 'Weeks of cover', sub: 'in pesos', render: weeksText },
 ];
 export const STOCK_COVER_COLUMNS = [
-  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+  { key: 'cover', label: 'Weeks of cover', sub: 'in pesos', render: weeksText },
   { key: 'weekly', label: 'Weekly sales (₱)', sub: 'average, 12 months', render: (r) => pesosText(r.weekly_sales) },
   { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
 ];
-export const ABOVE_RULE_COLUMNS = [
-  { key: 'above', label: 'Above the rule (₱)', sub: 'beyond 3 weeks of its sales', render: (r) => pesosText(r.above_rule_pesos) },
-  { key: 'pesos', label: 'Stock value (₱)', render: (r) => pesosText(r.pesos) },
-  { key: 'cover', label: 'Weeks of cover', render: weeksText },
+// The list behind the Stock cover card's "Above SSM's 3-week rule"
+// (Dashboard.jsx, 2026-10-22). `policyWeeks` is the response's own
+// policy_weeks. Every column names its unit; the weeks here are stock pesos
+// over sales pesos, so they say "in pesos" beside the card's pieces figure.
+export const aboveRuleColumns = (policyWeeks) => [
+  { key: 'above', label: 'Above the rule (₱)', sub: `beyond ${policyWeeks} weeks of its sales`, render: (r) => pesosText(r.above_rule_pesos) },
+  { key: 'pesos', label: 'Stock value (₱)', sub: 'at last purchase price', render: (r) => pesosText(r.pesos) },
+  { key: 'pieces', label: 'Stock (pieces)', render: (r) => (r.pieces == null ? '—' : formatUnits(r.pieces)) },
+  { key: 'weekly', label: 'Weekly sales (₱)', sub: 'average, at selling price', render: (r) => pesosText(r.weekly_sales) },
+  { key: 'cover', label: 'Weeks of cover', sub: 'in pesos', render: weeksText },
 ];
 const UNCHECKABLE_REASON = {
   no_safety_stock: 'No safety stock in the plan',
@@ -266,57 +301,48 @@ const wholePct = (share) => `${Math.round(share * 100)}%`;
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
 
 // The chart's colours: actual sales in the card's teal, the forecast in the
-// app's forecast violet; the miss between them in the same two (violet
-// where the forecast was too high, teal where too low), as the two miss
-// cards under the chart are.
+// app's forecast violet (solid against dashed). The miss between them
+// (2026-10-21, mockup pass): coral where the forecast was too high, teal
+// where it was too low, the same two as the miss cards under the chart.
+// Too low stays teal, not the mockup's blue: colors.js's hue-pair rule
+// (measured) keeps blue and violet out of one chart, since red-blind viewers
+// can't tell them apart. It is a deeper teal than the actual line
+// (CHART_COLORS.missTooLow, 2026-10-24): the same teal made the legend's
+// "Actual sales" and "Forecast too low" swatches one colour.
 const FC_ACTUAL = CHART_COLORS.salesSeries;
 const FC_FORECAST = COLORS.forecast;
+const FC_TOO_HIGH = CHART_COLORS.missTooHigh;
+const FC_TOO_LOW = CHART_COLORS.missTooLow;
 const FC_AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
 
-// The hover (2026-10-19), the Sales vs Inventory Value chart's own boxes:
-// one per series — the month, the exact pesos, the series' name — and the
-// miss under them, in pesos and as a share of what sold.
+// The hover, in both chart views (2026-10-21, mockup pass): the month, its
+// actual sales and forecast, the difference between them and which way it
+// went (utils/forecastHighlights.missStatus: too high above zero, too low
+// below, a match at exactly zero; nothing is called "accurate", since no
+// threshold for that is on record). Compact pesos, the exact ones under them.
+const FcSwatch = ({ color, dashed = false }) => (
+  <span className={`fc-tip-swatch${dashed ? ' is-dashed' : ''}`} style={{ '--fc-swatch': color }} aria-hidden="true" />
+);
 const ForecastVsActualTooltip = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
-  const up = row.variance >= 0;
-  const share = row.actual > 0 ? Math.abs((row.variance / row.actual) * 100).toFixed(1) : null;
+  const status = missStatus(row.variance);
+  const share = row.actual > 0 && row.variance ? Math.abs((row.variance / row.actual) * 100).toFixed(1) : null;
   return (
-    <div className="chart-tooltip chart-callouts">
-      <div className="chart-callout" style={{ '--chart-callout': FC_ACTUAL }}>
-        <span className="chart-callout-period">{formatMonth(row.period)}</span>
-        <strong className="chart-callout-value">{exactPesos(row.actual)}</strong>
-        <span className="chart-callout-name">Actual sales</span>
-      </div>
-      <div className="chart-callout" style={{ '--chart-callout': FC_FORECAST }}>
-        <span className="chart-callout-period">{formatMonth(row.period)}</span>
-        <strong className="chart-callout-value">{exactPesos(row.forecast)}</strong>
-        <span className="chart-callout-name">Forecast</span>
-      </div>
-      <p className="chart-tooltip-placeholder chart-tooltip-note">
-        Forecast too {up ? 'high' : 'low'} by <strong>{formatCompactPesos(Math.abs(row.variance))}</strong>
-        {share ? ` (${up ? '+' : '−'}${share}% of sales)` : ''} — risk of too {up ? 'much' : 'little'} stock.
-      </p>
-    </div>
-  );
-};
-
-// The "Monthly miss" view's hover: the month's miss, signed, which way it
-// leans and its share of that month's sales, with the two figures behind it.
-const MonthlyMissTooltip = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
-  const up = row.variance >= 0;
-  const share = row.actual > 0 ? Math.abs((row.variance / row.actual) * 100).toFixed(1) : null;
-  return (
-    <div className="chart-tooltip chart-callouts">
-      <div className="chart-callout" style={{ '--chart-callout': up ? FC_FORECAST : FC_ACTUAL }}>
-        <span className="chart-callout-period">{formatMonth(row.period)}</span>
-        <strong className="chart-callout-value">{signedPesos(row.variance)}</strong>
-        <span className="chart-callout-name">Forecast too {up ? 'high' : 'low'}{share ? ` · ${share}% of sales` : ''}</span>
-        <span className="chart-callout-line">Forecast {exactPesos(row.forecast)} · sold {exactPesos(row.actual)}</span>
-      </div>
-      <p className="chart-tooltip-placeholder chart-tooltip-note">Risk of too {up ? 'much' : 'little'} stock that month.</p>
+    <div className="chart-tooltip fc-tooltip">
+      <p className="fc-tooltip-month">{formatMonth(row.period)}</p>
+      <dl className="fc-tooltip-rows">
+        <div><dt><FcSwatch color={FC_ACTUAL} />Actual sales</dt><dd>{formatCompactPesos(row.actual)}</dd></div>
+        <div><dt><FcSwatch color={FC_FORECAST} dashed />Forecast sales</dt><dd>{formatCompactPesos(row.forecast)}</dd></div>
+        <div>
+          <dt>Difference</dt>
+          <dd>{formatCompactPesos(Math.abs(row.variance))}{share ? <span className="fc-tooltip-share"> · {share}% of sales</span> : null}</dd>
+        </div>
+        {status && (
+          <div><dt>Status</dt><dd className={`fc-tooltip-status is-${status}`}>{MISS_STATUS_LABEL[status]}</dd></div>
+        )}
+      </dl>
+      <p className="fc-tooltip-exact">Exact: {exactPesos(row.actual)} sold · {exactPesos(row.forecast)} forecast</p>
     </div>
   );
 };
@@ -423,9 +449,9 @@ export const ForecastErrorSummaryCard = ({
   const ticks = pesoTicks(months.flatMap((m) => [m.actual, m.forecast]));
   const varianceTicks = months.length ? missTicks(months.map((m) => m.variance)) : null;
   const lastIndex = months.length - 1;
-  const over = accuracy.surplus_pesos ?? 0;
-  const under = accuracy.shortage_pesos ?? 0;
-  const missMax = Math.max(over, under, 1);
+  // null when the backend sent no total: shown as — with no share or bar, never ₱0 (utils/missTotals).
+  const over = accuracy.surplus_pesos;
+  const under = accuracy.shortage_pesos;
   // Each total as a share of what sold over the range (actual_pesos, the
   // same basis), so "₱60.4M" has a size: 20% of sales.
   const soldTotal = accuracy.actual_pesos > 0 ? accuracy.actual_pesos : null;
@@ -476,44 +502,54 @@ export const ForecastErrorSummaryCard = ({
         </InfoTip>
       </p>
 
-      {/* Which forecasts are scored (2026-10-19): calendar-adjusted, as the
-          live forecast is made since Kelvin's 19 Oct run, and the same months
-          without the adjustment beside them, so the card says on its face
-          whether the method change helps THIS range — it does on Mar 2025 –
-          Feb 2026 and does not before 2025. */}
-      {served.calendar_adjusted && served.calendar_adjusted !== 'no' && (
-        <div className="fc-basis">
-          <p className="fc-basis-note">
-            {showingBefore
-              ? <>Showing the same months <strong>before the calendar adjustment</strong>, as the backtest was first published.</>
-              : served.calendar_adjusted === 'partly'
-                ? 'Some of these months are scored on calendar-adjusted forecasts and some are not.'
-                : <>Scored on <strong>calendar-adjusted</strong> forecasts, as the live forecast is made</>}
-            {!showingBefore && served.calendar_adjusted === 'yes'
-              && (calendarSignoffText(calendar?.signed_off) ? <> — {calendarSignoffText(calendar.signed_off)}.</> : '.')}
-            <InfoTip label="About the calendar adjustment">
-              <span className="fc-tip-line">{calendar?.method || CALENDAR_METHOD_FALLBACK}</span>
-              <span className="fc-tip-line">{CALENDAR_HISTORY_NOTE}</span>
-              {served.compare_run && (
-                <span className="fc-tip-line">
-                  Calendar-adjusted: {served.run_labels?.join('; ')}. Before the adjustment: {served.compare_run.label}.
-                </span>
+      {/* How to read this (2026-10-21, mockup pass): the comparison in one
+          plain sentence, then which forecasts are scored. That part keeps
+          its switch (calendar-adjusted, or the same months before the
+          adjustment: GET /dashboard's forecast_accuracy.compare_run) and the
+          pending-confirmation notice on its face; the two runs' figures and
+          the method sit one click down. Shown even with
+          SHOW_CHART_DESCRIPTIONS off: asked for by name. */}
+      <div className="fc-read">
+        <p className="fc-read-title">How to read this</p>
+        <p className="fc-read-text">
+          Compare what we predicted with what actually sold. Forecasts that are too high may lead to excess stock,
+          while forecasts that are too low may increase the risk of stockouts.
+        </p>
+        {served.calendar_adjusted && served.calendar_adjusted !== 'no' && (
+          <div className="fc-read-method">
+            <div className="fc-read-method-row">
+              {twinData && (
+                <ChartViewToggle view={basis} onChange={setBasis} options={FC_BASES} label="Forecasts scored: calendar-adjusted or before the adjustment" />
               )}
-            </InfoTip>
-          </p>
-          {twinData && (
-            <>
-              <p className="fc-basis-compare">
-                Same months, company total · typical product: calendar-adjusted <strong>{pct(served.company_total?.value)}</strong> ·{' '}
-                <strong>{pct(served.typical_product_weighted?.value)}</strong>; before the adjustment{' '}
-                <strong>{pct(twinData.company_total?.value)}</strong> · <strong>{pct(twinData.typical_product_weighted?.value)}</strong>.
-                {' '}{adjustmentVerdict(served, twinData)}
+              <p className="fc-read-status">
+                {showingBefore
+                  ? <>Showing the same months <strong>before the calendar adjustment</strong>, as the backtest was first published.</>
+                  : served.calendar_adjusted === 'partly'
+                    ? 'Some of these months are scored on calendar-adjusted forecasts and some are not.'
+                    : <>Scored on <strong>calendar-adjusted</strong> forecasts, as the live forecast is made</>}
+                {!showingBefore && served.calendar_adjusted === 'yes'
+                  && (calendarSignoffText(calendar?.signed_off) ? <> — {calendarSignoffText(calendar.signed_off)}.</> : '.')}
               </p>
-              <ChartViewToggle view={basis} onChange={setBasis} options={FC_BASES} label="Forecasts scored: calendar-adjusted or before the adjustment" />
-            </>
-          )}
-        </div>
-      )}
+            </div>
+            <details className="fc-read-more">
+              <summary>About the calendar adjustment</summary>
+              {twinData && (
+                <p className="fc-basis-compare">
+                  Same months, company total · typical product: calendar-adjusted <strong>{pct(served.company_total?.value)}</strong> ·{' '}
+                  <strong>{pct(served.typical_product_weighted?.value)}</strong>; before the adjustment{' '}
+                  <strong>{pct(twinData.company_total?.value)}</strong> · <strong>{pct(twinData.typical_product_weighted?.value)}</strong>.
+                  {' '}{adjustmentVerdict(served, twinData)}
+                </p>
+              )}
+              <p>{calendar?.method || CALENDAR_METHOD_FALLBACK}</p>
+              <p>{CALENDAR_HISTORY_NOTE}</p>
+              {served.compare_run && (
+                <p>Calendar-adjusted: {served.run_labels?.join('; ')}. Before the adjustment: {served.compare_run.label}.</p>
+              )}
+            </details>
+          </div>
+        )}
+      </div>
 
       {/* 2. The evidence: forecast against actual, month by month. */}
       {months.length > 0 && (
@@ -524,25 +560,28 @@ export const ForecastErrorSummaryCard = ({
               <SectionLede>The forecast against what really sold</SectionLede>
               <p className="fc-chart-sub">Monthly comparison · pesos at {String(accuracy.pesos_basis || '').split(' (')[0]}</p>
             </div>
+            {/* The view switch beside the chart's title, the key on its own
+                row under them (2026-10-21: a shorter card, to match the
+                forecast card beside it). */}
             <div className="fc-chart-tools">
-              {/* Every view's key laid in one cell, the current one shown
-                  (the others keep their space, unseen): the header keeps the
-                  tallest key's height, so switching views never moves the
-                  card or the one beside it (2026-10-19). */}
-              <div className="fc-legend-stack">
-                <ul className={`fc-legend${view === 'lines' ? '' : ' is-reserved'}`} aria-label="Legend">
-                  <li><span className="fc-legend-line" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Actual sales</li>
-                  <li><span className="fc-legend-line is-forecast" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast</li>
-                  <li><span className="fc-legend-band" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast too high</li>
-                  <li><span className="fc-legend-band" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Forecast too low</li>
-                </ul>
-                <ul className={`fc-legend${view === 'bars' ? '' : ' is-reserved'}`} aria-label="Legend">
-                  <li><span className="fc-legend-bar" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast too high</li>
-                  <li><span className="fc-legend-bar" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Forecast too low</li>
-                </ul>
-              </div>
               <ChartViewToggle view={view} onChange={setView} options={FC_VIEWS} label="Forecast vs actual: lines, monthly miss or table" />
             </div>
+          </div>
+          {/* Every view's key laid in one cell, the current one shown (the
+              others keep their space, unseen): the row keeps the tallest
+              key's height, so switching views never moves the card or the
+              one beside it (2026-10-19). */}
+          <div className="fc-legend-stack">
+            <ul className={`fc-legend${view === 'lines' ? '' : ' is-reserved'}`} aria-label="Legend">
+              <li><span className="fc-legend-line" style={{ backgroundColor: FC_ACTUAL }} aria-hidden="true" />Actual sales</li>
+              <li><span className="fc-legend-line is-forecast" style={{ backgroundColor: FC_FORECAST }} aria-hidden="true" />Forecast</li>
+              <li><span className="fc-legend-band" style={{ backgroundColor: FC_TOO_HIGH }} aria-hidden="true" />Forecast too high</li>
+              <li><span className="fc-legend-band" style={{ backgroundColor: FC_TOO_LOW }} aria-hidden="true" />Forecast too low</li>
+            </ul>
+            <ul className={`fc-legend${view === 'bars' ? '' : ' is-reserved'}`} aria-label="Legend">
+              <li><span className="fc-legend-bar" style={{ backgroundColor: FC_TOO_HIGH }} aria-hidden="true" />Forecast too high</li>
+              <li><span className="fc-legend-bar" style={{ backgroundColor: FC_TOO_LOW }} aria-hidden="true" />Forecast too low</li>
+            </ul>
           </div>
           {view === 'table' ? (
             // In the chart's own box, so the card is the same height in
@@ -552,7 +591,7 @@ export const ForecastErrorSummaryCard = ({
             </div>
           ) : view === 'bars' ? (
             // The miss alone: one bar per month, forecast − actual, above
-            // zero where the forecast was too high (violet), below where it
+            // zero where the forecast was too high (coral), below where it
             // was too low (teal) — the same rows as the lines, folded.
             <div
               className="fc-chart"
@@ -564,8 +603,8 @@ export const ForecastErrorSummaryCard = ({
                 <ComposedChart data={months} margin={{ top: 12, right: 16, left: 0, bottom: 4 }} barCategoryGap="28%">
                   <defs>
                     {/* Solid at the bar's tip, fading to the zero line, either side of it. */}
-                    <Fade id="fc-miss-high" color={FC_FORECAST} to={BAR_FADE_FLOOR} />
-                    <Fade id="fc-miss-low" color={FC_ACTUAL} to={BAR_FADE_FLOOR} flip />
+                    <Fade id="fc-miss-high" color={FC_TOO_HIGH} to={BAR_FADE_FLOOR} />
+                    <Fade id="fc-miss-low" color={FC_TOO_LOW} to={BAR_FADE_FLOOR} flip />
                   </defs>
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis
@@ -588,8 +627,8 @@ export const ForecastErrorSummaryCard = ({
                     ticks={varianceTicks ?? undefined}
                     label={{ value: 'Forecast − actual (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...FC_AXIS_TITLE }}
                   />
-                  <Tooltip content={<MonthlyMissTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} />
-                  <ReferenceLine y={0} stroke="#98A2B3" />
+                  <Tooltip content={<ForecastVsActualTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} />
+                  <ReferenceLine y={0} stroke="var(--color-slate-400)" />
                   <Bar dataKey="variance" name="Forecast − actual" radius={3} maxBarSize={28} isAnimationActive={false}>
                     {months.map((m) => <Cell key={m.period} fill={m.variance >= 0 ? 'url(#fc-miss-high)' : 'url(#fc-miss-low)'} />)}
                   </Bar>
@@ -627,16 +666,16 @@ export const ForecastErrorSummaryCard = ({
                     label={{ value: 'Pesos (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...FC_AXIS_TITLE }}
                   />
                   <Tooltip content={<ForecastVsActualTooltip />} cursor={{ stroke: CHART_COLORS.gridline }} />
-                  {/* The miss, shaded between the lines: violet where the
+                  {/* The miss, shaded between the lines: coral where the
                       forecast was too high, teal where too low. Recharts
                       draws an Area under every Line (its layer order). Neither
                       adds to the hover (tooltipType none): the note does. */}
                   <Area
-                    type="monotone" dataKey="tooHigh" name="Forecast too high" fill={FC_FORECAST} fillOpacity={0.2}
+                    type="monotone" dataKey="tooHigh" name="Forecast too high" fill={FC_TOO_HIGH} fillOpacity={0.16}
                     stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
                   />
                   <Area
-                    type="monotone" dataKey="tooLow" name="Forecast too low" fill={FC_ACTUAL} fillOpacity={0.2}
+                    type="monotone" dataKey="tooLow" name="Forecast too low" fill={FC_TOO_LOW} fillOpacity={0.18}
                     stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
                   />
                   <Line
@@ -658,6 +697,7 @@ export const ForecastErrorSummaryCard = ({
 
       {/* 3. Where the misses went: two bars on one scale. */}
       <div className="fc-misses">
+        <div className="fc-misses-head">
         <p className="fc-misses-title">
           Where the misses went
           <InfoTip label="What these amounts are">
@@ -668,29 +708,37 @@ export const ForecastErrorSummaryCard = ({
           </InfoTip>
         </p>
         <SectionLede>Too high, or too low?</SectionLede>
+        </div>
+        {/* Coral up, teal down (2026-10-21, mockup pass). The bar is the
+            total's share of the range's sales, the same figure as the line
+            above it, so its length means what it says; without sales to
+            divide by there is no share and no bar. */}
         <div className="fc-miss-cards">
           {[
-            { key: 'over', label: 'Forecast too high', note: 'Forecast above sales — risk of too much stock', value: over, color: COLORS.forecast },
-            { key: 'under', label: 'Forecast too low', note: 'Sales above forecast — risk of too little stock', value: under, color: CHART_COLORS.salesSeries },
-          ].map((b) => (
-            <div className="fc-miss-card" key={b.key}>
-              <span className="fc-miss-name">{b.label}</span>
+            { key: 'over', tone: 'high', Icon: ArrowUp, label: 'Forecast too high', note: 'Forecast above sales — risk of excess stock.', value: over },
+            { key: 'under', tone: 'low', Icon: ArrowDown, label: 'Forecast too low', note: 'Sales above forecast — risk of stockouts.', value: under },
+          ].map((b) => ({ ...b, share: missShare(b.value, soldTotal) })).map((b) => (
+            <div className={`fc-miss-card is-${b.tone}`} key={b.key}>
+              <div className="fc-miss-top">
+                <span className="fc-miss-name">{b.label}</span>
+                <span className="fc-miss-icon" aria-hidden="true"><b.Icon size={16} strokeWidth={2.5} /></span>
+              </div>
               <span className="fc-miss-value">{formatCompactPesos(b.value)}</span>
-              {soldTotal && (
+              {b.share != null && (
                 <span className="fc-miss-share">
                   <HoverShare value={b.value} sold={soldTotal} label={b.label} />
                 </span>
               )}
               <span className="fc-miss-note">{b.note}</span>
-              {/* The two bars share one scale (the larger total), so their
-                  lengths compare across the cards. */}
-              <div
-                className="fc-miss-track"
-                role="img"
-                aria-label={`${b.label}: ${formatCompactPesos(b.value)}, ${b.note}`}
-              >
-                <span style={{ width: `${(b.value / missMax) * 100}%`, backgroundColor: b.color }} />
-              </div>
+              {b.share != null && (
+                <div
+                  className="fc-miss-track"
+                  role="img"
+                  aria-label={`${b.label}: ${formatCompactPesos(b.value)}, ${wholePct(b.share)} of sales over ${accuracy.label}`}
+                >
+                  <span style={{ width: `${Math.min(100, b.share * 100)}%` }} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -698,10 +746,11 @@ export const ForecastErrorSummaryCard = ({
 
       {/* 4. The takeaway: the products to review, with their list. */}
       {runs.count > 0 && (
-        <button type="button" className="fc-action" onClick={() => onOpenList(showingBefore ? twinRunId : null)}>
-          <span>
+        <button type="button" className="fc-action fc-action-alert" onClick={() => onOpenList(showingBefore ? twinRunId : null)}>
+          <AlertTriangle className="fc-action-icon" size={16} aria-hidden="true" />
+          <span className="fc-action-text">
             <strong>{runs.count.toLocaleString()} products</strong> had forecasts that were too high {runs.run_months} or
-            more months in a row — check them before ordering
+            more months in a row.
           </span>
           <ArrowRight size={14} aria-hidden="true" />
         </button>
@@ -711,7 +760,7 @@ export const ForecastErrorSummaryCard = ({
           pieces and pesos (GET /dashboard/accuracy?level=category). */}
       {onOpenCategories && (
         <button type="button" className="fc-action fc-action-quiet" onClick={() => onOpenCategories(showingBefore ? twinRunId : null)}>
-          <span>See where the misses went, <strong>category by category</strong></span>
+          <span className="fc-action-text">See where the misses went, <strong>category by category</strong></span>
           <ArrowRight size={14} aria-hidden="true" />
         </button>
       )}
@@ -724,7 +773,7 @@ export const ForecastErrorSummaryCard = ({
 // accuracy percentages stay on the card's two headline figures.
 const signedPieces = (v) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${formatUnits(Math.abs(v))}`);
 export const CATEGORY_MISS_COLUMNS = [
-  { key: 'products', label: 'Products', render: (r) => (r.products ?? 0).toLocaleString() },
+  { key: 'products', label: 'Products', render: (r) => formatCount(r.products) },
   { key: 'forecast', label: 'Forecast (pieces)', sub: 'summed over the range', render: (r) => formatUnits(r.forecast_pieces) },
   { key: 'actual', label: 'Sold (pieces)', sub: 'summed over the range', render: (r) => formatUnits(r.actual_pieces) },
   { key: 'net', label: 'Net miss (pieces)', sub: '+ forecast too high, − too low', render: (r) => signedPieces(r.net_miss_pieces) },
@@ -745,11 +794,33 @@ export const OVER_RUN_COLUMNS = [
 // How many each side names before "See all" opens the rest, in place.
 const LIST_PREVIEW = 5;
 
+// One product's class in the comparison period and now, from the payload's
+// own compare_class / class (null = not ranked in that range; the item's
+// *_note says why). Shown only where a page asks for it (showClassMove: the
+// ABC page, 2026-10-24); the ranking is the backend's, nothing is re-ranked.
+// A Del Monte side with nothing collected (note 'not_collected', backend/
+// marts.py _unranked_side) says so, apart from a real "no sales".
+const ClassMove = ({ before, now, beforeNote, nowNote }) => {
+  const word = (tier, note) => (tier ? `Class ${tier}` : note === 'not_collected' ? 'not collected' : 'not ranked');
+  const side = (tier, note) => (tier ? <ClassBadge tier={tier} />
+    : <span className="class-move-none" title={note && note !== 'not_collected' ? note : undefined}>{word(tier, note)}</span>);
+  return (
+    <span className="class-move">
+      <span className="visually-hidden">{`${word(before, beforeNote)} before, ${word(now, nowNote)} now`}</span>
+      <span className="class-move-sides" aria-hidden="true">
+        {side(before, beforeNote)}
+        <ArrowRight size={12} />
+        {side(now, nowNote)}
+      </span>
+    </span>
+  );
+};
+
 // One side (2026-10-19, after the mockup): a tinted header band — green for
 // the ones that joined, red for the ones that left — then the products in
 // the payload's own order, each with its change in revenue at the right.
 // The full list scrolls inside the panel, so the card keeps its height.
-const ChangeList = ({ title, tone, items, noun, onOpen }) => {
+const ChangeList = ({ title, tone, items, noun, onOpen, showClassMove = false }) => {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? items : items.slice(0, LIST_PREVIEW);
   return (
@@ -762,11 +833,17 @@ const ChangeList = ({ title, tone, items, noun, onOpen }) => {
           {shown.map((item) => (
             <li key={item.sku_id || item.product_key || item.product_name}>
               <ProductName
-                name={item.product_name || item.category_path}
+                // A row without a SKU is a Del Monte category, served as its
+                // raw path; shown readable, the key keeps the raw (2026-10-26).
+                name={item.sku_id ? (item.product_name || item.category_path) : categoryLabel(item.product_name || item.category_path)}
                 code={item.sku_id}
                 onOpen={item.sku_id && onOpen ? () => onOpen(item.sku_id) : undefined}
                 openLabel="Open its forecast"
               />
+              {showClassMove && (
+                <ClassMove before={item.compare_class} now={item.class}
+                  beforeNote={item.compare_class_note} nowNote={item.class_note} />
+              )}
               {item.change_pesos != null && (
                 <span className={`pending-change-delta ${item.change_pesos >= 0 ? 'is-up' : 'is-down'}`}>
                   {signedPesos(item.change_pesos)}
@@ -811,7 +888,9 @@ const sideSentence = (who, before, beforeReason, now, nowReason) => {
   return <>The ones that {who} have no sales figure on either side ({whyNone(nowReason)}). </>;
 };
 
-export const ClassChanges = ({ changes, onOpen }) => {
+// `showClassMove`: each product's class before and now beside its name (the
+// ABC page). The Dashboard leaves it off and keeps its compact rows.
+export const ClassChanges = ({ changes, onOpen, showClassMove = false }) => {
   if (!changes?.principals?.length) return null;
   const names = { unilever: 'Unilever', delmonte: 'Del Monte' };
   const multi = changes.principals.length > 1;
@@ -821,13 +900,40 @@ export const ClassChanges = ({ changes, onOpen }) => {
       lede="Where changes happened"
       lead={`${changes.label}, compared with ${changes.compare_label}. `
         + 'The amount beside each product is the change in its revenue between the two periods.'}
+      leadVisible
     >
       {changes.principals.map((p) => {
         const noun = p.grain === 'sku' ? 'products' : 'categories';
+        const one = p.grain === 'sku' ? 'product' : 'category';
+        // A side where nothing at all was collected (Del Monte, Mar 2024 -
+        // Feb 2025). The backend marks every compared category's revenue on
+        // that side `not_collected` (backend/marts._unranked_side, only when
+        // the principal has no real month in the range). Ranked from nothing,
+        // that side has no top sellers, so the card used to say "0 categories
+        // a year earlier" and list every current one as joined (audit FE-4,
+        // 2026-10-21). No comparison is possible; it says so instead.
+        const compareMissing = p.entered_compare_revenue_reason === 'not_collected'
+          || p.left_compare_revenue_reason === 'not_collected';
+        const nowMissing = p.entered_revenue_reason === 'not_collected'
+          || p.left_revenue_reason === 'not_collected';
+        const missingSide = compareMissing ? changes.compare_label : nowMissing ? changes.label : null;
+        // "Open its forecast" for Unilever SKUs only: a Del Monte row is a
+        // category, with no product forecast to open (ABCClassification's
+        // openForecast, the same rule).
+        const openRow = p.principal === 'unilever' ? onOpen : undefined;
         return (
           <div key={p.principal} className="range-change-block">
             {multi && <span className="pending-card-label">{names[p.principal] || p.principal}</span>}
-            {p.blocked_reason ? <p className="range-blocked">{p.blocked_reason}</p> : (
+            {p.blocked_reason ? <p className="range-blocked">{p.blocked_reason}</p> : missingSide ? (
+              <p className="range-blocked">
+                No comparison: {names[p.principal] || p.principal} sales were not collected for {missingSide}, so
+                no {one} can be said to have joined or left the
+                top sellers.{' '}
+                {compareMissing
+                  ? <>Top sellers in {changes.label}: <strong>{p.class_a_count.toLocaleString()}</strong> {noun}.</>
+                  : <>Top sellers in {changes.compare_label}: <strong>{p.compare_class_a_count.toLocaleString()}</strong> {noun}.</>}
+              </p>
+            ) : (
               <>
                 {crossesRegroup(changes, p) && (
                   <p className="range-regroup-note">
@@ -851,8 +957,8 @@ export const ClassChanges = ({ changes, onOpen }) => {
                   Pesos at {p.pesos_basis}.
                 </p>
                 <div className="pending-change-grid">
-                  <ChangeList title="Joined the top sellers" tone="up" items={byChange(p.entered || [])} noun={noun} onOpen={onOpen} />
-                  <ChangeList title="Left the top sellers" tone="down" items={byChange(p.left || [])} noun={noun} onOpen={onOpen} />
+                  <ChangeList title="Joined the top sellers" tone="up" items={byChange(p.entered || [])} noun={noun} onOpen={openRow} showClassMove={showClassMove} />
+                  <ChangeList title="Left the top sellers" tone="down" items={byChange(p.left || [])} noun={noun} onOpen={openRow} showClassMove={showClassMove} />
                 </div>
                 <p className="range-source">{p.revenue_rule}</p>
               </>

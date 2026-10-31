@@ -1069,3 +1069,22 @@
   text-align: center;
   color: var(--color-text-muted, #5B6474);
 }
+/* Joined / left Class A on the range view (RangeCards ClassChanges + the
+   class each product came from or went to). */
+.abc-range-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A drill-down count that opens the Reorder page on its urgency (2026-10-22). */
+.abc-drilldown-link {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.abc-drilldown-link:hover,
+.abc-drilldown-link:focus-visible {
+  color: var(--color-nav-bg);
+}

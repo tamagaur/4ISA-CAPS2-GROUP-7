@@ -48,9 +48,9 @@ import { FIRST_DATA_YEAR } from '../dataCoverage';
 
 // Muted slate for past years, the dashboard's navy for the allocation's base
 // year, orange for the year still in progress.
-const BAR_COLOR = { history: '#8FA3C4', base: CHART_COLORS.heroInventory, ytd: '#F28C28' };
-const BAND_COLOR = '#F28C28';
-const BAND_INK = '#C2410C';
+const BAR_COLOR = { history: CHART_COLORS.annualHistory, base: CHART_COLORS.heroInventory, ytd: CHART_COLORS.annualYtd };
+const BAND_COLOR = CHART_COLORS.annualYtd;
+const BAND_INK = CHART_COLORS.annualYtdInk;
 const AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -181,9 +181,33 @@ const AnnualTooltip = ({ active, payload, band }) => {
 };
 
 // The year, and under it the months on record when the year is not full,
-// or its change on the year before when it is (green up, red down).
-const YOY_UP = '#2A8551';
-const YOY_DOWN = '#D54848';
+// or its change on the year before when it is: a small pill with an arrow,
+// dark green on light green up, dark red on light red down. Plain 11px text
+// in a mid green read as grey beside the axis labels (Audrey, 2026-10-21).
+// Up is the dashboard's success pair (--color-success-text on
+// --color-success-bg-alt, the FSN "Fast" badge), 6.5:1; down is 5.9:1.
+const YOY_STYLE = {
+  up: { ink: 'var(--color-success-text)', fill: 'var(--color-success-bg-alt)', arrow: '▲' },
+  down: { ink: 'var(--color-danger-ink)', fill: 'var(--color-severity-critical-bg)', arrow: '▼' },
+};
+const YoyPill = ({ yoy }) => {
+  const s = yoy >= 0 ? YOY_STYLE.up : YOY_STYLE.down;
+  const label = `${yoy >= 0 ? '+' : '−'}${Math.abs(yoy).toFixed(1)}%`;
+  // About 6.3px a character at 11px bold, plus the arrow and padding.
+  const width = Math.round(label.length * 6.3 + 22);
+  return (
+    <g aria-label={`${label} on the year before`}>
+      <rect x={-width / 2} y={15} width={width} height={16} rx={8} fill={s.fill} />
+      {/* y on the text, only relative nudges on the spans: a dy on the first
+          span replaces the text's own dy, and an absolute y on a span starts a
+          new chunk that text-anchor centres on its own, so the two overlap. */}
+      <text y={27} textAnchor="middle" fill={s.ink} fontSize={11} fontWeight={700}>
+        <tspan fontSize={8} dy={-1}>{s.arrow}</tspan>
+        <tspan dx={3} dy={1}>{label}</tspan>
+      </text>
+    </g>
+  );
+};
 const YearTick = ({ x, y, payload, rows }) => {
   const row = rows.find((r) => r.key === payload.value);
   return (
@@ -195,11 +219,7 @@ const YearTick = ({ x, y, payload, rows }) => {
       {row && row.value == null && (
         <text dy={25} textAnchor="middle" fill={CHART_COLORS.axisLabel} fontSize={11}>no data</text>
       )}
-      {row?.yoy != null && (
-        <text dy={25} textAnchor="middle" fill={row.yoy >= 0 ? YOY_UP : YOY_DOWN} fontSize={11} fontWeight={600}>
-          {row.yoy >= 0 ? '+' : '−'}{Math.abs(row.yoy).toFixed(1)}%
-        </text>
-      )}
+      {row?.yoy != null && <YoyPill yoy={row.yoy} />}
     </g>
   );
 };
@@ -214,7 +234,7 @@ const YearTick = ({ x, y, payload, rows }) => {
 // the decimal.
 const BarValue = ({ x, y, width, value }) => {
   if (value == null) return null;
-  const text = { x: x + width / 2, y: y - 6, textAnchor: 'middle', fill: '#344054', fontWeight: 600, stroke: '#fff', strokeWidth: 3, paintOrder: 'stroke' };
+  const text = { x: x + width / 2, y: y - 6, textAnchor: 'middle', fill: 'var(--color-text-label)', fontWeight: 600, stroke: 'var(--color-surface)', strokeWidth: 3, paintOrder: 'stroke' };
   const short = Math.abs(value) >= 1_000_000 ? `₱${Math.round(value / 1_000_000)}M` : formatCompactPesos(value);
   return (
     <g>
@@ -267,10 +287,10 @@ const EmptyYearLabels = ({ rows, start }) => {
   if (!plot || !rows.length) return null;
   const slot = plot.width / rows.length;
   const lines = [
-    ['No data', '#667085', 600, 10.5],
-    ['recorded', '#667085', 600, 10.5],
-    ["SSM's records", '#98A2B3', 400, 9.5],
-    [`start ${start}`, '#98A2B3', 400, 9.5],
+    ['No data', 'var(--color-text-subtle)', 600, 10.5],
+    ['recorded', 'var(--color-text-subtle)', 600, 10.5],
+    ["SSM's records", 'var(--color-slate-400)', 400, 9.5],
+    [`start ${start}`, 'var(--color-slate-400)', 400, 9.5],
   ];
   return (
     <g className="annual-view-empty">
@@ -423,7 +443,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                   tickLine={false}
                   axisLine={{ stroke: CHART_COLORS.gridline }}
                   interval={0}
-                  height={48}
+                  height={52}
                   tick={<YearTick rows={rows} />}
                   label={{ value: 'Year', position: 'insideBottom', offset: 0, ...AXIS_TITLE }}
                 />

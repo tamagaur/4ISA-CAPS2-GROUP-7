@@ -580,3 +580,21 @@
 .sku-table td {
   font-variant-numeric: tabular-nums;
 }
+
+/* An old Del Monte sub-category from before the Jan 2025 regrouping: kept
+   in the table, left out of the class counts (2026-10-22). */
+.sku-chip-regroup {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: var(--color-text-muted, #64748b);
+  white-space: normal;
+  max-width: 9rem;
+  margin-inline: auto;
+}
+
+/* The stock period line above the table (2026-10-22). */
+.sku-stock-note {
+  margin-bottom: 0.75rem;
+}

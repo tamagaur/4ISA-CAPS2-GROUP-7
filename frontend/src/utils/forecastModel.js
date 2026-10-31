@@ -7,8 +7,8 @@
 //   sales months   model_params.method                label
 //   under 3        trailing_average (provisional)     Provisional average
 //   3-11           ma3                                3-month moving average
-//   12-23          tsb                                TSB
-//   24 or more     xgb_ma3_avg                        XGBoost + MA3 average
+//   12-23          tsb                                Method for products that sell irregularly (TSB)
+//   24 or more     xgb_ma3_avg                        Average of a trained model and the 3-month average (XGBoost + MA3)
 //
 // Two more cases the runner can write: zero_no_order (no sale in the last 6
 // months, so the plan orders nothing), and a fallback, where a TSB/XGBoost
@@ -18,10 +18,12 @@
 // Labels name the model and nothing more. On real data the challengers TIE
 // with MA3, so no label here may say or imply that one is more accurate.
 
+// Plain words first, the method's short name in brackets (Technical
+// Adviser, 2 Oct 2026: no unexplained jargon; 2026-10-22).
 const METHOD_LABELS = {
   ma3: '3-month moving average',
-  tsb: 'TSB',
-  xgb_ma3_avg: 'XGBoost + MA3 average',
+  tsb: 'Method for products that sell irregularly (TSB)',
+  xgb_ma3_avg: 'Average of a trained model and the 3-month average (XGBoost + MA3)',
 };
 
 // What each model does, for a reader who doesn't know its name (the
@@ -135,7 +137,7 @@ function withCalendar(served, params) {
 // stored, never guessed at — callers keep the raw string in a tooltip.
 const wholeUnits = (value) => Math.round(Number(value)).toLocaleString();
 const FALLBACK_REASONS = [
-  [/^above_historical_max: (\S+) > (\S+)$/, (value, max) => `the model's value (${wholeUnits(value)}) was above this SKU's highest month (${wholeUnits(max)})`],
+  [/^above_historical_max: (\S+) > (\S+)$/, (value, max) => `the model's value (${wholeUnits(value)}) was above this product's highest month (${wholeUnits(max)})`],
   [/^below_zero: (\S+)$/, (value) => `the model's value (${wholeUnits(value)}) was below zero`],
   [/^xgb_unavailable: (.+)$/, (detail) => `XGBoost wasn't available (${detail})`],
   [/^xgb_no_forecast: (.+)$/, (detail) => `XGBoost produced no forecast (${detail})`],

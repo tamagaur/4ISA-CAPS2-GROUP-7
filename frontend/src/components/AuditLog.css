@@ -385,6 +385,30 @@
   text-overflow: ellipsis;
 }
 
+/* Recent changes: the remembered-device toggle and Load more (audit #17). */
+.audit-skip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  margin: 0 0 12px;
+  font-size: 0.875rem;
+  color: var(--color-text-body);
+  cursor: pointer;
+}
+
+.audit-skip-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.audit-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
 /* Digits of one width in every cell (counts, dates, durations line up). */
 .audit-table td {
   font-variant-numeric: tabular-nums;

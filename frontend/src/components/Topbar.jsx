@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FlaskConical } from 'lucide-react';
 import { DEFAULT_PRINCIPAL, SELECTABLE_PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
-import Greeting from './ui/Greeting';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
+import NotificationBell from './NotificationBell';
 import './Topbar.css';
 
 // The date range moved into each page's own RangePicker (2026-10-09); the
@@ -22,6 +24,25 @@ const Topbar = ({
 }) => {
   const preview = isPreviewMode(dataMode);
   const location = useLocation();
+  const { role, hasPermission } = usePermissions();
+  const showBell = role === 'admin' || hasPermission(P.LP_PROPOSE) || hasPermission(P.LP_DECIDE);
+
+  // The bar's own height as --topbar-h on the pane that scrolls
+  // (.main-content, its parent), kept current as the bar wraps or unwraps,
+  // so a toolbar that sticks under it (the dashboard's section chips,
+  // Dashboard.css .dash-toolbar) sits just below it rather than behind it.
+  const barRef = useRef(null);
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const pane = bar?.parentElement;
+    if (!bar || !pane) return undefined;
+    const publish = () => pane.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(publish);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
 
   // The principal filter (and the synthetic-data switch beside it) only on
   // the pages whose data it filters (Audrey, 2026-10-16, again 2026-10-18):
@@ -35,7 +56,7 @@ const Topbar = ({
   const showPrincipalFilter = PAGES_WITH_PRINCIPAL.includes(location.pathname);
 
   return (
-    <header className="topbar">
+    <header className="topbar" ref={barRef}>
       <div className="topbar-left">
         {/* Three lines while the sidebar is open; once it is closed on a
             desktop the SAN2 logo takes their place, so the brand stays on
@@ -120,12 +141,15 @@ const Topbar = ({
         )}
       </div>
 
-      {/* "Good afternoon, Mikhaella!" (ui/Greeting.jsx), between the
-          filters and the Refresh block; on its own line when the bar is
-          too narrow for all three. */}
-      <Greeting />
+      {/* The greeting sat here until 2026-10-21; it is the dashboard's
+          welcome banner now (ui/Greeting.jsx). */}
 
       {rightSlot}
+
+      {/* The notification bell (2026-10-28): admins hear about staff
+          requests, staff about the decisions on theirs. Shown to whoever can
+          make or settle a request. */}
+      {showBell && <NotificationBell />}
 
       {/* The topbar used to end with a second, bare "who am I" avatar here
           (no menu, no action — just initials in a circle) that duplicated

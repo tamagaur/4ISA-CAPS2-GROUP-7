@@ -13,7 +13,10 @@
   height: 100dvh;
   width: 100%;
   overflow: hidden;
-  background-color: var(--color-surface-raised);
+  background-color: #FFF6EF;
+  /* The sign-in page's cream (ui.css --app-canvas). It sits on this shell,
+     which never scrolls, so the glow stays put while a page scrolls over it. */
+  background-image: var(--app-canvas);
 }
 
 /* min-width: 0 — a flex child defaults to min-width:auto, which lets an

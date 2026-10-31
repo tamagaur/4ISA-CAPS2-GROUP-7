@@ -216,7 +216,7 @@ from backend.stock_units import (
     stock_count_info,
     stock_counts,
 )
-from backend import planning_mart, response_cache
+from backend import planning_mart, response_cache, stock_observation
 from backend.response_cache import cached
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
@@ -355,7 +355,9 @@ _PRESENT_SQL = """
            ) AS decision_cols,
            (to_regclass('lp_quantity_change') IS NOT NULL
             AND to_regclass('lp_direct_apply_grant') IS NOT NULL) AS approval,
-           to_regclass('lp_decision_reversal') IS NOT NULL AS reversal
+           to_regclass('lp_decision_reversal') IS NOT NULL AS reversal,
+           (to_regclass('lp_dismissal_request') IS NOT NULL
+            AND to_regclass('lp_stock_observation') IS NOT NULL) AS requests
 """
 # Migration 0062's columns. Where it isn't applied the row query reads the same names as NULLs.
 _DECISION_COLS_SQL = ("lr.decided_q_i AS decided_q_i, lr.decision_reason AS decision_reason, "
@@ -374,13 +376,15 @@ _REVIEW_ABSENT_SQL = """
 
 
 def _present(db: Session) -> dict:
-    """{review_flag, on_order, decision_cols, approval, reversal}: whether migration 0042's table and
-    columns, migration 0062's columns, migration 0068's two tables (approval) and migration 0067's table
-    (reversal) exist. A database (or test fake) that can't answer counts as none of them."""
+    """{review_flag, on_order, decision_cols, approval, reversal, requests}: whether migration 0042's table and
+    columns, migration 0062's columns, migration 0068's two tables (approval), migration 0067's table
+    (reversal) and migration 0070's two tables (requests: dismissal requests and stock counts) exist. A database
+    (or test fake) that can't answer counts as none of them."""
     row = db.execute(text(_PRESENT_SQL)).mappings().first()
     return {"review_flag": bool(row and row["review_flag"]), "on_order": bool(row and row["on_order"]),
             "decision_cols": bool(row and row.get("decision_cols")),
-            "approval": bool(row and row.get("approval")), "reversal": bool(row and row.get("reversal"))}
+            "approval": bool(row and row.get("approval")), "reversal": bool(row and row.get("reversal")),
+            "requests": bool(row and row.get("requests"))}
 
 
 def _with_present(sql: str, present: dict) -> str:
@@ -911,6 +915,14 @@ _UPDATE_DECISION_SQL = """
 _OPEN_CHANGE_GUARD = """
       AND NOT EXISTS (SELECT 1 FROM lp_quantity_change qc
                       WHERE qc.recommendation_key = lr.recommendation_key AND qc.state = 'pending_approval')"""
+# Migration 0070: the same rule for a staff member's dismissal request awaiting an admin.
+_OPEN_DISMISSAL_GUARD = """
+      AND NOT EXISTS (SELECT 1 FROM lp_dismissal_request dr
+                      WHERE dr.recommendation_key = lr.recommendation_key AND dr.state = 'pending_approval')"""
+_OPEN_DISMISSAL_SQL = """
+    SELECT request_key, requested_by FROM lp_dismissal_request
+    WHERE recommendation_key = :key AND state = 'pending_approval'
+"""
 # The pending change on a row, read only to explain a refusal.
 _OPEN_CHANGE_SQL = """
     SELECT change_key, proposed_by FROM lp_quantity_change
@@ -928,11 +940,17 @@ _WHY_NOT_DECIDED_SQL = """
 """
 
 
-def refusal_for(row, open_change=None) -> HTTPException:
+def refusal_for(row, open_change=None, open_dismissal=None) -> HTTPException:
     """The 404 / 409 for a decision that matched no open, current row. `row` is _WHY_NOT_DECIDED_SQL's;
-    `open_change` is _OPEN_CHANGE_SQL's row when the row has a quantity change awaiting approval."""
+    `open_change` is _OPEN_CHANGE_SQL's row when the row has a quantity change awaiting approval, and
+    `open_dismissal` _OPEN_DISMISSAL_SQL's when it has a dismissal request awaiting approval."""
     if row is None:
         return HTTPException(status_code=404, detail="Recommendation not found")
+    if row["status"] == "pending" and open_dismissal is not None:
+        return HTTPException(status_code=409, detail=(
+            f"This recommendation has a dismissal request awaiting approval (request {open_dismissal['request_key']}, "
+            f"requested by {open_dismissal['requested_by']}). An admin approves or rejects it before the row is decided."
+        ))
     if row["status"] == "pending" and open_change is not None:
         return HTTPException(status_code=409, detail=(
             f"This recommendation has a quantity change awaiting approval (change {open_change['change_key']}, "
@@ -976,15 +994,19 @@ def decide_row(db: Session, present: dict, *, key: int, status: str, reason: str
         capture = (", decision_reason = :reason, decided_q_i = CASE WHEN CAST(:decided_q AS numeric) IS NULL "
                    "OR ROUND(CAST(:decided_q AS numeric), 2) = lr.q_i THEN NULL ELSE ROUND(CAST(:decided_q AS numeric), 2) END")
         update_params.update(reason=reason, decided_q=decided_quantity)
-    guard = _OPEN_CHANGE_GUARD if present.get("approval") else ""
+    guard = (_OPEN_CHANGE_GUARD if present.get("approval") else "") + (
+        _OPEN_DISMISSAL_GUARD if present.get("requests") else "")
     decided = db.execute(text(_UPDATE_DECISION_SQL.format(capture=capture, guard=guard)), update_params).mappings().first()
     if decided is None:
         why = db.execute(text(_WHY_NOT_DECIDED_SQL), {"key": key}).mappings().first()
-        open_change = None
-        if present.get("approval") and why is not None and why["status"] == "pending"                 and why["planning_cycle_date"] == why["current_cycle"]:
-            open_change = db.execute(text(_OPEN_CHANGE_SQL), {"key": key}).mappings().first()
+        open_change = open_dismissal = None
+        if why is not None and why["status"] == "pending" and why["planning_cycle_date"] == why["current_cycle"]:
+            if present.get("approval"):
+                open_change = db.execute(text(_OPEN_CHANGE_SQL), {"key": key}).mappings().first()
+            if present.get("requests"):
+                open_dismissal = db.execute(text(_OPEN_DISMISSAL_SQL), {"key": key}).mappings().first()
         db.rollback()
-        raise refusal_for(why, open_change)
+        raise refusal_for(why, open_change, open_dismissal)
     # The planning mart's row for this decision, in the same transaction (migration 0046).
     planning_mart.decide(db, decision_params)
     return decided
@@ -1002,6 +1024,16 @@ def item_for(db: Session, present: dict, key: int, cycle) -> RecommendationItem:
         },
     ).mappings().first()
     return _to_item(row, present)
+
+
+REQUESTS_NOT_READY = ("Staff requests and stock counts aren't set up on this server yet "
+                      "(migration 0070 isn't applied).")
+# The row's product and its pieces per case, for a stock count sent with a decision or request.
+_PRODUCT_PACK_SQL = f"""
+    SELECT lr.product_key, {PACK_SQL} AS pack FROM lp_recommendation lr
+    JOIN product_dimension pd ON pd.product_key = lr.product_key
+    WHERE lr.recommendation_key = :key
+"""
 
 
 def may_apply_directly(db: Session, user: TokenPayload) -> bool:
@@ -1050,6 +1082,16 @@ def update_recommendation(
                                 "WHERE lr.recommendation_key = :key"), {"key": recommendation_key}).mappings().first()
         if sized is not None:
             check_whole_cases(decision.decided_quantity, sized["pack"], sized["q_i"])
+    # A stock count sent with a direct dismissal (migration 0070) is an observation only: backend/stock_observation.py.
+    product = None
+    if decision.stock_observation is not None:
+        if not present.get("requests"):
+            raise ApiError(503, REQUESTS_NOT_READY, code="requests_not_ready")
+        product = db.execute(text(_PRODUCT_PACK_SQL), {"key": recommendation_key}).mappings().first()
+        if product is None:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+        # refused (422) before anything is written: a cases count needs a pack size and a whole number
+        stock_observation.to_pieces(decision.stock_observation.quantity, decision.stock_observation.unit, product["pack"])
     decided = decide_row(db, present, key=recommendation_key, status=decision.status, reason=reason,
                          decided_quantity=decision.decided_quantity, decided_by=current_user.email)
     detail = f"SKU {decided['sku']}" + (f": {reason}" if reason else "")
@@ -1062,6 +1104,10 @@ def update_recommendation(
         + (f" [flagged for review: {', '.join(flagged)}; reviewed]" if flagged and decision.status == "accepted" else ""),
         actor=current_user,
     )
+    if product is not None:
+        stock_observation.record(db, decision.stock_observation, product_key=product["product_key"],
+                                 recommendation_key=recommendation_key, pack=product["pack"],
+                                 context="direct_dismissal", actor=current_user, sku=decided["sku"])
     db.commit()
     response_cache.invalidate()
     return item_for(db, present, recommendation_key, decided["planning_cycle_date"])

@@ -1053,12 +1053,53 @@
    fits the card width instead: SKU, urgency and qty size to their content
    and never wrap, and the product name takes whatever width is left,
    truncating with an ellipsis (full name in the cell's title tooltip). */
+/* Content height, not flex: 1. Growing to fill a card stretched to its
+   neighbour's height is what left a block of white between the last row and
+   "See all suggested orders" (2026-10-21). */
 .reorder-mini-list {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
-  margin-top: 0.9rem;
-  border-top: 1px solid var(--color-surface-sunken);
+  /* The cells' outer padding sits outside the card's text edge, so the
+     names line up with the header and the hover tint has room. */
+  margin: 0 -0.5rem;
 }
+
+/* Suggested orders: three counts over the listed rows, one compact line on
+   a soft panel (Charts.jsx, shownCritical etc.). */
+.reorder-mini-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #EDF0F4;
+  border-radius: 8px;
+  background: #F9FAFB;
+  font-size: var(--text-secondary);
+  color: var(--color-text-body);
+}
+
+.reorder-mini-strip-scope {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.reorder-mini-strip-item {
+  white-space: nowrap;
+}
+
+.reorder-mini-strip-item strong {
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-mini-strip-item strong.is-critical { color: #B42318; }
+.reorder-mini-strip-item strong.is-caution { color: #93470D; }
 
 .reorder-mini-table {
   width: 100%;
@@ -1077,12 +1118,23 @@
   white-space: nowrap;
 }
 
-.reorder-mini-table th:last-child {
+/* The two quantity columns: header over its numbers, both at the right. */
+.reorder-mini-table th.reorder-mini-num {
   text-align: right;
 }
 
+.reorder-mini-table th:first-child,
+.reorder-mini-table td:first-child {
+  padding-left: 0.5rem;
+}
+
+.reorder-mini-table th:last-child,
+.reorder-mini-table td:last-child {
+  padding-right: 0.5rem;
+}
+
 .reorder-mini-table td {
-  padding: 0.7rem 0.4rem;
+  padding: 0.65rem 0.4rem;
   border-bottom: 1px solid #EEF1F4;
   font-size: 0.89rem;
   color: var(--color-text);
@@ -1092,6 +1144,21 @@
 
 .reorder-mini-table tr:last-child td {
   border-bottom: none;
+}
+
+/* The Reorder page's table hover (index.css .data-table). */
+.reorder-mini-table tbody tr {
+  transition: background-color 0.12s;
+}
+
+.reorder-mini-table tbody tr:hover {
+  background-color: #FAFBFC;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reorder-mini-table tbody tr {
+    transition: none;
+  }
 }
 
 /* max-width:0 + width:100% lets this one column absorb (and give up) all
@@ -1126,42 +1193,42 @@
 }
 
 /* The product cell: ProductName (name, SKU code under it). The cell gives up
-   width to the other columns (max-width: 0 above), so a long name is cut
-   with an ellipsis on one line instead of wrapping the row tall; the cell's
-   title attribute carries the full name. */
+   width to the other columns (max-width: 0 above). A long name wraps to two
+   lines and is cut there (2026-10-21; one line cut most names mid-word);
+   the cell's and the name's title attributes carry the full name. */
+.reorder-mini-table td.reorder-mini-product {
+  white-space: normal;
+}
+
 .reorder-mini-product .product-name {
   display: flex;
   max-width: 100%;
 }
 
 .reorder-mini-product .product-name-title {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reorder-mini-product .product-name-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1.35;
 }
 
 .reorder-mini-product .product-name-code {
   font-size: 0.79rem;
 }
 
+/* The link sits in .dash-card-footer (Dashboard.css), which draws the
+   divider and sets the colour shared with the idle-stock card's link. */
 .reorder-mini-view-all {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
+  gap: 0.35rem;
   font-size: 0.86rem;
   font-weight: 600;
-  color: var(--color-info);
   text-decoration: none;
 }
 
@@ -1169,16 +1236,32 @@
   text-decoration: underline;
 }
 
+/* Urgency: soft tint, darker ink of the same hue, small corners. The red and
+   amber inks are darker than the badge tokens so the 11px word reads at
+   AA contrast (critical 5.9:1, urgent 6.4:1). */
 .urgency-badge-mini {
-  display: inline-block;
-  padding: 0.22rem 0.55rem;
-  border-radius: 4px;
-  font-size: 0.79rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.4;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
 }
+
+.urgency-badge-mini svg {
+  flex-shrink: 0;
+}
+
+.urgency-badge-mini.urgency-critical { background-color: var(--badge-critical-bg); color: #B42318; }
+.urgency-badge-mini.urgency-urgent { background-color: var(--badge-warning-bg); color: #93470D; }
+.urgency-badge-mini.urgency-planned { background-color: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
 
 .reorder-priorities {
   display: flex;
@@ -2468,13 +2551,22 @@
    buttons keep the top-right corner whatever the subtitle; a long one (the
    Weeks of stock view's) wraps under the title instead of pushing the
    buttons down. On a narrow card the two still stack. */
+/* 2026-10-26: at 1440px the five view buttons squeezed the title onto three
+   lines. The header wraps again, and the title area claims a fixed basis
+   (not its subtitle's full width), so the buttons drop to their own row
+   below the title only when the two can't share one; the title itself
+   stays on one line. */
 .chart-widget-svs .chart-header {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .chart-widget-svs .chart-title-area {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 20rem;
+  min-width: min(100%, 20rem);
+}
+
+.chart-widget-svs .chart-header h4 > span:first-child {
+  white-space: nowrap;
 }
 
 .chart-widget-svs .chart-header-controls {
@@ -2519,25 +2611,159 @@
   color: var(--color-text-body);
 }
 
+/* Its sign-off status, a pill after the sentence while the adviser has not
+   confirmed it (2026-10-24); wraps rather than run past a phone's edge. */
+.chart-calendar-note .chart-calendar-pending {
+  margin-left: 6px;
+  white-space: normal;
+  vertical-align: 1px;
+}
+
 /* Suggested orders (2026-10-19): how the order was worked out, in one line
    with the weights in it, and a product missing from the stock count. */
+/* Secondary to the table (2026-10-21): smaller and muted, same words. */
 .reorder-priorities-line {
-  margin: 0 0 10px;
-  font-size: 0.86rem;
-  line-height: 1.5;
-  color: var(--color-text-body);
+  margin: 0 0 12px;
+  font-size: var(--text-caption);
+  line-height: 1.55;
+  color: var(--color-text-muted);
 }
 
 .reorder-priorities-line strong {
-  color: var(--color-text);
+  font-weight: 600;
+  color: var(--color-text-body);
   font-variant-numeric: tabular-nums;
 }
 
+/* A product missing from the stock count: an amber note in the stock cell,
+   not a number, so it never reads as a counted zero. */
 .reorder-mini-nocount {
-  font-size: 0.8rem;
-  font-style: italic;
-  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background-color: var(--badge-warning-bg);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #93470D;
   white-space: nowrap;
+}
+
+/* "Check first": a suggested order the plan flags for review (review_flag),
+   under the product name. The chip is an InfoTip trigger (2026-10-24), so
+   the reason opens on hover, tap or Enter, not on hover alone. */
+.reorder-mini-review-tip.info-tip {
+  display: block;
+  margin-left: 0;
+}
+
+/* The chip is about 16px tall; the ::after widens the tap target to 24px
+   (WCAG 2.2, 2.5.8) without making the chip itself bigger. */
+.info-tip-trigger.reorder-mini-review {
+  position: relative;
+  cursor: help;
+}
+
+.info-tip-trigger.reorder-mini-review::after {
+  content: '';
+  position: absolute;
+  inset: -4px -2px;
+  min-height: 24px;
+}
+
+.reorder-mini-review,
+.info-tip-trigger.reorder-mini-review {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background-color: var(--badge-warning-bg);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #93470D;
+  white-space: nowrap;
+}
+
+.reorder-mini-nocount::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+/* Phones (2026-10-21): four columns left the name about 120px, cut after a
+   few letters. Each row becomes two lines instead: the name across the
+   full width, then urgency, stock and order, each figure under its own
+   small label (data-label). The header row stays for screen readers only.
+   After the 480px rules above, and as specific, so these win. */
+@media (max-width: 560px) {
+  .reorder-mini-table,
+  .reorder-mini-table tbody {
+    display: block;
+  }
+
+  .reorder-mini-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .reorder-mini-table tbody tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'product product product'
+      'urgency stock order';
+    align-items: end;
+    column-gap: 12px;
+    row-gap: 8px;
+    padding: 10px 0.5rem;
+    border-bottom: 1px solid #EEF1F4;
+  }
+
+  .reorder-mini-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .reorder-mini-table td,
+  .reorder-mini-table td:first-child,
+  .reorder-mini-table td:last-child {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .reorder-mini-table td.reorder-mini-product {
+    grid-area: product;
+    width: auto;
+    max-width: none;
+  }
+
+  .reorder-mini-table td:nth-child(2) {
+    grid-area: urgency;
+    align-self: center;
+  }
+
+  .reorder-mini-table td:nth-child(3) { grid-area: stock; }
+  .reorder-mini-table td:nth-child(4) { grid-area: order; }
+
+  .reorder-mini-table .reorder-mini-qty[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+  }
 }
 
 /* Sales vs Inventory Value's legend keys (the timeline, 2026-10-19): a bar,
@@ -2557,4 +2783,126 @@
   flex: 1 1 auto;
   height: auto;
   min-height: 300px;
+}
+
+/* ── Forecast demand, top sellers (PortfolioForecastWidget, 2026-10-21) ── */
+/* How many SKUs the line sums, beside the title. */
+.pf-sku-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 9px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-forecast-bg, #EEE9FC);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #5B3FC4;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Chart / Table: the active view in navy with white text, on this card
+   and the accuracy card's Lines / Monthly miss / Table (RangeCards.css). */
+.pf-card > .chart-header .chart-view-toggle {
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background-color: var(--color-surface);
+}
+
+.pf-card > .chart-header .chart-view-toggle button {
+  padding: 0.3rem 0.75rem;
+}
+
+.pf-card > .chart-header .chart-view-toggle button.active {
+  background-color: var(--color-text);
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+.pf-card > .chart-header .chart-view-toggle button:focus-visible {
+  outline: 2px solid var(--color-forecast, #8866E8);
+  outline-offset: 2px;
+}
+
+/* The marked points: the month over its value in a small white box with a
+   hairline in the series' colour. */
+.pf-mark-box {
+  fill: var(--color-surface, #FFFFFF);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
+/* The plot: at least 300px with its axes (240px on a phone), and beside
+   the accuracy card it takes up whatever that taller card leaves, so the
+   two cards are the same height (Audrey, 2026-10-21). The accuracy card
+   was tightened at the same time (RangeCards.css) to keep this short.
+   On a stacked layout nothing stretches it and it stays at its floor.
+   The Table view sits in the same box. */
+.pf-card .portfolio-forecast-body .chart-container {
+  flex: 1 0 auto;
+  min-height: 300px;
+}
+
+@media (max-width: 640px) {
+  .pf-card .portfolio-forecast-body .chart-container {
+    min-height: 240px;
+  }
+}
+
+/* Key takeaways: up to three numbered lines on a quiet panel. */
+.pf-takeaways {
+  margin-top: 14px;
+  padding: 12px 16px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+}
+
+.pf-takeaways-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.pf-takeaways-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pf-takeaway;
+}
+
+.pf-takeaways-list li {
+  position: relative;
+  padding-left: 32px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+  counter-increment: pf-takeaway;
+}
+
+.pf-takeaways-list li::before {
+  content: counter(pf-takeaway);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--color-forecast-bg, #EEE9FC);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #5B3FC4;
+}
+
+.pf-takeaways-list strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }

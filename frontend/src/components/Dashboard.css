@@ -1,9 +1,14 @@
+/* The page clips anything wider than itself, but does not scroll: the
+   pane around it (.main-content) does. With overflow-y: auto here the page
+   was a scroll container that never scrolled (it is as tall as its
+   content), so the section toolbar stuck to it and scrolled away with the
+   page (2026-10-21). `clip` hides the overflow without making a scroll
+   container, so the toolbar sticks to the pane that scrolls. */
 .dashboard {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: clip;
   min-width: 0;
 }
 
@@ -42,9 +47,11 @@
    margins match .dashboard-content's padding at each width (2.5rem, 1.5rem
    under 1280px), so the toolbar's background reaches the page's edges and
    cards sliding underneath never show at its sides. */
+/* Sticks just under the top bar, whose height Topbar.jsx publishes as
+   --topbar-h on the scrolling pane. */
 .dash-toolbar {
   position: sticky;
-  top: 0;
+  top: var(--topbar-h, 0px);
   z-index: 5;
   display: flex;
   align-items: center;
@@ -52,7 +59,9 @@
   gap: 1rem;
   margin: -1rem -2.5rem 0;
   padding: 0.55rem 2.5rem;
-  background-color: var(--color-surface-raised);
+  background-color: var(--app-canvas-bar);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   transition: box-shadow 160ms ease-out;
 }
 
@@ -83,8 +92,11 @@
 }
 
 /* A jump lands the section just below the pinned toolbar, not under it. */
-.dash-section-anchor {
-  scroll-margin-top: 4.75rem;
+.dash-section-anchor,
+#idle-stock {
+  /* #idle-stock: the Reorder page's link lands the idle card below the
+     sticky toolbar too (2026-10-22). */
+  scroll-margin-top: calc(var(--topbar-h, 0px) + 4.75rem);
 }
 
 @media (max-width: 1280px) {
@@ -104,8 +116,11 @@
     margin: -0.75rem -1rem 0;
     padding: 0.5rem 1rem;
   }
-  .dash-section-anchor {
-    scroll-margin-top: 1rem;
+  /* The toolbar is two rows here (the chips, then the range: about 93px),
+     so a jump leaves 8rem under the top bar. */
+  .dash-section-anchor,
+  #idle-stock {
+    scroll-margin-top: calc(var(--topbar-h, 0px) + 8rem);
   }
 }
 
@@ -595,6 +610,81 @@
   min-height: 0;
 }
 
+/* Suggested orders beside stock with no sale (2026-10-21): the two cards
+   are the same height (each stretches to the taller one, as every paired
+   row does), but with no 360px floor, so the row is only as tall as its
+   longer card's content. Each card's "See all" footer sits at the bottom
+   (.dash-card-footer margin-top: auto, below), so the two links line up and
+   any spare height in the shorter card is one gap above its footer, not
+   white at the foot of the card. Beats the 768px floor below on
+   specificity. */
+.dash-row-natural .dash-slot > .chart-widget {
+  min-height: 0;
+}
+
+/* An empty card in this row grows to fit its reason, instead of the 140px
+   every other empty card is held to (further down): Del Monte's "The order
+   plan does not cover Del Monte: ..." (audit FE-1) is three lines and ran
+   out of the fixed box. Same floor, and it matches its neighbour's height
+   like the rest of the row. */
+.dash-row-natural .dash-slot > .chart-widget-empty {
+  height: auto;
+  min-height: 140px;
+}
+
+/* Those two cards' headers: the lede, then the detail lines in quieter
+   secondary text, and a little more room before the content. */
+.dash-action-card .chart-header {
+  margin-bottom: 14px;
+}
+
+.dash-action-card .chart-title-area > p:not(.chart-placeholder-note) {
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* Their "See all" links: one footer style, a divider above, the brand red
+   at AA contrast (--color-brand-strong, 4.6:1), the arrow on the text's
+   centre line. */
+.dash-card-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* The space the footer keeps from the content above it, now that its own
+   top margin is "auto" (whatever height is left over, possibly none). */
+.dash-action-card .reorder-mini-list,
+.dash-action-card .idle-rank-list {
+  margin-bottom: 12px;
+}
+
+.dash-card-footer a,
+.dash-card-footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-brand-strong);
+}
+
+.dash-card-footer a:hover,
+.dash-card-footer button:hover {
+  color: var(--color-brand-strong-hover);
+}
+
+.dash-card-footer a:focus-visible,
+.dash-card-footer button:focus-visible {
+  outline: 2px solid var(--color-brand-strong);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Widgets whose body is a handful of flex rows (donut, tier bars, the
    volatility bands) centre that body in the height their row sets. */
 .dash-row .chart-widget-body {
@@ -830,10 +920,12 @@
    Active / dead stock bars. Kept: whatever warns, which is a synthetic-months
    line, a coverage or missing-data note (.chart-placeholder-note), the
    reason a comparison or an answer can't be drawn, and the allocation's
-   "not yet confirmed" line. */
-.dashboard-plain .chart-title-area p:not(.chart-placeholder-note):not(.chart-insight-synthetic):not(.chart-insight-reason):not(.section-lede),
+   "not yet confirmed" line. Also kept (.keep-visible, and the accuracy
+   card's .fc-answer), from the Technical Adviser's 2 Oct 2026 comments:
+   every number's period and count date, the calendar adjustment awaiting
+   his sign-off, and the accuracy answer in plain words (2026-10-22). */
+.dashboard-plain .chart-title-area p:not(.chart-placeholder-note):not(.chart-insight-synthetic):not(.chart-insight-reason):not(.section-lede):not(.keep-visible),
 .dashboard-plain .portfolio-insight-strip,
-.dashboard-plain .fc-answer,
 .dashboard-plain .fc-chart-sub,
 .dashboard-plain .alloc-answer:not(.alloc-answer-reason),
 .dashboard-plain .bar-scale-note,
@@ -1044,4 +1136,294 @@
   .dash-question-rule {
     display: none;
   }
+}
+
+/* ── Inventory pulse, polish pass (Audrey, 2026-10-21) ───────────────────
+   The welcome banner; graph cards raised off the page; larger section
+   headings and graph titles; the stale-plan note's detail folded away.
+   Last in the file, so these win over the rules above. */
+
+/* ── The header: welcome banner, then the page title (2026-10-22) ──────
+   One block: the banner, 16px, the title with its coral bar, the subtitle
+   and the page's question close under it, then the toolbar. Every edge on
+   the content column, like the cards below. */
+
+/* "Good evening, Mikhaella!" (ui/Greeting.jsx): a very light peach panel,
+   the greeting in navy, the name in the brand coral, set in the accent
+   italic (as "pulse"); a quiet warehouse mark on the right. */
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 18px;
+  padding: 22px 28px;
+  border: 1px solid rgba(232, 93, 74, 0.18);
+  border-radius: 16px;
+  background: var(--color-brand-tint);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 18px -6px rgba(232, 93, 74, 0.14);
+}
+
+.welcome-text {
+  min-width: 0;
+}
+
+.welcome-greeting {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-nav-bg);
+  overflow-wrap: anywhere;
+}
+
+.welcome-name {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-brand-primary);
+}
+
+.welcome-sub {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+/* The warehouse mark: low emphasis, a soft coral ring, never larger than
+   the greeting's two lines. */
+.welcome-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border: 1px solid rgba(232, 93, 74, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  color: rgba(232, 93, 74, 0.72);
+}
+
+/* The page title, under the banner: "Inventory" bold navy, "pulse" coral
+   italic, a short coral bar beside them; the subtitle and the question
+   close under it. Scoped to the dashboard (PageHeader className): the
+   other pages keep their own headers. */
+.dash-page-header {
+  margin: -8px 0 0;
+}
+
+.dash-page-header .page-header-title {
+  position: relative;
+  padding-left: 16px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--color-nav-bg);
+}
+
+.dash-page-header .page-header-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.14em;
+  bottom: 0.1em;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--color-brand-primary), rgba(232, 93, 74, 0.55));
+}
+
+.dash-page-header .page-title-accent {
+  font-weight: 500;
+  color: var(--color-brand-primary);
+}
+
+.dash-page-header .page-header-subtitle {
+  margin: 6px 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.dash-page-header .dash-main-question {
+  margin: 4px 0 0 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--color-text-body);
+}
+
+@media (max-width: 1024px) {
+  .welcome-banner {
+    padding: 20px 22px;
+  }
+
+  .welcome-greeting {
+    font-size: 27px;
+  }
+
+  .dash-page-header .page-header-title {
+    font-size: 27px;
+  }
+}
+
+@media (max-width: 640px) {
+  .welcome-banner {
+    margin-top: 12px;
+    padding: 16px 18px;
+  }
+
+  .welcome-greeting {
+    font-size: 22px;
+  }
+
+  .welcome-sub {
+    font-size: 14px;
+  }
+
+  /* No room beside the greeting: the mark goes. */
+  .welcome-mark {
+    display: none;
+  }
+
+  .dash-page-header .page-header-title {
+    font-size: 24px;
+    padding-left: 12px;
+  }
+
+  .dash-page-header .page-header-subtitle,
+  .dash-page-header .dash-main-question {
+    margin-left: 12px;
+  }
+}
+
+/* Graph cards: raised off the page like the KPI cards (HeroKpis.css), a
+   little more on hover, with no movement. The accent line along the top
+   follows the larger corner. */
+.dashboard .chart-widget {
+  border-radius: 16px;
+  border: 1px solid #E7EBF0;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 14px rgba(16, 24, 40, 0.06);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.dashboard .chart-widget:hover {
+  border-color: #DDE2EA;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 22px rgba(16, 24, 40, 0.08);
+}
+
+.dash-slot > .chart-widget::before {
+  border-radius: 16px 16px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard .chart-widget {
+    transition: none;
+  }
+}
+
+/* Section headings (the question above each row) and graph titles (inside
+   each card): 24px and 18px, so a row reads question, then graph. */
+.dash-question {
+  font-size: 24px;
+}
+
+.dashboard .chart-widget .chart-header h4,
+.dashboard .fc-title,
+.dashboard .alloc-title {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text-heading);
+}
+
+.dash-question-hint .info-tip {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+@media (max-width: 1024px) {
+  .dash-question {
+    font-size: 22px;
+  }
+
+  .dashboard .chart-widget .chart-header h4,
+  .dashboard .fc-title,
+  .dashboard .alloc-title {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 600px) {
+  .dash-question {
+    font-size: 20px;
+  }
+
+  .dashboard .chart-widget .chart-header h4,
+  .dashboard .fc-title,
+  .dashboard .alloc-title {
+    font-size: 16px;
+  }
+}
+
+/* The stale-plan note: the finding on its face, the backend's full reason
+   under Details. */
+.dash-stale-body {
+  min-width: 0;
+}
+
+.dash-stale-head {
+  margin: 0;
+}
+
+.dash-stale-more summary {
+  width: fit-content;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-warning-fg, #a87b1a);
+  cursor: pointer;
+}
+
+.dash-stale-more summary:focus-visible {
+  outline: 2px solid var(--color-warning-fg, #a87b1a);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.dash-stale-more p {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* Spacing: the page's 28px gap does the work between blocks, so the stale
+   note drops its own bottom margin, and the Class A caption sits close
+   above the KPI cards it describes (it is their caption, not a section). */
+.dashboard-body > .dash-stale-note {
+  margin-bottom: 0;
+}
+
+.dashboard-body > .tier-basis-label {
+  margin-bottom: -16px;
+}
+
+/* The toolbar at tablet width: the section chips give up space and scroll
+   sideways (as their rule above says they should), and the range picker
+   (date button and comparison) keeps its width. With the chips at flex:
+   none the date button was squeezed to an empty pill at 820px and the
+   comparison ran 52px past the edge (found 2026-10-21). */
+.dash-toolbar .dash-section-nav {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.dash-toolbar .range-picker {
+  flex: none;
+}
+
+.dash-toolbar .range-picker-btn {
+  flex: none;
 }

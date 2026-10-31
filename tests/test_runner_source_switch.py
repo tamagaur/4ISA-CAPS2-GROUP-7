@@ -112,7 +112,9 @@ def test_lp_demo_source_for_delmonte_runs_the_demo_builder_and_never_opens_the_r
 def test_lp_demo_source_for_unilever_runs_its_own_demo_builder_and_never_opens_the_real_path(monkeypatch):
     seen = {}
     monkeypatch.setattr(rlp.psycopg2, "connect", _boom)
-    monkeypatch.setattr(rlp, "_run_demo_lp_unilever", lambda write, new_run=False: seen.setdefault("write", write) or 0)
+    # _run_demo_lp_unilever(write, new_run) since --new-run (4a8d389): the stand-in takes both.
+    monkeypatch.setattr(rlp, "_run_demo_lp_unilever",
+                        lambda write, new_run=False: seen.update(write=write, new_run=new_run) or 0)
     monkeypatch.setattr(sys, "argv", ["run_lp.py", "--source", "demo", "--principal", "unilever"])
     rlp.main()
-    assert seen == {"write": False}  # report-only unless --write
+    assert seen == {"write": False, "new_run": False}  # report-only unless --write; no new run unless --new-run

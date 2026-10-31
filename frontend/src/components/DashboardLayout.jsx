@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import PeriodContextStrip from './PeriodContextStrip';
 import {
   COMPARE_MODES, COMPARE_STORAGE_KEY, RELATIVE_RANGES, isValidCompare, lastNRange, periodFromParam, periodToParam, sameRange,
@@ -13,6 +13,7 @@ import { getDataModeInfo } from '../api/dataMode';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import ErrorBoundary from './ErrorBoundary';
+import Modal from './Modal';
 import PageTransition from './PageTransition';
 import { MOCK_PERMISSIONS } from '../api/mocks/permissionsMock';
 import { LoadingStatus, PageSkeleton } from './Skeleton';
@@ -106,9 +107,11 @@ const LEGACY_RANGE_KEYS = ['san2_start_month', 'san2_start_year', 'san2_end_mont
 // A range in the address (?from=2025-03&to=2026-02), so a link or a reload
 // shows the same view. Checked against what the picker offers: inside the
 // data, not backwards, and at least MIN_RANGE_MONTHS long. `today` is the
-// latest month for either principal (the picker's ceiling).
-const loadUrlRange = (mode, today) => {
-  const params = new URLSearchParams(window.location.search);
+// latest month for either principal (the picker's ceiling). `search`: the
+// address to read, the current one by default (2026-10-22: the layout also
+// re-reads the one it opened on, once live coverage arrives).
+const loadUrlRange = (mode, today, search = window.location.search) => {
+  const params = new URLSearchParams(search);
   const from = periodFromParam(params.get('from'));
   const to = periodFromParam(params.get('to'));
   if (!from || !to) return null;
@@ -216,6 +219,19 @@ const DashboardLayout = () => {
   const [initialRange] = useState(() => (rangeAnchor
     ? lastNRange(RELATIVE_RANGES[rangeAnchor], latestFor(null, principal))
     : loadUrlRange(dataMode, latestFor(null, 'all')) || getDefaultDateRange(latestFor(null, principal))));
+  // A shared link's from/to that failed the check above (audit FE-13,
+  // 2026-10-22). That check runs before GET /data-mode answers, against
+  // dataCoverage.js's fallback ceiling, so a link ending in a month of real
+  // data newer than the fallback was dropped for the default. The address it
+  // came in is kept here and checked again once live coverage arrives (the
+  // effect below); any range the user applies first clears it, so a range
+  // they have since picked is never replaced.
+  const urlRangeToRecheck = useRef(
+    !loadUrlAnchor() && !loadUrlRange(dataMode, latestFor(null, 'all'))
+      && new URLSearchParams(window.location.search).has('from')
+      ? window.location.search
+      : null,
+  );
 
   // What every comparison on the page is against (src/periodFilter.js):
   // the same months a year earlier (default), the period just before, or
@@ -353,6 +369,7 @@ const DashboardLayout = () => {
 
   const handleApplyPeriod = () => {
     if (!canApplyPendingPeriod) return; // belt-and-suspenders — UI should already prevent this
+    urlRangeToRecheck.current = null; // the user's own pick wins over the link's
     // A range picked month by month is fixed: it does not follow "today".
     setRangeAnchor(null);
     setStartMonth(pendingStartMonth);
@@ -399,8 +416,15 @@ const DashboardLayout = () => {
       params.delete('range');
       changed = true;
     }
-    if (changed) navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
-  }, [startMonth, startYear, endMonth, endYear, compare, principal, rangeAnchor, location.pathname, location.search, navigate]);
+    // Keep the #hash (e.g. /#idle-stock from the Reorder page): this rewrite
+    // runs on arrival, before the target card has loaded, and used to drop it.
+    if (changed) {
+      navigate(
+        { pathname: location.pathname, search: `?${params.toString()}`, hash: location.hash },
+        { replace: true },
+      );
+    }
+  }, [startMonth, startYear, endMonth, endYear, compare, principal, rangeAnchor, location.pathname, location.search, location.hash, navigate]);
 
   const handleDiscardPeriod = () => {
     setPendingStartMonth(startMonth);
@@ -470,6 +494,9 @@ const DashboardLayout = () => {
   };
 
   const updatePeriodImmediately = (sm, sy, em, ey) => {
+    // Every quick range, "Today", and a mode flip apply through here: the
+    // user has picked a range, so the opening link's is not re-checked.
+    urlRangeToRecheck.current = null;
     setStartMonth(sm);
     setStartYear(sy);
     setEndMonth(em);
@@ -479,6 +506,22 @@ const DashboardLayout = () => {
     setPendingEndMonth(em);
     setPendingEndYear(ey);
   };
+
+  // Once live coverage arrives, the opening link's range is checked again
+  // against the real ceiling (dataLatest) and shown if it fits (FE-13,
+  // 2026-10-22). Once only; skipped when the user has a change pending.
+  useEffect(() => {
+    const search = urlRangeToRecheck.current;
+    if (!coverage || !search) return;
+    urlRangeToRecheck.current = null;
+    if (isPending) return;
+    const range = loadUrlRange(dataMode, dataLatest, search);
+    if (!range) return;
+    setRangeAnchor(null);
+    updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
+    // Runs on coverage alone; the rest is read as it is when coverage lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverage]);
 
   return (
     <div className={`dashboard-layout ${isSidebarOpen ? '' : 'sidebar-closed'} ${sidebarAnimated ? 'sidebar-animated' : ''}`}>
@@ -497,7 +540,11 @@ const DashboardLayout = () => {
         <Topbar
           toggleSidebar={toggleSidebar}
           isSidebarOpen={isSidebarOpen}
-          rightSlot={<DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
+          // Not on the Reference Guide (2026-10-26): it explains the figures
+          // and loads none, so "Updated / Refresh" means nothing there.
+          rightSlot={location.pathname === '/data-dictionary'
+            ? null
+            : <DataFreshness navKey={`${location.pathname}#${refreshKey}`} onRefresh={handleRefreshData} />}
           startMonth={startMonth}
           startYear={startYear}
           endMonth={endMonth}
@@ -591,50 +638,56 @@ const DashboardLayout = () => {
         </ErrorBoundary>
       </div>
 
-      {/* Nav Interception Confirmation Dialog */}
-      {showNavConfirm && (
-        <div className="period-nav-overlay" onClick={() => setShowNavConfirm(false)}>
-          <div className="period-nav-card" onClick={(e) => e.stopPropagation()}>
-            <div className="period-nav-header">
-              <h4 className="period-nav-title">Unsaved Period Change</h4>
-            </div>
-            <div className="period-nav-body">
-              <p>
-                You changed the selected period to <strong>{pendingStartMonth} {pendingStartYear} - {pendingEndMonth} {pendingEndYear}</strong> but haven't applied it.
-                Save this change, or discard it and keep viewing <strong>{startMonth} {startYear} - {endMonth} {endYear}</strong>?
-              </p>
-              {!isPendingRangeValid && (
-                <p className="period-nav-error">
-                  <AlertTriangle size={16} className="period-nav-error-icon" />
-                  <span>That range starts after it ends — Save is disabled until the start month is on or before the end month.</span>
-                </p>
-              )}
-              {isPendingRangeValid && !isPendingRangeLongEnough && (
-                <p className="period-nav-error">
-                  <AlertTriangle size={16} className="period-nav-error-icon" />
-                  <span>
-                    That range only spans {pendingRangeMonthCount} month{pendingRangeMonthCount === 1 ? '' : 's'} —
-                    select at least {MIN_RANGE_MONTHS} for a meaningful trend before saving.
-                  </span>
-                </p>
-              )}
-            </div>
-            <div className="period-nav-footer">
-              <button className="period-discard-btn" onClick={handleConfirmDiscardNav}>
-                Discard
-              </button>
-              <button
-                className="period-save-btn"
-                onClick={handleConfirmSaveNav}
-                disabled={!canApplyPendingPeriod}
-                title={canApplyPendingPeriod ? undefined : 'Fix the date range before saving'}
-              >
-                Save
-              </button>
-            </div>
-          </div>
+      {/* Nav Interception Confirmation Dialog. The shared Modal since
+          2026-10-22 (audit FE-11): it was a hand-made overlay with no
+          role="dialog", no Escape and no focus handling. Escape and a click
+          outside close it as the overlay click did: the change stays pending
+          and the page stays put. */}
+      <Modal
+        isOpen={showNavConfirm}
+        onClose={() => setShowNavConfirm(false)}
+        labelledBy="period-nav-title"
+        overlayClassName="period-nav-overlay"
+        containerClassName="period-nav-card"
+      >
+        <div className="period-nav-header">
+          <h4 id="period-nav-title" className="period-nav-title">Unsaved Period Change</h4>
         </div>
-      )}
+        <div className="period-nav-body">
+          <p>
+            You changed the selected period to <strong>{pendingStartMonth} {pendingStartYear} - {pendingEndMonth} {pendingEndYear}</strong> but haven't applied it.
+            Save this change, or discard it and keep viewing <strong>{startMonth} {startYear} - {endMonth} {endYear}</strong>?
+          </p>
+          {!isPendingRangeValid && (
+            <p className="period-nav-error">
+              <AlertTriangle size={16} className="period-nav-error-icon" />
+              <span>That range starts after it ends — Save is disabled until the start month is on or before the end month.</span>
+            </p>
+          )}
+          {isPendingRangeValid && !isPendingRangeLongEnough && (
+            <p className="period-nav-error">
+              <AlertTriangle size={16} className="period-nav-error-icon" />
+              <span>
+                That range only spans {pendingRangeMonthCount} month{pendingRangeMonthCount === 1 ? '' : 's'} —
+                select at least {MIN_RANGE_MONTHS} for a meaningful trend before saving.
+              </span>
+            </p>
+          )}
+        </div>
+        <div className="period-nav-footer">
+          <button className="period-discard-btn" onClick={handleConfirmDiscardNav}>
+            Discard
+          </button>
+          <button
+            className="period-save-btn"
+            onClick={handleConfirmSaveNav}
+            disabled={!canApplyPendingPeriod}
+            title={canApplyPendingPeriod ? undefined : 'Fix the date range before saving'}
+          >
+            Save
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -17,6 +17,9 @@ Two-Step Sign-In On / Off / Reset, Recovery Codes Replaced, Recovery Code
 Used, Device Remembered, Two-Step Code Skipped (backend/mfa.py).
 Reorder Quantity Change Proposed / Approved / Rejected, Reorder Decision Reversed,
 Direct Apply Granted / Revoked (backend/routers/reorder_approval.py).
+Reorder Dismissal Requested, Reorder Dismissal Request Approved / Rejected /
+Closed, Stock Count Reported / Verified / Rejected
+(backend/routers/reorder_requests.py, backend/stock_observation.py).
 """
 from __future__ import annotations
 

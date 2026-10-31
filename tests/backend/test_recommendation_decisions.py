@@ -276,6 +276,9 @@ ALLOWED = {
     "analytics/db/migrations/0068_lp_quantity_change_approval.sql",
     # 2026-10-24: the plan-total test feeds a decided quantity through both screens. Test code only.
     "tests/backend/test_dashboard.py",
+    # 2026-10-28: staff dismissal requests and the recommendation's history (migration 0070). The history READS the
+    # decision to show it; nothing there feeds forecasting, safety stock or the LP.
+    "backend/routers/reorder_requests.py", "tests/backend/test_reorder_requests.py",
 }
 
 

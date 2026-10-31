@@ -250,6 +250,7 @@ const DateFilter = ({
         {sm}
         <ChevronDown size={14} />
         <select
+          aria-label="Start month"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={sm}
           onChange={(e) => handleStartMonthChange(e.target.value)}
@@ -264,6 +265,7 @@ const DateFilter = ({
         {sy}
         <ChevronDown size={14} />
         <select
+          aria-label="Start year"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={sy}
           onChange={(e) => handleStartYearChange(e.target.value)}
@@ -281,6 +283,7 @@ const DateFilter = ({
         {em}
         <ChevronDown size={14} />
         <select
+          aria-label="End month"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={em}
           onChange={(e) => handleEndMonthChange(e.target.value)}
@@ -295,6 +298,7 @@ const DateFilter = ({
         {ey}
         <ChevronDown size={14} />
         <select
+          aria-label="End year"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={ey}
           onChange={(e) => handleEndYearChange(e.target.value)}

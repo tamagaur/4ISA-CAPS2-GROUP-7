@@ -9,13 +9,14 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Area, ReferenceLine, ReferenceArea
 } from 'recharts';
-import { AlertTriangle, ArrowRight, CheckCircle2, Info } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
+import { shownPiecesTotal } from '../utils/piecesTotal';
 import { formatCompactPesos, formatExactPesos, formatCompactQty } from '../utils/formatters';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
-import { useChartZoom, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { useChartZoom, seriesDot, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
@@ -25,6 +26,8 @@ import GapNote from './GapNote';
 import { gapLabel, originLabel } from '../utils/gapReasons';
 import { timelineMonths, yearEarlier } from '../utils/timeline';
 import { pesoTicks } from '../utils/pesoTicks';
+import { demandHighlights, labelsThatFit } from '../utils/forecastHighlights';
+import { reviewReasonsSentence } from '../utils/reviewReasons';
 import MonthTick, { monthName } from './MonthTick';
 import { BAR_FADE_FLOOR, Callout, CalloutLine, CalloutNote, Callouts, Fade, endDot } from './ui/ChartParts';
 import {
@@ -1025,11 +1028,11 @@ export const SalesVsStockWidget = ({
           {/* GET /dashboard's vat_note — only under All principals, where the
               combined pesos mix Unilever's VAT-inclusive amounts with Del
               Monte's VAT-exclusive ones. */}
-          {note && <p>{note}</p>}
-          {/* The backend's takeaway sentence, from the same rows this
-              chart plots (sales_vs_stock_insight). */}
-          {insight?.text && <p className="chart-insight">{insight.text}</p>}
-          {insight?.text && syntheticNote && <p className="chart-insight chart-insight-synthetic">{syntheticNote}</p>}
+          {note && <p className="keep-visible">{note}</p>}
+          {/* No composed summary sentence (2026-10-28, Audrey: figures
+              only, no written-out readings). The synthetic-data label
+              stays: it says what the data is. */}
+          {syntheticNote && <p className="chart-insight chart-insight-synthetic">{syntheticNote}</p>}
         </div>
         {hasData && (
           <div className="chart-header-controls">
@@ -1384,6 +1387,9 @@ const AbcAtRisk = ({ atRisk }) => {
           {clear
             ? `All ${measurable} we could check have enough stock until the next delivery.`
             : `${below} of the ${measurable} we could check could run out before the next delivery arrives.`}
+          {/* These are the order plan's Tier A, not the ring's range ranking
+              (2026-10-22), so the panel names its list. */}
+          {atRisk.tierLabel ? ` Checked on the order plan's ${atRisk.tierLabel}.` : ''}
         </p>
         {!clear && (
           <button type="button" className="abc-panel-link" onClick={atRisk.onOpen}>
@@ -1528,7 +1534,11 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null }) => {
+// `planTier` ({ count, label: 'Tier A as of Feb 2026' }, 2026-10-22): the
+// order plan's own Class A count, which the page shows on its plan cards. The
+// ring ranks the selected range instead, so the card names both and says why
+// they differ (Technical Adviser, 2 Oct 2026: Class A defined).
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null, planTier = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1614,7 +1624,18 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     </InfoTip>
   ) : null;
   const tierA = data.find((d) => d.tier === 'A');
+  const rangeLabel = revenue?.label || rankedMonth;
+  // `planTier.inPlan` false (All principals): the count is both principals'
+  // own lists, of which the plan holds Unilever's only (`planTier.note`).
+  const planInPlan = planTier?.inPlan !== false;
+  const tierNote = planTier && tierA && rangeLabel && planTier.count !== tierA.count
+    ? `Top sellers, ${rangeLabel}: ${tierA.count.toLocaleString()}. ${planInPlan ? `In the order plan, ${planTier.label}` : planTier.label}: `
+      + `${planTier.count.toLocaleString()}.${!planInPlan && planTier.note ? ` ${planTier.note}` : ''} `
+      + `They differ because this ring ranks only the selected range, while ${planInPlan ? 'the plan keeps its own list:' : 'Unilever\'s list is'} `
+      + 'Class A over the last 12 months, plus new products that are Class A over their last 3 (pending adviser confirmation).'
+    : null;
   const notes = [
+    tierNote,
     coverage,
     !sharesAddUp ? revenue?.blocked_reason : null,
     note,
@@ -2003,25 +2024,33 @@ const PortfolioForecastTooltip = ({ active, payload, label, calendar = null }) =
   if (!active || !payload || !payload.length) return null;
   const row = payload[0].payload;
   const when = plainPeriod(row.period ?? label);
-  const pieces = (v) => `${Math.round(v).toLocaleString()} pieces`;
+  // The headline compact ("1.2M pcs", as the axis and the labels read), the
+  // exact count under it (2026-10-21, mockup pass).
+  const compact = (v) => `${formatCompactQty(v, 2)} pcs`;
+  const exact = (v) => `${Math.round(v).toLocaleString()} pieces`;
   const band = row.confidenceBase != null && row.confidenceBand != null && row.confidenceBand > 0;
   const bridged = row.actual != null && row.forecast === row.actual;
   return (
     <Callouts>
-      {row.actual != null && <Callout color={CHART_COLORS.salesSeries} period={when} value={pieces(row.actual)} name="Actual demand" />}
+      {row.actual != null && (
+        <Callout color={CHART_COLORS.salesSeries} period={when} value={compact(row.actual)} name="Actual sales">
+          <CalloutLine>{exact(row.actual)}</CalloutLine>
+        </Callout>
+      )}
       {row.forecast != null && !bridged && (
-        <Callout color={COLORS.forecast} period={when} value={pieces(row.forecast)} name="Forecast">
+        <Callout color={COLORS.forecast} period={when} value={compact(row.forecast)} name="Forecast demand">
+          {band && (
+            <CalloutLine>
+              Likely range: <strong>
+                {formatCompactQty(row.confidenceBase, 2)} – {formatCompactQty(row.confidenceBase + row.confidenceBand, 2)}
+              </strong> pcs (meant to cover about 9 in 10 months)
+            </CalloutLine>
+          )}
+          <CalloutLine>{exact(row.forecast)}</CalloutLine>
           {calendar && row.beforeAdjustment != null && (
             <CalloutLine>
               Before the calendar adjustment: <strong>{Math.round(row.beforeAdjustment).toLocaleString()}</strong> pieces
               {calendarFactorText(calendar) ? ` (${calendarFactorText(calendar)})` : ''}
-            </CalloutLine>
-          )}
-          {band && (
-            <CalloutLine>
-              About 90% likely: <strong>
-                {Math.round(row.confidenceBase).toLocaleString()} – {Math.round(row.confidenceBase + row.confidenceBand).toLocaleString()}
-              </strong> pieces
             </CalloutLine>
           )}
         </Callout>
@@ -2032,6 +2061,44 @@ const PortfolioForecastTooltip = ({ active, payload, label, calendar = null }) =
     </Callouts>
   );
 };
+
+// The marked points (2026-10-21, mockup pass): the highest and lowest month
+// of actual demand and the next forecast, each a small box with the month
+// over its value. Drawn inside the plot: above the point, or below it where
+// there is no room above (and the other way round for the low), and pulled
+// in at the plot's edges. `frame` is the plot's box in pixels, worked out
+// from the measured container (Recharts gives a series label no plot box).
+// Which marks are drawn at all is labelsThatFit's: one that would run into
+// another is left to the tooltip. The .chart-end-label class hides them on
+// a phone, where there is no room.
+const PF_MARK_H = 34;
+const PF_MARK_GAP = 12;
+const markWidth = (lines) => Math.ceil(Math.max(lines[0].length * 5.8, lines[1].length * 7.4)) + 18;
+const markLabels = (marks, frame) => {
+  if (!marks.length || !frame) return false;
+  return ({ x, y, index }) => {
+    const m = marks.find((k) => k.idx === index);
+    if (!m || x == null || y == null) return null;
+    const roomAbove = y - PF_MARK_GAP - PF_MARK_H >= frame.top;
+    const roomBelow = y + PF_MARK_GAP + PF_MARK_H <= frame.bottom;
+    const above = m.below ? !roomBelow && roomAbove : roomAbove || !roomBelow;
+    const top = above ? y - PF_MARK_GAP - PF_MARK_H : y + PF_MARK_GAP;
+    const left = Math.max(frame.left, Math.min(x - m.width / 2, frame.right - m.width));
+    return (
+      <g className="chart-end-label pf-mark" pointerEvents="none">
+        <rect x={left} y={top} width={m.width} height={PF_MARK_H} rx={7} className="pf-mark-box" stroke={m.color} />
+        <text x={left + 9} y={top + 14} fontSize={10.5} fontWeight={600} fill="var(--color-text-muted, #5F6B7D)">{m.lines[0]}</text>
+        <text x={left + 9} y={top + 28} fontSize={12.5} fontWeight={700} fill="var(--color-text, #182230)">{m.lines[1]}</text>
+      </g>
+    );
+  };
+};
+// Dots on a line at the given points (its end, its marked months).
+const dotsAt = (color, indices) => ({ cx, cy, index }) => (
+  indices.includes(index) && cx != null && cy != null
+    ? <circle key={`dot-${index}`} cx={cx} cy={cy} r={4.5} fill={color} stroke="var(--color-surface, #fff)" strokeWidth={2} />
+    : null
+);
 
 // Past / Present / Future on the forecast chart (Audrey, 2026-10-03). The
 // sections follow the DATA's clock, not the calendar: the present is the
@@ -2066,19 +2133,23 @@ const SECTION_LABEL_MIN_SLOT_PX = 62;
 const PF_Y_AXIS_WIDTH = 60;
 // A measured width for an element that mounts late (the plot sits behind
 // the loading and table states, so a ref read once on mount would miss it).
-const useMeasuredWidth = () => {
-  const [width, setWidth] = useState(0);
+// Height too since 2026-10-21: the marked points need the plot's bottom.
+const useMeasuredSize = () => {
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const observer = useRef(null);
   const ref = useCallback((node) => {
     observer.current?.disconnect();
     observer.current = null;
     if (!node || typeof ResizeObserver === 'undefined') return;
-    const measure = () => setWidth(node.getBoundingClientRect().width);
+    const measure = () => {
+      const box = node.getBoundingClientRect();
+      setSize((prev) => (prev.width === box.width && prev.height === box.height ? prev : { width: box.width, height: box.height }));
+    };
     measure();
     observer.current = new ResizeObserver(measure);
     observer.current.observe(node);
   }, []);
-  return [ref, width];
+  return [ref, size];
 };
 
 // Portfolio-level aggregate forecast — sums forecast_value across every
@@ -2106,7 +2177,6 @@ export const PortfolioForecastWidget = ({
   scopeLabel,
   emptyReason,
   isUpdating = false,
-  insight = null,
   // How many SKUs the series sums (GET /dashboard's gated_sku_count) out of
   // the scope's Category A forecasts (forecast.total_count). The tiles that
   // showed the gate's figures are hidden; this line still says the card is
@@ -2115,6 +2185,10 @@ export const PortfolioForecastWidget = ({
   // Since 2026-09-29 the gate is MASE < 1 (the LP's own), which passes 73.
   gatedSkuCount = null,
   reliability = null,
+  // The list reliability.total_count is ('Tier A as of Feb 2026', or
+  // "Unilever's Tier A as of Feb 2026" under All principals); null keeps
+  // "Class A SKUs".
+  tierLabel = null,
   // Why the forecast point is not drawn (a range ending before the latest
   // month: the one forecast is for the month after the latest sales).
   forecastNote = null,
@@ -2123,15 +2197,13 @@ export const PortfolioForecastWidget = ({
   // "actual" is never mistaken for the summary card's: 965,554 pieces here
   // against 1,766,710 there for the same month (2026-10-19).
   piecesShare = null,
-  // The same month-to-month move a year earlier ({ from, to, pct }), for
-  // the "why up 26%?" the insight invites: a seasonal step, or not.
-  analog = null,
   // The company calendar factor inside the forecast (GET /dashboard's
   // portfolio_forecast.calendar_adjustment, applied only; 2026-10-19).
   calendar = null,
 }) => {
   const hasData = series.length > 0;
   const tierACount = reliability?.total_count ?? null;
+  const tierAUnits = tierLabel ? `SKUs in ${tierLabel}` : 'Class A SKUs';
   const [view, setView] = useState('chart');
 
   // Same base/excess stacking trick as CoverTrendWidget's policy shading:
@@ -2185,7 +2257,8 @@ export const PortfolioForecastWidget = ({
   // and the forecast month (never the bridge point, which is an actual).
   const lastActualIdx = plotRows.reduce((found, pt, i) => (pt.actual != null ? i : found), -1);
   const lastForecastIdx = plotRows.reduce((found, pt, i) => (pt.forecast != null && pt.actual == null ? i : found), -1);
-  const [plotRef, plotWidth] = useMeasuredWidth();
+  const [plotRef, plotSize] = useMeasuredSize();
+  const plotWidth = plotSize.width;
 
   // Past / Present / Future (FORECAST_SECTION_STYLE): the present is the
   // latest month with actual demand in the whole series; panned away from
@@ -2230,13 +2303,40 @@ export const PortfolioForecastWidget = ({
       : `${formatMonth(sec.from)} – ${formatMonth(sec.to)}`}${sectionNote[sec.key] ?? ''}`).join(' · ')
     : null;
 
-  // The projection's value, labelled at the end of its line.
-  const forecastLabels = useMemo(() => {
-    const last = [...zoom.view].reverse().find((pt) => pt.forecast != null);
-    return pointLabels(zoom.view, last && last.actual == null
-      ? [{ period: last.period, text: `Forecast ${formatCompactQty(last.forecast)} pcs` }]
-      : []);
-  }, [zoom.view]);
+  // The highest and lowest month of actual demand and the next forecast
+  // (utils/forecastHighlights.js), for the marked points and the Key
+  // takeaways under the chart. From `series` as served: the bridge point
+  // chartData adds is an actual month, never the next forecast. No next
+  // forecast when the range ends before the latest month (forecastNote).
+  const highlights = useMemo(() => {
+    const h = demandHighlights(series);
+    return forecastNote ? { ...h, next: null } : h;
+  }, [series, forecastNote]);
+  // The plot's box in the chart's own pixels (margins and axes as drawn below).
+  const plotFrame = plotSize.width && plotSize.height ? {
+    top: 10,
+    bottom: plotSize.height - 10 - (X_AXIS_TITLED_HEIGHT + 22),
+    left: PF_Y_AXIS_WIDTH,
+    right: plotSize.width * 0.99 - EDGE_LABEL_MARGIN,
+  } : null;
+  // The marks, in priority order: the forecast, then the high, then the low.
+  const marks = useMemo(() => {
+    const idxOf = (period) => plotRows.findIndex((pt) => pt.period === period);
+    const mark = (h, title, color, below = false) => {
+      if (!h) return null;
+      const idx = idxOf(h.period);
+      if (idx < 0) return null;
+      const lines = [title, `${formatCompactQty(h.value, 2)} pcs`];
+      return { idx, lines, width: markWidth(lines), color, below };
+    };
+    return labelsThatFit([
+      mark(highlights.next, `Forecast · ${formatMonth(highlights.next?.period)}`, COLORS.forecast),
+      mark(highlights.peak, formatMonth(highlights.peak?.period), CHART_COLORS.salesSeries),
+      mark(highlights.low, formatMonth(highlights.low?.period), CHART_COLORS.salesSeries, true),
+    ], Number.isFinite(slotPx) ? slotPx : 1e6);
+  }, [highlights, plotRows, slotPx]);
+  const forecastMarks = marks.filter((m) => m.color === COLORS.forecast);
+  const actualMarks = marks.filter((m) => m.color !== COLORS.forecast);
 
   const tableColumns = [
     { key: 'period', label: 'Month', format: (v) => formatAxisPeriod(v), align: 'left' },
@@ -2248,16 +2348,6 @@ export const PortfolioForecastWidget = ({
       ? [{ key: 'beforeAdjustment', label: 'Forecast before the calendar adjustment (pieces)', format: (v) => Math.round(v).toLocaleString() }]
       : []),
   ];
-  // The forecast before the calendar adjustment against the last month of
-  // actual sales, as the insight compares the adjusted one ("+17.1% on Feb
-  // 2026"): only when that last month comes just before the forecast month.
-  const lastActualPoint = [...series].reverse().find((pt) => pt.actual != null) || null;
-  const calendarRise = calendar && lastActualPoint && lastActualPoint.actual > 0 && calendar.before_pieces != null
-    ? (() => {
-      const pct = ((calendar.before_pieces - lastActualPoint.actual) / lastActualPoint.actual) * 100;
-      return `${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}% on ${formatMonth(lastActualPoint.period)}`;
-    })()
-    : null;
   // The months the card spans, for the subtitle: the picker's range plus
   // the forecast month after it.
   const seriesSpan = series.length
@@ -2265,17 +2355,26 @@ export const PortfolioForecastWidget = ({
     : null;
 
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget pf-card${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           {/* The unit is PIECES here and pesos on the chart above it; the
-              y-axis reads "120k" in both, so it is named in the heading. */}
+              y-axis reads "120k" in both, so it is named in the heading.
+              The badge is how many SKUs the line sums (gated_sku_count),
+              never a count the card doesn't have (2026-10-21). */}
           <h4>
-            <span><span className="title-accent">Forecast</span> demand, top sellers</span> <span className="chart-unit">pieces</span>
+            <span><span className="title-accent">Forecast</span> demand · Top sellers</span>
+            {gatedSkuCount > 0 && (
+              <span className="pf-sku-badge" title={`The chart sums ${gatedSkuCount.toLocaleString()} SKUs`}>
+                {gatedSkuCount.toLocaleString()} SKUs
+              </span>
+            )}
+            <span className="chart-unit">pieces</span>
             {gatedSkuCount != null && tierACount ? (
               <InfoTip label="Which SKUs are summed">
-                {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} Class A SKUs: `
-                  + 'those whose forecasts beat a simple last-month guess (MASE below 1), the same check the reorder plan uses. '
+                {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} ${tierAUnits}: `
+                  + 'those whose forecasts beat a simple last-month guess (MASE below 1), the same check the reorder plan uses, '
+                  + 'a check pending adviser confirmation. '
                   + `The other ${(tierACount - gatedSkuCount).toLocaleString()} are left out rather than summed on forecasts that failed `
                   + 'the check, and the plan gives them no order recommendation: their forecast did not pass, or the product '
                   + 'has too little history or no recent sales.'}
@@ -2289,11 +2388,11 @@ export const PortfolioForecastWidget = ({
               </InfoTip>
             ) : null}
           </h4>
-          <SectionLede>What the top sellers will need next</SectionLede>
+          <SectionLede>What the top sellers will most likely sell</SectionLede>
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} Class A SKUs that beat a simple last-month guess`
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} ${tierAUnits} that beat a simple last-month guess (pending adviser confirmation)`
               : ' · planned Class A SKUs'}
             {piecesShare && ` · ${piecesShare.pct.toFixed(0)}% of all pieces sold in ${piecesShare.period}`}
           </p>
@@ -2301,10 +2400,16 @@ export const PortfolioForecastWidget = ({
               it is a method change awaiting the adviser's sign-off, so it is
               said, not left in a "?" (2026-10-19). */}
           {hasData && calendar && (
-            <p className="chart-insight chart-calendar-note">
+            <p className="chart-insight chart-calendar-note keep-visible">
               {`The ${formatMonth(calendar.forecast_period)} forecast includes a calendar adjustment of `
-                + `${calendarFactorText(calendar)}, learned from ${calendarYearsText(calendar) || 'earlier years'}`}
-              {calendarSignoffText(calendar.signed_off) ? ` — ${calendarSignoffText(calendar.signed_off)}.` : '.'}
+                + `${calendarFactorText(calendar)}, learned from ${calendarYearsText(calendar) || 'earlier years'}.`}
+              {/* Pending sign-off as a pill, on the card's face (not behind
+                  the "?"), only while the API says signed_off is false. */}
+              {calendarSignoffText(calendar.signed_off) && (
+                <span className="badge badge-warning chart-calendar-pending">
+                  {calendarSignoffText(calendar.signed_off).replace(/^./, (c) => c.toUpperCase())}
+                </span>
+              )}
               <InfoTip label="About the calendar adjustment">
                 <span className="chart-tip-line">{calendar.method || CALENDAR_METHOD_FALLBACK}</span>
                 <span className="chart-tip-line">
@@ -2318,7 +2423,7 @@ export const PortfolioForecastWidget = ({
             </p>
           )}
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
-          {hasData && forecastNote && <p className="chart-insight">{forecastNote}</p>}
+          {hasData && forecastNote && <p className="chart-insight keep-visible">{forecastNote}</p>}
         </div>
         {/* The card follows the Topbar's principal filter like the rest of
             the page (2026-09-30). Its own All / Del Monte / Unilever + Reset
@@ -2383,7 +2488,9 @@ export const PortfolioForecastWidget = ({
                       title="Assumes each product's forecast misses on its own; if products move together, the real range is wider."
                     >
                       <span className="legend-color" style={{ backgroundColor: COLORS.forecastBg, borderRadius: '3px' }} />
-                      Likely range: about 9 times in 10
+                      {/* The band's design (z = 1.645), never measured against
+                          sales, so it says what it is meant to do (2026-10-22). */}
+                      Likely range: meant to cover about 9 in 10 months
                     </li>
                   </>
                 )}
@@ -2471,7 +2578,8 @@ export const PortfolioForecastWidget = ({
                       strokeWidth={3}
                       strokeLinecap="round"
                       fill="url(#pf-fill-actual)"
-                      dot={endDot(CHART_COLORS.salesSeries, lastActualIdx)}
+                      dot={dotsAt(CHART_COLORS.salesSeries, [lastActualIdx, ...actualMarks.map((m) => m.idx)])}
+                      label={markLabels(actualMarks, plotFrame)}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       connectNulls={false}
                       {...zoom.zoomAnim(1)}
@@ -2487,7 +2595,7 @@ export const PortfolioForecastWidget = ({
                       dot={endDot(COLORS.forecast, lastForecastIdx)}
                       activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                       connectNulls={false}
-                      label={forecastLabels}
+                      label={markLabels(forecastMarks, plotFrame)}
                       {...zoom.zoomAnim(2)}
                     />
                   </ComposedChart>
@@ -2497,28 +2605,41 @@ export const PortfolioForecastWidget = ({
           )}
         </div>
       )}
-      {/* The card's takeaway, composed by the backend from this same series
-          (portfolio_forecast.insight): a soft strip under the chart it sums
-          up (mockup pass), where it used to sit in the header. */}
-      {insight?.text && (
-        <p className="chart-insight portfolio-insight-strip">
-          <Info size={15} aria-hidden="true" />
-          <span>
-            {insight.text}
-            {/* The same step a year earlier, from the two series on the
-                page, so a rise reads as seasonal (or not) rather than
-                unexplained. */}
-            {analog && (
-              <> A year earlier, {formatMonth(analog.to)} was {analog.pct >= 0 ? '+' : '−'}{Math.abs(analog.pct).toFixed(1)}% on {formatMonth(analog.from)}.</>
+      {/* Key takeaways (2026-10-21, mockup pass): the highest and lowest
+          month and the next forecast, from the same series the chart draws
+          (highlights above). One that has no figure is left out. Shown even
+          with SHOW_CHART_DESCRIPTIONS off: asked for by name. */}
+      {hasData && (highlights.peak || highlights.low || highlights.next) && (
+        <section className="pf-takeaways" aria-label="Key takeaways">
+          <p className="pf-takeaways-title">Key takeaways</p>
+          {/* role="list": the list's markers are off (list-style: none), and
+              Safari then drops the list semantics (2026-10-22). */}
+          <ol className="pf-takeaways-list" role="list">
+            {highlights.peak && (
+              <li>
+                Highest month: <strong>{formatCompactQty(highlights.peak.value, 2)} pcs</strong> in {formatMonth(highlights.peak.period)}.
+              </li>
             )}
-            {/* How much of the rise is the calendar adjustment: the same
-                forecast before it, against the same last month of sales. */}
-            {calendarRise && (
-              <> Before the calendar adjustment it would be {Math.round(calendar.before_pieces).toLocaleString()} pieces ({calendarRise}).</>
+            {highlights.low && (
+              <li>
+                Lowest month: <strong>{formatCompactQty(highlights.low.value, 2)} pcs</strong> in {formatMonth(highlights.low.period)}.
+              </li>
             )}
-          </span>
-        </p>
+            {highlights.next && (
+              <li>
+                Next forecast: <strong>{formatCompactQty(highlights.next.value, 2)} pcs</strong> for {formatMonth(highlights.next.period)}
+                {highlights.next.low != null && highlights.next.high != null
+                  ? `, likely ${formatCompactQty(highlights.next.low, 2)} – ${formatCompactQty(highlights.next.high, 2)} pcs.`
+                  : '.'}
+              </li>
+            )}
+          </ol>
+        </section>
       )}
+      {/* The backend's summary sentence (portfolio_forecast.insight) and the
+          year-earlier and before-adjustment asides that followed it are no
+          longer shown (2026-10-28, Audrey: figures only, no written-out
+          readings); the figures are on the chart and in its tooltip. */}
     </div>
   );
 };
@@ -2526,10 +2647,12 @@ export const PortfolioForecastWidget = ({
 // Soft pills in the shared badge tints (ui.css): critical soft red, urgent
 // soft amber, planned neutral. The word is printed in every pill and rows
 // stay most-urgent first (sortedRows below), so colour never stands alone.
-const URGENCY_STYLES = {
-  CRITICAL: { bg: 'var(--badge-critical-bg)', color: 'var(--badge-critical-fg)' },
-  URGENT: { bg: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' },
-  PLANNED: { bg: 'var(--badge-neutral-bg)', color: 'var(--badge-neutral-fg)' },
+// The urgency badge's tint (Charts.css .urgency-*): soft red, soft amber,
+// neutral. The word carries the meaning; colour only repeats it.
+const URGENCY_CLASS = {
+  CRITICAL: 'urgency-critical',
+  URGENT: 'urgency-urgent',
+  PLANNED: 'urgency-planned',
 };
 
 // Keys match GET /dashboard's reorder_preview.lp_weights exactly (backend/
@@ -2576,8 +2699,12 @@ const LP_PRIORITY_ROWS = [
   },
 ];
 
+// Where the LP weights (45/35/20) come from is not on record: analytics/
+// params.py:205-207 marks them asserted, in no scribe note (2026-10-22).
+const LP_WEIGHTS_SOURCE_NOTE = 'a team setting; source not yet confirmed';
+
 // Compact dashboard-card version of the ReorderRecommendations page.
-// rows: [{ sku, product, urgency, orderQty, stock, safetyStock, notInCount }]
+// rows: [{ sku, product, urgency, orderQty, stock, safetyStock, notInCount, needsReview, reviewReasons }]
 // — the list, in GET /dashboard's order. weights: { cost, service_level,
 // storage } fractions (0-1), from GET /dashboard's reorder_preview
 // .lp_weights, said in one line (they only matter when supply is short).
@@ -2632,8 +2759,21 @@ export const ReorderRecommendationWidget = ({
   // Re-sorting here by order quantity used to override that.
   const sortedRows = rows;
 
+  // The strip above the table (Audrey, 2026-10-21): counts over the rows this
+  // card lists (GET /dashboard sends the 5 most urgent), never the whole
+  // plan, whose totals are the Pending reorders card's. The pieces total is
+  // left out unless every listed row has a quantity, so it is never a sum
+  // with a gap in it. It adds each row's figure as its cell shows it (rounded
+  // up to a whole piece), so it equals the rows listed (2026-10-24; rounding
+  // the sum instead printed a total 2 pieces short of them).
+  const shownCount = sortedRows.length;
+  const shownCritical = sortedRows.filter((r) => r.urgency === 'CRITICAL').length;
+  const shownNotInCount = sortedRows.filter((r) => r.notInCount).length;
+  const shownToCheck = sortedRows.filter((r) => r.needsReview).length;
+  const shownPieces = shownPiecesTotal(sortedRows);
+
   return (
-    <div className={`chart-widget${hasData ? '' : ' chart-widget-empty'}`}>
+    <div className={`chart-widget dash-action-card reorder-card${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
           <h4><span>Suggested <span className="title-accent">orders</span></span></h4>
@@ -2641,7 +2781,7 @@ export const ReorderRecommendationWidget = ({
           {/* GET /dashboard's reorder_preview has been scoped to the LP's
               current cycle since 2026-09-23 (backend/lp_cycle.py), the same
               rows Reorder Recs lists by default. */}
-          <p>
+          <p className="keep-visible">
             Order quantities in pieces from the order plan · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
             {runLabel ? ` · ${runLabel}` : ''}
             {countLabel ? ` · ${countLabel}` : ''}
@@ -2669,7 +2809,10 @@ export const ReorderRecommendationWidget = ({
                 {p.label.toLowerCase()} <strong>{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</strong>
               </React.Fragment>
             ))}
-            .
+            {/* The weights are recorded as asserted, in no scribe note
+                (analytics/params.py, LP_WEIGHTS): said where they are shown
+                (Technical Adviser, 2 Oct 2026; 2026-10-22). */}
+            {' '}({LP_WEIGHTS_SOURCE_NOTE}).
             <InfoTip label="How the order was worked out">
               <span className="chart-tip-line">
                 Each product is ordered up to its target stock, in layers: this month&apos;s demand, then safety stock,
@@ -2681,6 +2824,10 @@ export const ReorderRecommendationWidget = ({
                   <strong>{p.label} ({solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}).</strong> {p.blurb}
                 </span>
               ))}
+              <span className="chart-tip-line">
+                The percentages are {LP_WEIGHTS_SOURCE_NOTE}: the manuscript cites stakeholder consultation, but no
+                meeting note records it.
+              </span>
               {inputsArePlaceholders && (
                 <span className="chart-tip-line">Cost and capacity figures are placeholders until SSM confirms them.</span>
               )}
@@ -2690,61 +2837,100 @@ export const ReorderRecommendationWidget = ({
             {calendarNote && ` ${calendarNote}`}
           </p>
 
+          <div
+            className="reorder-mini-strip"
+            title="These counts cover the products listed below only. The whole plan's totals are on the Pending reorders card."
+          >
+            <span className="reorder-mini-strip-scope">Of the {shownCount} shown</span>
+            <span className="reorder-mini-strip-item">
+              <strong className={shownCritical > 0 ? 'is-critical' : undefined}>{shownCritical}</strong> critical
+            </span>
+            <span className="reorder-mini-strip-item">
+              <strong className={shownNotInCount > 0 ? 'is-caution' : undefined}>{shownNotInCount}</strong> not in the stock count
+            </span>
+            <span className="reorder-mini-strip-item">
+              <strong className={shownToCheck > 0 ? 'is-caution' : undefined}>{shownToCheck}</strong> to check before ordering
+            </span>
+            {shownPieces != null && (
+              <span className="reorder-mini-strip-item">
+                <strong>{formatUnits(shownPieces)}</strong> pieces to order
+              </span>
+            )}
+          </div>
+
           <div className="reorder-mini-list">
             {/* Own class name, not "reorder-table": that one is the full
                 Reorder Recs page table and carries min-width: 1180px, which
                 leaked in here (CSS is global) and forced a horizontal scroll. */}
-            <table className="reorder-mini-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Urgency</th>
-                  <th>Stock (pieces)</th>
-                  <th>Order (pieces)</th>
+            {/* Explicit table roles (2026-10-22): under 560px the rows turn
+                into a grid (Charts.css), and a table with display changed
+                loses its semantics in VoiceOver. */}
+            <table className="reorder-mini-table" role="table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader">Product</th>
+                  <th role="columnheader">Urgency</th>
+                  <th role="columnheader" className="reorder-mini-num">Stock (pieces)</th>
+                  <th role="columnheader" className="reorder-mini-num">Order (pieces)</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {sortedRows.map((r) => (
-                  <tr key={r.sku}>
+                  <tr key={r.sku} role="row">
                     {/* Name first, SKU code under it (Sir Catubag, 2 Oct
                         2026) — the table used to lead with the code. The name
                         opens that SKU's own recommendation, which the Reorder
                         Recs page shows in its detail modal on load (the ?sku=
                         handling in ReorderRecommendations.jsx), as the code
                         link did. */}
-                    <td className="reorder-mini-product" title={r.product || r.sku}>
+                    <td role="cell" className="reorder-mini-product" title={r.product || r.sku}>
                       <ProductName
                         name={r.product}
                         code={r.sku}
                         onOpen={() => navigate(`/reorder?sku=${encodeURIComponent(r.sku)}`)}
                         openLabel="Open the recommendation for"
                       />
+                      {/* Flagged for review on the Reorder page (review_flag):
+                          said here too, so the Dashboard never suggests an
+                          order the plan itself says to check first. The
+                          chip is an InfoTip trigger (2026-10-24): the reason
+                          opens on hover, tap or Enter and is read on focus
+                          (aria-describedby); it used to be a title only. */}
+                      {r.needsReview && (
+                        <InfoTip
+                          label="Why check first"
+                          className="reorder-mini-review-tip"
+                          triggerClassName="reorder-mini-review"
+                          trigger="Check first"
+                        >
+                          {reviewReasonsSentence(r.reviewReasons)}
+                        </InfoTip>
+                      )}
                     </td>
-                    <td>
+                    <td role="cell">
                       {/* Why this urgency, on hover: the stock against the
                           safety stock it is judged by (2026-10-19). */}
                       <span
-                        className="urgency-badge-mini"
-                        style={{
-                          backgroundColor: URGENCY_STYLES[r.urgency]?.bg,
-                          color: URGENCY_STYLES[r.urgency]?.color,
-                        }}
+                        className={`urgency-badge-mini${URGENCY_CLASS[r.urgency] ? ` ${URGENCY_CLASS[r.urgency]}` : ''}`}
                         title={r.safetyStock != null
                           ? `${r.urgency === 'CRITICAL' ? 'Below' : r.urgency === 'URGENT' ? 'Above' : 'Well above'} its safety stock of ${formatUnits(r.safetyStock)} pieces`
                             + `${r.notInCount ? '; not in the stock count, so read as 0 on hand' : ''}`
                           : undefined}
                       >
+                        {r.urgency === 'CRITICAL' && <AlertTriangle size={11} strokeWidth={2.5} aria-hidden="true" />}
                         {r.urgency}
                       </span>
                     </td>
-                    {/* The stock the urgency was judged on; a product missing
-                        from the opening count is read as 0 and says so. */}
-                    <td className="reorder-mini-qty">
+                    {/* The stock the urgency was judged on. A product missing
+                        from the opening count is read as 0 by the plan; the
+                        cell says "not in count" (amber), never a 0 that would
+                        look like a counted, empty shelf. */}
+                    <td role="cell" className="reorder-mini-qty" data-label="Stock (pieces)">
                       {r.notInCount
-                        ? <span className="reorder-mini-nocount" title="Not in the cycle's opening stock count; the plan reads it as 0 on hand">not in count</span>
+                        ? <span className="reorder-mini-nocount" title="Not in the cycle's opening stock count; the plan reads it as 0 on hand">Not in count</span>
                         : r.stock != null ? formatUnits(r.stock) : '—'}
                     </td>
-                    <td className="reorder-mini-qty">
+                    <td role="cell" className="reorder-mini-qty" data-label="Order (pieces)">
                       {formatUnits(r.orderQty)}
                     </td>
                   </tr>
@@ -2757,10 +2943,12 @@ export const ReorderRecommendationWidget = ({
               overview, not the working list) — this is its one connection
               to the full Reorder Recs page, where the complete list,
               Accept/Dismiss actions, and decision log actually live. */}
-          <Link to="/reorder" className="reorder-mini-view-all">
-            See all suggested orders
-            <ArrowRight size={14} />
-          </Link>
+          <div className="dash-card-footer">
+            <Link to="/reorder" className="reorder-mini-view-all">
+              See all suggested orders
+              <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          </div>
         </>
       )}
     </div>

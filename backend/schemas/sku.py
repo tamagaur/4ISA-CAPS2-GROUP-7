@@ -22,6 +22,10 @@ class SKUItem(BaseModel):
     sku_id: str
     product_name: str | None = None
     principal: str
+    # The product's category (Product_Dimension.category_path), the grouping
+    # GET /category-trends ranks by, so a category's products can be listed
+    # (SKU Management's ?category= filter, 2026-10-22).
+    category_path: str | None = None
     # 'sku' (an item code) or 'category' (a Del Monte sell-out category,
     # DEC-03). Del Monte is ranked by category, so its item codes are never
     # classified one by one; the page counts the two apart.
@@ -52,6 +56,10 @@ class SKUItem(BaseModel):
     # whenever the principal has any stock count, even if this product has
     # no row in it.
     stock_count_date: datetime.date | None = None
+    # The month of that count ('YYYY-MM', the latest _period of the
+    # principal's stock file). Del Monte has this but no stock_count_date:
+    # its stored day is a placeholder (routers/sku.py).
+    stock_count_period: str | None = None
 
 
 class SKUListResponse(BaseModel):
@@ -60,6 +68,9 @@ class SKUListResponse(BaseModel):
     # {principal: day its latest stock count was taken}, for the principals
     # in the list — what the page's stock column header states.
     stock_count_dates: dict[str, datetime.date] = {}
+    # {principal: 'YYYY-MM' of its latest stock count}, every principal in
+    # the list, so a principal without a count day still names its month.
+    stock_count_periods: dict[str, str] = {}
     # The LP cycle reorder_point comes from (a month's first day). None
     # without lp.view, like reorder_point itself, or when there is no cycle.
     planning_cycle_date: datetime.date | None = None

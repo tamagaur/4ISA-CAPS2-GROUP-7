@@ -165,6 +165,9 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
     canPan,
     panHandlers,
     containerRef,
+    // The container's width in px (null until measured), for a chart that
+    // places its own labels (SKU Forecast's annotation band).
+    width,
     labelInterval,
     isAdjusting,
     setIsAdjusting,

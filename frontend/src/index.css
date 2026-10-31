@@ -688,6 +688,17 @@ table td.table-center {
   --color-abc-a-bg: #fdf2f8;
   --color-abc-b-bg: #fdf4ff;
   --color-abc-deep: #701a75;
+
+  /* Added 2026-10-24 (audit NEW3-FE-7): values that were hex literals in
+     component code, now named. Same pixels as before. */
+  --color-brand-tint: #FFF7F3;   /* the Dashboard welcome banner's peach panel */
+  --color-text-label: #344054;   /* figures printed on a chart (Annual View bar values) */
+  --color-danger-ink: #B42318;   /* ink on --color-severity-critical-bg (Annual View "down" pill), 5.9:1 */
+  /* Forecast vs actual: the miss each way. Mirror CHART_COLORS.missTooHigh /
+     missTooLow (theme/colors.js). Too low is a deeper teal than the actual
+     sales line (--color-dispatched), so the band and the line differ. */
+  --color-miss-too-high: #F25F76;
+  --color-miss-too-low: #0E7490;
 }
 
 /* Form controls don't inherit the page font on their own. */

@@ -223,10 +223,11 @@ def test_require_permission_only_takes_catalog_keys():
 
 
 def test_the_presets_are_the_proposals_design_table():
-    staff = {"dashboard.view", "abc.view", "forecast.view", "category_trends.view", "sku.view", "lp.view"}
+    # lp.propose joined the staff preset 2026-10-28 (Yuan): staff propose, an admin decides.
+    staff = {"dashboard.view", "abc.view", "forecast.view", "category_trends.view", "sku.view", "lp.view", "lp.propose"}
     assert set(PRESETS["staff"]) == staff
     assert set(PRESETS) == {"staff"}  # admin has everything; there is no Manager
-    assert len(ALL_KEYS) == len(set(ALL_KEYS)) == 11
+    assert len(ALL_KEYS) == len(set(ALL_KEYS)) == 12  # lp.propose, 2026-10-28
 
 
 # ═══ THE FRONTEND'S COPY MATCHES ═════════════════════════════════════════════
@@ -249,9 +250,10 @@ def test_frontend_keys_are_the_catalog():
 
 def test_frontend_legacy_catalog_matches_word_for_word():
     entries = re.findall(
-        r"\{ key: P\.(\w+), label: '([^']*)', group: '([^']*)', description: '([^']*)' \}", KEYS_JS
+        r"\{ key: P\.(\w+), label: '([^']*)', group: '([^']*)', description: '([^']*)'(, admin_only: true)? \}", KEYS_JS
     )
-    assert [{"key": FRONTEND_P[n], "label": l, "group": g, "description": d} for n, l, g, d in entries] == CATALOG
+    assert [{"key": FRONTEND_P[n], "label": l, "group": g, "description": d, **({"admin_only": True} if a else {})}
+            for n, l, g, d, a in entries] == CATALOG
 
 
 def test_frontend_legacy_staff_access_is_the_staff_preset():
@@ -273,11 +275,15 @@ def test_frontend_dev_mock_presets_match():
 SIGN_IN_ONLY = {
     ("GET", "/auth/me"), ("POST", "/auth/heartbeat"), ("POST", "/auth/logout"),
     ("PATCH", "/auth/me"),  # your own name and picture (backend/profile.py, My profile)
+    ("POST", "/auth/change-password"),  # your OWN password, the current one asked first (My profile)
     ("GET", "/data-mode"),  # the data-mode banner on every page
     ("POST", "/users/me/avatar"),  # any signed-in account sets its OWN picture; no users.manage needed
     # Your own two-step sign-in (backend/routers/two_factor.py).
     ("GET", "/auth/mfa"), ("POST", "/auth/mfa/setup"), ("POST", "/auth/mfa/confirm"),
     ("POST", "/auth/mfa/recovery-codes"), ("POST", "/auth/mfa/disable"),
+    # Your OWN notification bell (backend/routers/notifications.py, migration 0071): every route reads or marks
+    # only the caller's rows (recipient_user_id = the token's user), someone else's key answers 404.
+    ("GET", "/notifications"), ("POST", "/notifications/{notification_key}/read"), ("POST", "/notifications/read-all"),
 }
 PUBLIC = {
     ("POST", "/auth/login"), ("GET", "/auth/forgot-password"), ("POST", "/auth/forgot-password"),
@@ -327,8 +333,10 @@ def _routes():
 # /auth/mfa*, /users/{user_id}/mfa/reset) merged 2026-10-03, plus PATCH /auth/me (the My profile
 # page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 67 since the reorder
 # approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23); 70 since the three
-# /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23). Change it when a route is added or removed.
-ROUTE_COUNT = 70
+# /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23); 72 when the two branches met (2026-10-24), this branch adding
+# GET /dashboard/stock-detail (the lists behind the stock cards, 2026-10-19) and POST /auth/change-password
+# (My profile's Change password, 2026-10-20). Change it when a route is added or removed.
+ROUTE_COUNT = 83  # 2026-10-28: +8, backend/routers/reorder_requests.py; +3, backend/routers/notifications.py
 
 
 def test_the_walk_finds_every_route():
@@ -371,7 +379,16 @@ NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user
               ("POST", "/recommendations/changes/{change_key}/reject"),
               ("POST", "/recommendations/{recommendation_key}/reverse"),
               ("GET", "/recommendations/direct-apply-grants/me"), ("GET", "/recommendations/direct-apply-grants"),
-              ("PUT", "/recommendations/direct-apply-grants/{user_id}")}
+              ("PUT", "/recommendations/direct-apply-grants/{user_id}"),
+              # 2026-10-28, backend/routers/reorder_requests.py: lp.propose (off for staff until an admin ticks it),
+              # admin-only settling, and GET /open-requests on lp.view.
+              ("POST", "/recommendations/{recommendation_key}/dismissal-request"),
+              ("GET", "/recommendations/dismissal-requests"),
+              ("POST", "/recommendations/dismissal-requests/{request_key}/approve"),
+              ("POST", "/recommendations/dismissal-requests/{request_key}/reject"),
+              ("GET", "/recommendations/stock-observations"),
+              ("POST", "/recommendations/stock-observations/{observation_key}/verify"),
+              ("GET", "/recommendations/open-requests"), ("GET", "/recommendations/{recommendation_key}/history")}
 
 
 def test_the_staff_preset_opens_exactly_what_staff_could_open_before():
@@ -486,7 +503,7 @@ def test_me_for_an_admin_lists_everything():
 def test_catalog_for_an_admin():
     with client_for(FakeStore(team())) as c:
         body = c.get("/admin/permissions/catalog", headers=auth(1, "admin")).json()
-    assert body["permissions"] == CATALOG
+    assert body["permissions"] == [{**entry, "admin_only": entry.get("admin_only", False)} for entry in CATALOG]
     assert body["roles"] == {"admin": "all", "staff": list(PRESETS["staff"])}
 
 
@@ -566,6 +583,24 @@ def test_an_unknown_permission_is_422_and_nothing_is_written():
     assert resp.status_code == 422
     assert resp.json() == {"detail": "Unknown permission.", "code": "unknown_permission", "permission": "everything.all"}
     assert store.overrides == {} and store.commits == 0
+
+
+@pytest.mark.real_permission_store
+def test_staff_never_hold_an_admin_only_permission():
+    """lp.decide is admin-only (Yuan, 2026-10-28): staff propose (lp.propose), an admin decides. Saving it for a
+    staff account is refused with nothing written, and a stored grant (from before the rule) counts for nothing."""
+    assert permissions.ADMIN_ONLY_KEYS == {"lp.decide"}
+    store = FakeStore(team())
+    with client_for(store) as c:
+        resp = c.put("/admin/users/2/permissions", json={"role": "staff", "overrides": {"lp.decide": True}},
+                     headers=auth(1, "admin"))
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "admin_only_permission" and resp.json()["permission"] == "lp.decide"
+    assert store.overrides == {} and store.commits == 0
+    assert "lp.decide" not in permissions.effective("staff", {"lp.decide": True})
+    assert "lp.propose" in permissions.effective("staff", {})
+    assert permissions.normalize("staff", {"lp.decide": True}) == {}
+    assert "lp.decide" in permissions.effective("admin", {})
 
 
 @pytest.mark.real_permission_store
@@ -957,6 +992,8 @@ ACTIONS = {
     "sku.edit": [("POST", "/sku", {"sku_code": "X-1", "product_name": "X", "principal": "delmonte"}),
                  ("PATCH", "/sku/1", {"status": "NOT-A-STATUS"})],
     "lp.decide": [("PATCH", "/recommendations/1", {"status": "maybe"})],
+    # 2026-10-28: asking for a dismissal is lp.propose's alone (lp.decide dismisses directly instead).
+    "lp.propose": [("POST", "/recommendations/1/dismissal-request", {"reason": ""})],
     "users.manage": [("POST", "/auth/register", {"email": "n@ssmcapstone.com", "full_name": "N", "role": "staff"}),
                      ("PATCH", "/users/3", {"full_name": "Renamed"}), ("DELETE", "/users/3", None),
                      ("POST", "/users/3/send-link", None), ("PUT", "/admin/users/3/permissions", {"role": "staff"})],
@@ -1011,7 +1048,8 @@ def test_every_page_works_for_each_preset_with_any_one_box_unticked(role, monkey
     assert problems == []
 
 
-@pytest.mark.parametrize("only", sorted(ALL_KEYS))
+# Not the admin-only keys: staff can't hold lp.decide at all (test_staff_never_hold_an_admin_only_permission).
+@pytest.mark.parametrize("only", sorted(set(ALL_KEYS) - permissions.ADMIN_ONLY_KEYS))
 def test_each_page_works_on_its_own_permission_alone(only, monkeypatch):
     """The strongest form of any-of: a staff account with every box
     unticked but one still gets that one page (and button) whole."""

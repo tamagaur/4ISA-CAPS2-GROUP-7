@@ -303,7 +303,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
               </button>
             </div>
             <div className="logout-modal-body">
-              <p>Are you sure you want to log out of <strong>SAN2 Inventory DSS</strong>?</p>
+              <p>Are you sure you want to log out of <strong>SAN2 | SSM Decision Support Dashboard</strong>?</p>
             </div>
             <div className="logout-modal-footer">
               <button className="logout-cancel-btn" onClick={() => setShowLogoutModal(false)}>

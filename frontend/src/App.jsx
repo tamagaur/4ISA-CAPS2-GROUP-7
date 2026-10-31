@@ -43,6 +43,7 @@ const routeTitles = {
   '/abc': 'SAN2 | ABC Classification',
   '/forecast': 'SAN2 | SKU Forecast',
   '/reorder': 'SAN2 | Reorder Recommendations',
+  '/category-trends': 'SAN2 | Category Trends',
   '/audit-log': 'SAN2 | Audit Log',
   '/upload': 'SAN2 | Data Management',
   '/users': 'SAN2 | User Management',
@@ -54,7 +55,8 @@ function DynamicTitle() {
   const location = useLocation();
 
   useEffect(() => {
-    document.title = routeTitles[location.pathname] || 'SAN2 | Inventory DSS';
+    // The project is the DSD (Decision Support Dashboard), never "DSS" (audit FE-12).
+    document.title = routeTitles[location.pathname] || 'SAN2 | SSM Decision Support Dashboard';
   }, [location]);
 
   return null;

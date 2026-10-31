@@ -22,6 +22,8 @@ At most one change per row can be pending_approval (partial unique index, migrat
 WHO CAN DO WHAT
 ---------------
 lp.decide           propose a quantity change (POST /{key}/quantity-change), accept as recommended or dismiss (PATCH)
+lp.propose          (2026-10-28) propose a quantity change, ask for a dismissal and report stock counted, all held
+                    for an admin (backend/routers/reorder_requests.py). No direct accept or dismiss.
 a direct-apply grant (lp_direct_apply_grant, an admin gives it to one user): the same POST applies at once, as an
                     accept with that quantity (outcome 'applied'); PATCH with a different quantity is allowed too
 admin               approve or reject, reverse a decision, grant or revoke direct apply. An admin's own quantity
@@ -57,7 +59,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend import audit, planning_mart, response_cache
+from backend import audit, notifications, planning_mart, response_cache, stock_observation
 from backend.api_errors import ApiError
 from backend.case_pack import PACK_SQL, check_whole_cases
 from backend.deps import TokenPayload, get_db
@@ -91,7 +93,7 @@ _CURRENT_CYCLE = """
 
 # The row a request is about: its quantity, state, cycle and the principal's current cycle.
 _ROW_SQL = """
-    SELECT lr.recommendation_key, lr.q_i, lr.status, lr.planning_cycle_date,
+    SELECT lr.recommendation_key, lr.q_i, lr.status, lr.planning_cycle_date, lr.product_key,
            COALESCE(pd.sku_code, pd.category_path) AS sku,
            {PACK} AS pack,
            (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
@@ -118,10 +120,12 @@ _CHANGE_COLUMNS = """
     SELECT c.change_key, c.recommendation_key, COALESCE(pd.sku_code, pd.category_path) AS sku_code, pd.product_name,
            lr.planning_cycle_date, c.recommended_q_i, c.proposed_q_i, c.proposal_reason AS reason, c.reviewed,
            c.state, c.proposed_by, c.proposed_at, c.resolved_by, c.resolved_at, c.resolution_note,
-           rv.reversed_by, rv.reversed_at
+           rv.reversed_by, rv.reversed_at, pu.full_name AS proposed_by_name
     FROM lp_quantity_change c
     JOIN lp_recommendation lr ON lr.recommendation_key = c.recommendation_key
     JOIN product_dimension pd ON pd.product_key = lr.product_key
+    -- The requester's name for the Staff Requests table (2026-10-28): the row keeps only the email.
+    LEFT JOIN users pu ON lower(pu.email) = lower(c.proposed_by)
     -- An approved change whose decision an admin later reversed (audit 2026-10-23 finding 10): the state stays
     -- 'approved' as the record, and these two columns say the decision it made was undone.
     LEFT JOIN LATERAL (SELECT r.reversed_by, r.reversed_at FROM lp_decision_reversal r
@@ -218,9 +222,28 @@ def _require_approval(present: dict) -> None:
         raise ApiError(503, APPROVAL_NOT_READY, code="approval_not_ready")
 
 
-def _change(db: Session, change_key: int) -> QuantityChange:
+def _change(db: Session, change_key: int, present: dict | None = None) -> QuantityChange:
     row = db.execute(text(_CHANGE_BY_KEY_SQL), {"change_key": change_key}).mappings().first()
-    return QuantityChange(**dict(row))
+    change = QuantityChange(**dict(row))
+    if present and present.get("requests"):
+        change.stock_observation = stock_observation.latest_for(db, "quantity_change_key", [change_key]).get(change_key)
+    return change
+
+
+def cases_text(pieces, pack) -> str:
+    """' (13 cases of 30)' for a whole-case quantity with a pack size, else ''. For the audit entries, so the log
+    states the same case count the page shows."""
+    if pack is None or float(pack) <= 1:
+        return ""
+    cases = float(pieces) / float(pack)
+    return f" ({cases:g} cases of {float(pack):g})" if abs(cases - round(cases)) < 1e-6 else ""
+
+
+def refuse_self_approval(row, approver: TokenPayload, requester_column: str) -> None:
+    """An admin never settles their own request (an admin's own change applies at once, so this only meets an
+    account that was staff when it asked). 409 self_approval."""
+    if (row[requester_column] or "").lower() == (approver.email or "").lower():
+        raise ApiError(409, "You made this request, so another admin has to approve or reject it.", code="self_approval")
 
 
 # ── propose, or apply directly ─────────────────────────────────────────────────────────────────────────────
@@ -230,7 +253,7 @@ def change_quantity(
     body: QuantityChangeRequest,
     response: Response,
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("lp.decide")),
+    current_user: TokenPayload = Depends(require_permission("lp.decide", "lp.propose")),
 ) -> QuantityChangeOutcome:
     """Edit the recommended quantity. Held for an admin (HTTP 202, outcome 'held') unless the caller is an admin or
     has a direct-apply grant, in which case it applies at once as an accept with this quantity (HTTP 200, outcome
@@ -248,7 +271,7 @@ def change_quantity(
         raise ApiError(400, "That is the recommended quantity. Accept the recommendation as it is instead.",
                        code="quantity_unchanged", recommended_q_i=recommended)
     check_whole_cases(quantity, row["pack"], recommended)
-    reason = (body.reason or "").strip() or None
+    reason = body.reason.strip()
     flagged = rec._review_reasons(db, recommendation_key) if present["review_flag"] else None
     if flagged is not None and not body.reviewed:
         raise HTTPException(status_code=409, detail=(
@@ -256,13 +279,25 @@ def change_quantity(
             "Change it from its own row after checking it."
         ))
 
-    if rec.may_apply_directly(db, current_user):
+    direct = rec.may_apply_directly(db, current_user)
+    if body.stock_observation is not None:
+        # A count travels with a request an admin reads. Validated (unit, pack size, whole cases) before anything
+        # is written.
+        if direct:
+            raise ApiError(400, "A stock count goes with a change sent for approval. Yours applies at once, so "
+                                "record the count with a dismissal or leave it out.", code="observation_needs_request")
+        if not present.get("requests"):
+            raise ApiError(503, rec.REQUESTS_NOT_READY, code="requests_not_ready")
+        stock_observation.to_pieces(body.stock_observation.quantity, body.stock_observation.unit, row["pack"])
+
+    if direct:
         decided = rec.decide_row(db, present, key=recommendation_key, status="accepted", reason=reason,
                                  decided_quantity=quantity, decided_by=current_user.email)
         audit.record(
             db, "Reorder Recommendation Accepted",
             f"SKU {decided['sku']}" + (f": {reason}" if reason else "")
-            + f" [quantity decided: {_fmt(quantity)}; applied directly, recommended {_fmt(recommended)}]"
+            + f" [quantity decided: {_fmt(quantity)}{cases_text(quantity, row['pack'])}; applied directly, "
+              f"recommended {_fmt(recommended)}]"
             + (f" [flagged for review: {', '.join(flagged)}; reviewed]" if flagged else ""),
             actor=current_user,
         )
@@ -288,13 +323,27 @@ def change_quantity(
     if after is None or after["status"] != "pending" or after["planning_cycle_date"] != after["current_cycle"]:
         db.rollback()
         raise rec.refusal_for(None if after is None else dict(after))
-    change = _change(db, created["change_key"])
+    # A dismissal request open on the row (migration 0070) is read AFTER the lock too: one waiting request per row,
+    # whichever kind. reorder_requests.request_dismissal takes the same lock and checks this table the other way.
+    if present.get("requests"):
+        open_dismissal = db.execute(text(rec._OPEN_DISMISSAL_SQL), {"key": recommendation_key}).mappings().first()
+        if open_dismissal is not None:
+            db.rollback()
+            raise rec.refusal_for(dict(after), None, open_dismissal)
     audit.record(
         db, "Reorder Quantity Change Proposed",
-        f"SKU {row['sku']}: quantity {_fmt(recommended)} -> {_fmt(quantity)} proposed (change {change.change_key}), "
-        "awaiting approval" + (f": {reason}" if reason else ""),
+        f"SKU {row['sku']}: quantity {_fmt(recommended)} -> {_fmt(quantity)}{cases_text(quantity, row['pack'])} "
+        f"proposed (change {created['change_key']}), awaiting approval: {reason}",
         actor=current_user,
     )
+    # The bell (migration 0071): every admin is told, in this same transaction.
+    notifications.request_made(db, kind="quantity_change_requested", actor=current_user, sku=row["sku"],
+                               recommended=recommended, proposed=quantity, change_key=created["change_key"])
+    if body.stock_observation is not None:
+        stock_observation.record(db, body.stock_observation, product_key=row["product_key"],
+                                 recommendation_key=recommendation_key, pack=row["pack"], context="quantity_change",
+                                 actor=current_user, sku=row["sku"], change_key=created["change_key"])
+    change = _change(db, created["change_key"], present)
     db.commit()
     response_cache.invalidate()
     response.status_code = 202
@@ -307,10 +356,11 @@ def list_changes(
     state: str = Query("pending_approval", description="pending_approval | approved | rejected | all"),
     recommendation_key: int | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("lp.decide")),
+    current_user: TokenPayload = Depends(require_permission("lp.decide", "lp.propose")),
 ) -> QuantityChangeList:
     """An admin sees every change. Anyone else sees only the ones they proposed. Newest first."""
-    _require_approval(rec._present(db))
+    present = rec._present(db)
+    _require_approval(present)
     if state != "all" and state not in STATES:
         raise HTTPException(status_code=400, detail="state must be one of pending_approval, approved, rejected, all")
     where, params = [], {}
@@ -326,6 +376,10 @@ def list_changes(
     sql = _CHANGE_COLUMNS + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY c.proposed_at DESC, c.change_key DESC"
     rows = db.execute(text(sql), params).mappings().all()
     items = [QuantityChange(**dict(r)) for r in rows]
+    if present.get("requests"):
+        counts = stock_observation.latest_for(db, "quantity_change_key", [c.change_key for c in items])
+        for c in items:
+            c.stock_observation = counts.get(c.change_key)
     return QuantityChangeList(count=len(items), items=items)
 
 
@@ -354,6 +408,11 @@ def approve_change(
     present = rec._present(db)
     _require_approval(present)
     change = _locked_pending_change(db, change_key)
+    try:
+        refuse_self_approval(change, admin, "proposed_by")
+    except ApiError:
+        db.rollback()
+        raise
     current = db.execute(text(_ROW_SQL), {"key": change["recommendation_key"]}).mappings().first()
     if current["planning_cycle_date"] != current["current_cycle"]:
         # Audit 2026-10-23 finding 9: the row's cycle has been superseded, so the change can never be applied. Close it
@@ -399,14 +458,18 @@ def approve_change(
                              decided_by=change["proposed_by"], decided_at=now)
     audit.record(
         db, "Reorder Quantity Change Approved",
-        f"SKU {decided['sku']}: quantity {_fmt(change['recommended_q_i'])} -> {_fmt(change['proposed_q_i'])} approved "
+        f"SKU {decided['sku']}: quantity {_fmt(change['recommended_q_i'])} -> {_fmt(change['proposed_q_i'])}"
+        f"{cases_text(change['proposed_q_i'], current['pack'])} approved "
         f"(change {change_key}, proposed by {change['proposed_by']} at {_stamp(change['proposed_at'])})"
         + (f": {note}" if note else ""),
         actor=admin,
     )
+    notifications.request_decided(db, kind="quantity_change_approved", admin=admin, requester=change["proposed_by"],
+                                  sku=decided["sku"], recommended=change["recommended_q_i"],
+                                  proposed=change["proposed_q_i"], change_key=change_key)
     db.commit()
     response_cache.invalidate()
-    return _change(db, change_key)
+    return _change(db, change_key, present)
 
 
 @router.post("/changes/{change_key}/reject", response_model=QuantityChange)
@@ -419,6 +482,11 @@ def reject_change(
     """Turn a held change down. The recommendation stays pending and untouched, the change stays as the record."""
     _require_approval(rec._present(db))
     change = _locked_pending_change(db, change_key)
+    try:
+        refuse_self_approval(change, admin, "proposed_by")
+    except ApiError:
+        db.rollback()
+        raise
     note = body.reason.strip()
     resolved = db.execute(text(_RESOLVE_SQL), {
         "state": "rejected", "resolved_by": admin.email, "resolved_at": datetime.datetime.utcnow(), "note": note,
@@ -433,6 +501,9 @@ def reject_change(
         f"rejected (change {change_key}, proposed by {change['proposed_by']} at {_stamp(change['proposed_at'])}): {note}",
         actor=admin,
     )
+    notifications.request_decided(db, kind="quantity_change_rejected", admin=admin, requester=change["proposed_by"],
+                                  sku=change["sku_code"], recommended=change["recommended_q_i"],
+                                  proposed=change["proposed_q_i"], change_key=change_key)
     db.commit()
     response_cache.invalidate()
     return _change(db, change_key)
@@ -491,7 +562,7 @@ def reverse_decision(
 @router.get("/direct-apply-grants/me", response_model=DirectApplyStatus)
 def my_direct_apply(
     db: Session = Depends(get_db),
-    current_user: TokenPayload = Depends(require_permission("lp.decide")),
+    current_user: TokenPayload = Depends(require_permission("lp.decide", "lp.propose")),
 ) -> DirectApplyStatus:
     """Whether the caller's quantity changes apply at once, so the page can say 'will be sent for approval'."""
     ready = bool(rec._present(db).get("approval"))

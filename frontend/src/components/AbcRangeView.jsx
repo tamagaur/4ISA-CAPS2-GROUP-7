@@ -6,7 +6,11 @@
 // Stock status, target stock and the movement (FSN) classes belong to one
 // month's plan and run, so this view leaves them out and says where they
 // are, instead of pairing a range ranking with one month's stock.
-import React, { useEffect, useMemo, useState } from 'react';
+//
+// Which products joined or left Class A (2026-10-24): the dashboard's own
+// card (RangeCards ClassChanges) on the same GET /dashboard/class-changes call
+// with the same range and principal, so the two pages show the same list.
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SectionLede from './ui/SectionLede';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../permissions/context';
@@ -19,9 +23,11 @@ import ParetoCurve from './ParetoCurve';
 import { ClassBadge } from './ui/StatusBadge';
 import { formatCompactPesos } from '../utils/formatters';
 import { yoyText } from './ClassProductsModal';
-import { getRangePareto, getRangeYoy } from '../api/dashboard';
+import { getClassChanges, getRangePareto, getRangeYoy } from '../api/dashboard';
 import { labelForPrincipal } from '../principals';
 import { LoadingStatus, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import { ClassChanges } from './RangeCards';
+import { createLatestOnly } from '../utils/latestOnly';
 
 // Below this many ranked items the 80/20 check says nothing: the same
 // floor the monthly view uses (PARETO_MIN_ITEMS, backend/routers/abc.py:160).
@@ -33,9 +39,14 @@ const pct = (share, digits = 1) => (share == null ? '—' : `${(share * 100).toF
 
 const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, onShowMonth }) => {
   const navigate = useNavigate();
-  const canOpenForecast = usePermissions().hasPermission(P.FORECAST_VIEW);
+  const { hasPermission } = usePermissions();
+  const canOpenForecast = hasPermission(P.FORECAST_VIEW);
+  // GET /dashboard/class-changes needs dashboard.view (backend/routers/dashboard_range.py).
+  const canSeeChanges = hasPermission(P.DASHBOARD_VIEW);
   const key = JSON.stringify([startPeriod, endPeriod, principal]);
   const [state, setState] = useState({ key: null, pareto: null, yoy: null, error: null });
+  const [changes, setChanges] = useState({ key: null, data: null, error: null });
+  const changesLatest = useRef(createLatestOnly());
   const [classFilter, setClassFilter] = useState(initialClass || 'ALL');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -52,6 +63,25 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
     // The three inputs are read through `key`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+
+  // The dashboard's call, same params (Dashboard.jsx getClassChanges), so the
+  // two pages name the same products. Only the latest range's answer lands.
+  useEffect(() => {
+    const latest = changesLatest.current;
+    if (!canSeeChanges) { latest.invalidate(); return undefined; }
+    const tag = latest.start();
+    getClassChanges({ period: endPeriod, startPeriod, principal })
+      .then((data) => { if (latest.isCurrent(tag)) setChanges({ key, data, error: null }); })
+      .catch((err) => {
+        if (latest.isCurrent(tag)) setChanges({ key, data: null, error: err.message || 'Failed to load Class A changes' });
+      });
+    return () => { latest.invalidate(); };
+    // The three inputs are read through `key`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, canSeeChanges]);
+
+  const changesLoading = changes.key !== key;
+  const openForecast = canOpenForecast ? (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`) : undefined;
 
   const loading = state.key !== key;
   const pareto = loading ? null : state.pareto;
@@ -170,6 +200,33 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
           </React.Fragment>
         );
       })}
+
+      {canSeeChanges && (
+        <section className="abc-range-changes" aria-busy={changesLoading || undefined}>
+          <SectionLede className="is-standalone">Which products joined or left Class A</SectionLede>
+          {changesLoading ? (
+            <>
+              <LoadingStatus>Loading the products that joined or left Class A…</LoadingStatus>
+              <div className="data-table-card"><SkeletonTable rows={4} columns={2} /></div>
+            </>
+          ) : changes.error ? (
+            <p className="ui-note is-warning" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>Failed to load the products that joined or left Class A: {changes.error}</span>
+            </p>
+          ) : changes.data?.principals?.length ? (
+            <>
+              {/* Each product's class before and now on its own row (showClassMove). */}
+              <ClassChanges changes={changes.data} onOpen={openForecast} showClassMove />
+            </>
+          ) : (
+            <p className="ui-note is-info">
+              <Info size={14} aria-hidden="true" />
+              <span>No Class A changes to show for {changes.data?.label || label}.</span>
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="abc-filters-row abc-range-filters">
         <div className="abc-search-wrapper">

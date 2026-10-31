@@ -48,7 +48,7 @@ import datetime
 
 from sqlalchemy.orm import Session
 
-from analytics.params import LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
+from analytics.params import CALENDAR_FACTOR_SIGNED_OFF, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION
 from analytics.params import SERVICE_LEVEL_PCT as LP_SERVICE_LEVEL_PCT
 from analytics.params import SERVICE_Z as LP_SERVICE_Z
 from backend import batch
@@ -170,6 +170,8 @@ def lp_model_info(run: dict | None = None) -> dict:
             # No run, so no stock count to name.
             "stock_counts": None,
             "safety_stock_assumption": SAFETY_STOCK_ASSUMPTION,
+            "calendar_factor_on": None,
+            "calendar_signed_off": CALENDAR_FACTOR_SIGNED_OFF,
         }
     model, inputs = run["model"], run["inputs"]
     return {
@@ -194,7 +196,21 @@ def lp_model_info(run: dict | None = None) -> dict:
             "code_version": run["code_version"],
         },
         "safety_stock_assumption": model.get("safety_stock_assumption", SAFETY_STOCK_ASSUMPTION),
+        # Whether the forecasts this run planned from carry the company calendar
+        # factor (scripts/run_lp.py records it per forecast run, 2026-10-20), and
+        # whether the Technical Adviser has signed that method off: the Reorder
+        # page states both, since the factor moves every order quantity.
+        "calendar_factor_on": _calendar_factor_on(inputs),
+        "calendar_signed_off": CALENDAR_FACTOR_SIGNED_OFF,
     }
+
+
+def _calendar_factor_on(inputs: dict) -> bool | None:
+    """True/False from the run's recorded forecast runs; None when the run
+    predates that record (before 2026-10-20) or recorded no forecast run."""
+    flags = [((fr or {}).get("run") or {}).get("calendar_factor_on") for fr in (inputs.get("forecast_run") or [])]
+    flags = [f for f in flags if f is not None]
+    return any(flags) if flags else None
 
 
 def _principal_key(principal: str | None) -> str | None:

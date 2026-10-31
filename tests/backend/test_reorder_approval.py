@@ -135,6 +135,8 @@ class _DB:
 
 
 def _propose(db, user=PLANNER, quantity=390.0, **extra):
+    # A reason is required since 2026-10-28 (test_a_quantity_change_needs_a_reason below).
+    extra.setdefault("reason", "Truck is full")
     response = type("R", (), {"status_code": 200})()
     out = ra.change_quantity(1, QuantityChangeRequest(quantity=quantity, **extra), response, db=db, current_user=user)
     return out, response.status_code
@@ -278,7 +280,7 @@ def test_the_change_list_names_an_approval_whose_decision_was_later_reversed():
 def test_a_settled_change_is_not_settled_twice(state):
     db = _DB(change=_change_row(state=state, resolved_by="admin@ssmcapstone.com", resolved_at=PROPOSED_AT))
     for call in (lambda: ra.approve_change(7, None, db=db, admin=ADMIN),
-                 lambda: ra.reject_change(7, RejectRequest(reason="no"), db=db, admin=ADMIN)):
+                 lambda: ra.reject_change(7, RejectRequest(reason="stock is fine"), db=db, admin=ADMIN)):
         with pytest.raises(HTTPException) as err:
             call()
         assert err.value.status_code == 409 and f"already {state}" in err.value.detail
@@ -436,7 +438,8 @@ def test_a_non_admin_lists_only_their_own_changes():
     db = _DB(change=_change_row())
     out = ra.list_changes(state="pending_approval", recommendation_key=None, db=db, current_user=ADMIN)
     sql, params = db.run("FROM lp_quantity_change c")[-1]
-    assert "proposed_by" not in sql.split("FROM lp_quantity_change c", 1)[1].split("ORDER BY")[0] and out.count == 1
+    # No requester filter for an admin (the requester's-name join on c.proposed_by, 2026-10-28, is not a filter).
+    assert "c.proposed_by = :me" not in sql and "me" not in params and out.count == 1
     assert params == {"state": "pending_approval"}
 
 
@@ -562,8 +565,9 @@ def _migration(name: str) -> str:
 def test_the_migrations_are_additive_and_the_numbers_are_free():
     names = sorted(p.name for p in (REPO / "analytics/db/migrations").glob("0*.sql"))
     numbers = [n[:4] for n in names]
-    assert numbers.count("0067") == 1 and numbers.count("0068") == 1 and "0069" not in numbers
-    for name in ("0067_lp_decision_reversal.sql", "0068_lp_quantity_change_approval.sql"):
+    assert numbers.count("0067") == 1 and numbers.count("0068") == 1 and numbers.count("0070") == 1
+    for name in ("0067_lp_decision_reversal.sql", "0068_lp_quantity_change_approval.sql",
+                 "0070_lp_dismissal_request_stock_observation.sql"):
         sql = "\n".join(l for l in _migration(name).splitlines() if not l.strip().startswith("--"))
         assert not re.search(r"\b(DELETE|TRUNCATE|UPDATE|ALTER\s+TABLE\s+\w+\s+DROP)\b", sql, re.I)
         assert "DROP TABLE" not in sql.upper()

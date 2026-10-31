@@ -3,6 +3,14 @@
 // once, custom months with Save, back to the default), and the shared
 // "Compare with". The row never changes height, so the pinned toolbar holds
 // still while the page scrolls under it; the panel floats above the page.
+//
+// LOCAL mode (2026-10-28, SKU Forecast): pass `localValue` / `onLocalChange`
+// (DateFilter's local mode, the same pair) and the picker reads and writes
+// the caller's own range instead of the shared one: a quick range or a
+// custom month applies at once, there is no Save and no "Compare with" (the
+// page's comparison is fixed), and `onReset` (optional) is the caller's own
+// "back to the Dashboard's range". `minMonths` and `realOnly` pass through
+// to DateFilter.
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { CalendarRange, ChevronDown, RotateCcw } from 'lucide-react';
@@ -11,15 +19,16 @@ import { PLACEHOLDER_START, isPreviewMode } from '../dataMode';
 import { COMPARE_MODES, COMPARE_OPTIONS, quickRanges, rangeText, sameRange } from '../periodFilter';
 import './RangePicker.css';
 
-const RangePicker = () => {
+const RangePicker = ({ localValue, onLocalChange, onReset, minMonths, realOnly = false } = {}) => {
   const outlet = useOutletContext() || {};
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
-  const applied = {
+  const isLocal = !!(localValue && onLocalChange);
+  const applied = isLocal ? localValue : {
     startMonth: outlet.startMonth, startYear: outlet.startYear,
     endMonth: outlet.endMonth, endYear: outlet.endYear,
   };
-  const preview = isPreviewMode(outlet.dataMode);
+  const preview = !realOnly && isPreviewMode(outlet.dataMode);
   // Relative to the latest month with data for the page's principal (the
   // layout's latestPeriod, from GET /data-mode).
   const quick = quickRanges(preview ? Number(PLACEHOLDER_START.year) : undefined, outlet.latestPeriod || undefined);
@@ -48,6 +57,7 @@ const RangePicker = () => {
   useEffect(() => { setOpen(false); }, [appliedKey]);
 
   const isDefault = activeQuick?.key === 'last12' && outlet.compare === COMPARE_MODES.YEAR;
+  const applyQuick = (q) => (isLocal ? onLocalChange(q.range) : outlet.applyPreset(q.range, q.key));
 
   return (
     <div className="range-picker" ref={rootRef}>
@@ -64,11 +74,11 @@ const RangePicker = () => {
           <span className="range-picker-range range-picker-short">{shortText}</span>
           {activeQuick && <span className="range-picker-quick">{activeQuick.label}</span>}
         </span>
-        {outlet.isPending && <span className="range-picker-pending" title="A custom range is picked but not saved">Unsaved</span>}
+        {!isLocal && outlet.isPending && <span className="range-picker-pending" title="A custom range is picked but not saved">Unsaved</span>}
         <ChevronDown size={14} aria-hidden="true" />
       </button>
 
-      {outlet.setCompare && (
+      {!isLocal && outlet.setCompare && (
         <label className="range-compare">
           <span className="range-compare-label">Compare with</span>
           <select value={outlet.compare} onChange={(e) => outlet.setCompare(e.target.value)} aria-label="Compare with">
@@ -92,7 +102,7 @@ const RangePicker = () => {
                     // Close on every pick, the active one included: it
                     // changes nothing, so the close-on-change effect below
                     // would leave the panel open over the page.
-                    onClick={() => { outlet.applyPreset(q.range, q.key); setOpen(false); }}
+                    onClick={() => { applyQuick(q); setOpen(false); }}
                   >
                     {q.label}
                     <span className="range-quick-sub">{rangeText(q.range)}</span>
@@ -102,12 +112,24 @@ const RangePicker = () => {
             </>
           )}
           <p className="range-panel-title">Custom months</p>
-          <DateFilter showToday={false} />
+          {isLocal ? (
+            <DateFilter showToday={false} localValue={localValue} onLocalChange={onLocalChange}
+              minMonths={minMonths} realOnly={realOnly} />
+          ) : (
+            <DateFilter showToday={false} />
+          )}
           <div className="range-panel-foot">
             <span className="range-panel-default">
-              Default: last 12 months, compared with the same months last year.
+              {isLocal
+                ? 'Follows the Dashboard’s range until you pick one here; a pick here changes this page only.'
+                : 'Default: last 12 months, compared with the same months last year.'}
             </span>
-            {!isDefault && (
+            {isLocal ? onReset && (
+              <button type="button" className="range-reset-btn" onClick={() => { onReset(); setOpen(false); }}>
+                <RotateCcw size={13} aria-hidden="true" />
+                Back to the Dashboard&apos;s range
+              </button>
+            ) : !isDefault && (
               <button type="button" className="range-reset-btn" onClick={outlet.handleResetToToday}>
                 <RotateCcw size={13} aria-hidden="true" />
                 Back to default

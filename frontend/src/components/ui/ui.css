@@ -22,14 +22,30 @@
   --section-gap: 40px;
   --page-padding-x: 32px;
 
-  /* Shape and depth: a card sits on the page, it does not float. */
+  /* Shape and depth. Since 2026-10-28 (Audrey: "make the KPIs and all the
+     cards pop, like they are elevated") a card is lifted off the warm page:
+     a hairline shadow for its edge and a soft, wide one under it, the same
+     recipe as the sign-in panel (AuthHandoff.css), a little lighter. */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-card: 14px;
   --radius-pill: 999px;
-  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 2px rgba(17, 26, 53, 0.05), 0 12px 30px -12px rgba(17, 26, 53, 0.18);
+  --shadow-card-hover: 0 2px 4px rgba(17, 26, 53, 0.06), 0 18px 40px -14px rgba(17, 26, 53, 0.24);
   --shadow-raised: 0 6px 16px rgba(16, 24, 40, 0.10);
-  --card-border: 1px solid #E7EBF0;
+  --card-border: 1px solid rgba(17, 26, 53, 0.07);
+
+  /* The page behind every screen (2026-10-28, Audrey: match the sign-in
+     page): the sign-in screen's golden-hour cream (AuthHandoff.css), a warm
+     glow at the top and a faint one at the bottom. The bars that pin to the
+     top of a scrolling page (the top bar, the Dashboard's section toolbar)
+     use a frosted copy of it so the page shows through without the cards
+     sliding under them reading through. */
+  --app-canvas:
+    radial-gradient(55% 45% at 50% 0%, rgba(255, 116, 72, 0.16) 0%, rgba(255, 116, 72, 0) 70%),
+    radial-gradient(60% 45% at 50% 100%, rgba(214, 56, 61, 0.08) 0%, rgba(214, 56, 61, 0) 70%),
+    linear-gradient(180deg, #FFF9F4 0%, #FFF1E8 100%);
+  --app-canvas-bar: rgba(255, 247, 241, 0.82);
 
   /* Type scale. */
   --text-page-title: 28px;
@@ -776,5 +792,39 @@
     align-items: center;
     gap: 8px;
     min-height: 36px;
+  }
+}
+
+/* ── One card title and one "Show details" section (2026-10-25) ──────────
+   Shared by the Sales forecast and Category Trends pages, so their card
+   titles and closed technical sections look the same. */
+.ui-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ui-details {
+  margin-top: 1.25rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0.9rem 2rem;
+}
+
+.ui-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.ui-details[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .ui-details {
+    padding: 0.75rem 1rem;
   }
 }

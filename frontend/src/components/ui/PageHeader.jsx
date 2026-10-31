@@ -4,8 +4,10 @@
 // in a Disclosure below, not here.
 import React from 'react';
 
-const PageHeader = ({ title, accent, subtitle, actions, children }) => (
-  <header className="page-header">
+// `className` lets one page restyle its own header (the dashboard's,
+// Dashboard.css .dash-page-header) without touching the others.
+const PageHeader = ({ title, accent, subtitle, actions, children, className = '' }) => (
+  <header className={`page-header${className ? ` ${className}` : ''}`}>
     <div className="page-header-text">
       <h2 className="page-header-title">
         {title}

@@ -6,9 +6,11 @@ expiry notice, "what happens next" steps, fallback link, tinted footer).
 
 Built for email apps, not browsers: a table layout 600px wide, inline styles
 only, no scripts, a button drawn as a table cell so Outlook shows it, and one
-small <style> block whose only job is to stack the hero and the steps on a
-phone (Gmail, Apple Mail and Outlook's apps honour it; the rest just see the
-desktop columns squeezed).
+small <style> block for phones and dark mode (Gmail, Apple Mail and Outlook's
+apps honour it; the rest just see the desktop columns squeezed). On a phone
+the hero keeps its desktop composition (Audrey, 2026-10-21): words on the
+left, the warehouse on the right, both narrower and the title smaller; only
+the "What happens next?" steps go one under another.
 
 Type (Audrey, 2026-10-20): Manrope for headings and the button
 (HEADING_FONT), Inter for the body (FONT), both loaded from Google Fonts for
@@ -24,11 +26,17 @@ app that does load them asks Google Fonts for them when the email is opened,
 so Google sees that request; nothing in the email itself tracks the reader.
 The logo and the four small icons travel inside the email (inline "cid:"
 images, a few KB), so they show without the frontend being reachable and the
-email reads fine with images blocked. The one big picture, the warehouse illustration, is
-fetched from the frontend (frontend/public/email/warehouse.jpg, served by
-Vercel at FRONTEND_URL) so the message itself stays small; it has alt text
-and a fixed box, so a blocked image leaves a labelled gap, not a broken
-layout. Nothing in it tracks the reader.
+email reads fine with images blocked. The logo carries a thin white outline
+around its navy lettering (scripts/make_email_assets.py), unseen on the
+white header and what keeps "CORPORATION" readable once Gmail's apps darken
+it. The one big picture, the warehouse illustration, is fetched from the
+frontend (frontend/public/email/warehouse.png, served by Vercel at
+FRONTEND_URL) so the message itself stays small; its left and top edges fade
+to transparency, like the sign-in page's yard, so it blends into the hero
+tint in light mode and into whatever colour an app paints in dark mode
+instead of showing as a pasted rectangle. It has alt text and a fixed box,
+so a blocked image leaves a labelled gap, not a broken layout. Nothing in it
+tracks the reader.
 
 The plain-text part carries every fact the HTML does, the link included:
 email apps that can't show HTML use it, and the tests read it.
@@ -44,7 +52,8 @@ ASSETS = Path(__file__).with_name("assets")
 # 300x102, shown at 150x51 so it stays sharp on phones; 128 colours keeps it near 7 KB.
 # Gmail fetches images after the text, so the size is fixed in the <img> to keep the
 # header from collapsing and the email from jumping when the logo arrives.
-LOGO_PATH = ASSETS / "email_logo.png"
+# Drawn from assets/email_logo.png with the white outline (make_email_assets.py).
+LOGO_PATH = ASSETS / "email" / "logo.png"
 LOGO_CID = "ssm-dsd-logo"
 LOGO_WIDTH, LOGO_HEIGHT = 150, 51
 
@@ -59,10 +68,11 @@ ICONS = {
     "swoosh": ("ssm-dsd-swoosh", ASSETS / "email" / "swoosh.png", 96, 102),
 }
 
-# The hosted hero illustration (a delivery truck at a warehouse), 604x448
-# shown at 268x199, on the hero's own tint. Its address is built on FRONTEND_URL by the caller
-# (backend/account_links.py) and passed in as hero_url.
-HERO_IMAGE_PATH = "/email/warehouse.jpg"
+# The hosted hero illustration (a delivery truck at a warehouse), 536x398
+# shown at 268x199 (narrower on a phone), with feathered transparent edges.
+# Its address is built on FRONTEND_URL by the caller (backend/account_links.py)
+# and passed in as hero_url.
+HERO_IMAGE_PATH = "/email/warehouse.png"
 
 HERO_WIDTH, HERO_HEIGHT = 268, 199
 # The hero title: 28px, not 30, so "You're invited to the SSM Dashboard" at
@@ -76,6 +86,10 @@ PLACE = "Urdaneta, Pangasinan"
 PH_TIME = datetime.timezone(datetime.timedelta(hours=8))  # Philippine time, no daylight saving
 
 BRAND = "#C74E3D"  # the logo's red; white on it is 4.6:1 (frontend --color-brand-strong)
+# The same red a little deeper for small red words (the eyebrow, the expiry
+# date, the step numbers, the footer name): BRAND on the light tints is
+# 3.6-4.2:1, under WCAG AA's 4.5:1; this is 4.6-5.4:1 on all of them.
+BRAND_TEXT = "#AE4132"
 INK = "#1C2533"    # headings and body: dark navy
 MUTED = "#5B6472"
 LINE = "#E6E8EC"
@@ -95,7 +109,7 @@ PANEL_BG = "#F8F9FB"   # the reset card, the steps box and the link box
 DARK = {
     "page": "#15181D", "card": "#1E2329", "line": "#30363F", "tint": "#2A2426", "panel": "#262B33",
     "notice": "#3C2724", "notice_line": "#5E3B35", "ink": "#ECEEF2", "muted": "#B5BBC6", "brand": "#F2927F",
-    "circle": "#4D2F2A", "circle_ink": "#F6AB9A", "btn": "#D45A48",
+    "circle": "#4D2F2A", "circle_ink": "#F6AB9A", "btn": "#CF4531",  # white on it 4.6:1
 }
 FONT = "Inter,Roboto,Arial,Helvetica,sans-serif"            # body text
 HEADING_FONT = "Manrope,Roboto,Arial,Helvetica,sans-serif"  # live headings and the button
@@ -149,12 +163,12 @@ def _greeting(full_name: str) -> str:
 
 
 # ── Pieces of HTML ─────────────────────────────────────────────────────────
-_COLOR_CLASS = {INK: "ink", MUTED: "muted", BRAND: "brand"}
+_COLOR_CLASS = {INK: "ink", MUTED: "muted", BRAND_TEXT: "brand"}
 
 
 def _p(text: str, *, size: int = 15, color: str = INK, margin: str = "0 0 16px", weight: str = "normal",
-       extra: str = "") -> str:
-    cls = _COLOR_CLASS.get(color, "")
+       extra: str = "", cls: str = "") -> str:
+    cls = " ".join(c for c in (_COLOR_CLASS.get(color, ""), cls) if c)
     return (f'<p class="{cls}" style="margin:{margin};font-family:{FONT};font-size:{size}px;line-height:1.55;'
             f'color:{color};font-weight:{weight};{extra}">{text}</p>')
 
@@ -198,50 +212,75 @@ def _title_cell(title: str, href: str | None) -> str:
     return text
 
 
+# The steps panel's content width in the 600px card (532px less its 2x22px
+# padding is 488), with a few px to spare so rounding never pushes the last
+# step of a row onto the next line.
+STEPS_INNER = 486
+
+
 def _steps_box(steps: list[tuple[str, str, str | None]]) -> str:
-    """'What happens next?': one numbered column per step on a wide screen,
-    stacked on a phone (class="stack"). Each step is (title, detail html,
-    link or None)."""
-    width = f"{100 // len(steps)}%"
-    cells = "".join(
-        f'<td class="stack" valign="top" width="{width}" style="width:{width};padding:0 8px 10px 0;">'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
-        '<td valign="top" width="38" style="width:38px;padding-top:1px;">'
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="circle" align="center" '
-        f'valign="middle" bgcolor="#F5E1DC" width="28" height="28" style="width:28px;height:28px;border-radius:14px;'
-        f'font-family:{HEADING_FONT};font-size:14px;font-weight:bold;color:{BRAND};">{i}</td></tr></table></td>'
-        f'<td class="ink" valign="top" style="font-family:{FONT};line-height:1.45;color:{INK};">'
-        f'<span class="ink" style="display:block;font-family:{HEADING_FONT};font-size:13px;font-weight:bold;margin:4px 0 3px;">'
-        f'{_title_cell(title, href)}</span>'
-        f'<span class="muted" style="display:block;font-size:12px;color:{MUTED};word-break:break-word;">{detail}</span></td>'
-        '</tr></table></td>'
-        for i, (title, detail, href) in enumerate(steps, 1)
-    )
+    """'What happens next?': up to three steps to a row (four make two rows
+    of two, so no column is squeezed to a few words a line). Each step is a
+    block at most STEPS_INNER // per_row px wide that drops to the next line
+    when the screen is narrower, so the steps read on a phone even in an app
+    that ignores the phone styles (a "hybrid" layout); Outlook for Windows,
+    which ignores max-width, gets the same columns as a table ([if mso]).
+    Where the phone styles apply, each step takes the full width (.step).
+    Each step is (title, detail html, link or None)."""
+    per_row = 3 if len(steps) <= 3 else 2
+    col = STEPS_INNER // per_row
+    pieces = ['<!--[if mso]><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><![endif]-->']
+    for n, (i, (title, detail, href)) in enumerate(enumerate(steps, 1)):
+        if n and n % per_row == 0:
+            pieces.append("<!--[if mso]></tr><tr><![endif]-->")
+        pieces.append(f'<!--[if mso]><td width="{col}" valign="top"><![endif]-->'
+                      + _step(i, title, detail, href, col) + "<!--[if mso]></td><![endif]-->")
+    pieces.append("<!--[if mso]></tr></table><![endif]-->")
     return (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 8px;">'
-        f'<tr><td class="panel" bgcolor="{PANEL_BG}" style="background-color:{PANEL_BG};border-radius:10px;padding:20px 22px 12px;">'
+        f'<tr><td class="panel" bgcolor="{PANEL_BG}" style="background-color:{PANEL_BG};border-radius:10px;padding:20px 22px 8px;">'
         + _p("What happens next?", size=15, weight="bold", margin="0 0 14px", extra=f"font-family:{HEADING_FONT};")
-        + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-        f'style="table-layout:fixed;width:100%;"><tr>{cells}</tr></table>'
+        # font-size:0 closes the gaps a browser puts between inline blocks.
+        + f'<div style="font-size:0;">{"".join(pieces)}</div>'
         '</td></tr></table>'
     )
 
 
+def _step(i: int, title: str, detail: str, href: str | None, col: int) -> str:
+    return (
+        f'<div class="step" style="display:inline-block;vertical-align:top;width:100%;max-width:{col}px;font-size:13px;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+        '<td valign="top" style="padding:0 12px 14px 0;">'
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+        '<td valign="top" width="38" style="width:38px;padding-top:1px;">'
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="circle" align="center" '
+        f'valign="middle" bgcolor="#F5E1DC" width="28" height="28" style="width:28px;height:28px;border-radius:14px;'
+        f'font-family:{HEADING_FONT};font-size:14px;font-weight:bold;color:{BRAND_TEXT};">{i}</td></tr></table></td>'
+        f'<td class="ink" valign="top" style="font-family:{FONT};line-height:1.45;color:{INK};">'
+        f'<span class="ink" style="display:block;font-family:{HEADING_FONT};font-size:13px;font-weight:bold;margin:4px 0 3px;">'
+        f'{_title_cell(title, href)}</span>'
+        f'<span class="muted" style="display:block;font-size:12px;color:{MUTED};word-break:break-word;">{detail}</span></td>'
+        '</tr></table></td></tr></table></div>'
+    )
+
+
 def _hero(*, eyebrow: str, heading: str, intro: str, hero_url: str | None) -> str:
+    # 55/45 of the 600px card, i.e. 330px and 270px as before; on a phone the
+    # same two columns share the narrower width (STYLE), never stacked.
     text_cell = (
-        f'<td class="stack pad" valign="middle" width="330" style="width:330px;padding:30px 12px 30px 32px;">'
-        + _p(escape(eyebrow), size=12, color=BRAND, weight="bold", margin="0 0 10px",
-             extra=f"letter-spacing:1px;text-transform:uppercase;font-family:{HEADING_FONT};")
+        f'<td class="hero-text" valign="middle" width="55%" style="width:55%;padding:30px 12px 30px 32px;">'
+        + _p(escape(eyebrow), size=12, color=BRAND_TEXT, weight="bold", margin="0 0 10px",
+             extra=f"letter-spacing:1px;text-transform:uppercase;font-family:{HEADING_FONT};", cls="eyebrow")
         + f'<h1 class="h1 ink" style="margin:0 0 12px;font-family:{HEADING_FONT};font-size:{TITLE_SIZE}px;line-height:1.2;'
           f'font-weight:800;color:{INK};">'
           f'{escape(heading)}</h1>'
-        + _p(intro, size=15, color=MUTED, margin="0")
+        + _p(intro, size=15, color=MUTED, margin="0", cls="hero-intro")
         + '</td>'
     )
     if hero_url:
         image_cell = (
-            '<td class="stack hero-img" valign="bottom" align="right" width="270" '
-            'style="width:270px;padding:18px 0 0;">'
+            '<td class="hero-img" valign="bottom" align="right" width="45%" '
+            'style="width:45%;padding:18px 0 0;">'
             f'<img class="hero-pic" src="{escape(hero_url)}" width="{HERO_WIDTH}" height="{HERO_HEIGHT}" '
             f'alt="{escape(HERO_ALT)}" '
             f'style="display:block;width:{HERO_WIDTH}px;max-width:100%;height:auto;border:0;'
@@ -280,10 +319,10 @@ def _footer() -> str:
         'border-radius:0 0 12px 12px;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
         '<td class="pad" valign="middle" style="padding:24px 32px;">'
-        + _p(PRODUCT, size=13, color=BRAND, weight="bold", margin="0 0 4px", extra=f"font-family:{HEADING_FONT};")
+        + _p(PRODUCT, size=13, color=BRAND_TEXT, weight="bold", margin="0 0 4px", extra=f"font-family:{HEADING_FONT};")
         + _p(f"{COMPANY}, {PLACE}<br>For authorized SSM staff only.", size=13, color=MUTED, margin="0")
         + '</td>'
-        f'<td valign="bottom" align="right" width="120" style="width:120px;padding:8px 20px 0 0;">{_icon("swoosh")}</td>'
+        f'<td class="footer-mark" valign="bottom" align="right" width="120" style="width:120px;padding:8px 20px 0 0;">{_icon("swoosh")}</td>'
         '</tr></table></td></tr>'
     )
 
@@ -320,12 +359,26 @@ STYLE = f"""
   body {{ margin:0; padding:0; -webkit-text-size-adjust:100%; }}
 {_dark_css()}
   @media only screen and (max-width:600px) {{
-    .stack {{ display:block !important; width:100% !important; max-width:100% !important; box-sizing:border-box !important; }}
+    .step {{ max-width:100% !important; }}
     .pad {{ padding-left:20px !important; padding-right:20px !important; }}
-    .hero-img {{ padding:0 20px 24px !important; }}
-    .hero-pic {{ margin:0 auto !important; }}
-    .h1 {{ font-size:26px !important; }}
+    .hero-text {{ width:60% !important; padding:22px 6px 22px 20px !important; }}
+    .hero-img {{ width:40% !important; padding-top:14px !important; }}
+    .hero-pic {{ width:100% !important; height:auto !important; }}
+    .h1 {{ font-size:22px !important; margin-bottom:8px !important; }}
+    .eyebrow {{ font-size:10px !important; letter-spacing:0.6px !important; margin-bottom:8px !important; }}
+    .hero-intro {{ font-size:13px !important; }}
     .card {{ border-radius:0 !important; }}
+    .btn-a {{ padding:14px 22px !important; }}
+    .footer-mark {{ width:64px !important; padding-right:12px !important; }}
+    .footer-mark img {{ width:56px !important; height:auto !important; }}
+  }}
+  @media only screen and (max-width:380px) {{
+    .hero-text {{ width:62% !important; padding-left:16px !important; }}
+    .hero-img {{ width:38% !important; }}
+    .h1 {{ font-size:20px !important; }}
+    .company {{ font-size:11px !important; }}
+    .logo-cell {{ width:122px !important; }}
+    .logo {{ width:116px !important; height:auto !important; }}
   }}
 """
 
@@ -360,12 +413,12 @@ def _layout(*, preheader: str, eyebrow: str, heading: str, intro: str, body_html
  style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid {LINE};border-radius:12px;">
 <tr><td class="pad line" style="padding:22px 32px;border-bottom:1px solid {LINE};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-<td valign="middle" width="160" style="width:160px;">
-<img src="cid:{LOGO_CID}" width="{LOGO_WIDTH}" height="{LOGO_HEIGHT}" alt="SAN2 Corporation"
+<td class="logo-cell" valign="middle" width="160" style="width:160px;">
+<img class="logo" src="cid:{LOGO_CID}" width="{LOGO_WIDTH}" height="{LOGO_HEIGHT}" alt="SAN2 Corporation"
  style="display:block;width:{LOGO_WIDTH}px;height:{LOGO_HEIGHT}px;border:0;
 font-family:{FONT};font-size:16px;font-weight:bold;color:{BRAND};">
 </td>
-<td class="muted" valign="middle" align="right" style="font-family:{FONT};font-size:13px;line-height:1.5;color:{MUTED};">
+<td class="muted company" valign="middle" align="right" style="font-family:{FONT};font-size:13px;line-height:1.5;color:{MUTED};">
 <span class="ink" style="display:block;font-weight:bold;letter-spacing:0.5px;color:{INK};">{COMPANY.upper()}</span>
 <span class="muted" style="display:block;">{PLACE}</span>
 </td></tr></table>
@@ -435,7 +488,7 @@ def invite_email(*, full_name: str, email: str, link: str, valid: str, sign_in_u
              + (f" as <strong>{escape(ROLE_WITH_ARTICLE[role])}</strong>" if role_label else "") + "."
              + (f" {escape(can_do)}" if can_do else ""), color=MUTED, margin="0 0 22px")
         + _button("Set your password", link)
-        + _notice("calendar", f"This link works once and expires <strong class=\"brand\" style=\"color:{BRAND};\">{escape(expires)}</strong>.")
+        + _notice("calendar", f"This link works once and expires <strong class=\"brand\" style=\"color:{BRAND_TEXT};\">{escape(expires)}</strong>.")
         + _steps_box(html_steps)
         + _p("We will never ask for your password by email. If you weren't expecting this invitation, "
              "you can ignore it: nothing happens and no account changes.", size=13, color=MUTED, margin="12px 0 0")
@@ -477,7 +530,7 @@ def reset_email(*, full_name: str, email: str, link: str, valid: str,
         + _p("Click the button below to choose a new password for your account "
              f"(<strong class=\"ink\" style=\"color:{INK};\">{escape(email)}</strong>).", color=MUTED, margin="0 0 22px")
         + _button("Choose a new password", link)
-        + _notice("clock", f"This link works once and expires <strong class=\"brand\" style=\"color:{BRAND};\">{escape(expires)}</strong>.")
+        + _notice("clock", f"This link works once and expires <strong class=\"brand\" style=\"color:{BRAND_TEXT};\">{escape(expires)}</strong>.")
         + _p("If you didn't request this, you can safely ignore this email.<br>Your password will remain the same.",
              size=14, margin="0 0 16px")
     )

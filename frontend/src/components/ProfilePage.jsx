@@ -58,10 +58,24 @@ async function fileToBitmap(file) {
   }
 }
 
-// The saved picture (a data URL) as a bitmap, to frame it again.
-async function dataUrlToBitmap(dataUrl) {
-  const blob = await (await fetch(dataUrl)).blob();
-  return createImageBitmap(blob);
+// The picture on screen as a bitmap, to frame it again: the saved one (its
+// Supabase Storage address since migration 0060) or one just cropped here (a
+// data URL). The address is fetched (vite.config.js lets the page reach
+// Storage). A data URL is decoded in place rather than fetched: fetch() is
+// governed by connect-src too, and the page's policy has no reason to allow
+// data: connections (audit NEW-SEC-2, 2026-10-21).
+async function dataUrlToBitmap(src) {
+  if (src.startsWith('data:')) {
+    const [head, payload = ''] = src.split(',', 2);
+    const type = head.slice(5).split(';')[0] || 'image/png';
+    const bytes = head.includes(';base64')
+      ? Uint8Array.from(atob(payload), (c) => c.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(payload));
+    return createImageBitmap(new Blob([bytes], { type }));
+  }
+  const res = await fetch(src);
+  if (!res.ok) throw new Error(`The picture could not be loaded (${res.status}).`);
+  return createImageBitmap(await res.blob());
 }
 
 // What the security row says for each two-step sign-in state (GET

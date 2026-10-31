@@ -12,7 +12,7 @@ import pytest
 from backend import account_links, email_templates as t, mailer, permissions
 
 LINK = "https://dsd.example/set-password#token=abc-DEF_123"
-HERO = "https://dsd.example/email/warehouse.jpg"
+HERO = "https://dsd.example/email/warehouse.png"
 
 
 def invite(**overrides):
@@ -52,7 +52,7 @@ def test_an_admin_invite_lists_every_permission():
 def test_role_abilities_follow_the_preset():
     assert t.role_abilities("staff") == [
         "view the dashboard", "view ABC classification", "view forecasts", "view category trends",
-        "view SKU Management", "view reorder recommendations",
+        "view SKU Management", "view reorder recommendations", "propose reorder changes",  # lp.propose, 2026-10-28
     ]
     assert len(t.role_abilities("admin")) == len(permissions.CATALOG)
     assert t.role_abilities(None) == [] and t.role_abilities("manager") == []
@@ -202,3 +202,38 @@ def test_the_headings_are_live_text_so_dark_mode_can_recolour_them():
     _s, _t, html = t.reset_email(full_name="N", email="n@x", link=LINK, valid="30 minutes")
     assert ">Reset your password</h1>" in html
 
+
+
+# --- phones, the hero picture and the logo (Audrey, 2026-10-21) ---------------
+
+def test_on_a_phone_the_hero_keeps_its_picture_beside_the_words():
+    """The two hero columns are never stacked."""
+    _s, _t, html = invite()
+    hero = html[html.index('class="hero-text"') - 4:html.index("</h1>")]
+    assert 'class="stack' not in hero
+    assert '<td class="hero-img" valign="bottom" align="right" width="45%"' in html
+    assert ".hero-text { width:60% !important;" in html and ".hero-img { width:40% !important;" in html
+
+
+def test_four_steps_make_two_rows_of_two():
+    _s, _t, three = invite()
+    _s, _t, four = invite(two_step_required=True)
+    # Blocks that wrap by themselves (no phone styles needed), as wide as a
+    # third or a half of the panel, and the same columns for Outlook.
+    col3, col4 = t.STEPS_INNER // 3, t.STEPS_INNER // 2
+    assert three.count('class="step"') == 3 and three.count(f"max-width:{col3}px") == 3
+    assert four.count('class="step"') == 4 and four.count(f"max-width:{col4}px") == 4
+    assert four.count(f'<td width="{col4}" valign="top">') == 4 and four.count("</tr><tr><![endif]-->") == 1
+    assert ".step { max-width:100% !important; }" in four
+
+
+def test_the_logo_is_the_outlined_one_and_the_hero_fades_to_transparent():
+    from PIL import Image
+
+    assert t.LOGO_PATH.name == "logo.png" and t.LOGO_PATH.read_bytes()[:4] == b"\x89PNG"
+    hero = Image.open(t.ASSETS.parents[1] / "frontend" / "public" / t.HERO_IMAGE_PATH.lstrip("/"))
+    assert hero.mode == "RGBA" and hero.size == (t.HERO_WIDTH * 2, t.HERO_HEIGHT * 2)
+    alpha = hero.getchannel("A")
+    assert alpha.getpixel((0, hero.height // 2)) == 0             # the left edge is gone
+    assert alpha.getpixel((hero.width // 2, 0)) == 0              # so is the top
+    assert alpha.getpixel((hero.width - 1, hero.height - 1)) == 255  # the corner at the card's edge stays

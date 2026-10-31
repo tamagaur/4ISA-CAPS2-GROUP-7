@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { isPreviewMode } from '../dataMode';
 import {
   Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, ChevronDown, ChevronRight, CheckCheck, AlertTriangle, Clock, Package,
+  Inbox,
 } from 'lucide-react';
 import ReorderModal from './ReorderModal';
 import InfoTip from './InfoTip';
@@ -18,7 +19,12 @@ import { useSaveResult } from '../utils/useSaveResult';
 import { getCurrentUser } from '../auth';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
-import { getRecommendations, decideRecommendation } from '../api/recommendations';
+import {
+  getRecommendations, decideRecommendation, getOpenRequests, getDirectApplyStatus, requestQuantityChange, requestDismissal,
+} from '../api/recommendations';
+import { HistoryModal, QuantityChangeModal, StaffRequestsTab } from './ReorderRequests';
+import { useStaffRequests } from '../utils/useStaffRequests';
+import { sameQuantity } from '../utils/reorderRequests';
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
 import { ReviewBadge } from './PendingCards';
@@ -34,7 +40,11 @@ import './DateFilter.css';
 // Dashboard's styles and reused here so both pages warn identically.
 import './Dashboard.css';
 import TierBasisLabel, { TierChip } from './TierBasisLabel';
+import { REVIEW_REASON_TEXT } from '../utils/reviewReasons';
+import { compareCycles, previousRunCycleDate, previousWindow, runCycles } from '../utils/cycleComparison';
+import { calendarSignoffText } from '../utils/calendarAdjustment';
 import './ReorderRecommendations.css';
+import { URGENCY_HOVER, getUrgencyBadge } from '../utils/urgency';
 
 // Helper to format SKU to 5 digits (SKU-#####)
 const formatSKU = (sku) => {
@@ -65,11 +75,6 @@ const URGENCY_RANK = { CRITICAL: 0, URGENT: 1, PLANNED: 2, 'NO DATA': 3 };
 // no bulk endpoint, so this is N sequential-ish writes against Supabase.
 const BULK_CONCURRENCY = 5;
 
-// GET /recommendations review_reasons in a planner's words (review_flag).
-const REVIEW_REASON_TEXT = {
-  collapse: 'sales over the last 3 months fell below half the 12-month average',
-  over_forecast_run: 'the forecast ran above sales 3 or more months in a row',
-};
 
 // Accept needs no typed reason; this is the one recorded for it.
 const ACCEPT_REASON = 'Accepted the order plan\u2019s quantity as-is.';
@@ -83,9 +88,9 @@ const URGENCY_LABEL = {
 };
 
 const COVER_BASIS_NOTE =
-  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day, last 3 sales months) — the same peso basis the Dashboard’s '
-  + 'weeks of cover uses. Understates cover by the margin, since stock is valued at last purchase cost while sales '
-  + 'are at selling price.';
+  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day, last 3 sales months). Understates cover by the '
+  + 'margin, since stock is valued at last purchase cost while sales are at selling price. (The Dashboard’s weeks of '
+  + 'cover for Unilever is in pieces instead, so the two can differ.)';
 
 // Every quantity on this page is in PIECES — the LP's unit (q_i, rop_i,
 // ss_i and the forecast all come from the pieces demand series) — while SSM
@@ -145,6 +150,212 @@ const lpQtyTitle = (item) => {
   return need === 0 ? `${working} — stock already covers the month and the target, so nothing is ordered.` : working;
 };
 
+// The stale-plan notice in plain words, from GET /recommendations'
+// freshness counts and timestamps only (2026-10-22).
+const staleText = (f) => {
+  const fc = f.forecast_generated_at ? ` on ${formatDateTime(f.forecast_generated_at)}` : '';
+  if (f.stale_row_count != null && f.row_count != null && f.stale_row_count < f.row_count) {
+    return `${f.stale_row_count.toLocaleString()} of the ${f.row_count.toLocaleString()} products in this plan were `
+      + `worked out before the forecasts were updated${fc}, so their order quantity and target stock come from `
+      + 'forecasts that have since changed. Check those before ordering.';
+  }
+  const lp = f.lp_generated_at ? `, last run ${formatDateTime(f.lp_generated_at)},` : '';
+  return `The order plan${lp} was worked out before the forecasts were updated${fc}, so its order quantities and `
+    + 'target stock come from forecasts that have since changed. A new run of the order plan clears this.';
+};
+
+// ── Changes since the previous plan (2026-10-24) ─────────────────────────
+// The current cycle's plan rows (every status: a decided row is still the
+// plan, backend/lp_cycle.PLAN_STATUSES) against the newest earlier cycle
+// GET /recommendations still holds (cycle=all, from/to = the 12 months
+// before). Compared by product code with the plan total's quantity
+// (plan_q_i, else q_i); the maths is utils/cycleComparison.js. Read only,
+// and the same endpoint (lp.view) the page already reads.
+// 2026-10-26: only an earlier cycle a stored plan run produced counts
+// (lp_model.run; previousRunCycleDate). Live, 2025-03..2026-02 hold 2-15
+// leftover rows each from the retired planner and no run, so comparing with
+// them read as "108 new · 14 no longer in it". None with a run: a plain line.
+const COMPARE_PREVIEW = 5; // rows per list before "See all"
+const COMPARE_WINDOW_MONTHS = 12;
+
+const pieces = (n) => `${n == null ? '—' : n.toLocaleString()} pieces`;
+const signed = (n) => (n > 0 ? `+${n.toLocaleString()}` : `−${Math.abs(n).toLocaleString()}`);
+
+function CycleChangeList({ title, rows, render, emptyText }) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? rows : rows.slice(0, COMPARE_PREVIEW);
+  return (
+    <div className="reorder-compare-group">
+      <h3 className="reorder-compare-group-title">
+        {title} <span className="reorder-compare-count">{rows.length.toLocaleString()}</span>
+      </h3>
+      {rows.length === 0 ? (
+        <p className="reorder-compare-empty">{emptyText}</p>
+      ) : (
+        <ul className="reorder-compare-list">
+          {shown.map((r) => (
+            <li key={r.key}>
+              <span className="reorder-compare-product">
+                {r.product || 'Unknown Product'}
+                <span className="reorder-compare-code">{formatSKU(r.sku)}</span>
+              </span>
+              <span className="reorder-compare-qty">{render(r)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {rows.length > COMPARE_PREVIEW && (
+        <button type="button" className="link-button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
+          {showAll ? 'Show fewer' : `See all ${rows.length.toLocaleString()}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CycleComparison({ principal, dataMode }) {
+  const [state, setState] = useState({ status: 'loading' });
+  const [open, setOpen] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    // The parent remounts this per principal and data mode (its key), so a
+    // response for an earlier scope is dropped by `cancelled`, never shown.
+    let cancelled = false;
+    setState({ status: 'loading' });
+    (async () => {
+      const current = await getRecommendations({ principal, cycle: 'current' });
+      if (cancelled) return;
+      const cycle = current.planning_cycle_date ? String(current.planning_cycle_date).slice(0, 10) : null;
+      if (!cycle) {
+        setState({ status: 'no-plan' });
+        return;
+      }
+      // A what-if preview was never saved: there is no earlier saved plan of it to compare with.
+      if (current.data_mode?.outputs) {
+        setState({ status: 'what-if' });
+        return;
+      }
+      const span = previousWindow(cycle, COMPARE_WINDOW_MONTHS);
+      if (!span) throw new Error(`Unreadable planning cycle date: ${cycle}`);
+      const earlier = await getRecommendations({ principal, cycle: 'all', from: span.from, to: span.to });
+      if (cancelled) return;
+      const currentRows = (current.items || []).filter((it) => String(it.planning_cycle_date).slice(0, 10) === cycle);
+      const previousCycle = previousRunCycleDate(earlier.items, cycle, runCycles(current, earlier));
+      if (!previousCycle) {
+        setState({ status: 'no-previous', cycle });
+        return;
+      }
+      const previousRows = (earlier.items || []).filter((it) => String(it.planning_cycle_date).slice(0, 10) === previousCycle);
+      setState({ status: 'ready', cycle, previousCycle, diff: compareCycles(currentRows, previousRows) });
+    })().catch((err) => {
+      if (!cancelled) setState({ status: 'error', message: describeLoadError(err) });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [principal, dataMode, attempt]);
+
+  if (state.status === 'no-plan') return null; // the table already says there is no plan
+
+  const heading = 'Changes since the previous plan';
+  let summary;
+  if (state.status === 'loading') {
+    summary = <span className="reorder-compare-muted"><Loader2 className="spinner-icon" size={14} aria-hidden="true" /> Checking the previous plan…</span>;
+  } else if (state.status === 'error') {
+    summary = (
+      <span className="reorder-compare-muted">
+        Couldn&apos;t load the previous plan to compare with.{' '}
+        <button type="button" className="link-button" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
+      </span>
+    );
+  } else if (state.status === 'what-if') {
+    summary = <span className="reorder-compare-muted">Not compared in preview: these what-if rows were never saved, so there is no earlier saved plan of them.</span>;
+  } else if (state.status === 'no-previous') {
+    summary = (
+      <span className="reorder-compare-muted">
+        No earlier plan from the current planning method to compare with yet. Current plan:{' '}
+        {formatMonth(state.cycle)}.
+      </span>
+    );
+  }
+
+  if (state.status !== 'ready') {
+    return (
+      <section className="reorder-compare" aria-label={heading} aria-live="polite">
+        <span className="reorder-how-title">{heading}</span>
+        <p className="reorder-compare-summary">{summary}</p>
+      </section>
+    );
+  }
+
+  const { diff, cycle, previousCycle } = state;
+  const cur = formatMonth(cycle);
+  const prev = formatMonth(previousCycle);
+  const n = (v) => v.toLocaleString();
+  const panelId = 'reorder-compare-panel';
+  return (
+    <section className="reorder-compare" aria-label={heading}>
+      <button
+        type="button"
+        className="reorder-compare-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
+        {open ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+        <span className="reorder-how-title">{heading}</span>
+        <span className="reorder-compare-period">{cur} plan compared with {prev}</span>
+      </button>
+      <p className="reorder-compare-summary">
+        <strong>{n(diff.added.length)}</strong> new in the plan · <strong>{n(diff.removed.length)}</strong> no longer
+        in it · <strong>{n(diff.increased.length)}</strong> ordering more · <strong>{n(diff.decreased.length)}</strong>{' '}
+        ordering less · {n(diff.unchanged)} unchanged
+        {diff.unknownQuantity > 0 && <> · {n(diff.unknownQuantity)} with no quantity recorded</>}
+      </p>
+      {open && (
+        <div id={panelId}>
+          <div className="reorder-compare-grid">
+            <CycleChangeList
+              title={`New in the ${cur} plan`}
+              rows={diff.added}
+              emptyText={`None: every product in the ${cur} plan was also in ${prev}.`}
+              render={(r) => pieces(r.quantity)}
+            />
+            <CycleChangeList
+              title={`In ${prev}, no longer in the plan`}
+              rows={diff.removed}
+              emptyText={`None: every product in ${prev} is still in the plan.`}
+              render={(r) => `${pieces(r.quantity)} in ${prev}`}
+            />
+            <CycleChangeList
+              title="Ordering more"
+              rows={diff.increased}
+              emptyText="None."
+              render={(r) => `${n(r.before)} → ${pieces(r.after)} (${signed(r.change)})`}
+            />
+            <CycleChangeList
+              title="Ordering less"
+              rows={diff.decreased}
+              emptyText="None."
+              render={(r) => `${n(r.before)} → ${pieces(r.after)} (${signed(r.change)})`}
+            />
+          </div>
+          <p className="reorder-table-note reorder-compare-note">
+            Matched by product code. Each quantity is the plan&apos;s suggested order in pieces, or the quantity a planner
+            accepted instead where one did. {n(diff.previousCount)} product
+            {diff.previousCount === 1 ? ' is' : 's are'} stored for {prev} and {n(diff.currentCount)} for {cur}. An earlier
+            month&apos;s rows are kept as they were saved and are never worked out again, so they may come from an earlier
+            version of the order plan: a large difference in the number of products can mean that rather than a change in
+            demand.
+            {diff.unmatched > 0 && <> {n(diff.unmatched)} product{diff.unmatched === 1 ? '' : 's'} could not be matched (no product code, or the code listed twice in one month) and {diff.unmatched === 1 ? 'is' : 'are'} left out.</>}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 const ReorderRecommendations = () => {
   // Shared principal scope (Topbar's segmented control). lp_recommendation
   // has no Del Monte rows yet, so 'delmonte' renders this page's normal
@@ -191,12 +402,112 @@ const ReorderRecommendations = () => {
   // Accept/Dismiss need lp.decide (Kelvin's permissions proposal; the
   // backend checks it on PATCH /recommendations). Without it the page is
   // view only: every recommendation can be reviewed, none acted on.
-  const { hasPermission } = usePermissions();
+  const { role, hasPermission } = usePermissions();
   const canDecide = hasPermission(P.LP_DECIDE);
+  // Staff requests (2026-10-28, ReorderRequests.jsx): lp.propose asks for a
+  // different quantity or a dismissal, held for an admin. An admin (role, on
+  // top of every key) applies a quantity change at once and approves or
+  // rejects the requests. lp.decide or lp.propose opens the requests list and
+  // a row's history (the endpoints' own permission).
+  const isAdmin = role === 'admin';
+  const canPropose = hasPermission(P.LP_PROPOSE);
+  const canSeeRequests = canDecide || canPropose;
+  // Asking for a dismissal is for someone who can't dismiss: an admin, or
+  // anyone with lp.decide, uses Dismiss.
+  const canRequestDismissal = canPropose && !isAdmin && !canDecide;
   // The detail window links to the product's own page (SKU Forecast).
   const navigate = useNavigate();
   const canOpenForecast = hasPermission(P.FORECAST_VIEW);
+  // The Dashboard's idle-stock card (#idle-stock): what to do with stock
+  // that stopped selling, one click from the order plan (Technical Adviser,
+  // 2 Oct 2026; 2026-10-22).
+  const canOpenDashboard = hasPermission(P.DASHBOARD_VIEW);
   const [decisionLog, setDecisionLog] = useState([]);
+
+  // Requests waiting for an admin, by recommendation_key, for EVERY viewer
+  // (GET /recommendations/open-requests, lp.view): the row shows "Pending
+  // approval" or "Dismissal requested" instead of buttons that the server
+  // would refuse (409) while one is open. `ready` is false until the server
+  // has dismissal requests and stock counts (migration 0070). A failed read
+  // leaves the table as it was before this existed: no badges.
+  const [openRequests, setOpenRequests] = useState({ ready: false, byKey: new Map() });
+  const [openAttempt, setOpenAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    getOpenRequests()
+      .then((res) => {
+        if (cancelled) return;
+        setOpenRequests({
+          ready: Boolean(res.ready),
+          byKey: new Map((res.items || []).map((r) => [r.recommendation_key, r])),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setOpenRequests({ ready: false, byKey: new Map() });
+      });
+    return () => { cancelled = true; };
+  }, [principal, attempt, dataMode, openAttempt]);
+
+  // Whether this user's quantity change applies at once or waits for an
+  // admin, to word the button (GET /recommendations/direct-apply-grants/me).
+  // approval_ready false: the server can't hold a change yet, so no button.
+  const [directApply, setDirectApply] = useState(null);
+  useEffect(() => {
+    if (!canSeeRequests) return undefined;
+    let cancelled = false;
+    getDirectApplyStatus()
+      .then((res) => { if (!cancelled) setDirectApply(res); })
+      .catch(() => { if (!cancelled) setDirectApply({ can_apply_directly: false, approval_ready: false }); });
+    return () => { cancelled = true; };
+  }, [canSeeRequests]);
+  const approvalReady = directApply?.approval_ready === true;
+  // A row's history is migration 0070's endpoint, like open-requests' `ready`.
+  const canSeeHistory = canSeeRequests && openRequests.ready;
+  const appliesDirectly = isAdmin || directApply?.can_apply_directly === true;
+
+  // The Requests tab's list, loaded with the page (every state, once) so the
+  // tab's badge counts what is waiting whatever the tab's filter shows. The
+  // filter is kept here so it survives a tab switch; null = the default
+  // (an admin starts on Pending, staff on All).
+  const [requestsFilter, setRequestsFilter] = useState(null);
+  const requestsView = requestsFilter ?? (isAdmin ? 'pending_approval' : 'all');
+  const staffRequests = useStaffRequests({ enabled: canSeeRequests, isAdmin });
+
+  // Deep link from the notification bell: /reorder?tab=requests&request=quantity_change-7
+  // (or dismissal-4) opens the Requests tab, and the tab opens that request
+  // once its list has loaded, then drops both params so a refresh or Back
+  // doesn't open it again. Someone who can't see requests just lands on the page.
+  const tabParam = searchParams.get('tab');
+  const requestParam = searchParams.get('request');
+  useEffect(() => {
+    if (tabParam !== 'requests' && !requestParam) return;
+    if (canSeeRequests) setActiveTab('REQUESTS');
+    if (!canSeeRequests || !requestParam) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('tab');
+        next.delete('request');
+        return next;
+      }, { replace: true });
+    }
+  }, [tabParam, requestParam, canSeeRequests, setSearchParams]);
+  const clearRequestLink = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('tab');
+      next.delete('request');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const reloadStaffRequests = staffRequests.reload;
+  const refreshRequests = () => {
+    setOpenAttempt((n) => n + 1);
+    reloadStaffRequests();
+  };
+
+  const [pendingQtyChange, setPendingQtyChange] = useState(null); // the row whose quantity is being changed
+  const [pendingDismissRequest, setPendingDismissRequest] = useState(null); // the row a dismissal is asked for
+  const [historyFor, setHistoryFor] = useState(null); // { id, product, sku, packSize }
 
   useEffect(() => {
     let cancelled = false;
@@ -266,6 +577,7 @@ const ReorderRecommendations = () => {
     () =>
       rawItems.map((item) => ({
         id: item.recommendation_key,
+        principal: item.principal, // for the request dialog's header
         sku: item.sku_id,
         product: item.product_name || 'Unknown Product',
         rop: item.rop_i,
@@ -379,24 +691,37 @@ const ReorderRecommendations = () => {
   const reviewLaterRows = filteredRows ? [] : rankedRows.slice(ACT_NOW_COUNT);
   const visibleRows = filteredRows ?? (showReviewLater ? rankedRows : actNowRows);
   // Rows flagged for review are left out: each is accepted from its own row.
-  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.needsReview);
+  // So are rows with a staff request open: the server refuses to decide them
+  // until an admin settles the request.
+  const bulkTargets = visibleRows.filter((r) => !r.actionStatus && !r.loadingAction && !r.needsReview
+    && !openRequests.byKey.has(r.id));
 
   // Deep link from the Dashboard's reorder widget (?sku=...): switch to the
   // most recent cycle holding that SKU, then open its detail modal — the
   // same modal a click on the table's SKU cell opens. deepLinkHandled stops
   // the modal reopening if it's closed while ?sku= is still in the URL.
+  //
+  // Waits for the load to finish, not for a non-empty list (FE-9,
+  // 2026-10-22): an empty plan used to return early and the link landed
+  // with no message. Matched against `data`, not localData: localData is
+  // copied from it in an effect, so it is still [] on the first render after
+  // loading ends and would read as "not in the plan". A failed load says
+  // nothing here; the page's own error is shown instead.
   const deepLinkHandled = useRef(false);
   useEffect(() => {
     const targetSku = searchParams.get('sku');
-    if (!targetSku || deepLinkHandled.current || localData.length === 0) return;
-    const match = localData
+    if (!targetSku || deepLinkHandled.current || loading || error) return;
+    const match = data
       .filter((item) => String(item.sku) === targetSku)
       .sort((a, b) => (a.planningCycleDate < b.planningCycleDate ? 1 : -1))[0];
     deepLinkHandled.current = true;
     if (match) {
       setSelectedCycle(match.planningCycleDate);
       setShowReviewLater(true); // the linked SKU may sit below the top 20
-      handleOpenDetails(match);
+      // handleOpenDetails' two setters, inline so the effect doesn't depend
+      // on a function re-created every render.
+      setSelectedItem(match);
+      setIsModalOpen(true);
     } else {
       // Linked from a product's own page (SKU Forecast, SKU Management) for a
       // product the plan does not cover: say so, rather than land on the
@@ -408,7 +733,8 @@ const ReorderRecommendations = () => {
       next.delete('sku');
       return next;
     }, { replace: true });
-  }, [localData, searchParams, setSearchParams]);
+    // toast is useToast()'s memoised api (ToastProvider.jsx), stable across renders.
+  }, [loading, error, data, searchParams, setSearchParams, toast]);
 
   const actNowPending = topRows.filter((r) => !r.actionStatus).length;
   // Rows the backend could not rank (no stock figure or no revenue share)
@@ -537,13 +863,13 @@ const ReorderRecommendations = () => {
   // Writes one decision, with its reason. Returns true on success. `silent`
   // skips the per-row toast so a bulk accept can report once at the end;
   // `rethrow` passes a failure on to a dialog that shows it itself.
-  const applyAction = async (id, actionType, { silent = false, reason, rethrow = false, reviewed = false } = {}) => {
+  const applyAction = async (id, actionType, { silent = false, reason, rethrow = false, reviewed = false, stockObservation = null } = {}) => {
     setLocalData(prev => prev.map(item =>
       item.id === id ? { ...item, loadingAction: actionType } : item
     ));
 
     try {
-      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed', reason, { reviewed });
+      await decideRecommendation(id, actionType === 'ACCEPTED' ? 'accepted' : 'dismissed', reason, { reviewed, stockObservation });
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null, actionStatus: actionType } : item
       ));
@@ -598,11 +924,65 @@ const ReorderRecommendations = () => {
   };
 
   // OverrideReasonModal shows the check or X itself; a throw here is its X.
-  const handleConfirmOverride = async (reason) => {
+  // stockObservation: the optional count typed in the dialog (null if none).
+  const handleConfirmOverride = async (reason, stockObservation) => {
     const { item, action } = pendingOverride;
-    await applyAction(item.id, action, { reason, silent: true, rethrow: true });
+    await applyAction(item.id, action, { reason, silent: true, rethrow: true, stockObservation });
     logDecision(item, action, reason);
+    if (stockObservation) reloadStaffRequests(); // the count joins the admin's list to check
   };
+
+  // A row's state once a decision lands outside a PATCH from this page: an
+  // applied or approved quantity change (accepted, planQty = the decided
+  // quantity, which the plan total already counts) or an approved dismissal.
+  const markDecided = (id, actionType, planQty) => {
+    setLocalData((prev) => prev.map((item) => (item.id === id
+      ? { ...item, loadingAction: null, actionStatus: actionType, ...(planQty != null ? { planQty } : {}) }
+      : item)));
+  };
+
+  // The quantity dialog's submit: held for an admin (202) or applied (200).
+  // The server's outcome decides what the row shows, never the guess that
+  // worded the button.
+  const handleSubmitQtyChange = async ({ quantity, reason, reviewed, stockObservation }) => {
+    const item = pendingQtyChange;
+    const res = await requestQuantityChange(item.id, { quantity, reason, reviewed, stockObservation });
+    if (res.outcome === 'applied') {
+      markDecided(item.id, 'ACCEPTED', res.item?.plan_q_i ?? quantity);
+      logDecision(item, 'ACCEPTED', `Changed the quantity to ${formatUnits(quantity)} pieces: ${reason}`);
+    }
+    refreshRequests();
+    return res;
+  };
+
+  const handleSubmitDismissRequest = async (reason, stockObservation) => {
+    await requestDismissal(pendingDismissRequest.id, { reason, stockObservation });
+    refreshRequests();
+  };
+
+  // The Requests tab settled one: the row on the page follows it.
+  const handleRequestResolved = (request, outcome) => {
+    if (outcome === 'approved') {
+      const row = localData.find((r) => r.id === request.recommendation_key);
+      if (request.kind === 'dismissal') {
+        markDecided(request.recommendation_key, 'DISMISSED');
+        if (row) logDecision(row, 'DISMISSED', `Approved ${request.by}'s dismissal request: ${request.reason}`);
+      } else {
+        markDecided(request.recommendation_key, 'ACCEPTED', request.proposed_q_i);
+        if (row) {
+          logDecision(row, 'ACCEPTED',
+            `Approved ${request.by}'s change to ${formatUnits(request.proposed_q_i)} pieces: ${request.reason}`);
+        }
+      }
+    }
+    refreshRequests();
+  };
+
+  // Rows by recommendation_key, for the Requests tab's warnings and stale check.
+  const rowsByKey = useMemo(() => new Map(localData.map((r) => [r.id, r])), [localData]);
+  // Some row of the plan on screen was cut to fit the supplier allocation.
+  const planHasCuts = cycleRows.some((r) => r.shortUnits > 0);
+  const openHistory = (row) => setHistoryFor({ id: row.id, product: row.product, sku: formatSKU(row.sku), packSize: row.packSize });
 
   // Bulk accept — every pending row currently in view (the Act-now list,
   // or the whole cycle once Review later is expanded). Runs in small
@@ -652,15 +1032,6 @@ const ReorderRecommendations = () => {
     });
   };
 
-  const getUrgencyBadge = (urgency) => {
-    switch (urgency) {
-      case 'CRITICAL': return 'pill pill-critical';
-      case 'URGENT': return 'pill pill-warning';
-      case 'PLANNED': return 'pill pill-planned';
-      default: return 'pill pill-neutral'; // 'NO DATA' — no stock record, no verdict
-    }
-  };
-
   const getLogActionBadge = (action) => {
     switch (action) {
       case 'ACCEPTED': return 'pill pill-planned';
@@ -699,9 +1070,100 @@ const ReorderRecommendations = () => {
       );
     }
 
+    // A staff request is waiting on this row: its status, with its text
+    // always visible, instead of buttons the server would refuse. Who asked
+    // shows to the requester and admins only (the server leaves
+    // requested_by empty for everyone else).
+    const open = openRequests.byKey.get(item.id);
+    if (open) {
+      const isDismissal = open.kind === 'dismissal';
+      const who = open.requested_by ? ` by ${open.requested_by}` : '';
+      const what = isDismissal ? 'Dismissal requested' : `Quantity change to ${formatUnits(open.proposed_q_i)} pieces requested`;
+      return (
+        <div className="action-status-container rq-open-cell">
+          <span className="pill pill-warning" title={`${what}${who}, waiting for an admin to approve or reject it.`}>
+            {isDismissal ? 'Dismissal requested' : 'Pending approval'}
+          </span>
+          {!isDismissal && open.proposed_q_i != null && (
+            <span className="reorder-cell-note">{formatUnits(open.proposed_q_i)} pieces asked</span>
+          )}
+          {isAdmin && (
+            <button type="button" className="link-button" onClick={() => setActiveTab('REQUESTS')}>
+              Review
+            </button>
+          )}
+          {!isAdmin && canSeeHistory && (
+            <button type="button" className="link-button" onClick={() => openHistory(item)}>History</button>
+          )}
+        </div>
+      );
+    }
+
+    // The second line: change the quantity (an admin's applies at once,
+    // anyone else's waits for an admin) and the row's history.
+    const qtyLabel = appliesDirectly ? 'Change quantity' : 'Request quantity change';
+    const canChangeQty = canSeeRequests && approvalReady;
+    const showDismissRequest = canRequestDismissal && openRequests.ready;
+    const showQtyLink = canChangeQty && canDecide;
+    const more = (showQtyLink || canSeeHistory) && (
+      <div className="rq-row-more">
+        {showQtyLink && (
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => setPendingQtyChange(item)}
+            disabled={bulkRunning}
+            aria-label={`${qtyLabel} for ${item.product} (${item.sku})`}
+          >
+            {qtyLabel}
+          </button>
+        )}
+        {canSeeHistory && (
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => openHistory(item)}
+            aria-label={`History of the recommendation for ${item.product} (${item.sku})`}
+          >
+            History
+          </button>
+        )}
+      </div>
+    );
+
     // Without lp.decide: the row's state instead of buttons — the one-line
-    // note above the table says why there's nothing to click.
+    // note above the table says why there's nothing to click. With
+    // lp.propose: the two requests instead, held for an admin.
     if (!canDecide) {
+      if (canPropose && (canChangeQty || showDismissRequest)) {
+        return (
+          <div className="rq-row-actions">
+            <div className="table-btn-group">
+              {canChangeQty && (
+                <button
+                  type="button"
+                  className="table-btn"
+                  onClick={() => setPendingQtyChange(item)}
+                  aria-label={`${qtyLabel} for ${item.product} (${item.sku})`}
+                >
+                  {qtyLabel}
+                </button>
+              )}
+              {showDismissRequest && (
+                <button
+                  type="button"
+                  className="table-btn"
+                  onClick={() => setPendingDismissRequest(item)}
+                  aria-label={`Request dismissal of ${item.product} (${item.sku})`}
+                >
+                  Request dismissal
+                </button>
+              )}
+            </div>
+            {more}
+          </div>
+        );
+      }
       return (
         <div className="action-status-container">
           <span className="reorder-pending-label" title="Waiting for someone who can accept or dismiss">
@@ -712,23 +1174,26 @@ const ReorderRecommendations = () => {
     }
 
     return (
-      <div className="table-btn-group">
-        <button
-          className="table-btn table-btn-primary"
-          onClick={() => handleAction(item, 'ACCEPTED')}
-          aria-label={`Accept reorder for ${item.product} (${item.sku})`}
-          disabled={bulkRunning}
-        >
-          Accept
-        </button>
-        <button
-          className="table-btn"
-          onClick={() => handleAction(item, 'DISMISSED')}
-          aria-label={`Dismiss reorder for ${item.product} (${item.sku})`}
-          disabled={bulkRunning}
-        >
-          Dismiss
-        </button>
+      <div className="rq-row-actions">
+        <div className="table-btn-group">
+          <button
+            className="table-btn table-btn-primary"
+            onClick={() => handleAction(item, 'ACCEPTED')}
+            aria-label={`Accept reorder for ${item.product} (${item.sku})`}
+            disabled={bulkRunning}
+          >
+            Accept
+          </button>
+          <button
+            className="table-btn"
+            onClick={() => handleAction(item, 'DISMISSED')}
+            aria-label={`Dismiss reorder for ${item.product} (${item.sku})`}
+            disabled={bulkRunning}
+          >
+            Dismiss
+          </button>
+        </div>
+        {more}
       </div>
     );
   };
@@ -805,10 +1270,15 @@ const ReorderRecommendations = () => {
         <td className="table-num cell-strong" title={lpQtyTitle(item)}>
           {formatUnits(item.orderQty)}
           {item.cases.order && <span className="reorder-cell-note">{item.cases.order}</span>}
+          {/* Accepted at a different quantity (a planner's change, applied or
+              approved): the figure the plan total counts (plan_q_i). */}
+          {item.planQty != null && !sameQuantity(item.planQty, item.orderQty) && (
+            <span className="reorder-cell-note rq-plan-note">accepted: {formatUnits(item.planQty)}</span>
+          )}
           {item.shortUnits > 0 && <span className="reorder-short-note">{formatUnits(item.shortUnits)} short</span>}
         </td>
         <td className="reorder-urgency-cell">
-          <span className={getUrgencyBadge(item.urgency)}>
+          <span className={getUrgencyBadge(item.urgency)} title={URGENCY_HOVER[item.urgency]}>
             {item.urgency}
           </span>
           <ReviewBadge reason={item.reviewFlag} />
@@ -890,6 +1360,8 @@ const ReorderRecommendations = () => {
         <div className="reorder-how-text">
           <span className="reorder-how-title">How this was optimized</span>
           <SectionLede>How the order sizes were chosen</SectionLede>
+          {/* 2026-10-26: the summary stays in view; every other paragraph,
+              note and flag below is folded under "Show details", none removed. */}
           <p className="reorder-table-note">
             The order plan orders each SKU up to its target stock, net of what is on hand. Only when the supplier allocation
             can&apos;t cover every SKU does it cut some orders, and then
@@ -899,6 +1371,11 @@ const ReorderRecommendations = () => {
                   {' '}SSM&apos;s {lpInputs.target_weeks ?? 3}-week stock rule (counted over the SKUs in this plan, not the
                   whole warehouse) and the plan&apos;s cost and service weights decide which SKUs come up short.
                 </>}
+          </p>
+          <details className="reorder-how-details ui-details">
+            <summary>Show details: units, the arithmetic, and notes on this plan</summary>
+          {(lpInputs.storage_cost_per_unit != null || notCategoryACount > 0 || meta?.supersededCount > 0) && (
+          <p className="reorder-table-note">
             {lpInputs.storage_cost_per_unit != null && (
               <>
                 {' '}The storage weight has no say for now: the placeholder storage cost is the same
@@ -918,6 +1395,7 @@ const ReorderRecommendations = () => {
               </>
             )}
           </p>
+          )}
           <p className="reorder-table-note">
             All quantities are in pieces, for the {planLabel}; under each order is its rough size in cases (pieces ÷
             pieces per case). Suggested qty = the month&apos;s forecast + target stock − stock at the start of the month
@@ -927,20 +1405,74 @@ const ReorderRecommendations = () => {
             Cover is in days on a peso basis (stock at last purchase price ÷ daily sales value
             {coverSalesLabel ? ` over ${coverSalesLabel}` : ''}).
           </p>
+          {/* The calendar adjustment inside the forecasts this plan ordered
+              from (lp_model.calendar_factor_on, from the run's own record):
+              it moves every order quantity, so its sign-off status is said
+              here too (Technical Adviser, 2 Oct 2026; 2026-10-22). */}
+          {meta?.lpModel?.calendar_factor_on && (
+            <p className="reorder-table-note">
+              The forecasts behind these orders include the company calendar adjustment (each month scaled by how
+              that month has sold in earlier years){calendarSignoffText(meta.lpModel.calendar_signed_off)
+                ? `, ${calendarSignoffText(meta.lpModel.calendar_signed_off)}` : ''}.
+            </p>
+          )}
+          {/* Methods that set these numbers and still await the adviser's
+              sign-off, flagged where they act (Technical Adviser, 2 Oct
+              2026; 2026-10-22): which products get a plan (MASE < 1,
+              analytics/params.py MASE_GATE, an open question in
+              reports/ADVISER_QUESTIONS_SIRCG.md §3) and how safety stock
+              scales monthly variation to days (lp_model
+              .safety_stock_assumption, CLAUDE.md "needs adviser ruling"). */}
+          <p className="reorder-table-note">
+            Only Class A products whose forecast beats a simple last-month guess are planned here (a reliability check
+            pending adviser confirmation).
+            {meta?.lpModel?.safety_stock_assumption && (
+              <>
+                {' '}Safety stock scales each product&apos;s month-to-month swings in sales down to the review and
+                delivery days
+                {lpInputs.review_days != null && lpInputs.lead_days != null
+                  ? ` (${lpInputs.review_days} + ${lpInputs.lead_days} business days)` : ''}, which assumes one
+                day&apos;s sales don&apos;t affect the next: an assumption pending adviser confirmation.
+                <InfoTip label="The safety stock formula">{meta.lpModel.safety_stock_assumption}</InfoTip>
+              </>
+            )}
+          </p>
           {openingCountNote && <p className="reorder-table-note">{openingCountNote}</p>}
           {planNotes.map((note) => <p className="reorder-table-note" key={note}>Data note: {note}</p>)}
+          {canOpenDashboard && (
+            <p className="reorder-table-note">
+              <button type="button" className="link-button" onClick={() => navigate({ pathname: '/', hash: '#idle-stock' })}>
+                See stock that has stopped selling
+              </button>
+              {' '}— products this plan orders nothing for may still be sitting in the warehouse.
+            </p>
+          )}
+          </details>
         </div>
         {weightRows.length > 0 && (
-          <dl className="reorder-how-weights" aria-label="The optimizer's weights">
-            {weightRows.map(([label, value]) => (
-              <div className="reorder-how-weight" key={label}>
-                <dt>{label}<span>{typeof value === 'number' ? `${Math.round(value * 100)}%` : '—'}</span></dt>
-                <dd><span style={{ width: `${typeof value === 'number' ? Math.round(value * 100) : 0}%` }} /></dd>
-              </div>
-            ))}
-          </dl>
+          <div className="reorder-how-side">
+            <dl className="reorder-how-weights" aria-label="The optimizer's weights">
+              {weightRows.map(([label, value]) => (
+                <div className="reorder-how-weight" key={label}>
+                  <dt>{label}<span>{typeof value === 'number' ? `${Math.round(value * 100)}%` : '—'}</span></dt>
+                  <dd><span style={{ width: `${typeof value === 'number' ? Math.round(value * 100) : 0}%` }} /></dd>
+                </div>
+              ))}
+            </dl>
+            {/* analytics/params.py LP_WEIGHTS: "TEAM (asserted)", in no
+                scribe note (reports/LP_READINESS.md §1.5). */}
+            <p className="reorder-how-weight-note">Weights: a team setting; source not yet confirmed.</p>
+          </div>
         )}
       </div>
+
+      {/* What changed since the previous cycle: collapsed to one line by
+          default. No plan covers Del Monte (the table says so), so nothing
+          to compare there. Keyed so a principal or data-mode switch starts
+          afresh and an earlier scope's answer can never land in it. */}
+      {principal !== 'delmonte' && (
+        <CycleComparison key={`${principal}|${dataMode}`} principal={principal} dataMode={dataMode} />
+      )}
 
       <div className="reorder-table-toolbar">
         {planFacts && <p className="reorder-table-note reorder-plan-facts">{planFacts}</p>}
@@ -961,7 +1493,9 @@ const ReorderRecommendations = () => {
         )}
         {!canDecide && !meta?.whatIf && (
           <p className="reorder-view-only-note">
-            View only — your account can&apos;t accept or dismiss reorders. Ask an admin if you need to.
+            {canPropose && approvalReady
+              ? 'Your account can’t accept or dismiss reorders directly. Request a quantity change or a dismissal on a row, and an admin approves or rejects it.'
+              : <>View only — your account can&apos;t accept or dismiss reorders. Ask an admin if you need to.</>}
           </p>
         )}
         {canDecide && !meta?.whatIf && (
@@ -1172,7 +1706,10 @@ const ReorderRecommendations = () => {
               is in "How this was optimized" above the table. Same freshness
               notice as the Dashboard's, for the page where
               the affected numbers (q_i, rop_i) are actually acted on.
-              Restored 2026-09-29 with the Dashboard's (see Dashboard.jsx). */}
+              Restored 2026-09-29 with the Dashboard's (see Dashboard.jsx).
+              Worded here from freshness' own counts and dates (2026-10-22):
+              its `reason` names backend columns (q_i, rop_i) and scripts,
+              so it sits behind the "?" instead of on the page. */}
           {meta?.freshness?.is_stale && (
             <div className="dash-stale-note" role="status">
               <AlertTriangle size={14} aria-hidden="true" />
@@ -1180,7 +1717,8 @@ const ReorderRecommendations = () => {
                 <strong>
                   {meta.freshness.stale_row_count < meta.freshness.row_count ? 'Some of these quantities are' : 'These quantities are'}
                   {' '}from an older run of the order plan.
-                </strong> {meta.freshness.reason}
+                </strong> {staleText(meta.freshness)}
+                {meta.freshness.reason && <InfoTip label="Technical detail">{meta.freshness.reason}</InfoTip>}
               </span>
             </div>
           )}
@@ -1208,6 +1746,30 @@ const ReorderRecommendations = () => {
             <ListChecks size={14} aria-hidden="true" />
             Decision log {decisionLog.length > 0 && <span className="segmented-count">{decisionLog.length}</span>}
           </button>
+          {/* Staff requests (lp.decide or lp.propose): an admin's queue of
+              everyone's requests, or a staff member's own. The red badge is
+              the requests still waiting for a decision (an admin: everyone's;
+              staff: their own), shown from every tab. */}
+          {canSeeRequests && (
+            <button
+              type="button"
+              role="tab"
+              className={`segmented-item${activeTab === 'REQUESTS' ? ' is-active' : ''}`}
+              aria-selected={activeTab === 'REQUESTS'}
+              onClick={() => setActiveTab('REQUESTS')}
+            >
+              <Inbox size={14} aria-hidden="true" />
+              {isAdmin ? 'Staff requests' : 'My requests'}
+              {staffRequests.pendingCount > 0 && (
+                <>
+                  <span className="reorder-tab-badge" aria-hidden="true">
+                    {staffRequests.pendingCount > 99 ? '99+' : staffRequests.pendingCount}
+                  </span>
+                  <span className="visually-hidden">, {staffRequests.pendingCount} pending approval</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {loading && (
@@ -1236,7 +1798,27 @@ const ReorderRecommendations = () => {
         {error && !loading && (
           <LoadError what="the reorder recommendations" message={error} onRetry={() => setAttempt((n) => n + 1)} />
         )}
-        {!loading && !error && (activeTab === 'RECOMMENDATIONS' ? renderRecommendationsTab() : renderDecisionLogTab())}
+        {!loading && !error && activeTab === 'RECOMMENDATIONS' && renderRecommendationsTab()}
+        {!loading && !error && activeTab === 'DECISION_LOG' && renderDecisionLogTab()}
+        {!loading && !error && activeTab === 'REQUESTS' && canSeeRequests && (
+          <StaffRequestsTab
+            requests={staffRequests}
+            isAdmin={isAdmin}
+            filter={requestsView}
+            onFilterChange={setRequestsFilter}
+            linkRequest={canSeeRequests ? requestParam : null}
+            onLinkHandled={clearRequestLink}
+            rowsByKey={rowsByKey}
+            planHasCuts={planHasCuts}
+            onResolved={handleRequestResolved}
+            onOpenHistory={canSeeHistory ? (request) => setHistoryFor({
+              id: request.recommendation_key,
+              product: request.product_name || 'Unknown Product',
+              sku: formatSKU(request.sku_code),
+              packSize: rowsByKey.get(request.recommendation_key)?.packSize ?? null,
+            }) : undefined}
+          />
+        )}
         {/* The synthetic order plans, below and framed apart from the real list: only with the Topbar switch on
             (and then only when the server sent them, i.e. DM_DEMO_ENABLED too). Never part of the real rows,
             the counts or the Accept buttons above. */}
@@ -1260,14 +1842,43 @@ const ReorderRecommendations = () => {
         onOpenForecast={canOpenForecast
           ? (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`)
           : undefined}
+        // One dialog at a time: the detail window closes as the history opens.
+        onOpenHistory={canSeeHistory && !meta?.whatIf
+          ? (row) => { setIsModalOpen(false); openHistory(row); }
+          : undefined}
       />
 
+      {/* Admin (lp.decide) Dismiss: the reason, and since 2026-10-28 an
+          optional stock count once the server keeps them (migration 0070). */}
       <OverrideReasonModal
         isOpen={Boolean(pendingOverride)}
         item={pendingOverride?.item}
         onCancel={() => setPendingOverride(null)}
         onConfirm={handleConfirmOverride}
+        allowStockCount={openRequests.ready}
       />
+
+      {/* Staff (lp.propose): ask an admin to dismiss. */}
+      <OverrideReasonModal
+        isOpen={Boolean(pendingDismissRequest)}
+        item={pendingDismissRequest}
+        mode="request"
+        onCancel={() => setPendingDismissRequest(null)}
+        onConfirm={handleSubmitDismissRequest}
+        allowStockCount={openRequests.ready}
+      />
+
+      <QuantityChangeModal
+        isOpen={Boolean(pendingQtyChange)}
+        item={pendingQtyChange}
+        directApply={appliesDirectly}
+        planHasCuts={planHasCuts}
+        countsReady={openRequests.ready}
+        onCancel={() => setPendingQtyChange(null)}
+        onSubmit={handleSubmitQtyChange}
+      />
+
+      <HistoryModal isOpen={Boolean(historyFor)} item={historyFor} onClose={() => setHistoryFor(null)} />
 
       {pendingAccept && (
         <Modal

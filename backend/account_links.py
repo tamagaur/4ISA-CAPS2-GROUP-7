@@ -133,7 +133,7 @@ def send_link_email(
     valid = _valid_for(minutes)
     try:
         # All three on FRONTEND_URL: the link, the sign-in page and the hosted
-        # hero illustration (frontend/public/email/warehouse.jpg).
+        # hero illustration (frontend/public/email/warehouse.png).
         link = link_url(token)
         sign_in_url = mailer.app_link("/login")
         hero_url = mailer.app_link(email_templates.HERO_IMAGE_PATH)

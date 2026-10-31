@@ -1,16 +1,26 @@
-// The month the ABC picker should show after a response (FE-6).
+// The ABC page's month picker (audit FE-6 + NEW-FE-3, 2026-10-21).
 //
-// The picker carries the previous selection over a principal change, which is the
-// "equivalent period" for the new principal. GET /abc answers with the nearest
-// classification run at or before the month asked for: if that is the month asked for,
-// the equivalent period exists and stays. If it is earlier, the principal has no run for
-// that month and the picker moves to the run the response was actually built from, which is
-// the principal's latest run whenever the carried-over month lies after it (Unilever's
-// latest run is 2026-02, Del Monte's 2025-12). It never moves forward.
-// Returns the 'YYYY-MM' to select, or null to leave the selection alone.
-export function monthToSelect(requested, resolved) {
-  if (!requested || !resolved) return null;
-  return resolved < requested ? resolved : null;
+// The person's pick is kept apart from what the page shows. Until 2026-10-21 a
+// response that came from an earlier run than the month asked for (Del Monte's
+// latest run is 2025-12, Unilever's 2026-02) was written into the selection
+// itself. That counted as a pick, so "Clear" appeared for nothing; it changed
+// the month asked for, so the page loaded twice; and after Del Monte the
+// selection sat on 2025-12, which Unilever also has, so Unilever never came back
+// to 2026-02. Now nothing but the person changes the pick.
+
+// The month GET /abc is asked for: the person's pick, else the dashboard
+// range's last month, so with no pick the page follows the range for every
+// principal. 'YYYY-MM' or null.
+export function requestedAbcPeriod(picked, rangeEnd) {
+  return picked || rangeEnd || null;
+}
+
+// The month the picker shows: the run the page is displaying, once the
+// answer on screen is the one for the current request (GET /abc answers
+// with the nearest run at or before the month asked for); until then, the
+// month asked for.
+export function shownAbcPeriod(requested, resolved, answerIsCurrent) {
+  return answerIsCurrent && resolved ? resolved : requested;
 }
 
 // The latest run for a scope, from GET /abc's tier_a_periods ({ 'Unilever': '2026-02', ... }).
@@ -19,4 +29,18 @@ export function latestRunFor(tierAPeriods, label) {
   const entries = Object.entries(tierAPeriods || {});
   const periods = (label ? entries.filter(([k]) => k === label) : entries).map(([, p]) => p).filter(Boolean);
   return periods.length ? periods.sort().at(-1) : null;
+}
+
+// Del Monte regrouped its product categories in Jan 2025: about 80 old
+// sub-category paths became five categories, with no mapping between them
+// (DEC-03). A Del Monte row last ranked before this month is one of the old
+// paths. GET /abc already leaves those out of the ABC page (its
+// retired_series_count, audit BE-3); GET /sku still lists them, so SKU
+// Management uses this test to keep them out of its class counts, and the
+// two pages give the same Del Monte Class A (2026-10-22). The backend's own
+// rule reads each path's first and last real month; a last ABC run before
+// Jan 2025 picks out the same 80 rows today.
+export const DEL_MONTE_REGROUP_PERIOD = '2025-01';
+export function isPreRegroupDelMonte(principal, tierPeriod) {
+  return principal === 'delmonte' && !!tierPeriod && tierPeriod < DEL_MONTE_REGROUP_PERIOD;
 }

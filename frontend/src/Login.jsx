@@ -2,13 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, LockKeyhole, Mail, Sparkles } from 'lucide-react';
 import {
-  confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
+  API_URL, confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup,
+  verifyLoginCode,
 } from './auth';
 import TwoStepCodeForm from './components/TwoStepCodeForm';
 import TwoStepSetup from './components/TwoStepSetup';
 import RecoveryCodes from './components/RecoveryCodes';
 import { beginHandoff, holdForHandoff } from './components/AuthHandoff';
 import AuthShell from './components/AuthShell';
+
+// Waking the server (audit SEC-6, 2026-10-21). The backend is on Render's free
+// plan, which sleeps after about 15 minutes idle; the first request after that
+// takes about a minute while it starts. The page now pings GET /status (no
+// sign-in needed, backend/main.py; the sidebar's light uses it too) as soon as
+// it opens, so the server is starting while the person types. If it hasn't
+// answered within WAKE_NOTICE_MS (the audit's "about 5 s") the form says so,
+// and it asks again every WAKE_RETRY_MS until the server answers.
+// After WAKE_GIVE_UP_MS with no answer (2026-10-22, audit NEW3-FE-3) a cold
+// start is no longer the likely reason, so the notice says the server can't
+// be reached instead; the pings carry on quietly, every WAKE_SLOW_RETRY_MS
+// rather than every WAKE_RETRY_MS (2026-10-24, audit #16: a page left open on
+// a down server pinged it every 5 s forever), and the notice goes as soon as
+// one is answered. One ping at a time: the next is scheduled only after the
+// last has failed. This is a wake/status check only; sign-in doesn't wait on it.
+const WAKE_NOTICE_MS = 5000;
+const WAKE_RETRY_MS = 5000;
+const WAKE_GIVE_UP_MS = 90000;
+const WAKE_SLOW_RETRY_MS = 30000;
 
 const Login = () => {
   const location = useLocation();
@@ -40,6 +60,10 @@ const Login = () => {
   //   { step: 'codes', codes }             setup done: save the recovery codes
   // null = the password form.
   const [mfa, setMfa] = useState(null);
+  // True once GET /status has gone WAKE_NOTICE_MS without answering, until it does.
+  const [serverWaking, setServerWaking] = useState(false);
+  // True once it has gone WAKE_GIVE_UP_MS without answering, until it does.
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   // The password (and code) accepted: the hand-off screen ("Signing in to
   // the dashboard…", shown by App.jsx's SignInHandoff) for a moment, then
   // the dashboard, with the screen staying up until the dashboard is in.
@@ -57,6 +81,43 @@ const Login = () => {
         sessionStorage.removeItem(SESSION_EXPIRED_KEY);
       }
     } catch { /* storage unavailable — just skip the notice */ }
+  }, []);
+
+  useEffect(() => {
+    let done = false;
+    let retry = null;
+    const controller = new AbortController();
+    const noticeTimer = setTimeout(() => { if (!done) setServerWaking(true); }, WAKE_NOTICE_MS);
+    const giveUpTimer = setTimeout(() => { if (!done) setServerUnreachable(true); }, WAKE_GIVE_UP_MS);
+    const startedAt = Date.now();
+    const ping = () => {
+      retry = null;
+      if (done) return;
+      fetch(`${API_URL}/status`, { cache: 'no-store', signal: controller.signal })
+        .then((res) => {
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          done = true;
+          setServerWaking(false);
+          setServerUnreachable(false);
+        })
+        .catch(() => {
+          // Render answers 502/503 while it boots, or the connection drops;
+          // ask again until it is up (or the page is left), less often once
+          // it has been down past WAKE_GIVE_UP_MS.
+          if (done || controller.signal.aborted) return;
+          const delay = Date.now() - startedAt < WAKE_GIVE_UP_MS ? WAKE_RETRY_MS : WAKE_SLOW_RETRY_MS;
+          clearTimeout(retry);
+          retry = setTimeout(ping, delay);
+        });
+    };
+    ping();
+    return () => {
+      done = true;
+      controller.abort();
+      clearTimeout(noticeTimer);
+      clearTimeout(giveUpTimer);
+      clearTimeout(retry);
+    };
   }, []);
 
   useEffect(() => {
@@ -188,6 +249,17 @@ const Login = () => {
                   </div>
                 )}
                 {error && <div className="error-message" role="alert">{error}</div>}
+                {serverWaking && !serverUnreachable && !error && (
+                  <div className="auth-info-message" role="status">
+                    Starting the server… It sleeps when nobody has used the dashboard for a while and takes up to
+                    a minute to wake. You can sign in now; it goes through as soon as the server is up.
+                  </div>
+                )}
+                {serverUnreachable && !error && (
+                  <div className="auth-info-message" role="status">
+                    Can&apos;t reach the server. Check your connection or try again later.
+                  </div>
+                )}
                 {/* Visible labels (2026-10-19): the placeholder is a hint now,
                     not the field's only name. */}
                 <div className="login-field">
