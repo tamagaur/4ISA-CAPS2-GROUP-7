@@ -233,8 +233,9 @@ def whole_units(value: float) -> int:
 
 def plan_quantity(q_i, status, decided_q_i) -> float:
     """The quantity a row adds to the displayed plan total: the planner's accepted quantity where there is
-    one, else the LP's q_i. This is the only reader of decided_q_i besides the decision endpoints; it feeds
-    the total and count shown on /recommendations and /dashboard and nothing upstream of them."""
+    one, else the LP's q_i. It feeds the total and count shown on /recommendations and /dashboard. Separately,
+    an accepted order becomes an expected receipt (backend/expected_receipts.py) and so part of the next
+    cycle's opening stock; neither path reaches the forecast or the safety stock."""
     if status == "accepted" and decided_q_i is not None:
         return float(decided_q_i)
     return float(q_i)

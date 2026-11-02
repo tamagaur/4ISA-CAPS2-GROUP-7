@@ -247,7 +247,7 @@ def test_the_row_query_reads_the_capture_columns_only_where_they_exist():
     assert "lr.decided_q_i" not in absent and "NULL::numeric AS decided_q_i" in absent
 
 
-# ---- the decided quantity feeds the displayed plan total, and nothing else -------------------------------
+# ---- what a decided quantity feeds: the displayed plan total, and an expected receipt ---------------------
 # What is true (2026-11-02): reasons enter no computation; a decision changes neither the forecast nor the safety stock;
 # an accepted order becomes an expected receipt and so part of the next cycle's opening stock, which the optimisation
 # reads. decided_q_i also feeds the displayed plan total and count (plan_q_i).
@@ -304,7 +304,7 @@ def test_the_forecast_and_the_safety_stock_never_read_a_decision():
     assert "decided_q_i" not in dashboard and "plan_q_i" in dashboard
 
 
-# ---- nothing upstream reads the capture ------------------------------------------------------------------
+# ---- who may name the capture columns at all --------------------------------------------------------------
 
 CAPTURE_NAMES = ("decided_q_i", "decision_reason", "decided_quantity")  # the allow-list below: who may name them at all
 # The only files allowed to mention the capture columns: the endpoint, its schema, the migration, these tests.

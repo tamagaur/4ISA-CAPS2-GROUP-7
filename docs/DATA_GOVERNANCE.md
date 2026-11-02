@@ -24,7 +24,9 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 | Audit trail | Restricted, integrity-critical | `app.audit_log` | Yes (actor email) |
 | SSM sales, stock, prices, costs, supplier ceilings | Confidential | `public`, `mart` | No |
 | Customer and outlet names: `customer_dimension.customer_name` (2,841 distinct), `salesreturn_fact.customer_name` (180), and the raw sheets' Customer Name, Outlet Name and Account Name columns | Confidential, **personal data in part** | `public`, `data/raw/`, `backups/` | **Yes, in part.** Free-text store names; many are a person's name (a sole proprietor's store named for them). A script cannot say how many |
-| Salesman names: `salesman_dimension.salesman_name` (33 distinct), the raw Salesman column | Restricted | `public`, `data/raw/`, `backups/` | **Yes: full names of individual employees or agents** |
+| Salesman names: `salesman_dimension.salesman_name` (33 distinct), the raw Salesman column | Restricted | `public`, `data/raw/`, `backups/` | **Yes: 30 of the 33 are individuals' names**; 3 are labels (`ENCODER`, `OFFICE SALES`, a route code beginning `DSP7-`) |
+| Rejected source rows: `etl_quarantine.raw_values` (8,224 rows; about 5,900 carry a raw customer or salesman name) | Restricted | `public`, `backups/` | **Yes, the same names as the two rows above**, held again as the file had them |
+| Invoice numbers: `invoice_num` on `sales_fact` (59,699 distinct), `salesreturn_fact` (5,287), `purchase_fact` (2,148) | Confidential | `public`, `data/raw/` | **No.** Document numbers with prefixes such as `GEN`, `INV`, `DMP`, `BILL`; none has a phone or email shape |
 | Forecasts, ABC classes, LP plan and decisions | Confidential | `public`, `mart`, `lp_*` | No |
 | Demonstration data (`is_demo = true`, `demo` schema) | Internal, labelled synthetic | `demo` | No |
 | Live-database backups | Same as the data they copy | `backups/` (git-ignored), 74 folders | Yes |
@@ -71,7 +73,7 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 | G9 | Row-level security not confirmed on every table that holds user or audit data | Direct database access could bypass the API | Run a read-only check of `pg_class.relrowsecurity` per table | Yuan |
 | G10 | Branch protection is not enforced on GitHub (private repo, free plan) | A direct push to an integration branch | Keep the pull-request convention; revisit if the plan changes | Team |
 | G11 | Agreements with Supabase, Render, Vercel and the email provider, and their data regions, not recorded | Unknown transfer of personal data abroad | Record the plan, region and DPA status of each in section 7 | Custodian |
-| G12 | **Answered 2026-11-02: yes, personal data is present; kept open for minimisation.** Customer and outlet names (2,841 in `customer_dimension`, 180 in `salesreturn_fact`) are free-text store names, many a person's name; 33 salesman names are individuals' full names. **No phone, address, contact, email or TIN field exists**: not in any `public`, `mart` or `lp_*` table (a column-name scan), and not in the header rows of any of the 567 `.xlsx` files in `data/raw/` (the first 8 rows of every sheet; headers seen: Salesman, Customer Name, Outlet Name, Account Name, plus province, city and municipality names, which are places, not street addresses). Only headers were scanned; a person's details typed into a free-text cell further down a sheet were not looked for. Masked examples: `*SUSAN E***** & B********`, `JEM'S C******`, `R***** M********`, `J*** J*** M*****` (a salesman) | Names of private people and of SSM's staff sit in the database, in the raw files and in every backup. **No backend route and no frontend file reads these columns** (searched `backend/` and `frontend/src/`), so the dashboard does not display them | Classify as in section 2 (done). Keep the columns out of any export, extract or report. Remove them at handover and delete the backup copies (section 10). Consider replacing salesman names with codes if a name is ever needed in a screen | Data steward |
+| G12 | **Answered 2026-11-02: yes, personal data is present; kept open for minimisation.** Customer and outlet names (2,841 in `customer_dimension`, 180 in `salesreturn_fact`) are free-text store names, many a person's name; 30 of the 33 salesman values are individuals' names (the other 3 are labels). `etl_quarantine.raw_values` holds the same names again, as the files had them (about 5,900 of its 8,224 rows). Invoice numbers are document numbers (prefixes `GEN`, `INV`, `DMP`, `BILL`), not people. **No phone, address, contact, email or TIN field exists**: not in any `public`, `mart` or `lp_*` table (a column-name scan), and not in the header rows of any of the 567 `.xlsx` files in `data/raw/` (the first 8 rows of every sheet; headers seen: Salesman, Customer Name, Outlet Name, Account Name, plus province, city and municipality names, which are places, not street addresses). The cells were then read too (2026-11-02): the customer, outlet, account, invoice and salesman columns of all 567 `.xlsx` files, about 2.3 million cells, hold **0 phone-shaped and 0 email-shaped values**; so do the same columns in `public` and `etl_quarantine`. 2,436 raw cells contain a street-style word (`st.`, `brgy`, `purok` and the like): the ones sampled are store names beginning `ST.`, but they were not read one by one, so a street address among them is not ruled out. The one `.xls` (the Unilever La Union file) has no customer column; its header names a person in its Current User field (`JOL***** G*****`), and it has 0 phone or email shapes. Masked examples: `*SUSAN E***** & B********`, `JEM'S C******`, `R***** M********`, `J*** J*** M*****` (a salesman) | Names of private people and of SSM's staff sit in the database, in the raw files and in every backup. **No backend route and no frontend file reads these columns** (searched `backend/` and `frontend/src/`), so the dashboard does not display them | Classify as in section 2 (done). Keep the columns out of any export, extract or report. Remove them at handover and delete the backup copies (section 10). Consider replacing salesman names with codes if a name is ever needed in a screen | Data steward |
 | G13 | **Open.** No handover procedure to SSM | Student accounts, keys and backup copies stay with the team after the project | Section 10 lists what transfers, what is rotated, what is removed and what is deleted | Team, then SSM |
 
 ### G7 evidence: first access review (2026-11-02)
@@ -109,27 +111,26 @@ months 2026-06 to 2026-11, plus any folder an applied migration cites as a rollb
 A **database backup** is a non-empty folder written before a change that holds table dumps of the live database; its name
 starts with `full_backup_`, `live_backup_`, `tables_`, `mart_backup_`, `dm_fixes_`, `synth_v2_cutover_`, `pm_cleanup_` or
 `real_recovery_` (the `real_recovery_rehearsal_` folders dump the same tables). An empty folder or an `INCOMPLETE_` one is
-not a backup. Anything else is a table export, a staging copy or a code patch: it is outside the rule and marked NOT GOVERNED.
+not a backup. Anything else is a table export, a staging copy, a code patch or a loose file: the rule does not delete it, and it is marked LEAVE.
 The date is the timestamp in the name; three folders have none and use their file date. Months with no database backup
 (2026-06, -07, -08) keep nothing.
 
-| | Folders | Size (MB) |
+| | Items | Size (MB) |
 |---|---|---|
-| In `backups/` | 74 | 718.48 |
+| In `backups/` | 74 folders + 18 loose files | 720.55 |
 | **KEEP** | 7 | 36.06 |
 | **DELETE** | 58 | **653.81 (reclaimable)** |
-| NOT GOVERNED (not counted) | 9 | 28.62 |
+| **LEAVE** (not database backups; do not delete in this pass) | 9 folders + 18 loose files | 30.69 |
 
 What the correction changed: the earlier list picked `lp_rerun_2026-09-30` as September's keeper because it was the latest
 folder by date. It is not a database backup: it holds a CSV and a parquet export of one table, `lp_recommendation`. The
 September keeper is now `pm_cleanup_20260928T174927Z`.
 
-**Read before deleting:** `full_backup_` folders hold the whole database; the `tables_` folders and the pre-apply folders hold only the tables they were about to change. After the DELETE rows go, **one complete full backup remains** (`full_backup_20261102T114428Z`). The rule asks for that; whether it is enough is Kelvin's call, and the rule is unchanged.
+**To act on this table:** delete every DELETE row, keep every KEEP row, do not touch a LEAVE row. Nothing else is needed. For information: `full_backup_` folders hold the whole database; the `tables_` and pre-apply folders hold only the tables they were about to change, so after the deletion **one complete full backup remains** (`full_backup_20261102T114428Z`).
 
-**Folder count.** `backups/` holds 74 folders and 18 loose files. This file earlier said 91 folders; that
-figure does not match the directory and its source is unresolved. **Empty folders: 4, not 5**: `tables_20261020T174555Z`, `full_backup_20261007T170842Z`, `real_recovery_rehearsal_20260923T010538Z`, `real_recovery_rehearsal_20260923T005531Z`.
+**Counts.** `backups/` holds 74 folders and 18 loose files; the "91 folders" this file gave earlier does not match the directory and its source is unresolved. **Empty folders: 4** (an earlier note said 5; a fifth is not on disk; each has no file at any depth): `tables_20261020T174555Z`, `full_backup_20261007T170842Z`, `real_recovery_rehearsal_20260923T010538Z`, `real_recovery_rehearsal_20260923T005531Z`. **Cited as a rollback point by an applied migration: 3**, all KEEP: `live_backup_20260914T151217Z` (0014), `live_backup_20260916T190021Z` (0016), `tables_20261021T175535Z` (0064). No loose file is cited.
 
-| # | Date | Folder | Size (MB) | What it is | Action | Why |
+| # | Date | Folder or file | Size (MB) | What it is | Action | Why |
 |---|---|---|---|---|---|---|
 | 1 | 2026-11-02 | `full_backup_20261102T114428Z` | 19.09 | database backup | **KEEP** | 3 most recent; latest database backup of 2026-11 |
 | 2 | 2026-10-24 | `tables_20261024T110607Z` | 0.14 | database backup | **KEEP** | 3 most recent; latest database backup of 2026-10 |
@@ -163,7 +164,7 @@ figure does not match the directory and its source is unresolved. **Empty folder
 | 30 | 2026-10-07 | `full_backup_20261007T171126Z` | 1.14 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 31 | 2026-10-07 | `full_backup_20261007T170842Z` | 0.00 | empty folder (no files) | **DELETE** | contains no files |
 | 32 | 2026-10-07 | `INCOMPLETE_full_backup_20261007T151146Z_ssl_drop` | 1.14 | incomplete backup (SSL dropped mid-run) | **DELETE** | an incomplete backup is not a restore point |
-| 33 | 2026-10-07 | `pre_0045_20261007` | 0.11 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 33 | 2026-10-07 | `pre_0045_20261007` | 0.11 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
 | 34 | 2026-10-05 | `mart_backup_before_0046_20261005T080301Z` | 3.06 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 35 | 2026-10-05 | `full_backup_20261005T061733Z` | 10.63 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 36 | 2026-10-04 | `full_backup_20261004T143933Z` | 10.57 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
@@ -172,11 +173,11 @@ figure does not match the directory and its source is unresolved. **Empty folder
 | 39 | 2026-10-04 | `full_backup_20261004T133536Z` | 10.56 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 40 | 2026-10-03 | `full_backup_20261003T095403Z` | 7.44 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 41 | 2026-10-03 | `full_backup_20261003T080251Z` | 7.41 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
-| 42 | 2026-10-03 | `segmentation_2026-02_pre_recompute_20261003T063026Z` | 0.16 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 42 | 2026-10-03 | `segmentation_2026-02_pre_recompute_20261003T063026Z` | 0.16 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
 | 43 | 2026-10-02 | `full_backup_20261002T160122Z` | 13.62 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
-| 44 | 2026-09-30 | `lp_rerun_2026-09-30` | 0.05 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
-| 45 | 2026-09-30 | `session5_wip2_untracked` | 0.39 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
-| 46 | 2026-09-30 | `session5_wip_untracked` | 0.39 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 44 | 2026-09-30 | `lp_rerun_2026-09-30` | 0.05 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 45 | 2026-09-30 | `session5_wip2_untracked` | 0.39 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 46 | 2026-09-30 | `session5_wip_untracked` | 0.39 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
 | 47 | 2026-09-28 | `pm_cleanup_20260928T174927Z` | 1.20 | database backup | **KEEP** | latest database backup of 2026-09 |
 | 48 | 2026-09-28 | `pm_cleanup_rehearsal_20260928T174501Z` | 1.21 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 49 | 2026-09-28 | `synth_v2_cutover_20260928T151525Z` | 32.74 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
@@ -195,39 +196,34 @@ figure does not match the directory and its source is unresolved. **Empty folder
 | 62 | 2026-09-22 | `real_recovery_rehearsal_20260922T150147Z` | 24.96 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 63 | 2026-09-22 | `real_recovery_rehearsal_20260922T144257Z` | 24.96 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 64 | 2026-09-22 | `real_recovery_rehearsal_20260922T132429Z` | 24.95 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
-| 65 | 2026-09-21 | `staging_v2_sales_return_superseded_20260921T152509Z` | 0.41 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
-| 66 | 2026-09-21 | `staging_real_region_fix_20260921T152230Z` | 0.03 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
-| 67 | 2026-09-21 | `staging_v2a_superseded_20260921T142457Z` | 9.68 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
-| 68 | 2026-09-21 | `staging_v1_20260921T140003Z` | 17.40 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 65 | 2026-09-21 | `staging_v2_sales_return_superseded_20260921T152509Z` | 0.41 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 66 | 2026-09-21 | `staging_real_region_fix_20260921T152230Z` | 0.03 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 67 | 2026-09-21 | `staging_v2a_superseded_20260921T142457Z` | 9.68 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 68 | 2026-09-21 | `staging_v1_20260921T140003Z` | 17.40 | not a database backup (table export, staging copy or code patch) | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
 | 69 | 2026-09-17 | `live_backup_20260917T093732Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 70 | 2026-09-17 | `live_backup_20260917T093208Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 71 | 2026-09-16 | `live_backup_20260916T190021Z` | 6.37 | database backup | **KEEP** | cited by applied migration 0016 (rule 8, kept regardless) |
 | 72 | 2026-09-16 | `live_backup_20260916T185950Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 73 | 2026-09-16 | `live_backup_20260916T185626Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
 | 74 | 2026-09-14 | `live_backup_20260914T151217Z` | 9.12 | database backup | **KEEP** | cited by applied migration 0014 (rule 8, kept regardless) |
-
-**The 18 loose files** in `backups/` (not folders; the rule does not govern them; none is cited by a migration unless the last column says so):
-
-| File | Size (KB) | What it is | Holds SSM data? | Cited by a migration |
-|---|---|---|---|---|
-| `RESTORE_freeze_2026-10-20.sql` | 2.3 | restore script for the 2026-10-20 freeze | no | no |
-| `claude_md_local_before_root_20261004.md` | 9.0 | copy of the old local CLAUDE.md before it moved to the repo root | no | no |
-| `delmonte_abc_held.patch` | 8.4 | held Del Monte ABC code patch | no | no |
-| `forecast_result_pre_router_20260921T100759Z.csv` | 161.1 | Forecast_Result rows before the 2026-09-21 router change (data) | yes | no |
-| `pm_cleanup_baseline_public_20260928T174908Z.json` | 25.6 | baseline counts for the 2026-09-28 product-master cleanup | counts only | no |
-| `pre_0047_viewdef_20261007T172944Z.sql` | 2.9 | view definitions saved before migration 0047 | no | no |
-| `pre_0061_viewdef_20261020T1355Z.sql` | 2.6 | view definitions saved before migration 0061 | no | no |
-| `product_dimension_backup_20260918.csv` | 1485.0 | product_dimension rows, 2026-09-18 (data) | yes | no |
-| `rollback_forecast_result_20260921T100759Z.py` | 2.5 | rollback script for the forecast-result CSV above | no | no |
-| `session5_build_preview_outputs_3way.py` | 14.6 | scratch script from session 5 | no | no |
-| `session5_wip.patch` | 175.2 | session 5 work-in-progress patch | no | no |
-| `session5_wip2.patch` | 182.3 | session 5 work-in-progress patch, second | no | no |
-| `session5_wip2_filelist.txt` | 1.8 | file list for the second session 5 patch | no | no |
-| `session5_wip2_untracked.sha256` | 2.2 | checksums for the second session 5 untracked copy | no | no |
-| `session5_wip_filelist.txt` | 1.8 | file list for the first session 5 patch | no | no |
-| `session5_wip_untracked.sha256` | 2.2 | checksums for the first session 5 untracked copy | no | no |
-| `sku_traits_pre_0022_20260920T151450Z.csv` | 20.7 | SKU traits before migration 0022 (data) | yes | no |
-| `synth_v2_cutover_baseline_public_20260928T151324Z.json` | 22.1 | baseline counts for the 2026-09-28 synthetic-v2 cutover | counts only | no |
+| 75 | 2026-10-20 | `RESTORE_freeze_2026-10-20.sql` | 0.00 | loose file: restore script for the 2026-10-20 freeze | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 76 | 2026-10-04 | `claude_md_local_before_root_20261004.md` | 0.01 | loose file: copy of the old local CLAUDE.md before it moved to the repo root | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 77 | 2026-09-21 | `delmonte_abc_held.patch` | 0.01 | loose file: held Del Monte ABC code patch | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 78 | 2026-09-21 | `forecast_result_pre_router_20260921T100759Z.csv` | 0.16 | loose file: Forecast_Result rows before the 2026-09-21 router change (data); holds SSM data | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 79 | 2026-09-29 | `pm_cleanup_baseline_public_20260928T174908Z.json` | 0.03 | loose file: baseline counts for the 2026-09-28 product-master cleanup; row counts only | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 80 | 2026-10-08 | `pre_0047_viewdef_20261007T172944Z.sql` | 0.00 | loose file: view definitions saved before migration 0047 | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 81 | 2026-10-20 | `pre_0061_viewdef_20261020T1355Z.sql` | 0.00 | loose file: view definitions saved before migration 0061 | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 82 | 2026-10-02 | `product_dimension_backup_20260918.csv` | 1.45 | loose file: product_dimension rows, 2026-09-18 (data); holds SSM data | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 83 | 2026-09-21 | `rollback_forecast_result_20260921T100759Z.py` | 0.00 | loose file: rollback script for the forecast-result CSV above | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 84 | 2026-09-30 | `session5_build_preview_outputs_3way.py` | 0.01 | loose file: scratch script from session 5 | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 85 | 2026-09-30 | `session5_wip.patch` | 0.17 | loose file: session 5 work-in-progress patch | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 86 | 2026-09-30 | `session5_wip2.patch` | 0.18 | loose file: session 5 work-in-progress patch, second | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 87 | 2026-09-30 | `session5_wip2_filelist.txt` | 0.00 | loose file: file list for the second session 5 patch | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 88 | 2026-09-30 | `session5_wip2_untracked.sha256` | 0.00 | loose file: checksums for the second session 5 untracked copy | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 89 | 2026-09-30 | `session5_wip_filelist.txt` | 0.00 | loose file: file list for the first session 5 patch | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 90 | 2026-09-30 | `session5_wip_untracked.sha256` | 0.00 | loose file: checksums for the first session 5 untracked copy | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 91 | 2026-09-20 | `sku_traits_pre_0022_20260920T151450Z.csv` | 0.02 | loose file: SKU traits before migration 0022 (data); holds SSM data | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
+| 92 | 2026-09-28 | `synth_v2_cutover_baseline_public_20260928T151324Z.json` | 0.02 | loose file: baseline counts for the 2026-09-28 synthetic-v2 cutover; row counts only | **LEAVE** | not a database backup, so the rule does not delete it; not cited by a migration |
 
 Copies on other laptops or drives are not counted here. Disk encryption (BitLocker) is **UNVERIFIED**.
 
@@ -238,7 +234,7 @@ Copies on other laptops or drives are not counted here. Disk encryption (BitLock
 | Active user accounts | While the person has access | Disable on leaving; delete personal fields after 12 months, keep the audit entry with the user id |
 | Sessions, invite and reset tokens | Until expiry | Prune expired rows |
 | Audit trail | 3 years. Basis: covers at least two complete annual planning cycles plus a margin, and matches the longest sales history the system holds | Archive, then delete |
-| Live-database backups | The 3 most recent, plus one per month for 6 months | Delete older, from disk and any copies. The current list is under G4 |
+| Live-database backups | The 3 most recent database backups, plus the latest **database backup** (not the latest folder) of each of the last 6 calendar months, plus any folder an applied migration cites as a rollback point (hard rule 8) | Delete older, from disk and any copies. The current list is under G4 |
 | Demonstration data | Until the capstone is archived | Drop the `demo` schema |
 | SSM business data | Held only for the duration of the capstone; returned or deleted at project close; deleted on SSM's request at any time | Delete from the database, `backups/`, `local/` and every copy; confirm person by person (section 10) |
 

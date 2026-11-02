@@ -126,8 +126,10 @@ class RecommendationItem(BaseModel):
     # migration 0062). q_i stays what the LP produced; recommended_q_i repeats it under an unambiguous
     # name so a page can show "recommended X, decided Y". decided_q_i is the quantity the planner chose
     # when it differs from q_i (None = no override: pending, dismissed, or accepted as recommended).
-    # decision_reason is why (required on dismiss). Nothing in forecasting, safety stock or the LP reads
-    # these, and none of them changes a recommended value. The one reader is the displayed plan total.
+    # decision_reason is why (required on dismiss) and enters no computation. A decision changes neither the
+    # forecast nor the safety stock. An accepted order becomes an expected receipt and so part of the next
+    # cycle's opening stock, which the optimisation reads (backend/expected_receipts.py); this row's own q_i
+    # does not change.
     recommended_q_i: float | None = None
     decided_q_i: float | None = None
     # What this row contributes to the displayed plan total and count (2026-10-24): decided_q_i where the planner accepted a different quantity, else q_i. Equal to
