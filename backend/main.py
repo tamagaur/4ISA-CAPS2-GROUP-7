@@ -41,7 +41,7 @@ from backend.security_headers import SecurityHeadersMiddleware
 from backend.startup_checks import validate_secrets
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
-    inventory, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
+    inventory, monthly_batch, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
     segment, sku, two_factor, users,
 )
 
@@ -147,6 +147,8 @@ app.include_router(decomposition.router)
 app.include_router(category_trends.router)
 app.include_router(data_mode.router)
 app.include_router(demo.router)
+if monthly_batch.enabled():   # local practice database only: the deployed API does not have these routes (docs/CHAPTER4_CODE_FIGURES.json)
+    app.include_router(monthly_batch.router)
 
 
 @app.get("/health", tags=["health"])

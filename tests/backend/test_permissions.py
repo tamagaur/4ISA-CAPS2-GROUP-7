@@ -370,7 +370,8 @@ ADMIN_ONLY_BEFORE = {
     ("POST", "/sku"), ("PATCH", "/sku/{product_key}"), ("PATCH", "/recommendations/{recommendation_key}"),
     ("GET", "/audit-log"), ("GET", "/audit-log/users"),
 }
-NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
+NEW_ROUTES = {
+    ("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
               ("PUT", "/admin/users/{user_id}/permissions"),
               ("POST", "/users/{user_id}/mfa/reset"),  # 2026-10-02, users.manage like the rest of /users
               # 2026-10-23, backend/routers/reorder_approval.py. Admin-only on top of the key, so a staff preset opens none.
@@ -984,7 +985,7 @@ PAGE_ENDPOINTS = {
     "lp.view": [("GET", "/recommendations"), ("GET", "/segment?sku=12345678"),
                 ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],  # + ReorderModal's panel, useBrandLookup
     "audit_log.view": [("GET", "/audit-log"), ("GET", "/audit-log/users")],
-    "upload.run": [],  # Data Management is a mock page: no endpoint yet
+    "upload.run": [],  # Data Management is a mock page on the deployed API: /batch is mounted only on the local database
     "users.manage": [("GET", "/users"), ("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/3/permissions")],
 }
 # Buttons: each needs its own permission, whatever page it sits on.

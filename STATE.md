@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-10-28.
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-02.
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=109 pieces=435988 cycle=2026-03-01 lp_run=6
@@ -19,16 +19,27 @@ Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, fro
 
 Weeks of cover: ONE basis, pieces over pieces (Dashboard 7.06, 2026-02 count, 12 months to 2026-02); the pesos basis gives 6.21. Del Monte has no pieces, so its card stays pesos.
 
-Open defects (2026-10-31): KNOWN_ISSUES.md: 3 left (A7 C1 P3). A13 Q15 P5b closed 2026-10-31 (uncommitted): dismiss reason 8-500 characters; close_cycle refuses an incomplete plan for the cycle being closed (the next cycle is only reported) (LP rows = ok forecasts with MASE < 1; 109 = 109 for 2026-03); row 4 labelled outside_plan in cycle=all. Every run_lp / close_cycle refusal now exits non-zero (2; errors 1). Four SSM items are closed with a written limitation (L1-L4). run_lp refuses an already-planned cycle (--replan) and both runners refuse a stale ABC period (--allow-stale-abc), exit 2. check.sh --full allows only the 21 tests in scripts/known_opt_in_skips.txt to skip (18 + 3 real-data tests, 2026-11-02). Extract tests run on synthetic fixtures in tests/fixtures/extract_raw/ everywhere and on data/raw too where present; tests/fixtures/policy_card_synthetic.csv covers pesos_comparison. TC83: scripts/manuscript_figures.py is exempt in the plan_q_i guard (list bounded at 3). TC82 (rollover scratch) does NOT complete: the merged notifications code reads an unqualified users table the scratch schema lacks, see KNOWN_ISSUES.
+Open defects (2026-11-02): KNOWN_ISSUES.md: 7 left (A7 C1 M1 M2 M3 M5 P3). T1 fixed, M4 closed 2026-11-02. A13 Q15 P5b closed 2026-10-31 (committed in a29d683): dismiss reason 8-500 characters; close_cycle refuses an incomplete plan for the cycle being closed (the next cycle is only reported) (LP rows = ok forecasts with MASE < 1; 109 = 109 for 2026-03); row 4 labelled outside_plan in cycle=all. Every run_lp / close_cycle refusal now exits non-zero (2; errors 1). Eight SSM items are closed with a written limitation (L1-L8). run_lp refuses an already-planned cycle (--replan) and both runners refuse a stale ABC period (--allow-stale-abc), exit 2. check.sh --full allows only the 18 tests in scripts/known_opt_in_skips.txt to skip.
 Checks: scripts/check.sh --fast (constant) / --full (everything). Skipped is a failure. Open defects: KNOWN_ISSUES.md.
-Throwaway local Postgres for destructive QA (never live): scripts/local_pg.py; 2026-10-30 results in reports/QA_PIPELINE_2026-10-30.md (local copy of the 16 Oct backup, so its plan is not the live plan).
+Throwaway local Postgres for destructive QA (never live): scripts/local_pg.py, restored 2026-11-02 from backups/full_backup_20261102T114428Z (109 rows, 435,988 pieces); 2026-10-30 results in reports/QA_PIPELINE_2026-10-30.md used the older 16 Oct backup.
 
 Manuscript figures (2026-10-31): python -m scripts.manuscript_figures (read-only; needs requirements-figures.txt) writes
   17 Chapter 4 figures to reports/figures/, the number map and captions to reports/figures/FIGURES.md, and Tables 4.2.19,
   4.2.20, 4.2.4 to docs/MANUSCRIPT_TABLE_DATA_2026-10-30.md. It exits 2 while a figure is HELD: figure l (block results)
   is held because cells_all.csv gives XGBoost+MA3 (long) 0/2/0 where the manuscript and DEC-26 say 0 wins/4 ties/1 loss.
+Test plan + worked calculations (2026-10-31, NOT committed): docs/TEST_PLAN.md (test items, features, criteria T1-T83, results
+  in two rounds, coverage) and docs/MANUSCRIPT_WORKED_CALCULATIONS.md (SKU 62687212 traced to plan_q_i 9,744; SKU 69668149
+  ordered 0; urgency subtotals 118,644 + 67,276 + 250,068 = 435,988). The worked-calculations file holds per-product sales
+  (hard rule 9): commit it only if the manuscript publishes 62687212. Coverage (coverage.py 7.16.2, local .venv only):
+  51.9% statements / 44.4% branches over the 216 imported files; backend 93.6% / 87.0%.
 Tracked reports (2026-10-30): scripts that write a committed reports/ or docs/ file go through scripts/report_target.report_path; a run against the local Postgres writes local/nonlive_reports/ instead (git-ignored).
-Forecast run (2026-10-30): writes its own cycle only; it no longer deletes other cycles' rows (own-cycle strays are flagged in model_params.retired). Tasks 2-5 of the rollover-hardening prompt are NOT done: stopped at a gate, see the session report.
+Monthly batch (2026-11-02, branch kelvin/monthly-batch, not pushed): python -m scripts.run_month (dry run by default; load, ABC, forecast, LP,
+  marts, review, then a separate --close) and python -m scripts.cycle_feedback (read-only). Rehearsed on the local Postgres only, with generated
+  March sales: reports/MONTHLY_BATCH_REHEARSAL_2026-11-02.md. Never run on live; the real load step has not run as a write. Live plan unchanged.
+  Data Management page (local only): python -m scripts.local_app signs in without a password on the throwaway database and shows the batch
+  (backend/routers/monthly_batch.py, mounted only when MONTHLY_BATCH_ENABLED and 127.0.0.1:55432, so the deployed API stays at the pinned 84 routes). Deployed login unchanged.
+  Generated sales are is_demo = true and only in the local ssm_practice copy (no page reads it). The forecast refuses them, so a practice month stops: KNOWN_ISSUES M5, decision open.
+Forecast run (2026-10-30): writes its own cycle only; it no longer deletes other cycles' rows (own-cycle strays are flagged in model_params.retired). Tasks 2-5 of the rollover-hardening prompt: unresolved; neither the prompt nor that session report can be found (Kelvin, 2026-11-02), so what they covered is unknown.
 
 Decided by the team, 2026-11-02 (the proponents; no external confirmation; entries in ARCHITECTURE.md):
   DEC-41 calendar factor (shrink 0.5, 3 prior months; live on all 175 ok rows; Sir Catubag has not signed it off, so the flag stays False)
@@ -42,4 +53,6 @@ Blocked (nothing below is ours to decide):
   SSM: the four cost inputs are still UNCONFIRMED by SSM (procurement, storage, warehouse capacity, supplier ceilings; DEC-44
     adopts them as assumptions, it does not confirm them); meaning of PO Qty;
     the 2 Mar count (about twice its neighbours); Ilocos Sur stock vs La Union sales; whether zero-sale months are omitted.
-  Yuan: lifting the hold on prescriptive claims.
+    SSM is not reachable; do not wait on it (team, 2026-11-02). Each open question is a written limitation, KNOWN_ISSUES.md L1-L8.
+    New sales files remain the one thing no workaround replaces on live.
+  Yuan: lifting the hold on prescriptive claims; approving any dead-SKU disable (837 would go; nobody approved; DEC-45).

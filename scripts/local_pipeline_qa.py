@@ -4,10 +4,16 @@ local database only (scripts/local_pg.py). Launch it through the guard so the ch
 
     python -m scripts.local_pg run -- python scripts/local_pipeline_qa.py happy
     python -m scripts.local_pg run -- python scripts/local_pipeline_qa.py step abc|forecast|lp|marts|close|synth
-    python -m scripts.local_pg run -- python scripts/local_pipeline_qa.py state
+    python -m scripts.local_pg run --practice -- python scripts/local_pipeline_qa.py state
 
 The month is March 2026: its per-SKU sales do not exist in the real sources, so `synth` generates them from each
-product's own February (the same rule as scripts/rollover_scratch_test.py), tagged _src_file = 'qa_synthetic_march'.
+product's own February (the same rule as scripts/rollover_scratch_test.py), tagged _src_file = 'qa_synthetic_march' and
+is_demo = true.
+
+`synth` runs only on ssm_practice, a copy of the local database that no page reads (python -m scripts.local_pg practice), so
+the database behind the pages never holds one. Rows flagged is_demo never pass a _Real view (rollover_scratch_test.py says
+the same), and the forecast refuses them even through a view (analytics/forecasting/router.assert_real_rows), so
+scripts/run_month.py refuses a month that holds only these rows: they label the month, they do not drive it (KNOWN_ISSUES M5).
 Everything else is the repo's own CLI, unmodified. Local timings say nothing about Render or Supabase.
 """
 from __future__ import annotations
@@ -22,6 +28,7 @@ from urllib.parse import urlparse
 REPO = Path(__file__).resolve().parents[1]
 PY = sys.executable
 TAG = "qa_synthetic_march"
+PRACTICE_DB = "ssm_practice"
 
 STEPS = {
     "abc": [PY, "-m", "analytics.classification.orchestrate_abc", "--period", "2026-03", "--schema", "public",
@@ -45,7 +52,14 @@ def connect():
     return psycopg2.connect(guard())
 
 
+def practice_guard() -> None:
+    url = guard()
+    if urlparse(url).path.lstrip("/") != PRACTICE_DB:
+        sys.exit(f"REFUSED: generated sales go only into {PRACTICE_DB}, never the database behind the pages")
+
+
 def synth() -> None:
+    practice_guard()
     with connect() as c, c.cursor() as cur:
         cur.execute("SELECT count(*) FROM unilever_sku_demand_fact WHERE calendar_month = '2026-03' AND is_demo = false")
         if cur.fetchone()[0]:
@@ -57,7 +71,7 @@ def synth() -> None:
             SELECT product_key, sku_code, '2026-03', region,
                    GREATEST(round(quantity_sold * (0.8 + 0.4 * ((abs(hashtext(sku_code || '2026-03')) %% 1000) / 1000.0))), 0),
                    net_amount * (0.8 + 0.4 * ((abs(hashtext(sku_code || '2026-03')) %% 1000) / 1000.0)),
-                   %(tag)s, %(tag)s, false, gsv, NULL
+                   %(tag)s, %(tag)s, true, gsv, NULL
             FROM unilever_sku_demand_fact WHERE calendar_month = '2026-02' AND is_demo = false AND quantity_sold > 0""", {"tag": TAG})
         print(f"synthetic March sales rows: {cur.rowcount}")
 

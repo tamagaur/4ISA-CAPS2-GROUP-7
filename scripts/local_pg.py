@@ -3,7 +3,9 @@ scripts/local_pg.py - a throwaway local Postgres for destructive QA (never live)
 
     python -m scripts.local_pg start                  # initdb (once) + start on 127.0.0.1:55432
     python -m scripts.local_pg restore BACKUP_DIR     # create db, load structure/*.sql and data/**/*.parquet
+    python -m scripts.local_pg practice               # (re)make ssm_practice, a copy of the local DB that no page reads
     python -m scripts.local_pg run -- CMD ARGS...     # run CMD with the local DB as its database
+    python -m scripts.local_pg run --practice -- CMD  # the same, on ssm_practice (generated sales live only there)
     python -m scripts.local_pg stop
 
 The connection lives in LOCAL_PG_URL, which no project code reads. `run` copies it into SUPABASE_DB_URL and
@@ -32,15 +34,16 @@ PGBIN = Path(os.environ.get("PG_BIN", r"C:\Program Files\PostgreSQL\17\bin"))
 DATA = REPO / "local" / "pg_throwaway"
 PORT = 55432
 DB = "ssm_local"
+PRACTICE_DB = "ssm_practice"
 DEFAULT_URL = f"postgresql://postgres@127.0.0.1:{PORT}/{DB}"
 
 
-def local_url() -> str:
+def local_url(practice: bool = False) -> str:
     url = os.environ.get("LOCAL_PG_URL", DEFAULT_URL)
     u = urlparse(url)
     if u.hostname not in ("127.0.0.1", "localhost") or u.port != PORT:
         sys.exit(f"REFUSED: LOCAL_PG_URL must be 127.0.0.1:{PORT}, got {u.hostname}:{u.port}")
-    return url
+    return u._replace(path=f"/{PRACTICE_DB}").geturl() if practice else url
 
 
 def _run(*cmd, **kw):
@@ -74,6 +77,16 @@ def _psql(db, sql=None, file=None):
     return _run(*cmd, capture_output=True, text=True, check=False)
 
 
+def make_practice() -> None:
+    """A fresh copy of the local database for the monthly batch. CREATE DATABASE ... TEMPLATE needs the source idle."""
+    _psql("postgres", f"DROP DATABASE IF EXISTS {PRACTICE_DB} WITH (FORCE)")
+    _psql("postgres", f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{DB}'")
+    r = _psql("postgres", f"CREATE DATABASE {PRACTICE_DB} TEMPLATE {DB}")
+    if r.returncode != 0:
+        sys.exit(f"could not make {PRACTICE_DB}: {r.stderr.strip()}")
+    print(f"{PRACTICE_DB} is a fresh copy of {DB}")
+
+
 def _pg_array(v):
     if v is None or v is pd_NA:
         return None
@@ -86,6 +99,7 @@ def restore(backup: Path) -> None:
     import pandas as pd
     import psycopg2
     t0 = time.time()
+    _psql("postgres", f"DROP DATABASE IF EXISTS {PRACTICE_DB} WITH (FORCE)")   # a copy of what is being replaced
     _psql("postgres", f"DROP DATABASE IF EXISTS {DB} WITH (FORCE)")
     _psql("postgres", f"CREATE DATABASE {DB}")
     pre = ("DO $$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role','supabase_admin'] LOOP "
@@ -144,8 +158,8 @@ def restore(backup: Path) -> None:
     print(f"restored {len(counts)} tables, {sum(counts.values()):,} rows in {time.time() - t0:.1f}s")
 
 
-def run(cmd: list[str]) -> int:
-    url = local_url()
+def run(cmd: list[str], practice: bool = False) -> int:
+    url = local_url(practice)
     env = dict(os.environ, LOCAL_PG_URL=url, SUPABASE_DB_URL=url, SUPABASE_DIRECT_URL=url, SUPABASE_KEY="local-dummy",
                DATABASE_URL=url, PYTHONIOENCODING="utf-8", PYTHONPATH=str(REPO))
     # belt and braces: the child must resolve to the throwaway server before anything else runs
@@ -167,7 +181,10 @@ if __name__ == "__main__":
         stop()
     elif a[0] == "restore":
         restore(Path(a[1]))
+    elif a[0] == "practice":
+        make_practice()
     elif a[0] == "run":
-        sys.exit(run(a[a.index("--") + 1:] if "--" in a else a[1:]))
+        head = a[1:a.index("--")] if "--" in a else []
+        sys.exit(run(a[a.index("--") + 1:] if "--" in a else a[1:], practice="--practice" in head))
     elif a[0] == "url":
         print(local_url())
