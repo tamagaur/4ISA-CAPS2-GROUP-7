@@ -1,0 +1,193 @@
+.mb-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+}
+
+.mb-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--card-gap);
+}
+
+.mb-step {
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mb-step h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.mb-small {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.mb-done {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.mb-file {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mb-file-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mb-file-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.mb-file-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.mb-choice {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.mb-choice legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.mb-confirm {
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.mb-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.mb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.mb-table th,
+.mb-table td {
+  padding: 6px 8px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mb-table th:first-child,
+.mb-table td:last-child,
+.mb-table th:last-child {
+  text-align: left;
+}
+
+.mb-table thead th {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-feedback {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mb-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mb-facts dt {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-facts dd {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.mb-log summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.mb-log pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  max-height: 280px;
+  overflow: auto;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mb-spin {
+  vertical-align: -2px;
+  animation: mb-spin 1s linear infinite;
+}
+
+@keyframes mb-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-spin { animation: none; }
+}
+
+@media (max-width: 900px) {
+  .mb-steps { grid-template-columns: minmax(0, 1fr); }
+}

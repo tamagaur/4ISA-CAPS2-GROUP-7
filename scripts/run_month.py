@@ -50,6 +50,13 @@ PLAN_SQL = """
     FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key
     WHERE pd.principal = %(principal)s AND lr.planning_cycle_date = %(plan_cycle)s AND lr.lp_run_key IS NOT NULL
 """
+NEWEST_PLAN_SQL = """
+    SELECT MAX(lr.planning_cycle_date) FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key
+    WHERE pd.principal = %(principal)s AND lr.lp_run_key IS NOT NULL
+"""
+PRIOR_CLOSED_SQL = """
+    SELECT 1 FROM planning_cycle WHERE principal = %(principal)s AND cycle = %(plan_cycle)s AND state = 'closed'
+"""
 OPENING_BASIS_SQL = """
     SELECT inputs ->> 'opening_basis' FROM lp_run WHERE planning_cycle_date = %(plan_cycle)s ORDER BY run_key DESC LIMIT 1
 """
@@ -76,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--month", required=True, type=parse_cycle, help="the month whose sales and count just arrived, YYYY-MM")
     ap.add_argument("--calendar-factor", required=True, choices=["on", "off"], help="say it every run; no default on purpose")
     ap.add_argument("--slice", action="append", default=[], metavar="SPEC", help="load this slice first (run_canonical_load --slice). Repeatable.")
+    ap.add_argument("--file", action="append", default=[], metavar="PATH", help="use this raw file for those slices (run_canonical_load --file). Repeatable.")
     ap.add_argument("--close", action="store_true", help="close the month, after a person has read the new plan")
     ap.add_argument("--expect-plan-pieces", type=int, metavar="N", help="with --close: the new plan's total as printed")
     ap.add_argument("--approved-by", metavar="NAME")
@@ -84,11 +92,24 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def cycle_prior(cycle: datetime.date) -> datetime.date:
+    return datetime.date(cycle.year - (cycle.month == 1), (cycle.month - 2) % 12 + 1, 1)
+
+
+def pick_month(newest_plan: datetime.date, prior_has_plan: bool, prior_closed: bool) -> datetime.date:
+    """The month in play: a new plan exists once its month's data arrived, and that month stays in play until it is closed."""
+    if prior_has_plan and not prior_closed:
+        return cycle_prior(newest_plan)
+    return newest_plan
+
+
 def is_write(args) -> bool:
     return bool(args.approved_by or args.expect_month)
 
 
 def gate_errors(args, live: bool) -> list[str]:
+    if args.file and not args.slice:
+        return ["--file needs --slice: a file says what to load, the slice says where it goes"]
     if not is_write(args):
         return []
     if not (args.approved_by and args.expect_month):
@@ -122,9 +143,11 @@ def plan_steps(args, py: str = sys.executable) -> list[Step]:
     period = f"{args.month:%Y-%m}"
     steps = []
     if args.slice:
-        load = [py, "scripts/run_canonical_load.py", "--schema", "public", "--target-public"]
+        load = [py, "-m", "scripts.run_canonical_load", "--schema", "public", "--target-public"]
         for spec in args.slice:
             load += ["--slice", spec]
+        for path in args.file:
+            load += ["--file", path]
         steps.append(Step("load", load, "sales_loaded", always=True))
     forecast = [py, "scripts/run_baseline_forecast.py", "--write"] + (["--calendar-factor"] if args.calendar_factor == "on" else [])
     steps += [Step("abc", [py, "-m", "analytics.classification.orchestrate_abc", "--period", period, "--schema", "public",
@@ -217,6 +240,20 @@ def _counts(params: dict) -> list[tuple]:
     def read(cur):
         cur.execute(COUNTS_SQL, params)
         return cur.fetchall()
+    return _read(read)
+
+
+def current_month() -> datetime.date:
+    def read(cur):
+        cur.execute(NEWEST_PLAN_SQL, {"principal": PRINCIPAL})
+        newest = cur.fetchone()[0]
+        if newest is None:
+            raise SystemExit("no plan on record")
+        args = {"principal": PRINCIPAL, "plan_cycle": cycle_prior(newest)}
+        cur.execute(PLAN_SQL, args)
+        has_plan = cur.fetchone()[0] > 0
+        cur.execute(PRIOR_CLOSED_SQL, args)
+        return pick_month(newest, has_plan, cur.fetchone() is not None)
     return _read(read)
 
 

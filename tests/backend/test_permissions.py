@@ -328,7 +328,7 @@ def _routes():
 # page, 2026-10-16) from the Main-Final merge (2026-10-17); 59 since GET /status (health route); 67 since the reorder
 # approval and reversal routes (backend/routers/reorder_approval.py, 2026-10-23); 70 since the three
 # /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23). Change it when a route is added or removed.
-ROUTE_COUNT = 71  # +GET /inventory/receipt-signals (2026-10-24)
+ROUTE_COUNT = 78  # +GET /inventory/receipt-signals (2026-10-24)
 
 
 def test_the_walk_finds_every_route():
@@ -362,7 +362,10 @@ ADMIN_ONLY_BEFORE = {
     ("POST", "/sku"), ("PATCH", "/sku/{product_key}"), ("PATCH", "/recommendations/{recommendation_key}"),
     ("GET", "/audit-log"), ("GET", "/audit-log/users"),
 }
-NEW_ROUTES = {("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
+NEW_ROUTES = {
+    # 2026-11-02: the local practice batch, upload.run (backend/routers/monthly_batch.py). Off unless local.
+    ("GET", "/batch/status"), ("GET", "/batch/job"), ("GET", "/batch/feedback"), ("POST", "/batch/files"),
+    ("POST", "/batch/practice-month"), ("POST", "/batch/run"), ("POST", "/batch/close"),("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/{user_id}/permissions"),
               ("PUT", "/admin/users/{user_id}/permissions"),
               ("POST", "/users/{user_id}/mfa/reset"),  # 2026-10-02, users.manage like the rest of /users
               # 2026-10-23, backend/routers/reorder_approval.py. Admin-only on top of the key, so a staff preset opens none.
@@ -949,7 +952,7 @@ PAGE_ENDPOINTS = {
     "lp.view": [("GET", "/recommendations"), ("GET", "/segment?sku=12345678"),
                 ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],  # + ReorderModal's panel, useBrandLookup
     "audit_log.view": [("GET", "/audit-log"), ("GET", "/audit-log/users")],
-    "upload.run": [],  # Data Management is a mock page: no endpoint yet
+    "upload.run": [("GET", "/batch/status")],  # local practice batch; the page itself is otherwise a mock
     "users.manage": [("GET", "/users"), ("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/3/permissions")],
 }
 # Buttons: each needs its own permission, whatever page it sits on.

@@ -38,7 +38,7 @@ from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
-    inventory, pareto, permissions, policy_comparison, recommendations, reorder_approval, segment, sku, two_factor, users,
+    inventory, monthly_batch, pareto, permissions, policy_comparison, recommendations, reorder_approval, segment, sku, two_factor, users,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,6 +137,7 @@ app.include_router(decomposition.router)
 app.include_router(category_trends.router)
 app.include_router(data_mode.router)
 app.include_router(demo.router)
+app.include_router(monthly_batch.router)
 
 
 @app.get("/health", tags=["health"])

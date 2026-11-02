@@ -16,7 +16,7 @@ FACTS = {"latest_sales_month": "2026-03", "synthetic_rows": 0}
 
 def _args(**kw):
     base = {"month": MONTH, "calendar_factor": "on", "slice": [], "approved_by": None, "expect_month": None,
-            "target_public": False, "close": False, "expect_plan_pieces": None}
+            "target_public": False, "close": False, "expect_plan_pieces": None, "file": []}
     return argparse.Namespace(**{**base, **kw})
 
 
@@ -197,3 +197,29 @@ def test_our_own_output_is_flushed_before_a_child_prints(monkeypatch):
     monkeypatch.setattr(rm.subprocess, "run", fake_run)
     assert rm._runner(["x"]) == 0
     assert order == ["flush", "child"]
+
+
+# ---- the month in play, and the raw files -----------------------------------------------------------------------------
+
+def test_the_month_in_play_is_the_newest_plan_when_the_one_before_is_settled():
+    assert rm.pick_month(datetime.date(2026, 3, 1), prior_has_plan=False, prior_closed=False) == datetime.date(2026, 3, 1)
+    assert rm.pick_month(datetime.date(2026, 4, 1), prior_has_plan=True, prior_closed=True) == datetime.date(2026, 4, 1)
+
+
+def test_the_month_in_play_stays_on_the_old_one_until_it_is_closed():
+    assert rm.pick_month(datetime.date(2026, 4, 1), prior_has_plan=True, prior_closed=False) == datetime.date(2026, 3, 1)
+
+
+def test_named_files_go_to_the_loader():
+    load = rm.plan_steps(_args(slice=["a:b:2026-03"], file=["local/x.xls"]), py="py")[0]
+    assert load.cmd[load.cmd.index("--file") + 1] == "local/x.xls"
+
+
+def test_a_file_with_no_slice_is_refused():
+    assert "--slice" in rm.gate_errors(_args(file=["x.xls"]), live=False)[0]
+
+
+def test_the_load_step_starts_the_loader_as_a_module():
+    """Run as a file it cannot import the analytics package (found clicking through the page, 2026-11-02)."""
+    load = rm.plan_steps(_args(slice=["a:b:2026-03"]), py="py")[0]
+    assert load.cmd[1:3] == ["-m", "scripts.run_canonical_load"]

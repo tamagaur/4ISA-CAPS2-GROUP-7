@@ -36,6 +36,29 @@ Take a backup before step 2 on live. If a step fails, fix it and run the same co
 
 To rehearse locally, prefix each command with `python -m scripts.local_pg run --`, generate the month with `scripts/local_pipeline_qa.py synth`, and leave out `--target-public`.
 
+## From the Data Management page (local only)
+
+```
+python -m scripts.local_pg start
+python -m scripts.local_app --reset backups/full_backup_20261016T070624Z    # a clean copy; leave out --reset to keep the current one
+```
+
+It prints one line to paste into the browser console at http://localhost:5173, which signs you in without a password. Data Management then shows four steps: add the month's data, run it, review the new plan, close it.
+
+**The shortcut cannot work on live.** No login code changed, so the deployed app has no bypass. The token is signed with a secret made up on each run, and `local_app` refuses any database but 127.0.0.1:55432. The batch routes also refuse any other database and never pass `--target-public`. With the batch off, the page shows its original banner and dropzone, and no panel.
+
+Clicked through in a real browser (Chrome, driven by Playwright) on a clean copy: generated practice sales, run (104 s), review, close. No browser errors, and no sideways scroll at phone width.
+
+**Known limits of the page:**
+
+| Limit | Effect |
+|---|---|
+| A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | The page has no sign-off button: run the `transform_signoff` command the log prints. Not built because there is no real new file to test it with. |
+| `LATEST_DATA_PERIOD` in `frontend/src/dataCoverage.js` is hand-set | After a run, the Dashboard's default range stays at Feb 2026 and it shows a banner saying so. The frontend's own file, left alone. |
+| The Dashboard and Reorder pages do not label practice sales | On the local copy they look real once practice sales are in. Only the Data Management panel says they are generated. Do not screenshot them as results. |
+| A second month can't be practised | `local_pipeline_qa synth` only generates 2026-03. |
+| The job log is held in memory | A backend restart forgets the log, not the work. |
+
 ## Rehearsal results
 
 | # | What was done | Expected | Happened |

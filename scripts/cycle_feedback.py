@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 from collections import Counter
@@ -148,6 +149,7 @@ def save(report: dict, rows: list[dict], lines: list[str], live: bool) -> Path:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cycle", required=True, type=parse_cycle, help="the planning month, YYYY-MM")
+    ap.add_argument("--json", action="store_true", help="print the report as one line of JSON and save nothing")
     args = ap.parse_args()
     import psycopg2
     from dotenv import load_dotenv
@@ -158,6 +160,9 @@ def main() -> int:
             report, rows = read_report(cur, cycle_params(args.cycle, PRINCIPAL))
     finally:
         conn.close()
+    if args.json:
+        print(json.dumps(report, default=float))
+        return 0
     lines = render(report)
     print("\n".join(lines))
     print(f"saved {save(report, rows, lines, is_live_target())}")
