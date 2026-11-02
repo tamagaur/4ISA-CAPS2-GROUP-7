@@ -44,7 +44,9 @@ legal opinion; the Data Privacy Act of 2012 (RA 10173) points are for the team a
 | Input safety | NUL and NaN/Infinity refused before the database; validation errors and request bodies are never logged (test enforces it) | `backend/input_guard.py`, `tests/backend/test_secret_redaction.py` |
 | API docs hidden in production | `/docs`, `/redoc`, `/openapi.json` off when `APP_ENV=production` | `backend/main.py:85` |
 | CORS | Allow-list of origins | `backend/main.py:98` |
-| Frontend headers | `X-Frame-Options: DENY` set; the rest of the header list **UNVERIFIED** | `frontend/vercel.json:13` |
+| Frontend headers | Content-Security-Policy (`script-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`, Referrer-Policy, Permissions-Policy, and HSTS (added 2026-11-02) | `frontend/vercel.json` |
+| API headers | `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS in production, `Cache-Control: no-store` on `/auth`, `/users`, `/admin`, `/audit-log` (added 2026-11-02, G2) | `backend/security_headers.py`, `tests/backend/test_security_headers.py` |
+| Audit immutability | Database triggers refuse UPDATE, DELETE and TRUNCATE on `app.audit_log` (G3). Written and rehearsed (rolled back) against live 2026-11-02, **not applied** | `analytics/db/migrations/0072_audit_log_append_only.sql` |
 | Secrets in git | `.env`, `local/` and `backups/` are git-ignored | `.gitignore:6`, `:99`, `:132` |
 | Change control | Numbered migrations only; applied ones never edited; no force pushes or history rewrites; read-only access uses a transaction-scoped READ ONLY | CLAUDE.md, DATABASE rule |
 | Data integrity | Models read only `_Real` views; demo data is labelled and kept apart; 51 pinned figures and 12 cross-endpoint invariants run in `scripts/check.sh --fast` | CLAUDE.md rules 1-3; check run 2026-11-02 |
@@ -54,9 +56,9 @@ legal opinion; the Data Privacy Act of 2012 (RA 10173) points are for the team a
 
 | # | Gap | Risk | Fix | Who |
 |---|---|---|---|---|
-| G1 | The sign-in token is kept in `localStorage` (`frontend/src/auth.js:89`) | Any script injected into the page can read it | Move to an httpOnly, Secure, SameSite cookie, or accept and document the risk with a strict Content-Security-Policy | Maika / Audrey |
-| G2 | The API sets no security headers of its own (none found in `backend/*.py`) | Weaker browser protections on API responses | Add a small middleware: `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Cache-Control: no-store` on auth routes | Backend |
-| G3 | Audit rows are append-only by convention and by revoked grants, not by a database trigger | A superuser or a bad script could still alter them | A migration adding a trigger that rejects UPDATE and DELETE on `app.audit_log` (needs the next free number from STATE.md; Yuan applies) | Yuan |
+| G1 | The sign-in token is kept in `localStorage` (`frontend/src/auth.js:89`) | Any script injected into the page can read it | **Accepted for now.** The Vercel CSP already limits scripts to the app's own origin. A cookie would be cross-site between `*.vercel.app` and `*.onrender.com`, and browsers restrict those. The proper fix is a Vercel rewrite that proxies `/api/*` to Render, then an httpOnly cookie. Only if SSM or the panel needs it | Maika / Audrey |
+| G2 | ~~The API set no security headers of its own~~ | — | **Done 2026-11-02** (`backend/security_headers.py`, 7 tests). Takes effect when this branch is deployed to Render | Backend |
+| G3 | Audit rows are append-only by convention and by revoked grants | A superuser or a bad script could still alter them | **Written, not applied:** migration 0072 (rehearsed and rolled back against live). Yuan applies. A retention purge must disable the trigger deliberately (see the migration header) | Yuan |
 | G4 | 91 local backup folders hold real data on a laptop; disk encryption **UNVERIFIED** | Laptop loss exposes SSM data and user hashes | Turn on BitLocker; list who holds copies; delete backups past the retention period in section 5 | Custodian |
 | G5 | No retention or disposal schedule exists | Data and backups kept indefinitely | Adopt section 5 and confirm with SSM | Data owner |
 | G6 | No privacy notice, breach procedure or named privacy contact | RA 10173 expectations unmet | Section 6 is the draft; fill the placeholders | Team |
@@ -96,7 +98,25 @@ legal opinion; the Data Privacy Act of 2012 (RA 10173) points are for the team a
 | Email provider (invites, resets) | Recipient address, message body | **UNVERIFIED** | **UNVERIFIED** |
 | GitHub (private repo) | Code, no data by rule 9 | Private | — |
 
-## 8. Review
+## 8. Platform checklist (tick in the dashboards; none of these could be checked from the repo)
+
+| Where | Setting | Why |
+|---|---|---|
+| Render | `APP_ENV=production` | Turns on HSTS and hides `/docs`, `/redoc`, `/openapi.json` |
+| Render | `CORS_ALLOWED_ORIGINS` = the Vercel production URL only (no localhost) | The default allows localhost |
+| Render | `FRONTEND_URL` = the Vercel URL | Invite and reset links; the app builds none without it in production |
+| Render | `JWT_SECRET_KEY` a long random string (32+ characters), different from local | Signs every session; the example file holds a placeholder |
+| Render | `MFA_ENCRYPTION_KEY` set and backed up apart from the database, before `MFA_ENABLED=true` | Without it authenticator secrets cannot be read |
+| Render | Secrets set as environment variables in the dashboard, not in the repo | `.env` is git-ignored but a render.yaml would not be |
+| Vercel | `VITE_API_URL` = the Render URL (https) | Build-time; the CSP allows any https connection |
+| Vercel | Production deploys from `Main-Final` or `Main-FE` only, preview deploys without production secrets | Previews are public URLs |
+| Supabase | Backups: plan, retention, and whether point-in-time recovery is on | Section 5 |
+| Supabase | Network restrictions and SSL enforcement on | The code already requires SSL |
+| Supabase | Region, and who holds dashboard access with MFA on their own accounts | Section 7 |
+| Supabase | Service-role and database passwords rotated when a person leaves | Access review (G7) |
+| GitHub | Repo stays private; 2FA on every member | Branch protection is not available on the free plan |
+
+## 9. Review
 
 Revisit this file each quarter, and whenever a new data source, a new role, or a new third party is added. Record
 the date and the reviewer here: `[TBD]`.

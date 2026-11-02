@@ -9,7 +9,7 @@ Main-FE merge (2026-11-02): newrepo/Main-FE 1590a97 merged into Main-BE a29d683 
 Governance (2026-11-02): docs/DATA_GOVERNANCE.md drafted on kelvin/data-governance (off kelvin/fe-merge), not pushed; owner/privacy-contact placeholders; 12 gaps listed, none fixed in code.
   Latest 4: D3 per-SKU cover in pieces, D2/BE-2 Del Monte class changes, D1 audit-log session cap, D4 range-card cache.
   Then (2026-10-28): lp.view gate on error-decomposition + /inventory/current + the /dashboard demonstration plan; lp.decide implies lp.view (permissions.IMPLIES).
-Next free migration: 0070 (0069 rollover ledger is applied to public; 0068 before it).
+Next free migration: 0073 on kelvin/data-governance (0070 and 0071 came from Main-FE, written not applied; 0072 audit_log append-only, written not applied, rehearsed 2026-11-02). Main-BE alone still shows 0070 free, so renumber if Main-BE adds a migration first.
 
 Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, frozen rows in
   local/published_snapshot_2026-10-24/ (git-ignored). Headline: MASE < 1 for 109 of 175; Tier A exceeds safety stock 749 months.

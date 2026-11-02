@@ -37,6 +37,7 @@ from backend.client_ip import RealClientIPMiddleware
 from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
+from backend.security_headers import SecurityHeadersMiddleware
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
     inventory, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
@@ -108,6 +109,8 @@ app.add_middleware(
 # CF-Connecting-IP) instead of a forwarded address the visitor can set; the
 # per-IP sign-in limits depend on it. See backend/client_ip.py.
 app.add_middleware(RealClientIPMiddleware)
+# Browser-enforced response headers (backend/security_headers.py); HSTS only where APP_ENV=production.
+app.add_middleware(SecurityHeadersMiddleware, hsts=not _SHOW_DOCS)
 # GET /sku is ~0.94 MB of JSON (2,783 rows) but ~0.057 MB gzipped, measured
 # 2026-10-07; added last so it wraps the other middleware. Only applies when
 # the client sends Accept-Encoding: gzip; bodies under 1000 bytes are left alone.
