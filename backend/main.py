@@ -38,6 +38,7 @@ from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
 from backend.security_headers import SecurityHeadersMiddleware
+from backend.startup_checks import validate_secrets
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
     inventory, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
@@ -67,6 +68,7 @@ async def lifespan(app: FastAPI):
     real engine is never touched by any request either, so checking it
     would just fail the test suite against a DB it was never going to use.
     """
+    validate_secrets()  # G8: a weak JWT_SECRET_KEY in production or a malformed MFA key stops the boot
     mailer.warn_if_frontend_url_unset()
     if get_db in app.dependency_overrides:
         logger.info("get_db is overridden (test/mock mode) — skipping startup DB connectivity check.")
