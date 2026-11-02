@@ -83,8 +83,8 @@ def assert_real_history(series: pd.Series, allow_placeholder: bool = False) -> N
     """Raise if the series carries placeholder (is_demo) months. Real months
     pass whatever their date, so SSM's real 2021-22 files replace the
     placeholder with no code change. allow_placeholder=True is for the
-    what-if preview only (scripts/preview_router_synth.py); the live router
-    never sets it."""
+    what-if preview (scripts/preview_router_synth.py) and for the runner when
+    practice_switch permits it on the practice copy: never on live."""
     marked = series.attrs.get(PLACEHOLDER_ATTR)
     if not allow_placeholder and marked and series.index.isin(list(marked)).any():
         raise ValueError(
@@ -156,7 +156,7 @@ class GlobalForecaster:
 
     def __init__(self, pool: dict, allow_placeholder: bool = False):
         self.pool = pool
-        self.allow_placeholder = allow_placeholder      # preview script only; the live router never sets it
+        self.allow_placeholder = allow_placeholder      # preview script, or practice_switch on the practice copy; never on live
         self._cache: dict[pd.Timestamp, tuple[xgb.Booster | None, int]] = {}
 
     def booster_for(self, target_month: pd.Timestamp) -> tuple[xgb.Booster | None, int]:

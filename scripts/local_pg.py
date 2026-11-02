@@ -29,6 +29,8 @@ pd_NA = pd.NA
 from pathlib import Path
 from urllib.parse import urlparse
 
+from scripts.local_pipeline_qa import TAG  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 PGBIN = Path(os.environ.get("PG_BIN", r"C:\Program Files\PostgreSQL\17\bin"))
 DATA = REPO / "local" / "pg_throwaway"
@@ -36,6 +38,15 @@ PORT = 55432
 DB = "ssm_local"
 PRACTICE_DB = "ssm_practice"
 DEFAULT_URL = f"postgresql://postgres@127.0.0.1:{PORT}/{DB}"
+# The practice copy's one difference from ssm_local: its demand view also admits the rows `local_pipeline_qa.py synth` generates,
+# so ABC, forecast, LP and close run on them. The column list is the real view's, is_demo included, so the label stays in sight of
+# analytics/forecasting/practice_switch and the guard behind it. Every other is_demo row (the retired backfill) stays out.
+PRACTICE_VIEW_SQL = f"""
+    CREATE OR REPLACE VIEW public.unilever_sku_demand_fact_real AS
+    SELECT demand_key, product_key, sku_code, calendar_month, region, quantity_sold, net_amount, _src_file, _src_sheet, is_demo, gsv
+    FROM public.unilever_sku_demand_fact
+    WHERE is_demo = false OR (is_demo = true AND _src_file = '{TAG}')
+"""
 
 
 def local_url(practice: bool = False) -> str:
@@ -84,7 +95,10 @@ def make_practice() -> None:
     r = _psql("postgres", f"CREATE DATABASE {PRACTICE_DB} TEMPLATE {DB}")
     if r.returncode != 0:
         sys.exit(f"could not make {PRACTICE_DB}: {r.stderr.strip()}")
-    print(f"{PRACTICE_DB} is a fresh copy of {DB}")
+    r = _psql(PRACTICE_DB, PRACTICE_VIEW_SQL)
+    if r.returncode != 0:
+        sys.exit(f"could not open {PRACTICE_DB}'s demand view to its generated rows: {r.stderr.strip()}")
+    print(f"{PRACTICE_DB} is a fresh copy of {DB}; its demand view also admits rows tagged {TAG}")
 
 
 def _pg_array(v):

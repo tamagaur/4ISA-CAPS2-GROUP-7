@@ -7,7 +7,7 @@ Sources: findings 5-13 of `reports/AUDIT_2026-10-23.md` (A#), 8-15 of `reports/Q
 
 **Tally.** Open at the start of 2026-10-30: 17 (7 carried in this file; 10 in `QA_PIPELINE_2026-10-30.md`, not yet in it).
 First session that day: 8 left the list (5 fixed: A11 P5-forecast-half P7 P8 P10; 2 already fixed: P4 P9; 1 not a defect: P6); one row
-added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3). On 2026-10-31 a full-suite run added T1 (a guard test failing at 4a80d41): 4 open. On 2026-11-02 T1 was fixed and M1-M4 added: 7 open (A7 C1 M1 M2 M3 M4 P3). Later that day M4 closed and M5 was added: 7 open (A7 C1 M1 M2 M3 M5 P3).** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7), a decision (M1).
+added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3). On 2026-10-31 a full-suite run added T1 (a guard test failing at 4a80d41): 4 open. On 2026-11-02 T1 was fixed and M1-M4 added: 7 open (A7 C1 M1 M2 M3 M4 P3). Later that day M4 closed and M5 was added: 7 open (A7 C1 M1 M2 M3 M5 P3). M5 fixed by Kelvin's decision: 6 open (A7 C1 M1 M2 M3 P3).** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7), a decision (M1).
 Eight client items are closed with a written limitation (L1-L8); they were not rows before.
 
 ## Open
@@ -18,7 +18,6 @@ Eight client items are closed with a written limitation (L1-L8); they were not r
 | C1 | Low | `/recommendations` on the mart path runs three statements per cycle, not two: the mart has pesos only and weeks of cover is in pieces (D3), so `_attach_avg_pieces` reads `quantity_sold` live. | The fix adds a column to `mart.planning_mart`: a migration on planning data. Out of scope, as the brief says. | **needs a migration** (next free 0070) |
 | M2 | Med | A real new sales file uploaded on the Data Management page stops at the loader's sign-off (`fingerprint_unsigned`); the page has no sign-off button, so the `transform_signoff` command printed in the log must be run. | Not built: no real new file exists to test it with. Local practice only until then. | **needs Kelvin's decision** when a real month arrives |
 | M3 | Med | `frontend/src/dataCoverage.js` `LATEST_DATA_PERIOD` is hand-set, so after a monthly run the Dashboard's default range stays at Feb 2026 and shows a banner saying so. | The frontend team's file, left alone (Kelvin, 2026-11-02). | **frontend team** |
-| M5 | Med | The practice month cannot run past the labelled rows. Generated sales are is_demo = true, so `_Real` views exclude them, `scripts/run_month.py` refuses the month, and `analytics/forecasting/router.py:50` refuses them even through a view. The Data Management panel's "Generate practice sales" therefore labels a month but cannot drive it. | Getting past it means hiding the label from the guard or changing forecast code; neither was done without a decision. | **needs Kelvin's decision** |
 | M1 | Low | Once a month after 2026-02 is loaded, `scripts/accuracy_as_served.py` stops at its check that the latest sales month equals the window end (`scripts/backtest_forecast_run.WINDOW`, hand-set to 2026-02). | It stops rather than give a wrong figure, and moving the window moves quoted figures, so that should be done on purpose. The batch does not call it; `scripts/cycle_feedback.py` scores the new month. Not reachable until a new month loads. | **needs Kelvin's decision** when a real month arrives |
 | P3 | Med-Low | After a second ABC re-run, cached `GET /abc` keeps the old classes: the cache's data version (`mart.refresh_status`) does not carry `abc_classification.computed_at`. | Adding `MAX(computed_at)` to the per-request version query costs about 23 ms a read on 75,430 rows (measured on the local copy) because no index covers it; the cheap fix is an index or a view change, i.e. a migration. Bites only on an ABC run on its own. | **needs a migration** |
 
@@ -40,6 +39,7 @@ A12 was then done as the additive field only (second session; see Closed). A13 w
 
 | ID | How | Evidence |
 |---|---|---|
+| M5 | **fixed** (Kelvin's decision; CLAUDE.md rule 2, path 2): on `ssm_practice` only, the demand view admits the generated tag and `analytics/forecasting/practice_switch.py`, from the connection alone, lets the forecast accept it. The label is not hidden. The month closed on the 2026-11-02 backup with all 709 rows still `is_demo = true`. | `tests/forecasting/test_practice_switch.py`, `reports/MONTHLY_BATCH_REHEARSAL_2026-11-02.md` |
 | T1 | **fixed**: `scripts/manuscript_figures.py` exempted from the guard test, because it reads the field from the API response to draw a figure and feeds nothing back. | `tests/backend/test_recommendation_decisions.py` |
 
 ## Closed on 2026-10-31 (Kelvin's decisions, implemented; not committed)

@@ -6,7 +6,20 @@ Written for: the team members who will run the month, or defend it.
 
 ## Changed later on 2026-11-02: read this first
 
-Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy no page reads. Because the forecast refuses such rows (`analytics/forecasting/router.py:50`), **a practice month no longer runs end to end** (`KNOWN_ISSUES.md` M5). Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup, and cannot be repeated as written. The current practice starting point is `backups/full_backup_20261102T114428Z`: 109 rows, 435,988 pieces.
+Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy no page reads except the batch panel. Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup. The current run is this one.
+
+**The practice month, labelled, end to end (run across midnight 2026-11-02/03).** Rule 2, path 2 in `CLAUDE.md`. Nothing here is a result.
+
+| Step | Outcome |
+|---|---|
+| Start | `backups/full_backup_20261102T114428Z`: 109 rows, 435,988 pieces |
+| Load | 709 generated rows, `is_demo = true`, tagged `qa_synthetic_march` (they replace that copy's 644 retired backfill rows for March) |
+| ABC, forecast, LP, marts | Exit 0 in 2 min 9 s. 185 `ok` forecasts, each marked `generated_sales_in_history`; the forecast logged the switch with database and row count |
+| Review | April plan: 121 rows, 110 ordering, 1,213,168 pieces. Forecast error withheld |
+| Close | 2026-03 `closed` by the practice approver; 110 plan rows closed |
+| After | 709 rows still `is_demo = true`, 0 with the tag and not labelled, 0 other `is_demo` rows through the view, 0 real March rows; `mart.sales_mart` holds the 709 as `generated` |
+
+It proves the month runs on labelled generated data on a local copy. It does not prove a real new monthly file runs: none has ever existed.
 
 ## What the loop is
 
@@ -38,7 +51,7 @@ python -m scripts.run_month --month 2026-03 --calendar-factor on --close --expec
 
 Take a backup before step 2 on live. If a step fails, fix it and run the same command again; finished steps are skipped. The review alone: `python -m scripts.cycle_feedback --cycle 2026-03` (per-product file in `local/cycle_feedback/`, git-ignored).
 
-To rehearse locally, prefix each command with `python -m scripts.local_pg run --practice --` and leave out `--target-public`. `scripts/local_pipeline_qa.py synth` generates labelled rows there, which the batch refuses (M5).
+To rehearse locally, prefix each command with `python -m scripts.local_pg run --practice --` and leave out `--target-public`. `scripts/local_pipeline_qa.py synth` generates labelled rows there, which this copy's demand view admits and the forecast accepts because of the connection (`analytics/forecasting/practice_switch.py`). Anywhere else they are refused.
 
 ## From the Data Management page (local only)
 

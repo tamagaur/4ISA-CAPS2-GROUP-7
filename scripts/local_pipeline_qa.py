@@ -11,9 +11,9 @@ product's own February (the same rule as scripts/rollover_scratch_test.py), tagg
 is_demo = true.
 
 `synth` runs only on ssm_practice, a copy of the local database that no page reads (python -m scripts.local_pg practice), so
-the database behind the pages never holds one. Rows flagged is_demo never pass a _Real view (rollover_scratch_test.py says
-the same), and the forecast refuses them even through a view (analytics/forecasting/router.assert_real_rows), so
-scripts/run_month.py refuses a month that holds only these rows: they label the month, they do not drive it (KNOWN_ISSUES M5).
+the database behind the pages never holds one. Rows flagged is_demo never pass a _Real view except there: that copy's demand
+view admits this tag and no other (local_pg.PRACTICE_VIEW_SQL), and the forecast accepts them only because
+analytics/forecasting/practice_switch recognises that connection. Everywhere else scripts/run_month.py and the forecast refuse them.
 Everything else is the repo's own CLI, unmodified. Local timings say nothing about Render or Supabase.
 """
 from __future__ import annotations

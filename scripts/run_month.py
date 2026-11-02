@@ -21,9 +21,10 @@ needs --expect-plan-pieces with the total that person saw (the gate pattern of s
 THE CALENDAR FACTOR has no default here. The forecast runner's default is off, the live forecast used it, and a monthly
 run that silently turned it off would move the plan (Sir Catubag's sign-off is still pending, see CLAUDE.md).
 
-SYNTHETIC SALES (scripts/local_pipeline_qa.py synth, is_demo = true) exist only in the local ssm_practice database. No real step
-reads them, so a month holding only those is refused here (KNOWN_ISSUES M5). On live this refuses to start if any are in the
-month, and it never generates any.
+SYNTHETIC SALES (scripts/local_pipeline_qa.py synth, is_demo = true) exist only in the local ssm_practice database, whose demand
+view admits them (local_pg.PRACTICE_VIEW_SQL) and whose connection alone makes the forecast accept them
+(analytics/forecasting/practice_switch). Anywhere else a month holding only those is refused here. On live this refuses to start
+if any are in the month, and it never generates any.
 """
 from __future__ import annotations
 
@@ -134,8 +135,8 @@ def preflight_refusals(month: datetime.date, facts: dict, checks: dict, slices: 
         refusals.append(f"{facts['synthetic_rows']} synthetic sales rows are in {period} on the live database")
     if not checks["sales_loaded"] and not slices:
         if facts["synthetic_rows"]:
-            refusals.append(f"{period} holds only {facts['synthetic_rows']} generated sales rows, labelled is_demo = true: the real "
-                            "steps do not read them and the forecast refuses them, so this month cannot run on them")
+            refusals.append(f"{period} holds only {facts['synthetic_rows']} generated sales rows, labelled is_demo = true: this database's "
+                            "demand view excludes them. Only the practice copy (python -m scripts.local_pg practice) runs on them")
         else:
             refusals.append(f"{period} sales are not loaded and no --slice was given to load them")
     if slices and checks["abc_run"]:

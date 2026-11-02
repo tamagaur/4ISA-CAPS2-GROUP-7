@@ -74,3 +74,25 @@ def test_the_practice_url_still_refuses_another_server(monkeypatch):
     monkeypatch.setenv("LOCAL_PG_URL", "postgresql://user:pw@aws-0.pooler.supabase.com:6543/postgres")
     with pytest.raises(SystemExit):
         local_pg.local_url(practice=True)
+
+
+def test_the_practice_view_admits_the_generated_tag_and_keeps_its_label():
+    sql = " ".join(local_pg.PRACTICE_VIEW_SQL.split())
+    assert sql.startswith("CREATE OR REPLACE VIEW public.unilever_sku_demand_fact_real AS")
+    assert f"WHERE is_demo = false OR (is_demo = true AND _src_file = '{qa.TAG}')" in sql   # not the retired backfill rows
+    assert " is_demo, " in sql.split(" FROM ")[0]                                             # the guard still sees the label
+
+
+def test_the_practice_view_goes_only_into_the_practice_copy(monkeypatch):
+    calls = []
+    monkeypatch.setattr(local_pg, "_psql", lambda db, sql=None, file=None: (calls.append((db, sql)), type("R", (), {"returncode": 0, "stderr": ""})())[1])
+    local_pg.make_practice()
+    assert [db for db, sql in calls if sql == local_pg.PRACTICE_VIEW_SQL] == ["ssm_practice"]
+
+
+def test_a_practice_copy_whose_view_cannot_open_is_refused(monkeypatch):
+    def fake(db, sql=None, file=None):
+        return type("R", (), {"returncode": 1 if sql == local_pg.PRACTICE_VIEW_SQL else 0, "stderr": "column mismatch"})()
+    monkeypatch.setattr(local_pg, "_psql", fake)
+    with pytest.raises(SystemExit, match="column mismatch"):
+        local_pg.make_practice()

@@ -264,12 +264,12 @@ def test_placeholder_mark_outside_the_series_does_not_trip():
 
 
 def test_router_default_path_is_unchanged():
-    """The flag defaults to False everywhere, the live runner never passes it, and only the preview script and the what-if simulation set it."""
+    """The flag defaults to False everywhere, the runner takes it only from practice_switch
+    (tests/forecasting/test_practice_switch.py), and only the preview script and the what-if simulation set it to a literal True."""
     import ast, inspect
     for fn in (router.route, router.rolling_one_step, router.assert_real_rows, gm.assert_real_history,
                gm.training_rows, gm.GlobalForecaster.__init__):
         assert inspect.signature(fn).parameters["allow_placeholder"].default is False
-    assert "allow_placeholder" not in (REPO / "scripts/run_baseline_forecast.py").read_text(encoding="utf-8")
 
     def passes_true(path) -> bool:          # a call site passing allow_placeholder=True (docstrings don't count)
         try:

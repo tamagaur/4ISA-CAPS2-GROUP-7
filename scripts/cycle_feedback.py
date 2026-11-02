@@ -14,6 +14,10 @@ full" says nothing about demand. tests/backend/test_recommendation_decisions.py 
 MISSING DATA. A month with no sales loaded is "not scored", never zero. In a loaded month a product with no row sold nothing
 (the Unilever rule, CLAUDE.md "Why data is missing"), and a blank quantity is left out. A month holding the rehearsal's
 generated sales says so on the first line.
+
+GENERATED SALES (hard rule 2). The forecast error is withheld, not computed, when any is_demo row is among the sales it would
+be scored on or the history behind the forecast. It reads the same _Real view as the score: the retired backfill rows in the
+base table (644 for 2026-03, never read by that view) say nothing about a real month's score.
 """
 from __future__ import annotations
 
@@ -36,6 +40,7 @@ SYNTHETIC_TAG = "qa_synthetic%%"   # scripts/local_pipeline_qa.py's _src_file on
 MONTH_LOADED_SQL = "SELECT EXISTS (SELECT 1 FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month = %(period)s)"
 # The base table: these rows are is_demo = true, so a count through a _Real view would read 0 and lose the label.
 SYNTHETIC_SQL = f"SELECT COUNT(*) FROM unilever_sku_demand_fact WHERE calendar_month = %(period)s AND _src_file LIKE '{SYNTHETIC_TAG}'"
+GENERATED_IN_SCORE_SQL = "SELECT COUNT(*) FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month <= %(period)s AND is_demo"
 FORECAST_SQL = """
     SELECT pd.sku_code, fr.forecast_value, s.actual, COALESCE(s.blanks, 0), s.product_key IS NOT NULL
     FROM forecast_result fr
@@ -61,8 +66,12 @@ RECEIPTS_SQL = """
 """
 
 
-def score(rows: list[dict], month_loaded: bool) -> dict:
-    """Forecast against sales, in pieces. Blocked (no ratio at all) when the month is not loaded."""
+def score(rows: list[dict], month_loaded: bool, generated_rows: int = 0) -> dict:
+    """Forecast against sales, in pieces. Blocked (no ratio at all) when the month is not loaded, or when generated sales
+    are in what it would be scored on: the figures that could rebuild an error are withheld with it."""
+    if generated_rows:
+        return {"status": "blocked", "reason": f"forecast error withheld: {generated_rows:,} generated sales rows are in this cycle, "
+                                               "and an error computed on generated sales is not presented"}
     if not month_loaded:
         return {"status": "blocked", "reason": "the month's sales are not loaded: not scored, and not read as zero"}
     scored = [r for r in rows if not r["blanks"]]
@@ -122,14 +131,16 @@ def read_report(cur, params: dict) -> tuple[dict, list[dict]]:
     loaded = bool(cur.fetchone()[0])
     cur.execute(SYNTHETIC_SQL, params)
     synthetic = int(cur.fetchone()[0])
+    cur.execute(GENERATED_IN_SCORE_SQL, params)
+    generated = max(int(cur.fetchone()[0]), synthetic)
     cur.execute(FORECAST_SQL, params)
     rows = [dict(zip(("sku_code", "forecast", "actual", "blanks", "has_row"), r)) for r in cur.fetchall()]
     cur.execute(DECISIONS_SQL, params)
     decisions = [dict(zip(("status", "q_i", "decided_q_i", "decision_reason", "in_plan"), r)) for r in cur.fetchall()]
     cur.execute(RECEIPTS_SQL, params)
     receipts = [dict(zip(("state", "not_visible", "n", "pieces", "overdue"), r)) for r in cur.fetchall()]
-    return ({"cycle": params["period"], "synthetic_rows": synthetic, "forecast": score(rows, loaded),
-             "decisions": summarize_decisions(decisions), "receipts": receipts}, rows if loaded else [])
+    return ({"cycle": params["period"], "synthetic_rows": synthetic, "forecast": score(rows, loaded, generated),
+             "decisions": summarize_decisions(decisions), "receipts": receipts}, rows if loaded and not generated else [])
 
 
 def save(report: dict, rows: list[dict], lines: list[str], live: bool) -> Path:

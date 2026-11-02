@@ -50,6 +50,52 @@ def test_decisions_separate_overrides_from_plain_accepts_and_count_the_reasons()
     assert result["reasons"] == [("Overstocked now", 2), ("Truck is full", 1)]
 
 
+def test_no_figure_that_could_rebuild_an_error_survives_a_generated_row():
+    result = cf.score([_row("A", 150.0, 100.0), _row("B", 50.0, 100.0)], month_loaded=True, generated_rows=1)
+    assert result["status"] == "blocked" and "generated sales" in result["reason"]
+    assert not {"wape", "bias", "forecast", "actual", "over", "under", "scored"} & set(result)
+
+
+def test_the_withheld_error_reaches_every_screen_as_the_reason():
+    # MonthlyBatchPanel.jsx prints fc.reason when fc.status is "blocked", and the same report object reaches it (--json).
+    report = {"cycle": "2026-03", "synthetic_rows": 709, "forecast": cf.score([_row("A", 150.0, 100.0)], True, 709),
+              "decisions": cf.summarize_decisions([]), "receipts": []}
+    text = "\n".join(cf.render(report))
+    assert "WAPE" not in text and "bias" not in text and "%" not in text and "generated sales" in text
+
+
+class _Cursor:
+    def __init__(self, generated, synthetic):
+        self.answers = {cf.MONTH_LOADED_SQL: [(True,)], cf.SYNTHETIC_SQL: [(synthetic,)], cf.GENERATED_IN_SCORE_SQL: [(generated,)],
+                        cf.FORECAST_SQL: [("A", 150.0, 100.0, 0, True)], cf.DECISIONS_SQL: [], cf.RECEIPTS_SQL: []}
+        self.last = None
+
+    def execute(self, sql, params=None):
+        self.last = sql
+
+    def fetchone(self):
+        return self.answers[self.last][0]
+
+    def fetchall(self):
+        return self.answers[self.last]
+
+
+def test_a_generated_row_empties_the_report_and_its_per_product_file():
+    for generated, synthetic in ((709, 709), (709, 0), (0, 709)):
+        report, rows = cf.read_report(_Cursor(generated, synthetic), {"period": "2026-03"})
+        assert report["forecast"]["status"] == "blocked" and rows == []
+
+
+def test_a_real_month_is_still_scored_despite_retired_backfill_rows_in_the_base_table():
+    # Live holds is_demo backfill rows in months a real file may yet fill. They never reach the _Real view, so they suppress nothing.
+    report, rows = cf.read_report(_Cursor(0, 0), {"period": "2026-03"})
+    assert report["forecast"]["status"] == "ok" and report["forecast"]["wape"] == 0.5 and len(rows) == 1
+
+
+def test_the_generated_check_reads_what_the_score_reads():
+    assert "_Real" in cf.GENERATED_IN_SCORE_SQL and "_Real" in cf.FORECAST_SQL and "is_demo" in cf.GENERATED_IN_SCORE_SQL
+
+
 def test_a_synthetic_month_is_labelled_on_every_report():
     lines = cf.render({"cycle": "2026-03", "synthetic_rows": 709, "forecast": cf.score([], month_loaded=True),
                        "decisions": cf.summarize_decisions([]), "receipts": []})
