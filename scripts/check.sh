@@ -5,7 +5,7 @@
 #       backend lint, frontend lint, the pinned-figure verification, the cross-endpoint invariants
 #   scripts/check.sh --full   everything above + the whole pytest suite + the frontend production build
 #
-# Skipped is not passed, with ONE exception: the 18 opt-in tests named in scripts/known_opt_in_skips.txt (whole suite only;
+# Skipped is not passed, with ONE exception: the 21 opt-in tests named in scripts/known_opt_in_skips.txt (whole suite only;
 # listed as NOT RUN, never as passed; any other skip, or a listed one skipping for a new reason, fails). If a check cannot run (a live database variable is unset, a test skips itself, node
 # modules are missing) this script FAILS and says why. It never reports green over a skipped check.
 #
@@ -45,7 +45,7 @@ pytest_strict() {
   local xml="$TMP/$label.xml"
   "$PY" -m pytest -q -p no:cacheprovider -rs --junitxml="$xml" "$@"; local rc=$?
   [ -f "$xml" ] || { echo "FAIL: pytest wrote no result file"; return 1; }
-  # only the whole suite may skip, and only the 18 named in scripts/known_opt_in_skips.txt; every other run allows none
+  # only the whole suite may skip, and only the 21 named in scripts/known_opt_in_skips.txt; every other run allows none
   local allow=""; [ "$label" = "full" ] && allow="--allow-listed"
   "$PY" scripts/check_helpers.py junit "$xml" $allow || rc=1
   return $rc
@@ -88,4 +88,4 @@ done
 echo "  total ${ELAPSED}s"
 if [ "$MODE" = "--fast" ] && [ "$ELAPSED" -gt 90 ]; then echo "  NOTE: over the 90 s target for --fast"; fi
 if [ "$FAILS" -gt 0 ]; then echo "RED: $FAILS check(s) failed"; exit 1; fi
-echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 18 opt-in tests in scripts/known_opt_in_skips.txt were NOT RUN)"
+echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 21 opt-in tests in scripts/known_opt_in_skips.txt are NOT RUN wherever their inputs are absent)"

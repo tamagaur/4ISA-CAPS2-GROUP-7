@@ -287,11 +287,21 @@ def test_qc_report_is_deterministic():
 # --- integration: real files under data/raw/ ------------------------------
 
 RAW_DIR = REPO_ROOT / "data" / "raw"
+# Invented raw files, one per family, built by tests/fixtures/extract_raw/build_fixtures.py. Each test below runs on
+# them everywhere, and on the real corpus as well wherever data/raw is present. A parser that runs here is proven on
+# inputs of the right SHAPE only: that it reads SSM's real files correctly is test_layout_regression's job (opt-in).
+FIXTURE_RAW_DIR = REPO_ROOT / "tests" / "fixtures" / "extract_raw"
+HAS_REAL_CORPUS = RAW_DIR.exists() and any(RAW_DIR.rglob("*.xlsx"))
+RAW_SOURCES = [FIXTURE_RAW_DIR] + ([RAW_DIR] if HAS_REAL_CORPUS else [])
 
 
-@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
-def test_parse_sales_register_against_real_files():
-    result = parse_sales_register()
+@pytest.fixture(params=RAW_SOURCES, ids=lambda p: "synthetic" if p == FIXTURE_RAW_DIR else "real_corpus")
+def raw_source(request) -> Path:
+    return request.param
+
+
+def test_parse_sales_register_against_real_files(raw_source):
+    result = parse_sales_register(raw_dir=raw_source)
     assert result.dfs, "expected at least one staged Sales Register sheet"
     df, outcome = result.dfs[0]
     assert isinstance(df, pd.DataFrame)
@@ -317,7 +327,7 @@ def test_parse_sales_register_against_real_files():
     assert mismatches, "expected at least one staged mismatch sheet in the real corpus"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
+@pytest.mark.skipif(not HAS_REAL_CORPUS, reason="needs the real data/raw corpus")
 def test_parse_unilever_sku_against_real_file():
     result = parse_unilever_sku()
     assert len(result.dfs) == 1, "the whole MHTML workbook is one staged sheet"
@@ -336,9 +346,24 @@ def test_parse_unilever_sku_against_real_file():
     assert ".." in outcome.period  # manifest-level range summary
 
 
-@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
-def test_parse_inventory_signoff_against_real_files():
-    result = parse_inventory_signoff()
+def test_parse_unilever_sku_on_the_synthetic_file():
+    """Same paths as the real-file test above, minus its ~24.9k-row count (a claim about the real workbook, kept there)."""
+    result = parse_unilever_sku(raw_dir=FIXTURE_RAW_DIR)
+    assert len(result.dfs) == 1, "the whole MHTML workbook is one staged sheet"
+    df, outcome = result.dfs[0]
+    assert outcome.principal == "unilever"
+    assert outcome.region == "la_union"
+    assert outcome.grain == "monthly-sku"
+    assert outcome.sheet_role == "data"
+    assert len(df) == 6
+    assert df["Product"].dtype == object or str(df["Product"].dtype) == "str"
+    assert all(isinstance(v, str) for v in df["Product"].dropna())
+    assert df["_period"].nunique() > 1
+    assert outcome.period == "2023-01..2023-03"
+
+
+def test_parse_inventory_signoff_against_real_files(raw_source):
+    result = parse_inventory_signoff(raw_dir=raw_source)
     assert result.dfs, "expected at least one staged Inventory Sign-Off sheet"
     for df, outcome in result.dfs:
         assert outcome.doc_type == "inventory_sign_off"
@@ -349,27 +374,24 @@ def test_parse_inventory_signoff_against_real_files():
             assert df["__col0__"].dtype != "float64"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
-def test_parse_sell_out_against_real_files():
-    result = parse_sell_out()
+def test_parse_sell_out_against_real_files(raw_source):
+    result = parse_sell_out(raw_dir=raw_source)
     assert result.dfs, "expected at least one staged Sell Out sheet"
     for _, outcome in result.dfs:
         assert outcome.doc_type == "sell_out"
         assert outcome.grain == "category"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
-def test_parse_purchase_order_against_real_files():
-    result = parse_purchase_order()
+def test_parse_purchase_order_against_real_files(raw_source):
+    result = parse_purchase_order(raw_dir=raw_source)
     assert result.dfs, "expected at least one staged Purchase Order sheet"
     for _, outcome in result.dfs:
         assert outcome.doc_type == "purchase_order"
         assert outcome.grain == "invoice"
 
 
-@pytest.mark.skipif(not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")), reason="data/raw/ not available")
-def test_parse_bo_rmr_gs_against_real_files():
-    result = parse_bo_rmr_gs()
+def test_parse_bo_rmr_gs_against_real_files(raw_source):
+    result = parse_bo_rmr_gs(raw_dir=raw_source)
     assert result.dfs, "expected at least one staged RMR GS/BO sheet"
     roles_seen = {outcome.sheet_role for _, outcome in result.dfs}
     # ONE PAGER = GS ∪ BO is a dedup trap — Extract must tag all three
@@ -380,18 +402,16 @@ def test_parse_bo_rmr_gs_against_real_files():
         assert outcome.status == "staged"  # none of these three roles get dropped here
 
 
-def test_all_six_families_produce_zero_unaccounted_when_combined():
+def test_all_six_families_produce_zero_unaccounted_when_combined(raw_source):
     """Sheet accountability QC gate, exercised directly (not just via the
     driver script): every scanned sheet across all families is either
     staged or explicitly rejected — never silently missing."""
-    if not RAW_DIR.exists() or not any(RAW_DIR.rglob("*.xlsx")):
-        pytest.skip("data/raw/ not available")
     all_outcomes = []
     for parse_fn in (
         parse_sales_register, parse_unilever_sku, parse_inventory_signoff,
         parse_sell_out, parse_purchase_order, parse_bo_rmr_gs,
     ):
-        all_outcomes.extend(parse_fn().outcomes)
+        all_outcomes.extend(parse_fn(raw_dir=raw_source).outcomes)
     staged = sum(1 for o in all_outcomes if o.status == "staged")
     rejected = sum(1 for o in all_outcomes if o.status == "rejected")
     assert staged + rejected == len(all_outcomes)

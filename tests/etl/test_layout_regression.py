@@ -32,7 +32,7 @@ _CLIENT_FILES = RAW.is_dir() and any(
     for f in RAW.rglob("*")
 )
 pytestmark = pytest.mark.skipif(
-    not _CLIENT_FILES, reason="data/raw client files (gitignored) not present"
+    not _CLIENT_FILES, reason="needs the real data/raw corpus"
 )
 
 
