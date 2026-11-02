@@ -102,10 +102,10 @@ const entries = {
       // The order-plan cut-off is an open question to the adviser
       // (reports/ADVISER_QUESTIONS_SIRCG.md §3, no recorded decision).
       term: 'Suitable / Not yet suitable for ordering',
-      caveat: 'Order-plan cut-off pending adviser confirmation',
+      caveat: 'Order-plan cut-off adopted by the team; not confirmed by SSM or the adviser',
       definition: 'Whether a product’s forecast is reliable enough for the order plan to use.',
       plain: 'Suitable means the forecast has been closer to actual sales than simply repeating last month’s sales. Only suitable products are put in the order plan.',
-      technical: 'MASE (forecast error score): the average absolute error on the held-back months, divided by the average month-to-month change in the product’s real sales history. Below 1 means the forecast beats that simple guess (Suitable); 1 or more, Not yet suitable. Only products scoring below 1 go into the order plan; using this cut-off for that is pending adviser confirmation. It is computed on real months only, never on sample data.',
+      technical: 'MASE (forecast error score): the average absolute error on the held-back months, divided by the average month-to-month change in the product’s real sales history. Below 1 means the forecast beats that simple guess (Suitable); 1 or more, Not yet suitable. Only products scoring below 1 go into the order plan; using this cut-off for that is a team decision, not confirmed by SSM or the adviser. It is computed on real months only, never on sample data.',
     },
     {
       // SKUForecast.jsx productAccuracy (share_of_forecast); RangeCards.jsx
@@ -129,10 +129,10 @@ const entries = {
       // 2026-10-22 (Technical Adviser, 2 Oct 2026: no unexplained jargon;
       // methods awaiting sign-off flagged).
       term: 'Calendar adjustment',
-      caveat: 'Pending adviser confirmation',
+      caveat: 'Team decision; adviser sign-off pending',
       definition: 'An adjustment for the time of year, applied to the stored forecast and shown beside it as ×factor.',
       plain: 'Each forecast is raised or lowered by how that month has usually sold compared with the months before it in earlier years. Until it is confirmed, the SKU Forecast page shows the forecast without it; the order plan uses the adjusted figure.',
-      technical: 'The factor is how the calendar month sold against the 3 months before it in earlier years, for the Unilever company total in pieces, averaged over those years (geometric mean) and moved halfway toward no change. A month with no earlier year on record is left as it is; only months before the forecast month are read. The forecast is multiplied by the factor after the model’s own checks. It is a method change pending adviser confirmation.',
+      technical: 'The factor is how the calendar month sold against the 3 months before it in earlier years, for the Unilever company total in pieces, averaged over those years (geometric mean) and moved halfway toward no change. A month with no earlier year on record is left as it is; only months before the forecast month are read. The forecast is multiplied by the factor after the model’s own checks. It is a team decision; adviser sign-off is pending.',
     },
   ],
   'reorder-planning': [
@@ -179,10 +179,10 @@ const entries = {
       // analytics/optimization/lp.py (solved in stages, PuLP);
       // scripts/run_lp.py (candidate pool: Class A, status ok, MASE < 1).
       term: 'Order plan optimizer (LP)',
-      caveat: 'Product cut-off pending adviser confirmation',
+      caveat: 'Product cut-off adopted by the team; not confirmed by SSM or the adviser',
       definition: 'The calculation that turns forecasts, stock on hand and the supplier allocation into the suggested orders.',
       plain: 'It works out how much of each top seller to order so stock gets back to its target, without going over what the supplier will allow.',
-      technical: 'A linear program (LP), a standard method for choosing quantities within limits. It orders each product up to its target stock, net of the stock on hand. If the supplier allocation cannot cover every order, SSM’s 3-week stock rule and then the order weights decide which products are cut. Only Class A products whose forecast beats a simple last-month guess are planned (that cut-off is pending adviser confirmation). Quantities are in pieces.',
+      technical: 'A linear program (LP), a standard method for choosing quantities within limits. It orders each product up to its target stock, net of the stock on hand. If the supplier allocation cannot cover every order, SSM’s 3-week stock rule and then the order weights decide which products are cut. Only Class A products whose forecast beats a simple last-month guess are planned (that cut-off is a team decision, not confirmed by SSM or the adviser). Quantities are in pieces.',
     },
     {
       // analytics/params.LP_WEIGHTS ("TEAM (asserted)", in no scribe note,

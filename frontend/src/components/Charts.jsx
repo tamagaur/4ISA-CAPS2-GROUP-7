@@ -2359,7 +2359,7 @@ export const PortfolioForecastWidget = ({
               <InfoTip label="Which SKUs are summed">
                 {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} ${tierAUnits}: `
                   + 'those whose forecasts beat a simple last-month guess (MASE below 1), the same check the reorder plan uses, '
-                  + 'a check pending adviser confirmation. '
+                  + 'a check the team adopted, not confirmed by SSM or the adviser. '
                   + `The other ${(tierACount - gatedSkuCount).toLocaleString()} are left out rather than summed on forecasts that failed `
                   + 'the check, and the plan gives them no order recommendation: their forecast did not pass, or the product '
                   + 'has too little history or no recent sales.'}
@@ -2377,7 +2377,7 @@ export const PortfolioForecastWidget = ({
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} ${tierAUnits} that beat a simple last-month guess (pending adviser confirmation)`
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} ${tierAUnits} that beat a simple last-month guess (a check the team adopted, not confirmed by SSM or the adviser)`
               : ' · planned Class A SKUs'}
             {piecesShare && ` · ${piecesShare.pct.toFixed(0)}% of all pieces sold in ${piecesShare.period}`}
           </p>

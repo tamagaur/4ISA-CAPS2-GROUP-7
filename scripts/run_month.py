@@ -19,7 +19,7 @@ its earlier ones, and the feedback report. There is no threshold for "too large"
 needs --expect-plan-pieces with the total that person saw (the gate pattern of scripts/clean_dead_skus.py).
 
 THE CALENDAR FACTOR has no default here. The forecast runner's default is off, the live forecast used it, and a monthly
-run that silently turned it off would move the plan (Sir Catubag's sign-off is still pending, see CLAUDE.md).
+run that silently turned it off would move the plan (team decision DEC-41; adviser sign-off outstanding, still pending, see CLAUDE.md).
 
 SYNTHETIC SALES (scripts/local_pipeline_qa.py synth, is_demo = true) exist only in the local ssm_practice database, whose demand
 view admits them (local_pg.PRACTICE_VIEW_SQL) and whose connection alone makes the forecast accept them

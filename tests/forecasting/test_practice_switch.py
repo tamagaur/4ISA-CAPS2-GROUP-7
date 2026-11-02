@@ -128,3 +128,23 @@ def test_only_this_module_names_the_practice_database_for_the_forecast():
     for path in ("analytics/forecasting/router.py", "analytics/forecasting/global_model.py", "scripts/run_baseline_forecast.py"):
         source = (REPO / path).read_text(encoding="utf-8")
         assert "55432" not in source and "ssm_practice" not in source
+
+
+def test_a_permitted_run_never_writes_the_per_product_accuracy_file(tmp_path, monkeypatch):
+    from scripts import run_baseline_forecast as rbf
+    path = tmp_path / "per_sku.csv"
+    monkeypatch.setattr(rbf, "PER_SKU_CSV", str(path))
+    df = pd.DataFrame({"sku_code": ["A"], "ma3_mase": [0.5]})
+    rbf._write_csv(df, labelled=True)
+    assert not path.exists()
+    path.write_text("what the last real run wrote", encoding="utf-8")
+    rbf._write_csv(df, labelled=True)
+    assert path.read_text(encoding="utf-8") == "what the last real run wrote"
+    rbf._write_csv(df)                                  # a real run still writes it
+    assert "ma3_mase" in path.read_text(encoding="utf-8")
+
+
+def test_the_runner_hands_the_switch_to_the_file_writer():
+    tree = ast.parse((REPO / "scripts/run_baseline_forecast.py").read_text(encoding="utf-8"))
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "_write_csv"]
+    assert len(calls) == 1 and [a.id for a in calls[0].args[1:]] == ["labelled"]

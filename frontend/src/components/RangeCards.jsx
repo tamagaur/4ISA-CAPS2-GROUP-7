@@ -513,7 +513,7 @@ export const ForecastErrorSummaryCard = ({
                     ? <strong>Mixed: adjusted and unadjusted</strong>
                     : <strong>Calendar-adjusted</strong>}
                 {!showingBefore && served.calendar_adjusted === 'yes'
-                  && (calendarSignoffText(calendar?.signed_off) ? ' · pending adviser confirmation' : '')}
+                  && (calendarSignoffText(calendar?.signed_off) ? ' · team decision, adviser sign-off pending' : '')}
               </p>
             </div>
             <details className="fc-read-more">

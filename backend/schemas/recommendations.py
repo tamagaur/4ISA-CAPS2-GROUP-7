@@ -145,6 +145,23 @@ class RecommendationItem(BaseModel):
     decided_by: str | None = None
 
 
+class NotPlannedItem(BaseModel):
+    """A Tier A product with no plan row in the cycle, and why. Read-only and with no order quantity on purpose: the
+    plan orders nothing for it."""
+    sku_id: str
+    product_name: str | None = None
+    # 'mase_gate' | 'insufficient_data' | 'dead'; 'other' for a product the three do not explain (none in cycle 2026-03).
+    reason: str
+    reason_text: str
+    # Pieces at the cycle's opening count, read as a plan row reads it: 0 with stock_not_in_count when the count omits
+    # the product, None with stock_blocked_reason when its cases can't be put in pieces.
+    current_stock: float | None = None
+    stock_not_in_count: bool = False
+    stock_blocked_reason: str | None = None
+    # Mean pieces a month over the 3 sales months up to the cycle's opening count (SKU_COVER_HISTORY_MONTHS; a month with no row = 0).
+    recent_monthly_pieces: float
+
+
 class RecommendationsResponse(BaseModel):
     items: list[RecommendationItem]
     count: int
@@ -187,6 +204,9 @@ class RecommendationsResponse(BaseModel):
     stock_counts: list[dict] = []
     # {principal display name: 'YYYY-MM'} — each principal's ABC run at or before the cycle month.
     tier_a_periods: dict[str, str] = {}
+    # The Tier A products of the current cycle with no plan row, whatever status, cycle or date filter the rows were
+    # asked with. None where it is not computed (preview, or no current cycle). See recommendations.not_planned.
+    not_planned: list[NotPlannedItem] | None = None
 
 
 DISMISS_REASON_MIN = 8      # Q15 (2026-10-31); measured after trimming, so spaces do not count

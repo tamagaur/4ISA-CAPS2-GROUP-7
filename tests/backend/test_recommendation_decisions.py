@@ -333,6 +333,10 @@ ALLOWED = {
     # 2026-10-28: staff dismissal requests and the recommendation's history (migration 0070). The history READS the
     # decision to show it; nothing there feeds forecasting, safety stock or the LP.
     "backend/routers/reorder_requests.py", "tests/backend/test_reorder_requests.py",
+    # 2026-11-03: comment-only migration correcting 0062's comments, and its test. The not-planned test asserts these
+    # names are absent from that field. Nothing that computes.
+    "analytics/db/migrations/0073_decision_column_comments.sql", "tests/backend/test_migrations.py",
+    "tests/backend/test_recommendations.py",
 }
 
 

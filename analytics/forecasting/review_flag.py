@@ -8,7 +8,8 @@ come from):
 
   collapse   the mean of its last 3 months is below 0.5 x the mean of its
              last 12 months (months up to M-1, counted from the first sale, a
-             month with no sales = 0; needs 12+ months since the first sale)
+             month with no sales = 0; a younger product uses the months it has,
+             and needs more of them than the 3 recent ones)
   over-run   it is in a run of 3+ over-forecast months ending at M-1: the
              model that serves it today, scored one step ahead on each of
              those months (force_bin, the holdout protocol of
@@ -62,15 +63,16 @@ def history_before(series: pd.Series, cycle: pd.Timestamp) -> pd.Series:
 
 
 def collapse_ratio(series: pd.Series, cycle: pd.Timestamp) -> float | None:
-    """mean(last 3 months) / mean(last 12 months) before `cycle`, or None
-    when there are fewer than 12 months since the first sale or the 12-month
-    mean is not positive."""
+    """mean(last 3 months) / mean(last 12 months) before `cycle`, over the
+    months the product has since its first sale. None when it has no more than
+    the 3 recent months (both means would read the same months, so there is
+    nothing to compare) or the base mean is not positive."""
     h = history_before(series, cycle)
     sold = np.flatnonzero(h.to_numpy(dtype=float) > 0)
     if not sold.size:
         return None
     h = h.iloc[int(sold[0]):]
-    if len(h) < REVIEW_COLLAPSE_BASE_MONTHS:
+    if len(h) <= REVIEW_COLLAPSE_RECENT_MONTHS:
         return None
     base = float(h.tail(REVIEW_COLLAPSE_BASE_MONTHS).mean())
     if base <= 0:

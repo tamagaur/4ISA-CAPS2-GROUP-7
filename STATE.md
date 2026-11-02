@@ -1,16 +1,20 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-02.
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-03.
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=109 pieces=435988 cycle=2026-03-01 lp_run=6
   (Unilever, t12m_new Tier A as of 2026-02; 73 rows order >0; total = sum of plan_q_i. Nothing decided yet except legacy row 4.)
 
-Main-BE: read the tip from `git log newrepo/Main-BE` (this line would lag by one commit). Test totals pinned in docs/CHAPTER4_CODE_FIGURES.json (2026-11-02, practice-month commit; check.sh --full fails on drift): 2312 passed, 18 skipped, 0 failed of 2330 with data/raw.
+Main-BE: read the tip from `git log newrepo/Main-BE` (this line would lag by one commit). Test totals pinned in docs/CHAPTER4_CODE_FIGURES.json (2026-11-03; check.sh --full fails on drift): 2322 passed, 18 skipped, 0 failed of 2340 with data/raw.
 Main-FE merge (2026-11-02): newrepo/Main-FE 1590a97 and d80f405 merged into Main-BE, pushed to Main-BE by Kelvin's instruction; check.sh --fast GREEN and the whole pytest suite passed (2166, 27 skipped: no data/raw client files, no local policy csv, opt-ins). lp.decide stays admin-only; quantity-change reason required (8+ chars).
 Governance (2026-11-02): docs/DATA_GOVERNANCE.md; roles named (team's own assignment; data owner Sir Abe has not acknowledged), retention and notice written, G2/G3/G5/G6/G7/G8 done, G4 open (backup list attached, nothing deleted), G13 handover open. G8 startup checks are on Main-BE (not deployed). G7 first review run 2026-11-02 (5 accounts, all admin, 2 to confirm, none removed); G12 answered (personal names present, 0 phone or email values in the customer, outlet, invoice and salesman fields of public or the raw files; 2,436 raw cells with a street-style word not read one by one; minimisation open); G4 table corrected (74 folders: 7 keep, 58 delete, 9 not governed, 653.81 MB; nothing deleted). Decisions never reach the forecast or safety stock; an accepted order becomes an expected receipt in the next opening stock (live holds none).
 Chapter 4 code figures (2026-11-02): docs/CHAPTER4_CODE_FIGURES.json pins route count and sign-in split, @cached GET routes, opt-in list size and the pytest totals, each with its command; scripts/check.sh fails on drift (python -m scripts.chapter_figures --write re-pins). Frozen rows behind the 51 pinned figures are tracked in docs/published_snapshot_2026-10-24/ (trimmed columns), so a clean clone runs the pinned-figure check. TC82 (rollover scratch test) passes 61 of 61 after app.users was named in five queries.
   Latest 4: D3 per-SKU cover in pieces, D2/BE-2 Del Monte class changes, D1 audit-log session cap, D4 range-card cache.
   Then (2026-10-28): lp.view gate on error-decomposition + /inventory/current + the /dashboard demonstration plan; lp.decide implies lp.view (permissions.IMPLIES).
-Next free migration: 0073. 0070 (dismissal requests + stock observations), 0071 (notification bell) and 0072 (audit_log append-only triggers) are APPLIED to public 2026-11-02 by Kelvin's go-ahead (additive: 0 rows written, audit_log 120 rows unchanged, lp_recommendation 289 unchanged; UPDATE/DELETE/TRUNCATE on app.audit_log confirmed refused). The files are on Main-BE (pushed 2026-11-02). Main-BE's own STATE.md still says 0070 is free: update it when this branch is merged.
+Next free migration: 0074. 0073 (comment-only, corrects 0062's "nothing reads it") is on Main-BE and NOT applied to public: apply it with the runner when live writes are in scope. 0070 (dismissal requests + stock observations), 0071 (notification bell) and 0072 (audit_log append-only triggers) are APPLIED to public 2026-11-02 by Kelvin's go-ahead (additive: 0 rows written, audit_log 120 rows unchanged, lp_recommendation 289 unchanged; UPDATE/DELETE/TRUNCATE on app.audit_log confirmed refused). The files are on Main-BE (pushed 2026-11-02). Main-BE's own STATE.md still says 0070 is free: update it when this branch is merged.
+
+Review flag (2026-11-03): the collapse rule no longer needs 12 months since the first sale; it uses the months a product has (more than 3). A read-only run for cycle 2026-03 gives 64 flagged of 189, 27 of the 109 planned (before: 62 and 25). Live review_flag STILL HOLDS the 62: python -m scripts.compute_review_flags --calendar-factor --write is a live write nobody has run. The plan does not read the flag.
+GET /recommendations not_planned (2026-11-03): the Tier A products with no plan row, 80 for cycle 2026-03 (66 MASE gate, 9 insufficient data, 5 dead), each with stock and recent sales, no quantity. API only; no page shows it yet.
+Dependence figures (2026-11-03), pinned in docs/CHAPTER4_CODE_FIGURES.json with their query: for the 109 planned products the 2 March count is 3.7x the 3 February count and 3.0x the 6 April count; the requirement at those levels is 1.67M and 1.54M pieces.
 
 Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, frozen rows in
   docs/published_snapshot_2026-10-24/ (tracked, trimmed to the columns the check reads). Headline: MASE < 1 for 109 of 175; Tier A exceeds safety stock 749 months.
@@ -47,6 +51,7 @@ Decided by the team, 2026-11-02 (the proponents; no external confirmation; entri
   DEC-43 Del Monte taxonomy: pre-2025 and post-2025 kept separate, no mapping
   DEC-44 the four optimisation inputs adopted as stated assumptions (NOT confirmed by SSM, see below)
   DEC-45 scripts/clean_dead_skus.py stays gated, not run before the defence
+  DEC-46 (2026-11-03) reliability gate MASE < 1 (not confirmed by SSM or the adviser; reversible by restoring the 20% MAPE gate; the safety-stock scaling assumption is NOT part of it and stays pending)
 
 Blocked (nothing below is ours to decide):
   Technical Adviser (Sir Catubag): DEC-40 Dashboard basis; safety stock from monthly sigma.

@@ -28,9 +28,9 @@ export function calendarYearsText({ years = null, years_min: min = null, years_m
 // The sign-off clause: a method change the technical adviser has not
 // approved yet (analytics.params.CALENDAR_FACTOR_SIGNED_OFF). Empty once he
 // has. Worded as the app's other open decision is (TierBasisLabel.jsx's
-// "pending adviser confirmation"): the dashboard is SSM's, so it names the
+// "team decision, adviser sign-off pending"): the dashboard is SSM's, so it names the
 // role, not the person.
-export const CALENDAR_PENDING = 'a method change pending adviser confirmation';
+export const CALENDAR_PENDING = 'a team decision, adviser sign-off pending';
 export function calendarSignoffText(signedOff) {
   return signedOff === false ? CALENDAR_PENDING : '';
 }

@@ -77,7 +77,7 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
     `calendar_totals` (calendar.company_totals) multiplies the final value,
     after the guards, by the calendar factor for `target_month`; None = no
     adjustment. The runner's default, but NOT what is live: the 2026-10-19 Forecast_Result was written with
-    the factor on (all 175 'ok' rows), pending Sir Catubag's sign-off.
+    the factor on (all 175 'ok' rows): team decision DEC-41; adviser sign-off outstanding (still pending).
     `ma3_value` stays the unadjusted benchmark either way.
 
     Guard order, first hit wins, fallback is always MA3 with the reason kept:

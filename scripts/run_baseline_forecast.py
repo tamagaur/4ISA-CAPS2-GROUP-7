@@ -363,7 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Multiply each served forecast by the company calendar factor "
                              "(analytics/forecasting/calendar.py). OFF by default (opt-in), but the live "
                              "Forecast_Result written 2026-10-19 WAS run with it (x1.0762 for March, all 175 'ok' "
-                             "rows): applied, pending Sir Catubag's sign-off. Without it the LP plans 354,975 "
+                             "rows): applied; team decision DEC-41; adviser sign-off outstanding (still pending). Without it the LP plans 354,975 "
                              "pieces instead of 424,127 (-16.3%, 70 of 107 rows change).")
     parser.add_argument("--allow-stale-abc", action="store_true", default=False,
                         help="Go on when the resolved ABC period is older than the latest real sales month. Without it "
@@ -560,7 +560,7 @@ def main():
     _pre_acceptance(df, cur, abc_period)
 
     # ---- write files ------------------------------------------------- #
-    _write_csv(df)
+    _write_csv(df, labelled)
     _write_md(df, abc_period, latest_demand_month)
 
     # ---- optional DB write ----------------------------------------- #
@@ -861,7 +861,12 @@ def _pre_acceptance(df, cur, abc_period):
         print("  *** ABC PERIOD MISMATCH - do not trust this run. ***")
 
 
-def _write_csv(df):
+def _write_csv(df, labelled: bool = False):
+    """`labelled` (practice_switch.labelled_rows_permitted): the accuracy columns are computed partly on generated sales,
+    and rule 2 forbids presenting those. The file stays what the last real run wrote."""
+    if labelled:
+        print(f"\nNot writing {PER_SKU_CSV}: this run's accuracy figures are computed on generated sales.")
+        return
     out = df.drop(columns=[c for c in ("_per_method", "_series_mean") if c in df.columns])
     os.makedirs(os.path.dirname(PER_SKU_CSV), exist_ok=True)
     out.to_csv(PER_SKU_CSV, index=False)

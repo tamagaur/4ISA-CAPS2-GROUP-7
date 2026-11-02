@@ -29,7 +29,7 @@ import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
 import { ReviewBadge } from './PendingCards';
 import { DemoOrderPlanCard } from './DemoOrderPlan';
-import { formatUnits, wholeUnits } from '../utils/formatNumber';
+import { formatCoverDays, formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import LoadError, { describeLoadError } from './ui/LoadError';
@@ -1262,7 +1262,7 @@ const ReorderRecommendations = () => {
           </td>
         )}
         <td className="table-num" title={item.daysOfCover != null ? coverNote : (item.coverReason || coverNote)}>
-          {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
+          {item.daysOfCover != null ? formatCoverDays(item.daysOfCover) : <span className="cell-empty">—</span>}
         </td>
         <td className="table-num" title={item.forecast != null ? exactPieces(item.forecast) : `No forecast for ${cycleMonth ?? 'this planning month'}`}>
           {item.forecast != null ? formatUnits(item.forecast) : <span className="cell-empty">—</span>}
@@ -1419,13 +1419,12 @@ const ReorderRecommendations = () => {
           {/* Methods that set these numbers and still await the adviser's
               sign-off, flagged where they act (Technical Adviser, 2 Oct
               2026; 2026-10-22): which products get a plan (MASE < 1,
-              analytics/params.py MASE_GATE, an open question in
-              reports/ADVISER_QUESTIONS_SIRCG.md §3) and how safety stock
+              analytics/params.py MASE_GATE, a team decision, DEC-46, not confirmed by SSM or the adviser) and how safety stock
               scales monthly variation to days (lp_model
               .safety_stock_assumption, CLAUDE.md "needs adviser ruling"). */}
           <p className="reorder-table-note">
             Only Class A products whose forecast beats a simple last-month guess are planned here (a reliability check
-            pending adviser confirmation).
+            the team adopted, not confirmed by SSM or the adviser).
             {meta?.lpModel?.safety_stock_assumption && (
               <>
                 {' '}Safety stock scales each product&apos;s month-to-month swings in sales down to the review and

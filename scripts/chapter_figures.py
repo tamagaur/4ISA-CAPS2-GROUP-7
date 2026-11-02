@@ -6,7 +6,7 @@ Pinned in docs/CHAPTER4_CODE_FIGURES.json, one entry per figure with its value a
 The accuracy figures are pinned separately (docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json); these are the rest.
 
     python -m scripts.chapter_figures --measure [ID]      print the current value of one figure (or all)
-    python -m scripts.chapter_figures --verify            measure the static figures, compare with the pin (scripts/check.sh --fast)
+    python -m scripts.chapter_figures --verify            measure the static and dependence figures, compare with the pin (scripts/check.sh --fast)
     python -m scripts.chapter_figures --verify-junit A.xml B.xml
                                                           compare the pytest totals of a whole run (invariants + suite) with the pin
                                                           (scripts/check.sh --full)
@@ -17,6 +17,10 @@ The test totals: a run on a clean clone skips all of the opt-in list; a machine 
 per-product policy table runs REAL_DATA_TESTS and skips that many fewer. The check expects exactly
 (opt-in list size) minus (REAL_DATA_TESTS that ran), so a partial environment is not a false alarm and a new unlisted
 skip is still a failure (scripts/check_helpers.py already fails it).
+
+The dependence figures (2026-11-03) read the live database, inside a READ ONLY transaction, for the plan they describe:
+how far the 109 planned products of lp_run 6 lean on the count of 2 March 2026. They are fixed to that run, so a later
+plan does not move them; DEPENDENCE_SQL is written into the pin beside them.
 
 The collected total also depends on the machine: tests/etl/test_extract.py parametrizes its six raw-file tests over
 "synthetic" and, only where data/raw exists, "real_corpus". The pin holds both totals (REAL_CORPUS_MARK counts the cases).
@@ -113,6 +117,60 @@ def measure_static() -> dict:
     return {**route_split(), "cached_get_routes": cached_get_routes(), "opt_in_list_size": opt_in_list_size()}
 
 
+# For the 109 planned products: stock in pieces at each count (a product the count omits is 0, as the LP reads it) and the
+# requirement at that stock level, need = forecast + target stock - stock, floored at 0 (scripts/run_lp.py, before the allocation).
+DEPENDENCE_SQL = """
+WITH plan AS (
+  SELECT lr.product_key, lr.rop_i, fr.forecast_value
+  FROM lp_recommendation lr
+  JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
+  WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6
+), stock AS (
+  SELECT inv._period, inv.product_key,
+         SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces
+  FROM inventory_fact_real inv
+  JOIN plan ON plan.product_key = inv.product_key
+  JOIN product_dimension pd ON pd.product_key = inv.product_key
+  WHERE inv._period IN ('2026-01', '2026-02', '2026-03')
+  GROUP BY inv._period, inv.product_key, pd.pack_size
+), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03'))
+SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces,
+       SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces
+FROM counts CROSS JOIN plan
+LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key
+GROUP BY counts.period ORDER BY counts.period
+"""
+DEPENDENCE_PRODUCTS = 109
+
+
+def dependence_figures(rows) -> dict:
+    """The four published values, as the chapter rounds them, from DEPENDENCE_SQL's rows
+    ((period, products, stock pieces, requirement pieces): the counts of 3 Feb, 2 Mar and 6 Apr 2026)."""
+    by = {r[0]: r for r in rows}
+    if {r[1] for r in rows} != {DEPENDENCE_PRODUCTS} or set(by) != {"2026-01", "2026-02", "2026-03"}:
+        raise SystemExit(f"the dependence query did not read {DEPENDENCE_PRODUCTS} products at the three counts: {rows}")
+    stock = {p: float(by[p][2]) for p in by}
+    return {"count_2mar_over_3feb": round(stock["2026-02"] / stock["2026-01"], 1),
+            "count_2mar_over_6apr": round(stock["2026-02"] / stock["2026-03"], 1),
+            "requirement_at_3feb_million_pieces": round(float(by["2026-01"][3]) / 1e6, 2),
+            "requirement_at_6apr_million_pieces": round(float(by["2026-03"][3]) / 1e6, 2)}
+
+
+def read_dependence_rows() -> list[tuple]:
+    from scripts.snapshot_published_figures import connect
+    conn, cur = connect()          # BEGIN; SET TRANSACTION READ ONLY
+    try:
+        cur.execute(DEPENDENCE_SQL)
+        return cur.fetchall()
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def measure_all() -> dict:
+    return {**measure_static(), **dependence_figures(read_dependence_rows())}
+
+
 FIGURES = [  # id, what the chapter says, equivalent plain command
     ("routes_total", "Method/path pairs the API serves", "python -m scripts.chapter_figures --measure routes_total  (= tests/backend/test_permissions.py ROUTE_COUNT)"),
     ("routes_require_sign_in", "Routes that need a signed-in user (every route but the public ones)", "python -m scripts.chapter_figures --measure routes_require_sign_in"),
@@ -129,7 +187,12 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
     ("tests_skipped_with_real_data", "Skipped tests on a machine with SSM's data/raw and the per-product policy table", "scripts/check.sh --full there"),
     ("tests_passed_clean_clone", "Passed tests on a clean clone (collected minus skipped)", "scripts/check.sh --full on a clone with no data/raw and no local/"),
     ("tests_passed_with_real_data", "Passed tests with SSM's real files present (collected minus skipped)", "scripts/check.sh --full there"),
+    ("count_2mar_over_3feb", "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 3 February count, times", "python -m scripts.chapter_figures --measure count_2mar_over_3feb"),
+    ("count_2mar_over_6apr", "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 6 April count, times", "python -m scripts.chapter_figures --measure count_2mar_over_6apr"),
+    ("requirement_at_3feb_million_pieces", "Requirement for those products at the 3 February stock level, million pieces", "python -m scripts.chapter_figures --measure requirement_at_3feb_million_pieces"),
+    ("requirement_at_6apr_million_pieces", "Requirement for those products at the 6 April stock level, million pieces", "python -m scripts.chapter_figures --measure requirement_at_6apr_million_pieces"),
 ]
+DEPENDENCE_IDS = ("count_2mar_over_3feb", "count_2mar_over_6apr", "requirement_at_3feb_million_pieces", "requirement_at_6apr_million_pieces")
 
 
 def derived(static: dict, collected: int, real_cases: int, failed: int = 0) -> dict:
@@ -143,7 +206,7 @@ def derived(static: dict, collected: int, real_cases: int, failed: int = 0) -> d
 
 
 def cmd_write(junit) -> int:
-    static = measure_static()
+    static = measure_all()
     if junit:
         j = read_junit(junit)
         collected, real_cases = j["tests_collected"], j["real_corpus_cases"]
@@ -152,10 +215,11 @@ def cmd_write(junit) -> int:
     if not real_cases:
         raise SystemExit("this machine has no data/raw, so the real_corpus cases cannot be counted: re-pin on the machine that has it")
     vals = derived(static, collected, real_cases)
-    out = {"pinned_on": "2026-11-02",
+    out = {"pinned_on": "2026-11-03",
            "rule": "Chapter 4 prints these from the code or the live system. Re-pin only on purpose, in the commit that changes the code; "
                    "the chapter must take every figure from one commit. scripts/check.sh fails on drift.",
-           "figures": [{"id": i, "what": w, "value": vals[i], "command": c} for i, w, c in FIGURES]}
+           "figures": [{"id": i, "what": w, "value": vals[i], "command": c, **({"query": " ".join(DEPENDENCE_SQL.split())} if i in DEPENDENCE_IDS else {})}
+                       for i, w, c in FIGURES]}
     PIN.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {PIN.relative_to(REPO)}: " + ", ".join(f"{i}={vals[i]}" for i, _, _ in FIGURES))
     return 0
@@ -165,9 +229,11 @@ def _pinned() -> dict:
     return {f["id"]: f["value"] for f in json.loads(PIN.read_text(encoding="utf-8"))["figures"]}
 
 
-def cmd_verify() -> int:
+def cmd_verify(live: bool = True) -> int:
+    """`live`: also read the dependence figures from the database (check.sh, which fails first when it has none). The
+    test suite passes False: it also runs on a clean clone, and tests/test_chapter_figures.py tests their arithmetic."""
     pin = _pinned()
-    now = measure_static()
+    now = measure_all() if live else measure_static()
     bad = [f"{k}: pinned {pin.get(k)!r}, measured {v!r}" for k, v in now.items() if pin.get(k) != v]
     bad += [f"{i}: not in {PIN.name}" for i, _, _ in FIGURES if i not in pin]
     if now["opt_in_list_size"] != pin.get("tests_skipped_clean_clone"):
@@ -218,7 +284,7 @@ def main() -> int:
     ap.add_argument("--junit", nargs="+", metavar="XML", help="with --write: take the collected total from these junit files")
     a = ap.parse_args()
     if a.measure:
-        now = measure_static()
+        now = measure_all()
         if a.measure == "all":
             print(json.dumps(now, indent=1))
         elif a.measure in now:

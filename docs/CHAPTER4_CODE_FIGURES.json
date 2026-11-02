@@ -1,5 +1,5 @@
 {
- "pinned_on": "2026-11-02",
+ "pinned_on": "2026-11-03",
  "rule": "Chapter 4 prints these from the code or the live system. Re-pin only on purpose, in the commit that changes the code; the chapter must take every figure from one commit. scripts/check.sh fails on drift.",
  "figures": [
   {
@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2324,
+   "value": 2334,
    "command": "python -m pytest --collect-only -q tests | tail -1  (on a clone with no data/raw)"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2330,
+   "value": 2340,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,14 +83,42 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2303,
+   "value": 2313,
    "command": "scripts/check.sh --full on a clone with no data/raw and no local/"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2312,
+   "value": 2322,
    "command": "scripts/check.sh --full there"
+  },
+  {
+   "id": "count_2mar_over_3feb",
+   "what": "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 3 February count, times",
+   "value": 3.7,
+   "command": "python -m scripts.chapter_figures --measure count_2mar_over_3feb",
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+  },
+  {
+   "id": "count_2mar_over_6apr",
+   "what": "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 6 April count, times",
+   "value": 3.0,
+   "command": "python -m scripts.chapter_figures --measure count_2mar_over_6apr",
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+  },
+  {
+   "id": "requirement_at_3feb_million_pieces",
+   "what": "Requirement for those products at the 3 February stock level, million pieces",
+   "value": 1.67,
+   "command": "python -m scripts.chapter_figures --measure requirement_at_3feb_million_pieces",
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+  },
+  {
+   "id": "requirement_at_6apr_million_pieces",
+   "what": "Requirement for those products at the 6 April stock level, million pieces",
+   "value": 1.54,
+   "command": "python -m scripts.chapter_figures --measure requirement_at_6apr_million_pieces",
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
   }
  ]
 }

@@ -25,7 +25,8 @@ from __future__ import annotations
 # accuracy", IJF 22(4). MASE < 1 means the forecast beat the in-sample
 # one-step naive forecast on average. A definition, not a tuned cut. This is
 # THE reliability gate: the LP's candidate pool (scripts/run_lp.py), the
-# dashboard's forecast card and the runner's pass rates all use it.
+# dashboard's forecast card and the runner's pass rates all use it. Adopted as
+# the plan's quality gate by the team (DEC-46), not confirmed by SSM or the adviser.
 MASE_GATE = 1.0
 
 # TEAM: the 2026-09-23 fit review's severity bands, fixed before computing
@@ -182,8 +183,8 @@ CALENDAR_FACTOR_SIGNED_OFF = False
 # Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern
 # label (analytics/forecasting/decomposition.py)
 # --------------------------------------------------------------------------- #
-# TEAM: the collapse rule, last-3-month mean < 0.5 x last-12-month mean, with
-# at least 12 months since the first sale. 0.5 is Yuan's example (2026-10-03),
+# TEAM: the collapse rule, last-3-month mean < 0.5 x last-12-month mean, on the
+# history the product has (2026-11-03: no 12-month minimum). 0.5 is Yuan's example (2026-10-03),
 # recorded in reports/diagnostics/forecast_error_business_2026-10-03/README.md
 # section 7 (kelvin/forecast-error-business b4f6b77).
 REVIEW_COLLAPSE_RATIO = 0.5

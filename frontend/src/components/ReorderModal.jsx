@@ -6,7 +6,7 @@ import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import { formatDate, formatMonth } from '../utils/formatDate';
-import { formatUnits } from '../utils/formatNumber';
+import { formatCoverDays, formatUnits } from '../utils/formatNumber';
 import { CHART_COLORS } from '../theme/colors';
 import './ReorderModal.css';
 
@@ -141,7 +141,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               <InfoTip label="About cover">{data.daysOfCover != null ? COVER_BASIS_NOTE : (data.coverReason || COVER_BASIS_NOTE)}</InfoTip>
             </span>
             <span className="reorder-grid-value">
-              {data.daysOfCover != null ? data.daysOfCover.toFixed(1) : '—'}
+              {data.daysOfCover != null ? formatCoverDays(data.daysOfCover) : '—'}
             </span>
             <span className="reorder-grid-sub">
               stock {countLabel}{coverSales ? ` ÷ sales ${coverSales}` : ''}
@@ -253,15 +253,15 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               : <> SSM&apos;s {inputs.target_weeks ?? 3}-week rule is built into each SKU&apos;s target stock as a floor.</>}
             {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}
           </p>
-          {/* Methods that set this quantity and await the adviser's sign-off
-              (Technical Adviser, 2 Oct 2026; 2026-10-22): the reliability
-              check that admits a product to the plan (MASE < 1, an open
-              question in reports/ADVISER_QUESTIONS_SIRCG.md §3), the
+          {/* Methods that set this quantity, said beside it (Technical Adviser,
+              2 Oct 2026; 2026-10-22): the reliability check that admits a
+              product to the plan (MASE < 1, a team decision, DEC-46, not
+              confirmed by SSM or the adviser), the
               safety-stock scaling (lp_model.safety_stock_assumption) and the
               weights (analytics/params.py LP_WEIGHTS, team-asserted). */}
           <p className="reorder-why-note">
             A product enters the plan only if it is Class A and its forecast beats a simple last-month guess (a
-            reliability check pending adviser confirmation).
+            reliability check the team adopted, not confirmed by SSM or the adviser).
             {lpModel?.safety_stock_assumption && (
               <>
                 {' '}Its safety stock scales month-to-month swings in sales down to the review and delivery days,

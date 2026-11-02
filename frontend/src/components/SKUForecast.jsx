@@ -2044,7 +2044,7 @@ const SKUForecast = () => {
                   <p style={{ margin: 0, maxWidth: '22rem', textAlign: 'right', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
                     {isDelMonte
                       ? 'Not in the order plan: the plan does not cover Del Monte, which has no product-level sales to forecast.'
-                      : 'Not in the order plan: only Class A products whose forecast beats a simple last-month guess (pending adviser confirmation) get an order.'}
+                      : 'Not in the order plan: only Class A products whose forecast beats a simple last-month guess (a check the team adopted, not confirmed by SSM or the adviser) get an order.'}
                   </p>
                 )}
               </div>
@@ -2970,9 +2970,8 @@ const SKUForecast = () => {
                                     last-month guess" (the verdict uses the
                                     stored value). */}
                                 {' '}This product: MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}.
-                                {/* MASE_GATE is an open question to the adviser
-                                    (reports/ADVISER_QUESTIONS_SIRCG.md §3; 2026-10-22). */}
-                                {' '}Using this check to decide which products get an order is pending adviser confirmation.
+                                {/* MASE_GATE is a team decision, DEC-46, not confirmed by SSM or the adviser. */}
+                                {' '}Using this check to decide which products get an order is a team decision, not confirmed by SSM or the adviser.
                               </InfoTip>
                             </dt>
                             <dd className={storedForecast.mase < 1 ? '' : 'forecast-howmade-warn'}>
@@ -3062,7 +3061,7 @@ const SKUForecast = () => {
                     {tierAPeriods?.Unilever && (
                       <p className="forecast-details-note">
                         Unilever&apos;s rule (Class A over the last 12 months, plus new products that are Class A over the
-                        last 3) is pending adviser confirmation.
+                        last 3) is a team decision; adviser sign-off is pending.
                       </p>
                     )}
                   </div>

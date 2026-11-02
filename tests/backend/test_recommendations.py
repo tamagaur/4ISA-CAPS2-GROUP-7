@@ -91,6 +91,7 @@ class FakeSession:
         # (recommendations._present). Off by default: the tests written
         # before them see the database they were written against.
         self.present = {"review_flag": False, "on_order": False}
+        self.not_planned_rows: list[dict] = []  # rec.not_planned's query
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
@@ -99,6 +100,8 @@ class FakeSession:
         scope = params.get("principal")
         if "to_regclass('review_flag')" in sql:
             return FakeResult([self.present])
+        if "forecast_status" in sql:  # rec.not_planned
+            return FakeResult(self.not_planned_rows)
         # backend/lp_cycle.stored_run (migration 0037). Before every
         # lp_recommendation matcher: its subquery reads that table too.
         if "to_regclass('lp_run')" in sql:
@@ -854,3 +857,44 @@ def test_a_decided_row_no_lp_run_produced_is_labelled_outside_the_plan():
     assert "lr.lp_run_key IS NOT NULL" in lp_cycle.PLAN_STATUS_SQL
     from backend.schemas.recommendations import RecommendationItem
     assert RecommendationItem.model_fields["outside_plan"].default is False
+
+
+def _not_planned_row(**overrides):
+    return {"sku_id": "NP1", "product_name": "Not planned", "principal": "unilever", "forecast_status": "ok", "mase": 1.2,
+            "current_stock": 50.0, "current_stock_cases": 5.0, "in_stock_count": True, "recent_monthly_pieces": 30.0, **overrides}
+
+
+def test_not_planned_lists_each_reason_with_stock_and_sales_and_no_quantity(session):
+    session.not_planned_rows = [
+        _not_planned_row(),
+        _not_planned_row(sku_id="NP2", forecast_status="insufficient_data", mase=None, recent_monthly_pieces=None),
+        _not_planned_row(sku_id="NP3", forecast_status="dead_sku", mase=None, current_stock=None, current_stock_cases=None,
+                         in_stock_count=False, recent_monthly_pieces=0),
+        _not_planned_row(sku_id="NP4", forecast_status="ok", mase=0.8),   # passes the gate yet has no row: not forced into a reason
+        _not_planned_row(sku_id="NP5", forecast_status=None, mase=None, current_stock=None, current_stock_cases=3.0),
+    ]
+    got = {i["sku_id"]: i for i in _get(session, "/recommendations?principal=unilever")["not_planned"]}
+    assert [got[s]["reason"] for s in ("NP1", "NP2", "NP3", "NP4", "NP5")] == ["mase_gate", "insufficient_data", "dead", "other", "other"]
+    assert got["NP1"]["current_stock"] == 50.0 and got["NP1"]["recent_monthly_pieces"] == 30.0 and got["NP1"]["reason_text"]
+    assert got["NP2"]["recent_monthly_pieces"] == 0.0
+    # Absent from a count that omits zero-stock items reads as a plan row does: 0, marked as inferred.
+    assert got["NP3"]["current_stock"] == 0.0 and got["NP3"]["stock_not_in_count"] is True
+    # In the count, but its cases can't be put in pieces: no figure, and why.
+    assert got["NP5"]["current_stock"] is None and got["NP5"]["stock_blocked_reason"]
+    for item in got.values():
+        assert not {"q_i", "plan_q_i", "recommended_q_i", "decided_q_i", "order_pieces"} & set(item)
+
+
+def test_not_planned_query_reads_the_cycles_tier_a_and_excludes_only_plan_rows(session):
+    _get(session, "/recommendations?principal=unilever&cycle=all")
+    sql, params = next((s, p) for s, p in session.calls if "forecast_status" in s)
+    assert "ac.tier = 'A'" in sql and "abc_method" not in sql
+    # A decided row no LP run produced is outside the plan, so it does not hide the product.
+    assert "NOT (l3.status <> 'pending' AND l3.lp_run_key IS NULL)" in sql
+    assert params["nop_cycle"] == "2026-03-01" and params["inv_period"] == "2026-02" and params["abc_p_unilever"] == "2026-02"
+
+
+def test_not_planned_is_absent_when_there_is_no_cycle(sample_rows):
+    session = FakeSession(sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
+                          abc_period_by_scope={"unilever": "2026-02"}, cycle_by_scope={"unilever": None, None: None})
+    assert _get(session, "/recommendations?principal=unilever")["not_planned"] is None
