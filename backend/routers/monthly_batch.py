@@ -4,7 +4,8 @@ backend.routers.monthly_batch — /batch, the Data Management page's monthly bat
 LOCAL ONLY FOR NOW. backend/main.py mounts these routes only when MONTHLY_BATCH_ENABLED is on AND the database is the
 throwaway local one (scripts/local_pg.py), so the deployed API does not have them and the page stays as it was. The routes
 check again per request: GET /batch/status says {"enabled": false} and the rest refuse with 409 batch_local_only. No route passes --target-public, so scripts.run_month could not write to
-live even if this check were wrong. Turning this on for live is a separate decision: it would also have to solve where
+live even if this check were wrong. Every step runs on ssm_practice, a copy of the local database (step_env): that is where
+generated sales live, labelled is_demo = true, so the database behind the pages holds none. Turning this on for live is a separate decision: it would also have to solve where
 uploaded files live on the server.
 
 It runs scripts, it does not reimplement them. A write is one child process of scripts.run_month, whose gates, order and
@@ -38,6 +39,7 @@ from backend.permissions import require_permission
 REPO = Path(__file__).resolve().parents[2]
 UPLOADS = REPO / "local" / "monthly_batch" / "uploads"   # git-ignored: raw files hold per-product sales (hard rule 9)
 THROWAWAY = ("127.0.0.1", 55432)                         # scripts/local_pg.py
+PRACTICE_DB = "ssm_practice"                             # scripts/local_pg.py practice
 MONTH = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
 ALLOWED_SUFFIXES = {".xlsx", ".xls", ".csv"}             # what the page's dropzone accepts
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024                     # the largest raw file on record is 34.7 MB (SSIS Jan 2021)
@@ -61,6 +63,13 @@ def enabled() -> bool:
 def require_local() -> None:
     if not enabled():
         raise ApiError(409, LOCAL_ONLY, code="batch_local_only")
+
+
+def step_env() -> dict:
+    """A step's environment: the practice database, on the throwaway server only. This process stays on the pages' database."""
+    require_local()
+    url = urlparse(os.environ["SUPABASE_DB_URL"])._replace(path=f"/{PRACTICE_DB}").geturl()
+    return {**os.environ, "SUPABASE_DB_URL": url, "SUPABASE_DIRECT_URL": url, "DATABASE_URL": url, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
 
 
 class Job:
@@ -90,11 +99,11 @@ class Job:
         code = 1
         try:
             proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                                    errors="replace", env={**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"})
+                                    errors="replace", env=step_env())
             for line in proc.stdout:
                 self.lines.append(line.rstrip())
             code = proc.wait()
-        except OSError as exc:
+        except (OSError, ApiError) as exc:
             self.lines.append(f"could not start the step: {exc}")
         with self._lock:
             self.status = "done" if code == 0 else "failed"
@@ -113,7 +122,7 @@ JOB = Job()
 def _script_json(*args: str) -> dict:
     """A read-only script's JSON answer. Its own process, so this one never imports analytics."""
     done = subprocess.run([sys.executable, "-m", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=SCRIPT_TIMEOUT_S, env={**os.environ, "PYTHONUTF8": "1"})
+                          timeout=SCRIPT_TIMEOUT_S, env=step_env())
     if done.returncode != 0:
         raise ApiError(502, "The batch status could not be read.", code="batch_status_failed")
     return json.loads(done.stdout.strip().splitlines()[-1])

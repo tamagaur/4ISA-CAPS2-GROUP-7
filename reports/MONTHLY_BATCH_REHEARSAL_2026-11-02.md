@@ -4,6 +4,10 @@ Written for: the team members who will run the month, or defend it.
 
 **Nothing here is a result.** The rehearsal ran on the throwaway local database (a copy of the 16 Oct backup, migrated to 0069) with generated March sales, so its plan is not the live plan and its accuracy figures are not accuracy. Nothing was written to live.
 
+## Changed later on 2026-11-02: read this first
+
+Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy no page reads. Because the forecast refuses such rows (`analytics/forecasting/router.py:50`), **a practice month no longer runs end to end** (`KNOWN_ISSUES.md` M5). Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup, and cannot be repeated as written. The current practice starting point is `backups/full_backup_20261102T114428Z`: 109 rows, 435,988 pieces.
+
 ## What the loop is
 
 | Signal | Reaches the next plan? | How |
@@ -34,13 +38,13 @@ python -m scripts.run_month --month 2026-03 --calendar-factor on --close --expec
 
 Take a backup before step 2 on live. If a step fails, fix it and run the same command again; finished steps are skipped. The review alone: `python -m scripts.cycle_feedback --cycle 2026-03` (per-product file in `local/cycle_feedback/`, git-ignored).
 
-To rehearse locally, prefix each command with `python -m scripts.local_pg run --`, generate the month with `scripts/local_pipeline_qa.py synth`, and leave out `--target-public`.
+To rehearse locally, prefix each command with `python -m scripts.local_pg run --practice --` and leave out `--target-public`. `scripts/local_pipeline_qa.py synth` generates labelled rows there, which the batch refuses (M5).
 
 ## From the Data Management page (local only)
 
 ```
 python -m scripts.local_pg start
-python -m scripts.local_app --reset backups/full_backup_20261016T070624Z    # a clean copy; leave out --reset to keep the current one
+python -m scripts.local_app --reset backups/full_backup_20261102T114428Z    # a clean copy; leave out --reset to keep the current one
 ```
 
 It prints one line to paste into the browser console at http://localhost:5173, which signs you in without a password. Data Management then shows four steps: add the month's data, run it, review the new plan, close it.
@@ -55,7 +59,7 @@ Clicked through in a real browser (Chrome, driven by Playwright) on a clean copy
 |---|---|
 | A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | The page has no sign-off button: run the `transform_signoff` command the log prints. Not built because there is no real new file to test it with. |
 | `LATEST_DATA_PERIOD` in `frontend/src/dataCoverage.js` is hand-set | After a run, the Dashboard's default range stays at Feb 2026 and it shows a banner saying so. The frontend's own file, left alone. |
-| The Dashboard and Reorder pages do not label practice sales | On the local copy they look real once practice sales are in. Only the Data Management panel says they are generated. Do not screenshot them as results. |
+| The Dashboard and Reorder pages never show the batch | They read `ssm_local`; every batch step runs on `ssm_practice`. Results appear only in the panel. |
 | A second month can't be practised | `local_pipeline_qa synth` only generates 2026-03. |
 | The job log is held in memory | A backend restart forgets the log, not the work. |
 

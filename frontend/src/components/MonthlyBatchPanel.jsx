@@ -164,7 +164,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
       <p className="ui-note is-info" role="note">
         <AlertTriangle size={16} aria-hidden="true" />
         <span>
-          <strong>Local practice database.</strong> This runs the real monthly steps on a local copy, not on the live system.
+          <strong>Local practice database.</strong> This runs the real monthly steps on its own copy, not on the live system. The Dashboard and Reorder pages do not read that copy, so nothing done here appears on them.
           {status.synthetic_rows > 0 && ` ${pieces(status.synthetic_rows)} sales rows this month are generated practice data, so nothing here is a real result.`}
         </span>
       </p>

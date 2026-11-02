@@ -48,7 +48,7 @@ When the month's count is **not yet loaded**, a clearly labelled projection: `co
 
 | Step | Exists | To build |
 |---|---|---|
-| Load the month's sales and count | `run_canonical_load` (idempotent); `EXPECTED_MONTHS`/`WINDOW` edited by hand | check "both loaded" before going on |
+| Load the month's sales and count | `run_canonical_load --slice principal:table:YYYY-MM` (idempotent; nothing is edited by hand) | check "both loaded" before going on |
 | Settle receipts against the new count | no | `expected_receipt` update (b) |
 | ABC, then forecast run | `orchestrate_abc`, `run_baseline_forecast --write` | refuses unless the step before finished |
 | Stock roll-forward | no (a count is only ever the next opening) | `stock_opening_v` (c) |

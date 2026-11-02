@@ -67,3 +67,8 @@ def test_nothing_in_this_report_writes():
     source = pathlib.Path(cf.__file__).read_text(encoding="utf-8")
     for word in ("INSERT INTO", "UPDATE ", "DELETE FROM", ".commit("):
         assert word not in source
+
+
+def test_generated_rows_are_counted_on_the_base_table():
+    # Labelled is_demo = true, they never pass the _Real views: a count through a view would read 0 and drop the label.
+    assert "_Real" not in cf.SYNTHETIC_SQL and "unilever_sku_demand_fact" in cf.SYNTHETIC_SQL

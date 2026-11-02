@@ -14,6 +14,13 @@ NONE_DONE = {"sales_loaded": True, "count_loaded": True, "abc_run": False, "fore
 FACTS = {"latest_sales_month": "2026-03", "synthetic_rows": 0}
 
 
+def test_a_month_holding_only_labelled_generated_rows_is_refused_and_says_why():
+    facts = {"latest_sales_month": "2026-02", "synthetic_rows": 709}
+    checks = {"sales_loaded": False, "abc_run": False}
+    refusals = rm.preflight_refusals(datetime.date(2026, 3, 1), facts, checks, [], live=False)
+    assert len(refusals) == 1 and "709 generated sales rows" in refusals[0] and "is_demo" in refusals[0]
+
+
 def _args(**kw):
     base = {"month": MONTH, "calendar_factor": "on", "slice": [], "approved_by": None, "expect_month": None,
             "target_public": False, "close": False, "expect_plan_pieces": None, "file": []}

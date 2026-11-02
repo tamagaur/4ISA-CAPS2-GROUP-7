@@ -83,6 +83,22 @@ def reset(backup: str, env: dict) -> None:
     subprocess.run([sys.executable, "-m", "scripts.local_pg", "restore", backup], cwd=REPO, check=True)
     subprocess.run([sys.executable, "-m", "scripts.run_canonical_load", "--schema", "public", "--target-public", "--schema-only"],
                    cwd=REPO, env=env, check=True)
+    make_practice_copy()
+
+
+def make_practice_copy() -> None:
+    subprocess.run([sys.executable, "-m", "scripts.local_pg", "practice"], cwd=REPO, check=True)
+
+
+def practice_copy_exists(url: str) -> bool:
+    import psycopg2
+    conn = psycopg2.connect(url)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = 'ssm_practice'")
+        return cur.fetchone() is not None
+    finally:
+        conn.close()
 
 
 def main() -> int:
@@ -97,6 +113,8 @@ def main() -> int:
     os.environ.update(env)      # this process signs the token with the same secret
     if args.reset:
         reset(args.reset, env)
+    elif not practice_copy_exists(url):
+        make_practice_copy()
     session = start_session(url)
     token = mint_token(session["user_id"], session["email"], session["role"], session["full_name"], session["session_id"])
     SESSION_FILE.parent.mkdir(exist_ok=True)

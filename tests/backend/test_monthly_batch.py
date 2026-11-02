@@ -83,6 +83,20 @@ def test_no_write_route_runs_outside_the_throwaway_database(monkeypatch, client,
     assert started == []
 
 
+def test_every_step_runs_on_the_practice_database_and_the_pages_stay_on_theirs(monkeypatch):
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
+    env = mb.step_env()
+    assert env["SUPABASE_DB_URL"] == env["SUPABASE_DIRECT_URL"] == env["DATABASE_URL"] == "postgresql://postgres@127.0.0.1:55432/ssm_practice"
+
+
+def test_no_step_can_be_pointed_anywhere_else(monkeypatch):
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LIVE)
+    with pytest.raises(ApiError):
+        mb.step_env()
+
+
 # ---- the permission --------------------------------------------------------------------------------------------------
 
 def test_without_the_permission_it_is_refused(started):
@@ -194,13 +208,26 @@ def test_a_second_job_is_refused_while_one_runs():
     assert err.value.status_code == 409
 
 
-def test_a_job_records_its_output_and_exit_code():
+def test_a_job_records_its_output_and_exit_code(monkeypatch):
     import sys
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
     job = mb.Job()
     job.start("plan", [sys.executable, "-c", "print('hello'); raise SystemExit(3)"])
     job.thread.join(30)
     state = job.state()
     assert state["status"] == "failed" and state["exit_code"] == 3 and "hello" in state["log"]
+
+
+def test_a_step_refused_outside_the_local_database_ends_the_job(monkeypatch):
+    import sys
+    monkeypatch.delenv("MONTHLY_BATCH_ENABLED", raising=False)
+    monkeypatch.setenv("SUPABASE_DB_URL", LIVE)
+    job = mb.Job()
+    job.start("plan", [sys.executable, "-c", "print('ran')"])
+    job.thread.join(30)
+    state = job.state()
+    assert state["status"] == "failed" and "ran" not in state["log"]
 
 
 # ---- resuming after a failure, and switching between a file and practice sales ---------------------------------------

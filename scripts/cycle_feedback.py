@@ -31,10 +31,11 @@ sys.path.insert(0, str(REPO))
 from scripts.close_cycle import PRINCIPAL, cycle_params, parse_cycle, transaction  # noqa: E402
 from scripts.report_target import is_live_target  # noqa: E402
 
-SYNTHETIC_TAG = "qa_synthetic%%"   # scripts/local_pipeline_qa.py's _src_file on generated sales; local database only
+SYNTHETIC_TAG = "qa_synthetic%%"   # scripts/local_pipeline_qa.py's _src_file on generated sales; practice database only
 
 MONTH_LOADED_SQL = "SELECT EXISTS (SELECT 1 FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month = %(period)s)"
-SYNTHETIC_SQL = f"SELECT COUNT(*) FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month = %(period)s AND _src_file LIKE '{SYNTHETIC_TAG}'"
+# The base table: these rows are is_demo = true, so a count through a _Real view would read 0 and lose the label.
+SYNTHETIC_SQL = f"SELECT COUNT(*) FROM unilever_sku_demand_fact WHERE calendar_month = %(period)s AND _src_file LIKE '{SYNTHETIC_TAG}'"
 FORECAST_SQL = """
     SELECT pd.sku_code, fr.forecast_value, s.actual, COALESCE(s.blanks, 0), s.product_key IS NOT NULL
     FROM forecast_result fr

@@ -19,9 +19,9 @@ Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, fro
 
 Weeks of cover: ONE basis, pieces over pieces (Dashboard 7.06, 2026-02 count, 12 months to 2026-02); the pesos basis gives 6.21. Del Monte has no pieces, so its card stays pesos.
 
-Open defects (2026-11-02): KNOWN_ISSUES.md: 7 left (A7 C1 M1 M2 M3 M4 P3). T1 fixed 2026-11-02. A13 Q15 P5b closed 2026-10-31 (committed in a29d683): dismiss reason 8-500 characters; close_cycle refuses an incomplete plan for the cycle being closed (the next cycle is only reported) (LP rows = ok forecasts with MASE < 1; 109 = 109 for 2026-03); row 4 labelled outside_plan in cycle=all. Every run_lp / close_cycle refusal now exits non-zero (2; errors 1). Eight SSM items are closed with a written limitation (L1-L8). run_lp refuses an already-planned cycle (--replan) and both runners refuse a stale ABC period (--allow-stale-abc), exit 2. check.sh --full allows only the 18 tests in scripts/known_opt_in_skips.txt to skip.
+Open defects (2026-11-02): KNOWN_ISSUES.md: 7 left (A7 C1 M1 M2 M3 M5 P3). T1 fixed, M4 closed 2026-11-02. A13 Q15 P5b closed 2026-10-31 (committed in a29d683): dismiss reason 8-500 characters; close_cycle refuses an incomplete plan for the cycle being closed (the next cycle is only reported) (LP rows = ok forecasts with MASE < 1; 109 = 109 for 2026-03); row 4 labelled outside_plan in cycle=all. Every run_lp / close_cycle refusal now exits non-zero (2; errors 1). Eight SSM items are closed with a written limitation (L1-L8). run_lp refuses an already-planned cycle (--replan) and both runners refuse a stale ABC period (--allow-stale-abc), exit 2. check.sh --full allows only the 18 tests in scripts/known_opt_in_skips.txt to skip.
 Checks: scripts/check.sh --fast (constant) / --full (everything). Skipped is a failure. Open defects: KNOWN_ISSUES.md.
-Throwaway local Postgres for destructive QA (never live): scripts/local_pg.py; 2026-10-30 results in reports/QA_PIPELINE_2026-10-30.md (local copy of the 16 Oct backup, so its plan is not the live plan).
+Throwaway local Postgres for destructive QA (never live): scripts/local_pg.py, restored 2026-11-02 from backups/full_backup_20261102T114428Z (109 rows, 435,988 pieces); 2026-10-30 results in reports/QA_PIPELINE_2026-10-30.md used the older 16 Oct backup.
 
 Manuscript figures (2026-10-31): python -m scripts.manuscript_figures (read-only; needs requirements-figures.txt) writes
   17 Chapter 4 figures to reports/figures/, the number map and captions to reports/figures/FIGURES.md, and Tables 4.2.19,
@@ -37,7 +37,8 @@ Monthly batch (2026-11-02, branch kelvin/monthly-batch, not pushed): python -m s
   marts, review, then a separate --close) and python -m scripts.cycle_feedback (read-only). Rehearsed on the local Postgres only, with generated
   March sales: reports/MONTHLY_BATCH_REHEARSAL_2026-11-02.md. Never run on live; the real load step has not run as a write. Live plan unchanged.
   Data Management page (local only): python -m scripts.local_app signs in without a password on the throwaway database and shows the batch
-  (backend/routers/monthly_batch.py, off unless MONTHLY_BATCH_ENABLED and 127.0.0.1:55432). Deployed login unchanged.
+  (backend/routers/monthly_batch.py, mounted only when MONTHLY_BATCH_ENABLED and 127.0.0.1:55432, so the deployed API stays at the pinned 84 routes). Deployed login unchanged.
+  Generated sales are is_demo = true and only in the local ssm_practice copy (no page reads it). The forecast refuses them, so a practice month stops: KNOWN_ISSUES M5, decision open.
 Forecast run (2026-10-30): writes its own cycle only; it no longer deletes other cycles' rows (own-cycle strays are flagged in model_params.retired). Tasks 2-5 of the rollover-hardening prompt: unresolved; neither the prompt nor that session report can be found (Kelvin, 2026-11-02), so what they covered is unknown.
 
 Blocked (nothing below is ours to decide):
