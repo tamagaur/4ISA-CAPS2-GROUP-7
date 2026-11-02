@@ -75,22 +75,25 @@ const ForgotPassword = () => {
                   and the warning above the box says it in one sentence. */}
               <form onSubmit={handleSubmit} className="login-form" noValidate>
                 {error && <div id="forgot-email-error" className="error-message" role="alert">{error}</div>}
-                <div className="input-group">
-                  <Mail className="input-icon" aria-hidden="true" />
-                  <input
-                    ref={emailRef}
-                    type="email"
-                    placeholder="Email address"
-                    aria-label="Email address"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (error) { setError(''); setEmailWrong(false); }
-                    }}
-                    aria-invalid={emailWrong || undefined}
-                    aria-describedby={error ? 'forgot-email-error' : undefined}
-                  />
+                <div className="login-field">
+                  <label htmlFor="forgot-email">Email address</label>
+                  <div className="input-group">
+                    <Mail className="input-icon" aria-hidden="true" />
+                    <input
+                      id="forgot-email"
+                      ref={emailRef}
+                      type="email"
+                      placeholder="Enter your email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (error) { setError(''); setEmailWrong(false); }
+                      }}
+                      aria-invalid={emailWrong || undefined}
+                      aria-describedby={error ? 'forgot-email-error' : undefined}
+                    />
+                  </div>
                 </div>
 
                 <button type="submit" className={`submit-btn ${isSubmitting ? 'submitting' : ''}`} disabled={isSubmitting}>

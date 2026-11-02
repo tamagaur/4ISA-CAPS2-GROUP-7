@@ -126,18 +126,35 @@ class LinkInfo(BaseModel):
     expires_at: datetime.datetime
 
 
+def _fits_bcrypt(value: str) -> str:
+    if len(value.encode("utf-8")) > PASSWORD_MAX_BYTES:
+        raise ValueError(
+            f"Password must be at most {PASSWORD_MAX_BYTES} bytes "
+            f"(about {PASSWORD_MAX_BYTES} characters)."
+        )
+    return value
+
+
 class SetPasswordRequest(TokenRequest):
     password: str = Field(min_length=PASSWORD_MIN_LENGTH)
 
     @field_validator("password")
     @classmethod
-    def _fits_bcrypt(cls, value: str) -> str:
-        if len(value.encode("utf-8")) > PASSWORD_MAX_BYTES:
-            raise ValueError(
-                f"Password must be at most {PASSWORD_MAX_BYTES} bytes "
-                f"(about {PASSWORD_MAX_BYTES} characters)."
-            )
-        return value
+    def _password_fits(cls, value: str) -> str:
+        return _fits_bcrypt(value)
+
+
+class ChangePasswordRequest(BaseModel):
+    """POST /auth/change-password: the signed-in person's own password. The
+    current one is checked first, so an unattended signed-in browser can't
+    be used to take the account over."""
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(min_length=PASSWORD_MIN_LENGTH)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_fits(cls, value: str) -> str:
+        return _fits_bcrypt(value)
 
 
 class ForgotPasswordRequest(BaseModel):

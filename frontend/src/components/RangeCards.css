@@ -28,7 +28,7 @@
 }
 
 .range-stat-label {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -55,7 +55,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.45;
   color: var(--color-text-body);
 }
@@ -68,7 +68,7 @@
 .range-note,
 .range-blocked {
   margin: 0 0 12px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.45;
   color: var(--color-text-body);
 }
@@ -79,7 +79,7 @@
 
 .range-source {
   margin: 8px 0 0;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-subtle);
 }
 
@@ -91,7 +91,7 @@
   padding: 0;
   border: none;
   background: none;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--color-brand-primary);
   cursor: pointer;
@@ -114,7 +114,7 @@
 
 .range-list-status {
   margin: 16px 0;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-muted);
 }
 
@@ -125,7 +125,7 @@
   background-color: var(--color-surface-raised);
   border-left: 3px solid var(--color-slate-400);
   border-radius: 8px;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   line-height: 1.45;
 }
@@ -144,7 +144,7 @@
   gap: 12px;
   padding: 7px 0;
   border-bottom: 1px solid var(--color-border);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .range-product-list li:last-child {
@@ -160,7 +160,7 @@
 /* Idle stock: the name with a muted second line (never sold / last sold). */
 .range-list-title {
   margin: 4px 0 2px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -295,9 +295,91 @@
   color: var(--color-forecast);
 }
 
+/* The miss bands between the lines (2026-10-19): a tinted block, as the
+   plot draws them at 20%. */
+.fc-legend-band {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+  opacity: 0.35;
+}
+
+/* Every view's key in one grid cell, only the current one visible: the cell
+   is as tall and as wide as the largest key (Lines, four entries), so the
+   header row holds its height and the toggle keeps its place whatever the
+   view. A hidden key is out of the accessibility tree too (visibility). */
+.fc-legend-stack {
+  display: grid;
+}
+
+.fc-legend-stack > .fc-legend {
+  grid-area: 1 / 1;
+  flex-wrap: wrap;
+}
+
+.fc-legend-stack > .fc-legend.is-reserved {
+  visibility: hidden;
+}
+
+/* Which forecasts the error card scores (2026-10-19): the calendar-adjusted
+   run or the same months before the adjustment, their two headline misses
+   side by side, and the switch between them. A quiet violet rule, the
+   forecast's colour, as on the forecast card's own note. */
+.fc-basis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-forecast, #8866E8);
+  border-radius: 0 10px 10px 0;
+  background: var(--color-forecast-bg, #EEE9FC);
+}
+
+.fc-basis-note,
+.fc-basis-compare {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.fc-basis-compare strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The "Monthly miss" view's bars in the key: a short solid bar. */
+.fc-legend-bar {
+  display: inline-block;
+  width: 10px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* Tall enough for the two-line month ticks and the axis title under them. */
 .fc-chart {
   width: 100%;
-  height: 240px;
+  height: 270px;
+}
+
+/* A miss total's share of the range's sales, under its pesos. */
+.fc-miss-share {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.fc-miss-share .info-tip {
+  margin-left: 0;
+}
+
+.fc-miss-share-trigger {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 
 /* The Table view takes the chart's place at the chart's height. */
@@ -341,7 +423,7 @@
 }
 
 .fc-miss-name {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -429,4 +511,573 @@
   .fc-miss-value {
     font-size: 22px;
   }
+}
+
+/* The top-seller changes' summary (2026-10-19): its counts and totals in
+   bold, so the sentence scans. */
+.range-change-summary strong {
+  font-weight: 700;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Stock with no sale (IdleStockCard, 2026-10-21) ─────────────────────── */
+/* Two KPI blocks, each its own soft panel; side by side when each has about
+   200px, stacked below that (a narrow card, a phone). */
+.idle-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.idle-kpis .range-stat {
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid #EDF0F4;
+  border-radius: 10px;
+  background: #F9FAFB;
+}
+
+.idle-kpis .range-stat-value {
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+.idle-kpis .range-stat-sub {
+  font-size: var(--text-micro);
+  line-height: 1.45;
+}
+
+/* The earlier count, one quiet line under the blocks. */
+.idle-prior {
+  margin: 0 0 14px;
+  padding: 7px 12px;
+  border-left: 2px solid var(--color-border-strong);
+  background: #FBFBFC;
+  border-radius: 0 6px 6px 0;
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.idle-prior strong {
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+/* Largest by stock value: a ranked list, 01-05, value at the right. */
+.idle-rank-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.idle-rank-list li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  margin: 0 -8px;
+  padding: 8px;
+  border-bottom: 1px solid #EEF1F4;
+  border-radius: 6px;
+  transition: background-color 0.12s;
+}
+
+.idle-rank-list li:last-child {
+  border-bottom: none;
+}
+
+.idle-rank-list li:hover {
+  background-color: #FAFBFC;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .idle-rank-list li {
+    transition: none;
+  }
+}
+
+.idle-rank-num {
+  align-self: start;
+  padding-top: 1px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.idle-rank-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* A long name wraps to two lines and is cut there; its title attribute
+   (ProductName) carries the full name. */
+.idle-rank-name .product-name-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.idle-rank-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  font-size: 11.5px;
+  color: var(--color-text-subtle);
+}
+
+.idle-rank-code {
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.idle-rank-code + .idle-rank-status::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--color-text-subtle);
+}
+
+.idle-rank-status {
+  color: var(--color-text-muted);
+}
+
+.idle-rank-status.is-never {
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.idle-rank-value {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* No purchase price: said in words, quieter than a figure. */
+.idle-rank-value.is-missing {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-subtle);
+}
+
+/* ── Forecast accuracy card, mockup pass (2026-10-21) ─────────────────── */
+/* How to read this: one plain sentence, then which forecasts are scored,
+   its switch and the pending-confirmation notice; the method one click
+   down (<details>). */
+.fc-read {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #E4DCFB;
+  border-radius: 12px;
+  background: #F7F4FE;
+}
+
+.fc-read-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.fc-read-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-body);
+}
+
+.fc-read-method {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid #E4DCFB;
+}
+
+.fc-read-method-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.fc-read-status {
+  flex: 1 1 220px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.fc-read-status strong {
+  color: var(--color-text-body);
+}
+
+.fc-read-more summary {
+  width: fit-content;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #5B3FC4;
+  cursor: pointer;
+}
+
+.fc-read-more summary:focus-visible {
+  outline: 2px solid var(--color-forecast, #8866E8);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.fc-read-more p {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-text-body);
+}
+
+/* Lines / Monthly miss / Table: the active view in navy with white text
+   (the forecast card's Chart / Table does the same, Charts.css). */
+.fc-chart-tools .chart-view-toggle {
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background-color: var(--color-surface);
+}
+
+.fc-chart-tools .chart-view-toggle button {
+  padding: 0.3rem 0.75rem;
+}
+
+.fc-chart-tools .chart-view-toggle button.active {
+  background-color: var(--color-text);
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+.fc-chart-tools .chart-view-toggle button:focus-visible {
+  outline: 2px solid var(--color-forecast, #8866E8);
+  outline-offset: 2px;
+}
+
+/* The hover: the month, then label | value rows. */
+.fc-tooltip {
+  min-width: 220px;
+  padding: 10px 12px;
+}
+
+.fc-tooltip-month {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.fc-tooltip-rows {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.fc-tooltip-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12.5px;
+}
+
+.fc-tooltip-rows dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.fc-tooltip-rows dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fc-tooltip-share {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.fc-tooltip-status.is-high { color: #B42340; }
+.fc-tooltip-status.is-low { color: var(--color-miss-too-low); }
+.fc-tooltip-status.is-exact { color: var(--color-text-body); }
+
+.fc-tooltip-exact {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A line's swatch: solid for sales, dashed for the forecast. */
+.fc-tip-swatch {
+  width: 14px;
+  height: 0;
+  border-top: 3px solid var(--fc-swatch);
+  border-radius: 2px;
+}
+
+.fc-tip-swatch.is-dashed {
+  height: 3px;
+  border-top: none;
+  background: repeating-linear-gradient(90deg, var(--fc-swatch) 0 4px, transparent 4px 7px);
+}
+
+/* The two miss cards: coral up, teal down, the same height side by side
+   (the grid stretches both). */
+.fc-miss-card {
+  gap: 6px;
+  padding: 16px 18px;
+}
+
+.fc-miss-card.is-high {
+  border-color: #FAD3DA;
+  background: #FFF5F7;
+  --fc-tone: #B42340;
+  --fc-tone-bar: var(--color-miss-too-high);
+  --fc-tone-soft: #FDE3E8;
+}
+
+.fc-miss-card.is-low {
+  border-color: #C9ECEF;
+  background: #F2FBFC;
+  --fc-tone: var(--color-miss-too-low);
+  /* The chart's "too low" colour, not the actual line's teal (2026-10-24). */
+  --fc-tone-bar: var(--color-miss-too-low);
+  --fc-tone-soft: #D6F2F5;
+}
+
+.fc-miss-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fc-miss-card .fc-miss-name {
+  color: var(--fc-tone, var(--color-text-muted));
+}
+
+.fc-miss-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: var(--fc-tone-soft, var(--color-surface-sunken));
+  color: var(--fc-tone, var(--color-text-muted));
+}
+
+.fc-miss-card .fc-miss-value {
+  font-size: 28px;
+}
+
+.fc-miss-card .fc-miss-share {
+  font-size: 12.5px;
+  color: var(--color-text-body);
+}
+
+.fc-miss-card .fc-miss-track {
+  margin-top: 6px;
+  background-color: rgba(16, 24, 40, 0.07);
+}
+
+.fc-miss-card .fc-miss-track span {
+  background-color: var(--fc-tone-bar, var(--color-text-muted));
+  opacity: 1;
+}
+
+/* The repeated-miss alert: amber, a warning icon, the count first. */
+.fc-action {
+  transition: background-color 0.12s, border-color 0.12s;
+}
+
+.fc-action-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.fc-action-alert {
+  justify-content: flex-start;
+  border-color: #F6DDA9;
+}
+
+.fc-action-alert strong {
+  color: #7A4A06;
+}
+
+.fc-action-icon {
+  flex: none;
+  color: #C27803;
+}
+
+.fc-action-alert:hover {
+  background-color: #FCEFD2;
+}
+
+/* The category row: white, a hairline, the arrow at the right. */
+.fc-action.fc-action-quiet:hover {
+  background-color: var(--color-surface-raised);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fc-action {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .fc-read {
+    padding: 12px 14px;
+  }
+
+  .fc-miss-card .fc-miss-value {
+    font-size: 24px;
+  }
+
+  .fc-tooltip {
+    min-width: 0;
+  }
+}
+
+/* ── Shorter, to match the forecast card beside it (Audrey, 2026-10-21) ── */
+/* Every section kept; only the space around them is tighter: the gaps, the
+   panels' padding, the view switch beside the chart's title with the key on
+   its own row, the chart 30px shorter, and the misses' heading and its
+   question on one line. Placed last, so these win over the rules above. */
+.fc-card {
+  gap: 12px;
+}
+
+.fc-read {
+  gap: 4px;
+  padding: 12px 14px;
+}
+
+.fc-read-method {
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 8px;
+}
+
+.fc-chart-block {
+  gap: 6px;
+}
+
+.fc-chart {
+  height: 240px;
+}
+
+.fc-misses {
+  gap: 8px;
+  padding-top: 0;
+}
+
+.fc-misses-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.fc-misses-head .section-lede {
+  margin: 0;
+}
+
+.fc-miss-cards {
+  gap: 10px;
+}
+
+.fc-miss-card {
+  gap: 3px;
+  padding: 12px 14px;
+}
+
+.fc-miss-card .fc-miss-value {
+  font-size: 24px;
+}
+
+.fc-miss-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.fc-miss-card .fc-miss-track {
+  margin-top: 4px;
+}
+
+.fc-action {
+  padding: 9px 14px;
+}
+
+.fc-action.fc-action-quiet {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .fc-chart {
+    height: 200px;
+  }
+}
+
+/* The idle card's next step (2026-10-22): one plain line between the
+   figures and the ranked list, in the card's own muted voice. */
+.idle-next-step {
+  margin: 0 0 14px;
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.idle-next-step strong {
+  font-weight: 600;
+}
+
+/* A product's class before and now (ClassChanges showClassMove, the ABC page). */
+.class-move {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 10px;
+  color: var(--color-text-subtle);
+}
+
+.class-move-sides {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.class-move-none {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--color-text-subtle);
+  white-space: nowrap;
 }

@@ -1,7 +1,7 @@
 /* Which ABC run the tiers come from — one line, identical on every page. */
 .tier-basis-label {
   margin: 0.25rem 0 0.75rem;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--text-muted, #64748b);
 }
 
@@ -16,11 +16,11 @@
   opacity: 0.55;
 }
 .tier-chip-age {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 400;
 }
 .tier-chip-stale {
-  font-size: 0.62rem;
+  font-size: 0.79rem;
   font-weight: 600;
   text-transform: uppercase;
   padding: 0 0.3rem;

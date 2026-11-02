@@ -7,8 +7,8 @@
 //   sales months   model_params.method                label
 //   under 3        trailing_average (provisional)     Provisional average
 //   3-11           ma3                                3-month moving average
-//   12-23          tsb                                TSB
-//   24 or more     xgb_ma3_avg                        XGBoost + MA3 average
+//   12-23          tsb                                Method for products that sell irregularly (TSB)
+//   24 or more     xgb_ma3_avg                        Average of a trained model and the 3-month average (XGBoost + MA3)
 //
 // Two more cases the runner can write: zero_no_order (no sale in the last 6
 // months, so the plan orders nothing), and a fallback, where a TSB/XGBoost
@@ -18,10 +18,12 @@
 // Labels name the model and nothing more. On real data the challengers TIE
 // with MA3, so no label here may say or imply that one is more accurate.
 
+// Plain words first, the method's short name in brackets (Technical
+// Adviser, 2 Oct 2026: no unexplained jargon; 2026-10-22).
 const METHOD_LABELS = {
   ma3: '3-month moving average',
-  tsb: 'TSB',
-  xgb_ma3_avg: 'XGBoost + MA3 average',
+  tsb: 'Method for products that sell irregularly (TSB)',
+  xgb_ma3_avg: 'Average of a trained model and the 3-month average (XGBoost + MA3)',
 };
 
 // What each model does, for a reader who doesn't know its name (the
@@ -90,12 +92,41 @@ export function describeServedModel(modelParams, status) {
       fallback: true,
     };
   }
-  return {
+  return withCalendar({
     kind: 'forecast',
     label: METHOD_LABELS[method] ?? null,
     plain: METHOD_PLAIN[method] ?? null,
     recomputable: method === 'ma3',
     fallback: false,
+  }, params);
+}
+
+// A served forecast multiplied by the company calendar factor (model_params
+// .calendar_factor, run_baseline_forecast.py --calendar-factor, 2026-10-19)
+// does know the time of year, whatever its model: `season` says so first,
+// then what the model does on its own; `short` says the number is adjusted.
+// The number is no longer the model's own, so it can't be recomputed in the
+// browser either (`recomputable`).
+function withCalendar(served, params) {
+  if (params.calendar_factor == null || !served.plain) return served;
+  const factor = Number(params.calendar_factor);
+  const years = params.calendar_years;
+  const pct = (factor - 1) * 100;
+  const adjust = `×${factor.toFixed(4)} (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)}%)`;
+  const own = served.plain.season
+    ? served.plain.season.charAt(0).toLowerCase() + served.plain.season.slice(1).replace(': ', ' — ')
+    : null;
+  return {
+    ...served,
+    recomputable: false,
+    calendar: { factor, years: years ?? null, before: params.value_before_calendar ?? null },
+    plain: {
+      ...served.plain,
+      short: `${served.plain.short}, adjusted for the month`,
+      season: `Yes, through the calendar adjustment: ${adjust}, how this month has sold against the 3 months before `
+        + `it${years != null ? ` in ${years} earlier ${years === 1 ? 'year' : 'years'}` : ''} (company total).`
+        + `${own ? ` The model on its own: ${own}.` : ''}`,
+    },
   };
 }
 
@@ -106,7 +137,7 @@ export function describeServedModel(modelParams, status) {
 // stored, never guessed at — callers keep the raw string in a tooltip.
 const wholeUnits = (value) => Math.round(Number(value)).toLocaleString();
 const FALLBACK_REASONS = [
-  [/^above_historical_max: (\S+) > (\S+)$/, (value, max) => `the model's value (${wholeUnits(value)}) was above this SKU's highest month (${wholeUnits(max)})`],
+  [/^above_historical_max: (\S+) > (\S+)$/, (value, max) => `the model's value (${wholeUnits(value)}) was above this product's highest month (${wholeUnits(max)})`],
   [/^below_zero: (\S+)$/, (value) => `the model's value (${wholeUnits(value)}) was below zero`],
   [/^xgb_unavailable: (.+)$/, (detail) => `XGBoost wasn't available (${detail})`],
   [/^xgb_no_forecast: (.+)$/, (detail) => `XGBoost produced no forecast (${detail})`],

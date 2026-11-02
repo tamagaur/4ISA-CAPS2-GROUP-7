@@ -5,6 +5,7 @@
 // import() caches each module after its first call.
 export const pageLoaders = {
   dashboard: () => import('./components/Dashboard'),
+  dataDictionary: () => import('./components/DataDictionary'),
   skuManagement: () => import('./components/SKUManagement'),
   abc: () => import('./components/ABCClassification'),
   forecast: () => import('./components/SKUForecast'),

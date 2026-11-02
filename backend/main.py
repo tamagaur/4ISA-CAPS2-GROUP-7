@@ -31,6 +31,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from backend import mailer
 from backend.api_errors import ApiError, api_error_handler
 from backend.client_ip import RealClientIPMiddleware
 from backend.error_redaction import validation_error_handler
@@ -38,7 +39,8 @@ from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
-    inventory, pareto, permissions, policy_comparison, recommendations, reorder_approval, segment, sku, two_factor, users,
+    inventory, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
+    segment, sku, two_factor, users,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,7 @@ async def lifespan(app: FastAPI):
     real engine is never touched by any request either, so checking it
     would just fail the test suite against a DB it was never going to use.
     """
+    mailer.warn_if_frontend_url_unset()
     if get_db in app.dependency_overrides:
         logger.info("get_db is overridden (test/mock mode) — skipping startup DB connectivity check.")
     else:
@@ -124,6 +127,8 @@ app.include_router(inventory.router)
 app.include_router(forecast.router)
 app.include_router(recommendations.router)
 app.include_router(reorder_approval.router)
+app.include_router(reorder_requests.router)
+app.include_router(notifications.router)  # the bell (migration 0071, 2026-10-28)
 app.include_router(abc.router)
 app.include_router(dashboard.router)
 app.include_router(dashboard_range.router)

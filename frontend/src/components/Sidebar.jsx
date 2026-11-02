@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  List, 
+  BookOpen,
   Layers, 
+  Package,
+  Database,
   TrendingUp,
   RotateCcw,
-  Upload,
   LogOut,
   X,
   ClipboardList,
@@ -16,7 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { logout, getCurrentUser, API_URL } from '../auth';
-import { getMfaStatus } from '../api/mfa';
+import { getMfaStatus, MFA_STATUS_EVENT } from '../api/mfa';
 import { usePermissions } from '../permissions/context';
 import { permissionForPath } from '../permissions/keys';
 import Modal from './Modal';
@@ -33,36 +34,42 @@ const getInitials = (name) => {
   return (first + last).toUpperCase();
 };
 
-// Grouped by what a person comes to do (UI pass, 2026-10-08): the overview,
-// the analysis pages, the inventory pages, then administration. Routes and
-// the permission each one needs are unchanged.
+// Navigation groups follow the sidebar reference: dashboard first, then
+// inventory operations, analytics, and data governance. Routes and
+// permissions are unchanged.
 const navSections = [
   {
-    label: 'Overview',
+    label: null,
     items: [
       { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
     ],
   },
   {
-    label: 'Analytics',
+    label: 'Inventory Operations',
+    items: [
+      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
+      { name: 'SKU Management', icon: Package, path: '/sku-management' },
+      { name: 'ABC Classification', icon: Layers, path: '/abc' },
+    ],
+  },
+  {
+    label: 'Analytics & Forecasting',
     items: [
       { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
       { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
     ],
   },
   {
-    label: 'Inventory',
+    label: 'Data & Governance',
     items: [
-      { name: 'SKU Management', icon: List, path: '/sku-management' },
-      { name: 'ABC Classification', icon: Layers, path: '/abc' },
-      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
+      { name: 'Reference Guide', icon: BookOpen, path: '/data-dictionary' },
+      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
-      { name: 'Data Management', icon: Upload, path: '/upload' },
+      { name: 'Data Management', icon: Database, path: '/upload' },
       { name: 'User Management', icon: Users, path: '/users' },
     ],
   },
@@ -70,7 +77,7 @@ const navSections = [
 
 const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SERVER ONLINE', offline: 'SERVER OFFLINE' };
 
-const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
+const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
 
   // Real backend reachability, re-checked every minute. Pings /status, not
   // /health (same check): ad blockers' EasyPrivacy list blocks
@@ -110,7 +117,13 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
     getMfaStatus()
       .then((status) => { if (!cancelled) setMfaStatus(status); })
       .catch(() => { if (!cancelled) setMfaStatus(null); });
-    return () => { cancelled = true; };
+    // A change made from the My profile page's copy of the dialog.
+    const onStatus = (event) => setMfaStatus(event.detail);
+    window.addEventListener(MFA_STATUS_EVENT, onStatus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(MFA_STATUS_EVENT, onStatus);
+    };
   }, []);
   const securityState = mfaStatus?.available ? (mfaStatus.enabled ? 'protected' : 'pending') : null;
   const currentUser = getCurrentUser();
@@ -185,9 +198,11 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
 
               return (
                 <div className="sidebar-nav-section" key={section.label}>
-                  <div className="sidebar-modules-header">
-                    <span className="modules-title">{section.label.toUpperCase()}</span>
-                  </div>
+                  {section.label && (
+                    <div className="sidebar-modules-header">
+                      <span className="modules-title">{section.label.toUpperCase()}</span>
+                    </div>
+                  )}
                   {visibleItems.map((item) => (
                     <NavLink
                       key={item.name}
@@ -288,7 +303,7 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt, currentMonth }) => {
               </button>
             </div>
             <div className="logout-modal-body">
-              <p>Are you sure you want to log out of <strong>SAN2 Inventory DSS</strong>?</p>
+              <p>Are you sure you want to log out of <strong>SAN2 | SSM Decision Support Dashboard</strong>?</p>
             </div>
             <div className="logout-modal-footer">
               <button className="logout-cancel-btn" onClick={() => setShowLogoutModal(false)}>

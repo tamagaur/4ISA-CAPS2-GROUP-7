@@ -53,7 +53,7 @@
 }
 
 .reorder-modal-subtitle {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   margin: 0;
   line-height: 1.4;
@@ -94,7 +94,7 @@
 }
 
 .reorder-grid-label {
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--color-text-subtle);
@@ -102,7 +102,7 @@
 }
 
 .reorder-grid-value {
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -112,7 +112,7 @@
   background-color: var(--color-surface-raised);
   padding: 1rem 1.2rem;
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.5;
 }
@@ -128,7 +128,7 @@
 }
 
 .reorder-section-title {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0 0 0.6rem 0;
@@ -156,7 +156,7 @@
   border: 1px solid #c6f6d5;
   padding: 0.25rem 0.7rem;
   border-radius: 20px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -171,7 +171,7 @@
 }
 
 .reorder-why-intro {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   margin: 0 0 0.9rem 0;
 }
@@ -214,13 +214,13 @@
 }
 
 .reorder-weight-legend-label {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text-body);
 }
 
 .reorder-weight-legend-pct {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -229,7 +229,7 @@
   background-color: var(--color-surface-raised);
   padding: 0.85rem 1rem;
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.5;
   margin: 0;
@@ -267,7 +267,7 @@
 /* A grid value's second line: the rough case count under a quantity in
    pieces, or why there is no stock figure / why it reads 0. */
 .reorder-grid-sub {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 500;
   color: var(--color-text-muted);
   line-height: 1.4;
@@ -275,7 +275,7 @@
 
 /* The one-line "storage cost has no effect" caveat under the weights bar. */
 .reorder-why-caveat {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.5;
   margin: 0 0 0.9rem 0;
@@ -291,7 +291,7 @@
   border: none;
   background: none;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--color-info);
   cursor: pointer;

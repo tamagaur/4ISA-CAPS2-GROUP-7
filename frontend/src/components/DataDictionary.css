@@ -1,0 +1,650 @@
+/* Reference Guide (DataDictionary.jsx, 2026-10-18 redesign): a header band,
+   two notices, search and category pills, then glossary rows whose
+   methodology opens beneath them. Colours are the app's tokens; the coral is
+   --color-brand-primary, the navy --color-nav-bg. */
+
+.data-dictionary-page {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--page-padding-x) 40px;
+  --dict-navy: var(--color-text-heading, #1F2A3A);
+  --dict-muted: #5B6676;
+  --dict-line: #EDF0F4;
+}
+
+/* ── Header band ─────────────────────────────────────────────────────── */
+.dict-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+  padding: 24px 28px;
+  border: 1px solid #F6E1DA;
+  border-radius: 18px;
+  background:
+    radial-gradient(90% 140% at 100% 0%, rgba(232, 92, 74, 0.14) 0%, rgba(232, 92, 74, 0) 60%),
+    linear-gradient(100deg, #FFFFFF 0%, #FFF8F5 55%, #FFEFE8 100%);
+}
+
+.dict-hero-text {
+  min-width: 0;
+  max-width: 760px;
+}
+
+.dict-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-brand-primary, #E85C4A);
+}
+
+.dict-hero .page-header-title {
+  margin: 0;
+}
+
+.dict-hero-sub {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--dict-muted);
+}
+
+.dict-hero-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.dict-hero-side .btn {
+  text-decoration: none;
+}
+
+.dict-hero-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 8px 20px -12px rgba(232, 92, 74, 0.55);
+  color: var(--color-brand-primary, #E85C4A);
+}
+
+/* ── Notices ─────────────────────────────────────────────────────────── */
+.dict-notices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dict-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+}
+
+.dict-notice > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.dict-notice strong {
+  display: block;
+  font-size: 14px;
+  color: var(--dict-navy);
+}
+
+.dict-notice p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dict-muted);
+}
+
+.dict-notice.is-info {
+  border-color: #D6E4FB;
+  background: #F2F7FF;
+}
+
+.dict-notice.is-info > svg { color: #2563EB; }
+
+.dict-notice.is-tip {
+  border-color: #F6E2CF;
+  background: #FFF8F1;
+}
+
+.dict-notice.is-tip > svg { color: #D97706; }
+
+/* ── Search and categories ───────────────────────────────────────────── */
+.dict-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.dict-search {
+  position: relative;
+  display: flex;
+  flex: 1 1 340px;
+  align-items: center;
+  min-width: 0;
+}
+
+.dict-search > svg {
+  position: absolute;
+  left: 14px;
+  color: #8A94A6;
+  pointer-events: none;
+}
+
+.dict-search input {
+  width: 100%;
+  height: 44px;
+  padding: 0 40px 0 42px;
+  border: 1px solid #DDE2EA;
+  border-radius: 12px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 14px;
+  color: var(--dict-navy);
+}
+
+.dict-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.dict-search input:focus {
+  outline: none;
+  border-color: var(--color-brand-primary, #E85C4A);
+  box-shadow: 0 0 0 3px rgba(232, 92, 74, 0.15);
+}
+
+.dict-search-clear {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #667085;
+  cursor: pointer;
+}
+
+.dict-search-clear:hover { background: #F2F4F7; }
+
+.dict-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dict-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #DDE2EA;
+  border-radius: 999px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #344054;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.dict-pill:hover { border-color: #B9C3D3; background: #F9FAFB; }
+
+.dict-pill.is-active {
+  border-color: var(--color-brand-primary, #E85C4A);
+  background: var(--color-brand-primary, #E85C4A);
+  color: #FFFFFF;
+}
+
+.dict-pill-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #F2F4F7;
+  font-size: 11.5px;
+  line-height: 18px;
+  text-align: center;
+  color: #475467;
+  font-variant-numeric: tabular-nums;
+}
+
+.dict-pill.is-active .dict-pill-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+.dict-pill:focus-visible,
+.dict-entry-toggle:focus-visible,
+.dict-search-clear:focus-visible,
+.dict-status-actions button:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+.dict-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin: 14px 2px 10px;
+  font-size: 12.5px;
+  color: #667085;
+}
+
+.dict-status-actions {
+  display: inline-flex;
+  gap: 14px;
+}
+
+.dict-status-actions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: #1D4ED8;
+  cursor: pointer;
+}
+
+.dict-status-actions button:hover { text-decoration: underline; }
+
+/* ── Results ─────────────────────────────────────────────────────────── */
+/* Room under the toolbar for a short category (Top Products), so the page
+   never shrinks under the reader and the toolbar holds its place. */
+.dict-results {
+  min-height: calc(100dvh - 190px);
+}
+
+/* The scrollbar's space is kept whether or not the list needs one, so a
+   short category does not shift the page sideways. */
+.main-content:has(.data-dictionary-page) {
+  scrollbar-gutter: stable;
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+.dict-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dict-section {
+  padding: 18px 20px 8px;
+  scroll-margin-top: 16px;
+}
+
+.dict-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.dict-section-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #FFF1EC;
+  color: var(--color-brand-primary, #E85C4A);
+}
+
+.dict-section-head h3 {
+  margin: 0;
+  font-size: var(--text-section, 20px);
+  color: var(--dict-navy);
+}
+
+.dict-section-head p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #667085;
+}
+
+.dict-section-count {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: #667085;
+  white-space: nowrap;
+}
+
+/* ── Glossary rows ───────────────────────────────────────────────────── */
+.dict-entry {
+  border-top: 1px solid var(--dict-line);
+}
+
+.dict-entry-main {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.6fr) auto;
+  align-items: start;
+  gap: 8px 24px;
+  padding: 14px 0;
+}
+
+.dict-entry-term h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--dict-navy);
+}
+
+.dict-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin-top: 4px;
+}
+
+/* Tags as quiet grey words (Audrey, 2026-10-18), a dot between them, so
+   the term and its definition stay the strongest things in the row. */
+.dict-tag {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #8A94A6;
+}
+
+.dict-tag + .dict-tag::before {
+  content: '·';
+  margin-right: 6px;
+  color: #C0C6D0;
+}
+
+.dict-caveat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border: 1px solid #F6D9A8;
+  border-radius: 6px;
+  background: #FFF8EB;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #9A5A06;
+}
+
+.dict-entry-def {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #344054;
+}
+
+.dict-entry-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #DDE2EA;
+  border-radius: 10px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dict-entry-toggle:hover { border-color: #B9C3D3; background: #F9FAFB; }
+
+.dict-entry.is-open .dict-entry-toggle {
+  border-color: #F3C9C0;
+  background: #FFF4F1;
+  color: #B33A2A;
+}
+
+.dict-chevron {
+  transition: transform 200ms ease;
+}
+
+.dict-entry.is-open .dict-chevron {
+  transform: rotate(180deg);
+}
+
+/* The methodology, under its row; it fades and slides in when opened. */
+.dict-method {
+  padding: 0 0 14px;
+}
+
+.dict-method:not([hidden]) .dict-method-inner {
+  animation: dict-method-in 200ms ease both;
+}
+
+@keyframes dict-method-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.dict-method-inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 14px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--color-brand-primary, #E85C4A);
+  border-radius: 0 10px 10px 0;
+  background: #F8F9FB;
+}
+
+.dict-method-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--dict-navy);
+  white-space: nowrap;
+}
+
+.dict-method-inner p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #344054;
+}
+
+.dict-entry mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: #FFE3A3;
+  color: inherit;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+.dict-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 20px;
+  text-align: center;
+  color: #667085;
+}
+
+.dict-empty h3 {
+  margin: 6px 0 0;
+  font-size: 16px;
+  color: var(--dict-navy);
+}
+
+.dict-empty p {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.dict-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dict-chevron,
+  .dict-pill { transition: none; }
+  .dict-method:not([hidden]) .dict-method-inner { animation: none; }
+}
+
+/* ── Tablet ──────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .dict-entry-main {
+    grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.6fr);
+  }
+  .dict-entry-toggle {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .dict-search {
+    flex-basis: 100%;
+  }
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .data-dictionary-page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+  .dict-hero {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    padding: 18px;
+  }
+  .dict-hero-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .dict-hero-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+  .dict-hero-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+  .dict-notices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dict-hero-text .page-header-title {
+    font-size: 24px;
+  }
+  .dict-hero-sub {
+    font-size: 13.5px;
+  }
+  /* The four pills two by two, each as wide as its half. */
+  .dict-pills {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .dict-pill {
+    justify-content: center;
+    min-width: 0;
+    padding: 0 10px;
+  }
+  .dict-pill > span:not(.dict-pill-count) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dict-status {
+    margin-top: 12px;
+  }
+  .dict-section-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .dict-section-head > div {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .dict-section-count {
+    flex-basis: 100%;
+    margin-left: 52px;
+  }
+  .dict-section-head h3 {
+    font-size: 18px;
+  }
+  .dict-entry-def {
+    font-size: 13.5px;
+  }
+  .dict-section {
+    padding: 14px 14px 4px;
+  }
+  .dict-entry-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dict-entry-toggle {
+    grid-column: auto;
+    justify-self: stretch;
+    justify-content: center;
+    min-height: 40px;
+  }
+  .dict-method-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* "Technical details" inside "How it's computed" (2026-10-26): closed by
+   default; formulas, model names and figures for reviewers. */
+.dict-tech {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.dict-tech > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.dict-tech[open] > summary {
+  margin-bottom: 0.35rem;
+}
+
+.dict-tech p {
+  font-size: 0.88rem;
+  color: var(--color-text-body);
+}
+
+/* The Technical details row spans both columns of the panel's grid, under
+   the "How it's computed" label and its text. */
+.dict-method-inner > .dict-tech {
+  grid-column: 1 / -1;
+}
+
+.dict-method-inner > .dict-tech p {
+  font-size: 13px;
+}

@@ -31,6 +31,7 @@ const SAVE_ERRORS = {
   last_admin: () => 'This is the only admin. Make someone else an admin first.',
   self_lockout: () => "You can't take away your own admin access. Ask another admin to do it.",
   self_promotion: () => "You can't change your own access. Ask another admin to do it.",
+  admin_only_permission: () => 'Only an admin can accept or dismiss recommendations. Staff propose changes instead.',
   unknown_permission: (key) => `"${key}" isn't a known permission any more. Close this and open it again.`,
   user_not_found: () => 'This account no longer exists. Close this and refresh the list.',
 };
@@ -239,6 +240,8 @@ const PermissionsModal = ({ isOpen, user, newUser = null, isSelf = false, onClos
                   <legend className="perm-group-title">{group}</legend>
                   {permissions.map((permission) => {
                     const change = overrides[permission.key];
+                    // Admin-only (lp.decide): locked for staff, who propose instead.
+                    const adminOnly = permission.admin_only && !isAdminRole;
                     return (
                       <label
                         key={permission.key}
@@ -247,6 +250,7 @@ const PermissionsModal = ({ isOpen, user, newUser = null, isSelf = false, onClos
                         <input
                           type="checkbox"
                           checked={granted.has(permission.key)}
+                          disabled={adminOnly}
                           onChange={(e) => handleToggle(permission.key, e.target.checked)}
                           aria-describedby={`perm-desc-${permission.key}`}
                         />
@@ -262,6 +266,7 @@ const PermissionsModal = ({ isOpen, user, newUser = null, isSelf = false, onClos
                           {(permission.description || !readOnly) && (
                             <span className="perm-desc" id={`perm-desc-${permission.key}`}>
                               {permission.description}
+                              {adminOnly && ' Admins only.'}
                               {!isAdminRole && !readOnly && change === undefined && preset.has(permission.key)
                                 && ' Part of this role.'}
                             </span>

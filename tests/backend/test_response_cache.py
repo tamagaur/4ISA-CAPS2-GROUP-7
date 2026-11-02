@@ -200,7 +200,7 @@ def test_every_dashboard_range_card_is_cached_and_keyed_by_endpoint_and_permissi
     response built for a user with lp.view is never served to one without it."""
     from backend.routers import dashboard_range
     routes = [r for r in dashboard_range.router.routes if hasattr(r, "endpoint")]
-    assert len(routes) == 11
+    assert len(routes) == 12
     uncached = [r.path for r in routes if not hasattr(r.endpoint, "cache_endpoint")]
     assert not uncached, f"range cards served without the cache: {uncached}"
     assert len({r.endpoint.cache_endpoint for r in routes}) == len(routes), "two cards share one cache endpoint name"

@@ -164,7 +164,7 @@
   border: 1px solid var(--color-danger-border);
   border-radius: 10px;
   padding: 0.75rem 1rem;
-  font-size: 0.95rem;
+  font-size: 1rem;
   width: 100%;
   box-sizing: border-box;
   text-align: left;
@@ -172,7 +172,7 @@
 
 .auth-notice {
   color: var(--color-text-subtle);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   margin: 2rem 0 0 0;
 }
 
@@ -192,7 +192,7 @@
   border: 1px solid #bfdbfe;
   border-radius: 10px;
   padding: 0.75rem 1rem;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   width: 100%;
   box-sizing: border-box;
   text-align: left;
@@ -207,7 +207,7 @@
   border: 1px solid #9ae6b4;
   border-radius: 10px;
   padding: 0.75rem 1rem;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   width: 100%;
   box-sizing: border-box;
   text-align: left;
@@ -229,7 +229,7 @@
 
 .auth-link {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   font-weight: 500;
   text-decoration: none;
   border-radius: 4px;
@@ -267,7 +267,7 @@
 
 .auth-hint {
   color: var(--color-text-subtle);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin: -0.5rem 0 0 0;
   text-align: left;
 }
@@ -285,7 +285,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   font-weight: 500;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -306,12 +306,12 @@
   white-space: nowrap;
 }
 
-/* On the redesigned card (LoginPage.css): the subtitle's muted ink at the
-   link's size, and a box drawn like the fields (frosted, white edge, the
-   same blue focus ring), ticked in the focus blue. */
+/* On the redesigned card (LoginPage.css): the body ink at the link's
+   size, and a box drawn like the fields (white, the same border, the same
+   orange focus ring), ticked in the brand red. */
 .login-page .login-remember {
-  font-size: 14.5px;
-  color: var(--login-muted);
+  font-size: 14px;
+  color: var(--login-body);
 }
 
 .login-page .login-remember input {
@@ -321,9 +321,9 @@
   place-content: center;
   width: 18px;
   height: 18px;
-  border: 1px solid #B9C2DE;
+  border: 1px solid var(--login-border);
   border-radius: 5px;
-  background-color: var(--login-field);
+  background-color: var(--login-surface);
   transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -338,8 +338,8 @@
 }
 
 .login-page .login-remember input:checked {
-  border-color: #4C7BD9;
-  background-color: #4C7BD9;
+  border-color: var(--login-red);
+  background-color: var(--login-red);
 }
 
 .login-page .login-remember input:checked::after {
@@ -348,10 +348,10 @@
 
 .login-page .login-remember input:focus-visible {
   outline: none;
-  border-color: #4C7BD9;
-  box-shadow: 0 0 0 3px rgba(76, 123, 217, 0.24);
+  border-color: var(--login-orange);
+  box-shadow: 0 0 0 3px var(--login-ring);
 }
 
 .login-page .login-remember:hover input:not(:checked) {
-  border-color: #4C7BD9;
+  border-color: var(--login-orange);
 }

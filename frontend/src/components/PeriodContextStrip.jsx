@@ -1,7 +1,14 @@
-// One line under the top bar on every page except the dashboard (which has
-// the full filter bar): what the shared filters are set to, and whether THIS
-// page follows them. The Technical Adviser changes a filter and watches what
-// moves; a page that does not move must say why rather than look broken.
+// One line under the top bar on the pages that read the shared date range
+// but have no full filter bar of their own (the dashboard has one): what the
+// shared filters are set to, and how THIS page follows them, with the way
+// back to change them. The Technical Adviser changes a filter and watches
+// what moves.
+//
+// Only pages that use the date range (2026-10-20): a page the range does not
+// touch — the order plan (its own planning cycle), the product list, the
+// activity log, the Reference Guide, the admin pages — shows no date at all,
+// rather than a range it ignores. The principal filter in the top bar is
+// gated the same way (Topbar.jsx's PAGES_WITH_PRINCIPAL).
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarRange, Pin } from 'lucide-react';
@@ -17,23 +24,14 @@ const PAGE_RULES = {
   },
   '/forecast': {
     follows: true,
-    text: 'The chart follows the date range unless you set its own range on the page; Clear goes back to this one.',
+    text: 'The chart follows the date range unless you set its own range on the page; “Back to the Dashboard’s range” goes back to this one.',
   },
   '/category-trends': {
     follows: 'partly',
+    // Drawn like the Sales forecast page's strip (2026-10-25); the text still
+    // says which part of the range it follows.
+    look: 'follows',
     text: 'Trends are fitted as of the end of the date range, on the 24 months of sales up to it. The start of the range does not shorten that history.',
-  },
-  '/reorder': {
-    follows: false,
-    text: 'A plan is made for one month: this page follows the planning cycle you pick on it, not the date range.',
-  },
-  '/sku-management': {
-    follows: false,
-    text: 'A product list: the date range does not apply. Each class is from the latest ABC run.',
-  },
-  '/audit-log': {
-    follows: false,
-    text: 'The date range does not apply to the activity log.',
   },
 };
 
@@ -44,7 +42,8 @@ const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
   const compareText = compare === COMPARE_MODES.NONE || !versus
     ? 'no comparison'
     : `compared with ${compare === COMPARE_MODES.YEAR ? 'the same months last year' : 'the previous period'} (${versus.label})`;
-  const tone = rule.follows === true ? 'is-follows' : rule.follows === 'partly' ? 'is-partly' : 'is-fixed';
+  const look = rule.look ?? rule.follows;
+  const tone = look === true || look === 'follows' ? 'is-follows' : look === 'partly' ? 'is-partly' : 'is-fixed';
   return (
     <div className={`period-strip ${tone}`} role="note">
       <span className="period-strip-filters">
@@ -53,7 +52,7 @@ const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
         <span className="period-strip-compare">· {compareText}</span>
       </span>
       <span className="period-strip-rule">
-        {rule.follows !== true && <Pin size={12} aria-hidden="true" />}
+        {tone !== 'is-follows' && <Pin size={12} aria-hidden="true" />}
         {rule.text}
       </span>
       <Link to={{ pathname: '/', search: window.location.search }} className="period-strip-link">

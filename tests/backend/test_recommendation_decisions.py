@@ -303,6 +303,9 @@ ALLOWED = {
     "tests/backend/test_qa_findings_8_15.py",
     "tests/optimization/test_run_lp_projected.py", "scripts/rollover_scratch_test.py",
     "analytics/db/migrations/0069_rollover_ledger.sql",
+    # 2026-10-28: staff dismissal requests and the recommendation's history (migration 0070). The history READS the
+    # decision to show it; nothing there feeds forecasting, safety stock or the LP.
+    "backend/routers/reorder_requests.py", "tests/backend/test_reorder_requests.py",
 }
 
 

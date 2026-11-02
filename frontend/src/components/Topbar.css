@@ -2,7 +2,10 @@
   display: flex;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: var(--color-surface-raised);
+  /* Frosted over the warm page (ui.css --app-canvas-bar, 2026-10-28). */
+  background-color: var(--app-canvas-bar);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -75,7 +78,7 @@
 
 .breadcrumb-path {
   color: var(--color-text-subtle);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
 }
 
 .period-selector-wrapper {
@@ -93,7 +96,7 @@
   border: 1px solid var(--color-border-strong);
   border-radius: 16px;
   padding: 0.35rem 0.8rem;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -135,7 +138,7 @@
   border: none;
   border-radius: 16px;
   padding: 0.35rem 0.85rem;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 2px 5px rgba(197, 48, 48, 0.25);
@@ -152,6 +155,16 @@
     flex-wrap: wrap;
     gap: 0.75rem;
     padding: 0.85rem 1rem;
+  }
+}
+
+/* The greeting moved to the dashboard's welcome banner on 2026-10-21
+   (ui/Greeting.jsx, Dashboard.css .welcome-banner). */
+
+@media (max-width: 1360px) {
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: 0.6rem;
   }
 }
 
@@ -228,7 +241,7 @@
   border: none;
   border-radius: 20px;
   padding: 0.4rem 2rem 0.4rem 0.8rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #4a5568;
   cursor: pointer;
   outline: none;

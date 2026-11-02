@@ -40,7 +40,7 @@ from backend.data_mode import (
     preview_block,
     unilever_demand,
 )
-from analytics.params import FORECAST_INTERVAL_LEVEL_PCT, FORECAST_INTERVAL_Z
+from analytics.params import CALENDAR_FACTOR_SIGNED_OFF, FORECAST_INTERVAL_LEVEL_PCT, FORECAST_INTERVAL_Z
 from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal, principal_clause
@@ -209,6 +209,7 @@ def get_forecast(
         forecast=forecast,
         interval=dict(FORECAST_INTERVAL),
         gap_note=gap_note(pt["reason"] for pt in points if pt["reason"]),
+        calendar_signed_off=CALENDAR_FACTOR_SIGNED_OFF,
     )
     if mode != PREVIEW:
         return response

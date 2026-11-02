@@ -11,6 +11,12 @@ export function allKeys(catalog) {
   return (catalog?.permissions || []).map((permission) => permission.key);
 }
 
+// Keys only an admin can hold (catalog `admin_only`: lp.decide, Yuan
+// 2026-10-28). A staff override never grants one; the server refuses it.
+export function adminOnlyKeys(catalog) {
+  return new Set((catalog?.permissions || []).filter((permission) => permission.admin_only).map((permission) => permission.key));
+}
+
 // The role's default permissions, as a Set.
 export function presetKeys(catalog, role) {
   const preset = catalog?.roles?.[role];
@@ -22,7 +28,9 @@ export function presetKeys(catalog, role) {
 export function effectiveKeys(catalog, role, overrides = {}) {
   const keys = presetKeys(catalog, role);
   if (role === 'admin') return keys;
+  const adminOnly = adminOnlyKeys(catalog);
   for (const [key, granted] of Object.entries(overrides)) {
+    if (adminOnly.has(key)) continue;
     if (granted) keys.add(key);
     else keys.delete(key);
   }
@@ -35,7 +43,8 @@ export function effectiveKeys(catalog, role, overrides = {}) {
 export function normalizeOverrides(catalog, role, overrides = {}) {
   if (role === 'admin') return {};
   const preset = presetKeys(catalog, role);
+  const adminOnly = adminOnlyKeys(catalog);
   return Object.fromEntries(
-    Object.entries(overrides).filter(([key, granted]) => preset.has(key) !== granted)
+    Object.entries(overrides).filter(([key, granted]) => preset.has(key) !== granted && !adminOnly.has(key))
   );
 }

@@ -1,32 +1,21 @@
-// The latest month with real sales data — the date picker's ceiling and the
-// "today" every page's default range ends on (DateFilter.jsx,
-// DashboardLayout.jsx). Unilever's demand runs 2023-01 to 2026-02 and Del
-// Monte's sell-out 2023-01 to 2025-12, so the later of the two bounds the
-// picker.
+// What "now" is for the date filter: the latest month with REAL sales, per
+// principal. Since 2026-10-20 it comes from the API — GET /data-mode's
+// `coverage` (backend/marts.real_coverage), asked by the layout on every page
+// — so a new month of data moves every page's default range by itself.
 //
-// Hard-coded, so it needs a manual edit when a new month of data loads —
-// this is the ONE place to make it. GET /dashboard also returns the value
-// as `latest_data_period` (task E3); reading it from there is the follow-up
-// that retires this constant.
+// The values below are only the fallback until that answer arrives (and if it
+// fails): the coverage as of 2026-10-20. Unilever's demand runs 2023-01 to
+// 2026-02 and Del Monte's sell-out 2023-01 to 2025-12; the later of the two
+// bounds the date picker.
 export const LATEST_DATA_PERIOD = { month: 'Feb', year: '2026' };
+export const LATEST_BY_PRINCIPAL = {
+  unilever: { month: 'Feb', year: '2026' },
+  delmonte: { month: 'Dec', year: '2025' },
+};
 
 // First year of real data — both principals start in 2023-01.
 export const FIRST_DATA_YEAR = 2023;
 
-// ── Staleness detection ─────────────────────────────────────────────────
-// The constant above is the date picker's ceiling AND the app's pinned
-// "today", and it is edited by hand. If a new month of data lands and
-// nobody edits it, every page silently keeps ending at the old month —
-// the figures stay real, but they are no longer the latest, and nothing
-// on screen says so. That is the failure this guards.
-//
-// GET /dashboard returns the true value as `latest_data_period`. Pages
-// hand it here; when it is AHEAD of the constant the layout shows a
-// notice naming the file to edit. Deliberately detection rather than an
-// automatic override: the picker builds its year and month option lists
-// from the constant at module load, so silently moving the ceiling past
-// what the dropdown offers would let "today" select a month the user
-// cannot pick. One honest warning beats a half-applied value.
 const MONTH_ORDER = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function periodToOrdinal({ month, year }) {
@@ -42,16 +31,33 @@ export function parsePeriod(period) {
 }
 
 /**
- * The live latest period, when it is NEWER than the hardcoded constant.
- * Returns null when the constant is current (the normal case) — so a
- * caller can render the notice on a truthy value and nothing otherwise.
+ * The latest month with real sales for `principal` ('all', 'unilever',
+ * 'delmonte'), as { month, year }: from `coverage` (GET /data-mode's) when
+ * it has the answer, else the fallback above. 'all' is the later of the two
+ * principals, so a view that includes Unilever never rewinds to Del Monte's
+ * shorter data; Del Monte alone ends at its own latest month, so its default
+ * range has no empty months at the end.
  */
-export function staleCoverageNotice(latestDataPeriod) {
+export function latestFor(coverage, principal = 'all') {
+  const byPrincipal = coverage?.latest_data_period_by_principal || {};
+  if (principal === 'unilever' || principal === 'delmonte') {
+    return parsePeriod(byPrincipal[principal]) || LATEST_BY_PRINCIPAL[principal];
+  }
+  return parsePeriod(coverage?.latest_data_period) || LATEST_DATA_PERIOD;
+}
+
+/**
+ * The live latest period, when it is NEWER than the one the page's filters
+ * end on (`applied`, the layout's own latest) — which can only happen when
+ * GET /data-mode could not be read and the layout fell back to the constant.
+ * Null otherwise, so a caller renders the notice on a truthy value only.
+ */
+export function staleCoverageNotice(latestDataPeriod, applied = LATEST_DATA_PERIOD) {
   const live = parsePeriod(latestDataPeriod);
-  if (!live) return null;
-  if (periodToOrdinal(live) <= periodToOrdinal(LATEST_DATA_PERIOD)) return null;
+  if (!live || !applied) return null;
+  if (periodToOrdinal(live) <= periodToOrdinal(applied)) return null;
   return {
     live: `${live.month} ${live.year}`,
-    pinned: `${LATEST_DATA_PERIOD.month} ${LATEST_DATA_PERIOD.year}`,
+    pinned: `${applied.month} ${applied.year}`,
   };
 }

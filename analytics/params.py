@@ -169,6 +169,12 @@ XGB_NTHREAD = 1
 # window, the trailing level the factor corrects.
 CALENDAR_FACTOR_SHRINK = 0.5
 CALENDAR_FACTOR_PRIOR_MONTHS = 3
+# TEAM: whether Sir Catubag has signed the factor off (Kelvin's note above).
+# The live 2026-03 forecast was nonetheless written with --calendar-factor on
+# 2026-10-19 (Forecast_Result.model_params.calendar_factor on every 'ok' row),
+# so the dashboard says the forecast is adjusted AND that the adjustment awaits
+# his sign-off, from this flag. Set True when he approves it.
+CALENDAR_FACTOR_SIGNED_OFF = False
 
 # --------------------------------------------------------------------------- #
 # Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern

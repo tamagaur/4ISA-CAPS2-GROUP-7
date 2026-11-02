@@ -1,6 +1,6 @@
 import React from 'react';
 import SectionLede from './ui/SectionLede';
-import { X, ArrowRight } from 'lucide-react';
+import { X, ArrowRight, History } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import InfoTip from './InfoTip';
@@ -17,7 +17,9 @@ import './ReorderModal.css';
 // analytics/optimization/lp.py by tests), not constants retyped here: until
 // 2026-09-29 this listed "Service level ≥ 95%" and "Warehouse capacity" as
 // weights, where the solver uses a 90% service level (Z = 1.28) and w3 is
-// storage cost.
+// storage cost. Since 2026-10-22 the page says "about 9 times in 10 (a 90%
+// service level)" and keeps Z behind a "?" (Technical Adviser, 2 Oct 2026:
+// no unexplained jargon).
 //
 // Colour matches the Dashboard's own cost/service level/storage priority
 // bars (LP_PRIORITY_ROWS in Charts.jsx) one-for-one via
@@ -40,6 +42,9 @@ const objectiveWeights = (lpModel) => {
   ];
 };
 
+// "9 times in 10" from the served service level (90), never retyped.
+const timesInTen = (pct) => (pct % 10 === 0 ? `${pct / 10} times in 10` : `${pct} times in 100`);
+
 // Stock is valued at purchase cost and sales at selling price, so cover
 // reads a little short (backend/routers/recommendations.py days_of_cover).
 const COVER_BASIS_NOTE =
@@ -48,7 +53,9 @@ const COVER_BASIS_NOTE =
 // `periods` — the dates the page read its figures at (GET /recommendations'
 // label_context, passed through by ReorderRecommendations), so each figure
 // here names its period the way the table's headers do.
-const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {}, onOpenForecast }) => {
+// onOpenHistory (2026-10-28): opens the row's history (requests, decisions,
+// stock counts); passed only to someone with lp.decide or lp.propose.
+const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {}, onOpenForecast, onOpenHistory }) => {
   if (!isOpen || !data) return null;
   const plan = data.planningCycleDate ? `${formatMonth(data.planningCycleDate)} plan` : 'this plan';
   const countLabel = periods.stockCountDate
@@ -83,7 +90,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
                 (worked out once on the row by ReorderRecommendations). */}
             <p className="reorder-modal-subtitle">
               Order <strong>{formatUnits(data.orderQty)}</strong> pieces
-              {data.cases?.order ? ` (${data.cases.order})` : ''} for the {plan}. Below is how the optimizer (LP)
+              {data.cases?.order ? ` (${data.cases.order})` : ''} for the {plan}. Below is how the order plan
               arrived at this suggestion.
             </p>
             {/* The product's own page: its sales history, the forecast and
@@ -92,6 +99,12 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               <button type="button" className="reorder-modal-link" onClick={() => onOpenForecast(data.sku)}>
                 See this product&apos;s sales history and forecast
                 <ArrowRight size={13} aria-hidden="true" />
+              </button>
+            )}
+            {onOpenHistory && (
+              <button type="button" className="reorder-modal-link" onClick={() => onOpenHistory(data)}>
+                <History size={13} aria-hidden="true" />
+                History of this recommendation
               </button>
             )}
           </div>
@@ -171,7 +184,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               this credited the weights alone, and said the 3-week rule held
               "across the whole warehouse" — it sums the planned SKUs only. */}
           <p className="reorder-why-intro">
-            The LP orders each SKU up to its target stock, net of what is already on hand. Only when the supplier
+            The order plan orders each SKU up to its target stock, net of what is already on hand. Only when the supplier
             allocation can&apos;t cover every SKU does it cut, taking the rest of the target first, then safety stock,
             and this month&apos;s demand last. Which SKUs take the cut is decided
             {coverRuleDecides
@@ -217,7 +230,17 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
             Target stock = demand expected over the review period and delivery lead time
             {inputs.review_days != null && inputs.lead_days != null
               && <> ({inputs.review_days} + {inputs.lead_days} business days)</>}
-            {' '}plus safety stock{lpModel?.z_score != null && <> at Z = {lpModel.z_score}</>}. The cycle&apos;s
+            {' '}plus safety stock
+            {lpModel?.service_level_pct != null && (
+              <>
+                , set to cover demand about {timesInTen(lpModel.service_level_pct)} (a {lpModel.service_level_pct}% service level)
+                {lpModel.z_score != null && (
+                  <InfoTip label="About the service level">
+                    {`Safety stock = ${lpModel.z_score} (Z, the normal-curve value for ${lpModel.service_level_pct}%) × how much monthly sales swing, scaled to the review and delivery days.`}
+                  </InfoTip>
+                )}
+              </>
+            )}. The cycle&apos;s
             total order stays within the supplier allocation
             {inputs.allocation_pct != null && <> ({inputs.allocation_pct}% of last year&apos;s sales)</>} and the
             warehouse capacity.
@@ -225,10 +248,29 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               ? <>
                   {' '}SSM&apos;s {inputs.target_weeks ?? 3}-week rule asks that the stock left at month end of the SKUs
                   in this plan — not the whole warehouse — be worth at least {inputs.target_weeks ?? 3} weeks of their
-                  sales, at last purchase price; the LP keeps it where the allocation allows.
+                  sales, at last purchase price; the plan keeps it where the allocation allows.
                 </>
               : <> SSM&apos;s {inputs.target_weeks ?? 3}-week rule is built into each SKU&apos;s target stock as a floor.</>}
             {lpModel?.inputs_are_placeholders && ' These inputs are placeholders until SSM confirms them.'}
+          </p>
+          {/* Methods that set this quantity and await the adviser's sign-off
+              (Technical Adviser, 2 Oct 2026; 2026-10-22): the reliability
+              check that admits a product to the plan (MASE < 1, an open
+              question in reports/ADVISER_QUESTIONS_SIRCG.md §3), the
+              safety-stock scaling (lp_model.safety_stock_assumption) and the
+              weights (analytics/params.py LP_WEIGHTS, team-asserted). */}
+          <p className="reorder-why-note">
+            A product enters the plan only if it is Class A and its forecast beats a simple last-month guess (a
+            reliability check pending adviser confirmation).
+            {lpModel?.safety_stock_assumption && (
+              <>
+                {' '}Its safety stock scales month-to-month swings in sales down to the review and delivery days,
+                which assumes one day&apos;s sales don&apos;t affect the next: an assumption pending adviser
+                confirmation.
+                <InfoTip label="The safety stock formula">{lpModel.safety_stock_assumption}</InfoTip>
+              </>
+            )}
+            {weightRows.length > 0 && ' The weights above are a team setting; source not yet confirmed.'}
           </p>
         </div>
     </Modal>

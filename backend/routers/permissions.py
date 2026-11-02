@@ -14,6 +14,8 @@ GUARDRAILS on PUT (the proposal's "no lockout", plus self-promotion):
     otherwise make themselves an admin.
   - 409 last_admin: a change that would leave no admin is refused.
   - 422 unknown_permission: an override names a key not in the catalog.
+  - 422 admin_only_permission: a staff override grants an admin-only key
+    (lp.decide, Yuan 2026-10-28): staff propose, an admin decides.
 Every saved change writes an audit_log entry: who, for whom, old -> new.
 """
 from __future__ import annotations
@@ -26,7 +28,7 @@ from backend import audit
 from backend.api_errors import ApiError
 from backend.deps import TokenPayload, get_db
 from backend.permissions import (
-    ALL_KEYS, CATALOG, LAST_ADMIN, PRESETS, admin_count, effective, load_overrides, normalize,
+    ADMIN_ONLY_KEYS, ALL_KEYS, CATALOG, LAST_ADMIN, PRESETS, admin_count, effective, load_overrides, normalize,
     require_admin_for, require_permission, require_ready,
 )
 from backend.schemas.permissions import CatalogResponse, UserPermissions, UserPermissionsUpdate
@@ -93,6 +95,10 @@ def put_user_permissions(
     unknown = sorted(key for key in body.overrides if key not in ALL_KEYS)
     if unknown:
         raise ApiError(422, "Unknown permission.", code="unknown_permission", permission=unknown[0])
+    admin_only = sorted(key for key, granted in body.overrides.items() if granted and key in ADMIN_ONLY_KEYS)
+    if admin_only and body.role != "admin":
+        raise ApiError(422, "Only an admin can have this permission.", code="admin_only_permission",
+                       permission=admin_only[0])
 
     user = _get_user(db, user_id)
     old_role = user["role"]

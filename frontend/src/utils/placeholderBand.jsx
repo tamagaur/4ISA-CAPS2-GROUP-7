@@ -26,6 +26,6 @@ export const renderPlaceholderBand = (span) => span && (
     fillOpacity={0.16}
     stroke="none"
     ifOverflow="hidden"
-    label={{ value: 'Placeholder data', position: 'insideTopLeft', fill: CHART_COLORS.axisLabel, fontSize: 10, fontWeight: 600 }}
+    label={{ value: 'Sample data', position: 'insideTopLeft', fill: CHART_COLORS.axisLabel, fontSize: 10, fontWeight: 600 }}
   />
 );

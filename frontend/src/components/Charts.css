@@ -29,6 +29,7 @@
   align-items: center;
   margin: 0 0 4px;
   font-size: var(--text-card-title);
+  line-height: 1.4;
   color: var(--color-text);
   font-weight: 600;
 }
@@ -59,7 +60,7 @@
   padding: 0.05rem 0.35rem;
   border: 1px solid var(--color-border, #e3e0d8);
   border-radius: 4px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 500;
   color: var(--color-text-muted);
   vertical-align: middle;
@@ -71,7 +72,7 @@
    one. Same muted size as the axis titles. */
 .bar-scale-note {
   margin: 0 0 0.35rem;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   color: var(--color-text-subtle);
 }
@@ -96,7 +97,7 @@
   padding: 0.28rem 0.7rem;
   border: none;
   background: transparent;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-slate-500);
   cursor: pointer;
@@ -125,7 +126,7 @@
   border: 1px solid #fecaca;
   border-radius: 16px;
   padding: 0.28rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(197, 48, 48, 0.08);
@@ -161,14 +162,14 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-slate-500);
   font-weight: 600;
 }
 
 .chart-picker-select {
   padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   border-radius: 6px;
   border: 1px solid var(--color-border-strong);
   background-color: var(--color-surface);
@@ -216,7 +217,7 @@
    notice"), generated from the data — never hardcoded copy. */
 .chart-insight {
   margin: 0.35rem 0 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }
@@ -306,7 +307,7 @@
   background: transparent;
   padding: 0.26rem 0.6rem;
   border-radius: 6px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -346,27 +347,173 @@
 .chart-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
 }
 
 .chart-table th,
 .chart-table td {
-  padding: 0.4rem 0.65rem;
+  padding: 0.4rem 0.55rem;
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
+/* Headings wrap onto two or three lines rather than running the table
+   wider than its card (Audrey, 2026-10-16): the cells stay on one line,
+   so the columns are as wide as their figures, and the headings fold to
+   fit above them. */
 .chart-table thead th {
   position: sticky;
   top: 0;
   background: var(--color-surface-raised);
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: var(--text-table-header);
+  font-weight: 600;
+  line-height: 1.3;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
   text-align: left;
+  vertical-align: bottom;
+  white-space: normal;
   z-index: 1;
+}
+
+/* A column of sentences folds onto a few lines, so it never sets the
+   table's width. */
+.chart-table td.table-wrap {
+  white-space: normal;
+  min-width: 8rem;
+  max-width: 26rem;
+  line-height: 1.4;
+}
+
+/* A note column: the start of the note on one line, cut with an ellipsis,
+   and "See more" beside it opening the whole note in a dialog. */
+.chart-note {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.chart-note-preview {
+  display: inline-block;
+  max-width: 6.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.chart-note-preview strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.chart-note-more {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chart-note-more:hover {
+  text-decoration: underline;
+}
+
+.chart-note-more:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The note's dialog: a small white card over a dim page. */
+.chart-note-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(15, 23, 42, 0.45);
+}
+
+.chart-note-dialog {
+  width: 100%;
+  max-width: 480px;
+  padding: 20px 22px 22px;
+  border-radius: 14px;
+  background-color: var(--color-surface);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.chart-note-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.chart-note-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+.chart-note-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: -4px -6px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.chart-note-close:hover {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.chart-note-lead {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #B54708;
+}
+
+.chart-note-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-body);
+}
+
+/* The heading's second line: the price basis, what an estimate is from. */
+.chart-table-th-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-muted);
 }
 
 .chart-table thead th.table-num {
@@ -396,7 +543,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
 }
 
@@ -434,7 +581,7 @@
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text);
 }
 
@@ -478,6 +625,9 @@
   line-height: 1.4;
 }
 
+/* The hover's boxes (one per series) moved to ui/ChartParts.css on
+   2026-10-19, once every chart on the dashboard took them up. */
+
 /* Legend key for a stock count flagged as unusual — the same muted slate
    dot the chart draws at that point (Charts.jsx stockDot): filled, so it
    stands apart from the lines without competing with them. */
@@ -511,12 +661,12 @@
 }
 
 .abc-bar-label {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
 }
 
 .abc-bar-count {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--color-slate-500);
   flex: 1;
@@ -524,7 +674,7 @@
 }
 
 .abc-bar-share {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text);
   min-width: 3.5rem;
@@ -546,7 +696,7 @@
 
 .abc-bar-instruction {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
 }
 
@@ -555,7 +705,7 @@
   padding: 0.6rem 0.9rem;
   background-color: var(--color-surface-raised);
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.4;
 }
@@ -583,7 +733,7 @@
   border: none;
   background: none;
   padding: 0.3rem 0.75rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-subtle);
   border-radius: 999px;
@@ -622,7 +772,7 @@
   border: 1px solid var(--color-border);
   background-color: var(--color-surface);
   padding: 0.3rem 0.65rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text-body);
   border-radius: 999px;
@@ -651,12 +801,12 @@
 @media (max-width: 480px) {
   .card-principal-option {
     padding: 0.28rem 0.55rem;
-    font-size: 0.68rem;
+    font-size: 0.79rem;
   }
 
   .card-filter-reset {
     padding: 0.28rem 0.55rem;
-    font-size: 0.68rem;
+    font-size: 0.79rem;
   }
 }
 
@@ -684,7 +834,7 @@
 }
 
 .portfolio-stat-label {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -698,7 +848,7 @@
 }
 
 .portfolio-stat-scope {
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 /* ── Stock status by ABC tier — horizontal composition bars ───────────── */
@@ -747,7 +897,7 @@
 .tier-stock-detail {
   margin: 0;
   min-height: 1.5em;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }
@@ -776,7 +926,7 @@
 .tier-stock-label {
   flex: 0 0 auto;
   width: 1rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text-body);
 }
@@ -813,7 +963,7 @@
   align-items: flex-start;
   gap: 8px;
   margin: 0;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   line-height: 1.5;
   color: var(--color-text-body);
 }
@@ -847,7 +997,7 @@
 }
 
 .tier-stock-empty {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--color-text-subtle);
   padding-left: 0.5rem;
   align-self: center;
@@ -892,7 +1042,7 @@
 }
 
 .reorder-mini-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -903,12 +1053,53 @@
    fits the card width instead: SKU, urgency and qty size to their content
    and never wrap, and the product name takes whatever width is left,
    truncating with an ellipsis (full name in the cell's title tooltip). */
+/* Content height, not flex: 1. Growing to fill a card stretched to its
+   neighbour's height is what left a block of white between the last row and
+   "See all suggested orders" (2026-10-21). */
 .reorder-mini-list {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
-  margin-top: 0.9rem;
-  border-top: 1px solid var(--color-surface-sunken);
+  /* The cells' outer padding sits outside the card's text edge, so the
+     names line up with the header and the hover tint has room. */
+  margin: 0 -0.5rem;
 }
+
+/* Suggested orders: three counts over the listed rows, one compact line on
+   a soft panel (Charts.jsx, shownCritical etc.). */
+.reorder-mini-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #EDF0F4;
+  border-radius: 8px;
+  background: #F9FAFB;
+  font-size: var(--text-secondary);
+  color: var(--color-text-body);
+}
+
+.reorder-mini-strip-scope {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.reorder-mini-strip-item {
+  white-space: nowrap;
+}
+
+.reorder-mini-strip-item strong {
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-mini-strip-item strong.is-critical { color: #B42318; }
+.reorder-mini-strip-item strong.is-caution { color: #93470D; }
 
 .reorder-mini-table {
   width: 100%;
@@ -917,7 +1108,7 @@
 
 .reorder-mini-table th {
   text-align: left;
-  font-size: 0.62rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -927,14 +1118,25 @@
   white-space: nowrap;
 }
 
-.reorder-mini-table th:last-child {
+/* The two quantity columns: header over its numbers, both at the right. */
+.reorder-mini-table th.reorder-mini-num {
   text-align: right;
 }
 
+.reorder-mini-table th:first-child,
+.reorder-mini-table td:first-child {
+  padding-left: 0.5rem;
+}
+
+.reorder-mini-table th:last-child,
+.reorder-mini-table td:last-child {
+  padding-right: 0.5rem;
+}
+
 .reorder-mini-table td {
-  padding: 0.7rem 0.4rem;
+  padding: 0.65rem 0.4rem;
   border-bottom: 1px solid #EEF1F4;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text);
   vertical-align: middle;
   white-space: nowrap;
@@ -942,6 +1144,21 @@
 
 .reorder-mini-table tr:last-child td {
   border-bottom: none;
+}
+
+/* The Reorder page's table hover (index.css .data-table). */
+.reorder-mini-table tbody tr {
+  transition: background-color 0.12s;
+}
+
+.reorder-mini-table tbody tr:hover {
+  background-color: #FAFBFC;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reorder-mini-table tbody tr {
+    transition: none;
+  }
 }
 
 /* max-width:0 + width:100% lets this one column absorb (and give up) all
@@ -967,7 +1184,7 @@
   }
 
   .reorder-mini-table td {
-    font-size: 0.72rem;
+    font-size: 0.82rem;
   }
 
   .reorder-mini-table .urgency-badge-mini {
@@ -976,42 +1193,42 @@
 }
 
 /* The product cell: ProductName (name, SKU code under it). The cell gives up
-   width to the other columns (max-width: 0 above), so a long name is cut
-   with an ellipsis on one line instead of wrapping the row tall; the cell's
-   title attribute carries the full name. */
+   width to the other columns (max-width: 0 above). A long name wraps to two
+   lines and is cut there (2026-10-21; one line cut most names mid-word);
+   the cell's and the name's title attributes carry the full name. */
+.reorder-mini-table td.reorder-mini-product {
+  white-space: normal;
+}
+
 .reorder-mini-product .product-name {
   display: flex;
   max-width: 100%;
 }
 
 .reorder-mini-product .product-name-title {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.reorder-mini-product .product-name-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
+  line-height: 1.35;
 }
 
 .reorder-mini-product .product-name-code {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
 }
 
+/* The link sits in .dash-card-footer (Dashboard.css), which draws the
+   divider and sets the colour shared with the idle-stock card's link. */
 .reorder-mini-view-all {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-  font-size: 0.75rem;
+  gap: 0.35rem;
+  font-size: 0.86rem;
   font-weight: 600;
-  color: var(--color-info);
   text-decoration: none;
 }
 
@@ -1019,16 +1236,32 @@
   text-decoration: underline;
 }
 
+/* Urgency: soft tint, darker ink of the same hue, small corners. The red and
+   amber inks are darker than the badge tokens so the 11px word reads at
+   AA contrast (critical 5.9:1, urgent 6.4:1). */
 .urgency-badge-mini {
-  display: inline-block;
-  padding: 0.22rem 0.55rem;
-  border-radius: 4px;
-  font-size: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.4;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-fg);
 }
+
+.urgency-badge-mini svg {
+  flex-shrink: 0;
+}
+
+.urgency-badge-mini.urgency-critical { background-color: var(--badge-critical-bg); color: #B42318; }
+.urgency-badge-mini.urgency-urgent { background-color: var(--badge-warning-bg); color: #93470D; }
+.urgency-badge-mini.urgency-planned { background-color: var(--badge-neutral-bg); color: var(--badge-neutral-fg); }
 
 .reorder-priorities {
   display: flex;
@@ -1045,7 +1278,7 @@
 }
 
 .reorder-priorities-title {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -1054,7 +1287,7 @@
    takes its own line under the title instead of squeezing in beside it. */
 .reorder-priorities-caption {
   flex-basis: 100%;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   line-height: 1.45;
   color: var(--color-text-subtle);
 }
@@ -1075,7 +1308,7 @@
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text);
   min-width: 0;
 }
@@ -1090,7 +1323,7 @@
 /* Pushes the percentage to the far right, leaving label + "?" grouped
    together on the left (the info icon belongs to the label, not the value). */
 .reorder-priority-pct {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--color-text);
   margin-left: auto;
@@ -1120,104 +1353,149 @@
 
 
 /* ── ABC classification: donut + legend, selected-tier card, share bars ─── */
-.abc-share-pair {
+/* ── Which products bring in most of the sales? (ABCDonutWidget, 2026-10-19,
+   after the mockup) ──────────────────────────────────────────────────────
+   Top to bottom: the finding (abc-finding), the ring with its legend beside
+   the at-risk count and the selected class (abc-overview), then the two
+   share bars (abc-share-pair). The card is a size container: the ring row
+   stacks by the card's own width (half a row on a wide screen, the whole
+   row below 1350px), not the window's. */
+.abc-card {
+  container-type: inline-size;
+}
+
+.abc-card .chart-widget-body.abc-body {
+  justify-content: flex-start;
+  gap: 18px;
+}
+
+/* The finding: the card's answer line, as the Forecast accuracy card's
+   (.fc-answer) — the sentence in the heading colour, its two numbers a
+   touch larger, the definition under it in muted text with Class A's list
+   on the end. No tint, no icon: on this page a tinted strip with an icon is
+   something to act on, and a finding is not (one meaning per pattern,
+   Technical Adviser, 2 Oct 2026). */
+.abc-finding {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 0.25rem;
+  gap: 4px;
 }
 
-.abc-share-row {
-  display: grid;
-  grid-template-columns: 7.5rem 1fr;
-  grid-template-areas: "label track" "label values";
-  column-gap: 0.6rem;
-  row-gap: 0.15rem;
-  align-items: center;
-}
-
-.abc-share-label {
-  grid-area: label;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--color-text-body);
-}
-
-.abc-share-track {
-  grid-area: track;
+.abc-finding-answer {
   display: flex;
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--color-surface-sunken);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 2px;
+  margin: 0;
+  max-width: 70ch;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--color-text-heading);
 }
 
-.abc-share-track span {
-  height: 100%;
-}
-
-.abc-share-values {
-  grid-area: values;
-  font-size: 0.68rem;
-  color: var(--color-text-muted);
+.abc-finding-answer strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
-/* Donut + legend on the left, the selected tier's card on the right; the
-   card drops below the donut, full width, on phones (< 768px). */
-.abc-overview {
-  display: flex;
+.abc-finding-definition {
+  margin: 0;
+  max-width: 80ch;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* Class A's list, on its own line under the definition. */
+.abc-finding-link {
+  align-self: flex-start;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 28px;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.abc-finding-link:hover,
+.abc-finding-link:focus-visible {
+  text-decoration: underline;
+}
+
+.abc-finding-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Coverage, a withheld revenue share, a placeholder or synthetic month. */
+.abc-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: -8px;
+}
+
+.abc-notes .chart-placeholder-note {
+  margin: 0;
+}
+
+/* The ring and its legend at the left, the panels at the right, as tall
+   as each other. */
+.abc-overview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px 28px;
 }
 
 .abc-donut-col {
-  flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  gap: 20px;
+  min-width: 0;
 }
 
 .abc-donut {
   display: block;
+  flex: none;
   overflow: visible;
 }
 
-/* Unselected tiers step back so the selected one reads first. */
-/* The three plums at near full strength (deep, medium, light pink), the
-   selected class at full; the tier card beside the ring names the
-   selection, so no dark outline is drawn around it. */
+/* Unselected tiers step back so the selected one reads first; the panel
+   beside the ring names the selection, so no outline is drawn around it. */
 .abc-seg {
   cursor: pointer;
-  opacity: 0.8;
+  opacity: 0.82;
   transition: opacity 150ms ease-out;
 }
 
-.abc-seg.is-selected {
+.abc-seg.is-selected,
+.abc-seg:hover {
   opacity: 1;
 }
 
-/* One tier per line, letter then plain name ("A  Top sellers"): a row of
-   bare letters said nothing about what a tier is. */
-.abc-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.05rem;
-}
-
-.abc-legend-tier {
-  min-width: 0.7rem;
+/* A tier's share on its band: white on the deep and medium plums, the deep
+   plum on the pale one. Never in the pointer's way. */
+.abc-seg-label {
+  font-size: 13px;
   font-weight: 700;
+  fill: #fff;
+  pointer-events: none;
 }
 
-.abc-legend-name {
-  white-space: nowrap;
+.abc-seg-label.is-dark {
+  fill: #5A1E48;
 }
 
 /* The selected tier's share in the ring's hole. Drawn by the SVG, so the
@@ -1228,34 +1506,87 @@
 
 .abc-donut-centre-tier,
 .abc-donut-centre-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   fill: var(--color-text-muted);
 }
 
 .abc-donut-centre-value {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 700;
   fill: var(--color-text);
 }
 
+/* The legend: one tier per row, its name over its share of the products. */
+.abc-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .abc-legend-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.35rem;
-  border: 0;
-  border-radius: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: none;
   font: inherit;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
+  text-align: left;
+  color: var(--color-text-body);
   cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.abc-legend-btn .legend-color {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.abc-legend-btn:hover {
+  background: var(--color-surface-sunken);
 }
 
 .abc-legend-btn.is-selected {
-  font-weight: 700;
+  background: #FAF3F8;
+  border-color: #EBD3E4;
+}
+
+.abc-legend-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.abc-legend-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 0.97rem;
   color: var(--color-text);
+}
+
+.abc-legend-tier {
+  font-weight: 700;
+}
+
+.abc-legend-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.abc-legend-sub {
+  font-size: 0.84rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 
 /* Keyboard focus only: a clicked segment would otherwise keep the browser's
@@ -1270,47 +1601,120 @@
   outline-offset: 2px;
 }
 
-/* Fills everything right of the donut in both directions: as wide as the
-   ABC card allows and as tall as the donut + legend, content centred in it.
-   A size container, so its layout follows its own width (below), not the
-   window's — the ABC card is narrow on a 1366px laptop but full-width
-   below 1350px. */
-.abc-tier-card {
-  flex: 1 1 240px;
-  min-width: 240px;
-  align-self: stretch;
+/* The right-hand column: the at-risk count over the selected class. */
+.abc-side {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 16px 18px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.abc-panel {
+  padding: 14px 16px;
   border: 1px solid #EDF0F4;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #F9FAFB;
-  container-type: inline-size;
 }
 
-.abc-tier-card-body {
+.abc-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
+.abc-panel-text {
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.abc-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #C7402B;
+  cursor: pointer;
+}
+
+.abc-panel-link:hover,
+.abc-panel-link:focus-visible {
+  text-decoration: underline;
+}
+
+.abc-panel-link:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Below safety stock: red while any top seller is, green when none is. */
+.abc-atrisk {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  border-color: #F6D5CE;
+  background: #FFF6F4;
 }
 
-.abc-tier-card-stat {
+.abc-atrisk .abc-panel-title {
+  color: #C7402B;
+}
+
+.abc-atrisk-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #FCE4DF;
+  color: #D9472F;
+}
+
+.abc-atrisk-text {
+  min-width: 0;
+}
+
+.abc-atrisk.is-clear {
+  border-color: var(--color-success-bg-alt);
+  background: var(--color-success-bg);
+}
+
+.abc-atrisk.is-clear .abc-panel-title {
+  color: var(--color-success-text);
+}
+
+.abc-atrisk.is-clear .abc-atrisk-icon {
+  background: var(--color-success-bg-alt);
+  color: var(--color-success-deep);
+}
+
+/* The selected class: its count and revenue side by side, the period under
+   them, its list last. Takes the column's remaining height. */
+.abc-tier-card {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
-}
-
-.abc-tier-card-stat + .abc-tier-card-stat {
-  margin-top: 0.6rem;
 }
 
 .abc-tier-card-name {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  margin: 0 0 0.35rem;
-  font-size: 0.8rem;
-  font-weight: 600;
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 700;
   color: var(--color-text);
 }
 
@@ -1319,11 +1723,54 @@
   color: var(--color-text-muted);
 }
 
-.abc-tier-card-role {
-  margin: 0 0 0.65rem;
-  font-size: 0.74rem;
-  line-height: 1.4;
-  color: var(--color-text-body);
+.abc-tier-card-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1.1rem;
+}
+
+.abc-tier-card-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.abc-tier-card-stat + .abc-tier-card-stat {
+  padding-left: 1.1rem;
+  border-left: 1px solid #E4E7EC;
+}
+
+/* The count and the revenue at one size, as the mockup has them. A figure
+   never breaks across lines ("₱314.0 / M"): it steps down instead on a
+   narrower card (the container query below). */
+.abc-tier-card-skus,
+.abc-tier-card-revenue {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.abc-tier-card-revenue.is-unavailable {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: normal;
+}
+
+.abc-tier-card-note {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.abc-tier-card-period {
+  margin: 0.7rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
 }
 
 .abc-tier-card-link {
@@ -1331,11 +1778,16 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  margin-top: 0.75rem;
-  font-size: 0.72rem;
+  margin-top: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 0.84rem;
   font-weight: 600;
   color: var(--color-brand-primary);
   text-decoration: none;
+  cursor: pointer;
 }
 
 .abc-tier-card-link:hover,
@@ -1343,154 +1795,67 @@
   text-decoration: underline;
 }
 
-/* The class link as a button (opens the range's class list): no button
-   chrome, same look as the link. */
-button.abc-tier-card-link {
-  padding: 0;
-  border: none;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-/* The same link, as a button: opens the below-safety-stock list. Two links
-   stack with a smaller gap than the first one's top margin. */
-.abc-tier-card-atrisk {
-  display: inline;
-  padding: 0;
-  border: none;
-  background: none;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* The arrow stays on the sentence's last line instead of dropping below it. */
-.abc-tier-card-nowrap {
-  white-space: nowrap;
-}
-
-.abc-tier-card-atrisk svg {
-  display: inline;
-  vertical-align: -2px;
-}
-
-.abc-tier-card-atrisk + .abc-tier-card-link {
-  margin-top: 0.4rem;
-}
-
-.abc-tier-card-skus {
-  margin: 0;
-  font-size: 1.6rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--color-text);
-}
-
-.abc-tier-card-revenue {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--color-text);
-}
-
-.abc-tier-card-revenue.is-unavailable {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
-.abc-tier-card-note {
-  margin: 0.1rem 0 0;
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-}
-
-/* The thin divider sits on the sentence, so it only appears with it. */
-.abc-tier-card-insight {
-  margin: 0.7rem 0 0;
-  padding-top: 0.7rem;
+/* The share bars: the label and the three shares on one line, the bar
+   under them. */
+.abc-share-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 2px;
+  padding-top: 16px;
   border-top: 1px solid var(--color-border);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: var(--color-text-body);
 }
 
-.abc-tier-card-insight strong {
+.abc-share-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.abc-share-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.abc-share-label {
+  font-size: 0.86rem;
+  font-weight: 600;
   color: var(--color-text);
 }
 
-/* Medium card: SKUs and revenue side by side, the sentence underneath. */
-@container (min-width: 400px) {
-  .abc-tier-card-body {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 1.5rem;
-  }
-  .abc-tier-card-stat + .abc-tier-card-stat {
-    margin-top: 0;
-    padding-left: 1.5rem;
-    border-left: 1px solid var(--color-border);
-  }
-  .abc-tier-card-insight {
-    grid-column: 1 / -1;
-    font-size: 0.85rem;
-  }
-  .abc-tier-card-name {
-    margin-bottom: 0.6rem;
-    font-size: 0.9rem;
-  }
-  .abc-tier-card-skus {
-    font-size: 2.3rem;
-  }
-  .abc-tier-card-revenue:not(.is-unavailable) {
-    font-size: 1.5rem;
-  }
-  .abc-tier-card-revenue.is-unavailable {
-    font-size: 1rem;
-  }
-  .abc-tier-card-note {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-  }
+.abc-share-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Wide card: SKUs | revenue | sentence in one row, equal columns, the
-   type scaled up so the row fills the panel's height as well as its width.
-   With no sentence (revenue unavailable) the two stats share the width. */
-@container (min-width: 620px) {
-  .abc-tier-card-name {
-    margin-bottom: 0.75rem;
-    font-size: 0.95rem;
-  }
-  .abc-tier-card-body {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-  }
-  .abc-tier-card-skus {
-    font-size: 2.6rem;
-  }
-  .abc-tier-card-revenue:not(.is-unavailable) {
-    font-size: 1.7rem;
-  }
-  .abc-tier-card-revenue.is-unavailable {
-    font-size: 1.1rem;
-  }
-  .abc-tier-card-note {
-    margin-top: 0.3rem;
-    font-size: 0.85rem;
-  }
-  .abc-tier-card-insight {
-    grid-column: auto;
-    display: flex;
-    align-items: center;
-    margin: 0;
-    padding: 0 0 0 1.5rem;
-    border-top: 0;
-    border-left: 1px solid var(--color-border);
-    font-size: 0.9rem;
-  }
+.abc-share-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.abc-share-value .legend-color {
+  width: 8px;
+  height: 8px;
+}
+
+.abc-share-track {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+
+.abc-share-track span {
+  height: 100%;
 }
 
 /* Portalled to <body> (see AbcHoverTooltip): fixed, above every card and
@@ -1498,40 +1863,47 @@ button.abc-tier-card-link {
 .abc-hover-tip {
   position: fixed;
   z-index: 2100;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 9px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
   font-family: var(--font-inter);
-  font-size: 0.75rem;
-  line-height: 1.35;
-  color: var(--color-text-body);
   white-space: nowrap;
 }
 
-.abc-hover-tip-title {
-  font-weight: 700;
-  color: var(--color-text);
+
+/* Half a row (two cards side by side): the selected class's figures a step
+   smaller, so "₱314.0M" sits beside its count on one line. */
+@container (max-width: 799px) {
+  .abc-tier-card-skus,
+  .abc-tier-card-revenue:not(.is-unavailable) {
+    font-size: 1.5rem;
+  }
 }
 
-@media (max-width: 767px) {
+/* A card too narrow for the ring row: the panels go under the ring. */
+@container (max-width: 639px) {
   .abc-overview {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* A phone: the legend under the ring. */
+@media (max-width: 480px) {
   .abc-donut-col {
-    align-self: flex-start;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
-  .abc-tier-card {
-    flex: none;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
+  .abc-finding-answer {
+    font-size: 15px;
+  }
+  .abc-tier-card-skus {
+    font-size: 1.6rem;
+  }
+  .abc-tier-card-revenue {
+    font-size: 1.25rem;
   }
 }
 
@@ -1562,7 +1934,7 @@ button.abc-tier-card-link {
 }
 
 .policy-headline-text {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-body);
 }
 
@@ -1572,7 +1944,7 @@ button.abc-tier-card-link {
   border-left: 3px solid var(--color-warning);
   border-radius: 6px;
   background-color: var(--color-surface-raised);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   line-height: 1.45;
   color: var(--color-text-muted);
 }
@@ -1596,7 +1968,7 @@ button.abc-tier-card-link {
 }
 
 .policy-bar-label {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--color-text-body);
 }
@@ -1619,7 +1991,7 @@ button.abc-tier-card-link {
 }
 
 .policy-bar-value {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
@@ -1727,7 +2099,7 @@ button.abc-tier-card-link {
   flex-wrap: wrap;
   gap: 0.5rem 1.5rem;
   margin: -0.25rem 0 0.5rem calc(12rem + 0.75rem);
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-body);
 }
 
@@ -1782,7 +2154,7 @@ button.abc-tier-card-link {
 
 .policy-stat-value small {
   margin-left: 2px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-muted);
 }
@@ -2018,7 +2390,7 @@ button.abc-tier-card-link {
 .alloc-metric.is-achieved { background: #F1EDFF; }
 
 .alloc-metric-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2061,27 +2433,6 @@ button.abc-tier-card-link {
   color: var(--color-dispatched);
 }
 
-/* ABC tier card: SKUs and revenue side by side from a narrower card (the
-   dashboard's half-row card is ~375px), as the mockup shows. */
-@container (min-width: 330px) and (max-width: 399px) {
-  .abc-tier-card-body {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 1.1rem;
-  }
-  .abc-tier-card-stat + .abc-tier-card-stat {
-    margin-top: 0;
-    padding-left: 1.1rem;
-    border-left: 1px solid #E4E7EC;
-  }
-  .abc-tier-card-skus {
-    font-size: 1.75rem;
-  }
-  .abc-tier-card-revenue:not(.is-unavailable) {
-    font-size: 1.35rem;
-  }
-}
-
 /* The line that says which months of the chart's sentence are synthetic. */
 .chart-widget .chart-title-area p.chart-insight-synthetic {
   font-weight: 600;
@@ -2102,14 +2453,14 @@ button.abc-tier-card-link {
 /* What a panel shows, above it. */
 .yoy-panel-caption {
   margin: 0.4rem 0 0;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text);
 }
 
 .yoy-panel-empty {
   margin: 0.25rem 0 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
 }
 
@@ -2133,9 +2484,16 @@ button.abc-tier-card-link {
   outline-offset: 2px;
 }
 
+/* A legend entry switched off: muted grey, its swatch greyed too (no
+   strikethrough, 2026-10-19). */
 .legend-toggle.is-off {
+  color: #98A2B3;
+}
+
+.legend-toggle.is-off .legend-color,
+.legend-toggle.is-off svg {
+  filter: grayscale(1);
   opacity: 0.45;
-  text-decoration: line-through;
 }
 
 /* Sales vs Inventory Value keeps one height whatever it shows: the two
@@ -2177,4 +2535,374 @@ button.abc-tier-card-link {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
+}
+
+/* A chart's "?" text, one short paragraph per line (Sales vs Inventory
+   Value, Sales per year; 2026-10-19). */
+.chart-tip-line {
+  display: block;
+}
+
+.chart-tip-line + .chart-tip-line {
+  margin-top: 6px;
+}
+
+/* Sales vs Inventory Value's header (2026-10-19): the view and chart/table
+   buttons keep the top-right corner whatever the subtitle; a long one (the
+   Weeks of stock view's) wraps under the title instead of pushing the
+   buttons down. On a narrow card the two still stack. */
+/* 2026-10-26: at 1440px the five view buttons squeezed the title onto three
+   lines. The header wraps again, and the title area claims a fixed basis
+   (not its subtitle's full width), so the buttons drop to their own row
+   below the title only when the two can't share one; the title itself
+   stays on one line. */
+.chart-widget-svs .chart-header {
+  flex-wrap: wrap;
+}
+
+.chart-widget-svs .chart-title-area {
+  flex: 1 1 20rem;
+  min-width: min(100%, 20rem);
+}
+
+.chart-widget-svs .chart-header h4 > span:first-child {
+  white-space: nowrap;
+}
+
+.chart-widget-svs .chart-header-controls {
+  flex: 0 0 auto;
+}
+
+.chart-widget-svs.is-narrow .chart-header {
+  flex-wrap: wrap;
+}
+
+/* Every subtitle the card can switch to, laid in one grid cell with only
+   the current one visible: the cell is as tall as the longest, at any
+   width, so changing the view never moves the card or the page below it
+   (2026-10-19; before this the Weeks of stock and Purchases subtitles,
+   wrapping under the title, made the card up to two lines taller). A
+   hidden one is out of the accessibility tree too (visibility). */
+.svs-lede-stack {
+  display: grid;
+}
+
+.svs-lede-stack > .section-lede {
+  grid-area: 1 / 1;
+}
+
+.svs-lede-stack > .section-lede.is-reserved {
+  visibility: hidden;
+}
+
+/* The table view is as tall as its rows, up to the chart's height (it
+   scrolls past that), so no empty band sits under the last row. */
+.yoy-body.is-table {
+  height: auto;
+  max-height: 500px;
+}
+
+/* Forecast demand (2026-10-19): the calendar adjustment inside the forecast,
+   said on the card's face — a quiet violet rule, the forecast's colour. */
+.chart-widget .chart-title-area p.chart-calendar-note {
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--color-forecast, #8866E8);
+  color: var(--color-text-body);
+}
+
+/* Its sign-off status, a pill after the sentence while the adviser has not
+   confirmed it (2026-10-24); wraps rather than run past a phone's edge. */
+.chart-calendar-note .chart-calendar-pending {
+  margin-left: 6px;
+  white-space: normal;
+  vertical-align: 1px;
+}
+
+/* Suggested orders (2026-10-19): how the order was worked out, in one line
+   with the weights in it, and a product missing from the stock count. */
+/* Secondary to the table (2026-10-21): smaller and muted, same words. */
+.reorder-priorities-line {
+  margin: 0 0 12px;
+  font-size: var(--text-caption);
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.reorder-priorities-line strong {
+  font-weight: 600;
+  color: var(--color-text-body);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A product missing from the stock count: an amber note in the stock cell,
+   not a number, so it never reads as a counted zero. */
+.reorder-mini-nocount {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background-color: var(--badge-warning-bg);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #93470D;
+  white-space: nowrap;
+}
+
+/* "Check first": a suggested order the plan flags for review (review_flag),
+   under the product name. The chip is an InfoTip trigger (2026-10-24), so
+   the reason opens on hover, tap or Enter, not on hover alone. */
+.reorder-mini-review-tip.info-tip {
+  display: block;
+  margin-left: 0;
+}
+
+/* The chip is about 16px tall; the ::after widens the tap target to 24px
+   (WCAG 2.2, 2.5.8) without making the chip itself bigger. */
+.info-tip-trigger.reorder-mini-review {
+  position: relative;
+  cursor: help;
+}
+
+.info-tip-trigger.reorder-mini-review::after {
+  content: '';
+  position: absolute;
+  inset: -4px -2px;
+  min-height: 24px;
+}
+
+.reorder-mini-review,
+.info-tip-trigger.reorder-mini-review {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background-color: var(--badge-warning-bg);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #93470D;
+  white-space: nowrap;
+}
+
+.reorder-mini-nocount::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+/* Phones (2026-10-21): four columns left the name about 120px, cut after a
+   few letters. Each row becomes two lines instead: the name across the
+   full width, then urgency, stock and order, each figure under its own
+   small label (data-label). The header row stays for screen readers only.
+   After the 480px rules above, and as specific, so these win. */
+@media (max-width: 560px) {
+  .reorder-mini-table,
+  .reorder-mini-table tbody {
+    display: block;
+  }
+
+  .reorder-mini-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .reorder-mini-table tbody tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'product product product'
+      'urgency stock order';
+    align-items: end;
+    column-gap: 12px;
+    row-gap: 8px;
+    padding: 10px 0.5rem;
+    border-bottom: 1px solid #EEF1F4;
+  }
+
+  .reorder-mini-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .reorder-mini-table td,
+  .reorder-mini-table td:first-child,
+  .reorder-mini-table td:last-child {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .reorder-mini-table td.reorder-mini-product {
+    grid-area: product;
+    width: auto;
+    max-width: none;
+  }
+
+  .reorder-mini-table td:nth-child(2) {
+    grid-area: urgency;
+    align-self: center;
+  }
+
+  .reorder-mini-table td:nth-child(3) { grid-area: stock; }
+  .reorder-mini-table td:nth-child(4) { grid-area: order; }
+
+  .reorder-mini-table .reorder-mini-qty[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+  }
+}
+
+/* Sales vs Inventory Value's legend keys (the timeline, 2026-10-19): a bar,
+   a hatched bar, an outlined bar or a dot, drawn as the plot draws them. */
+.svs-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+/* One plot, as tall as the two panels of the year overlay were together. */
+.chart-container-yoy.svs-plot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 300px;
+}
+
+/* ── Forecast demand, top sellers (PortfolioForecastWidget, 2026-10-21) ── */
+/* How many SKUs the line sums, beside the title. */
+.pf-sku-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 9px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-forecast-bg, #EEE9FC);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #5B3FC4;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Chart / Table: the active view in navy with white text, on this card
+   and the accuracy card's Lines / Monthly miss / Table (RangeCards.css). */
+.pf-card > .chart-header .chart-view-toggle {
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background-color: var(--color-surface);
+}
+
+.pf-card > .chart-header .chart-view-toggle button {
+  padding: 0.3rem 0.75rem;
+}
+
+.pf-card > .chart-header .chart-view-toggle button.active {
+  background-color: var(--color-text);
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+.pf-card > .chart-header .chart-view-toggle button:focus-visible {
+  outline: 2px solid var(--color-forecast, #8866E8);
+  outline-offset: 2px;
+}
+
+/* The marked points: the month over its value in a small white box with a
+   hairline in the series' colour. */
+.pf-mark-box {
+  fill: var(--color-surface, #FFFFFF);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+
+/* The plot: at least 300px with its axes (240px on a phone), and beside
+   the accuracy card it takes up whatever that taller card leaves, so the
+   two cards are the same height (Audrey, 2026-10-21). The accuracy card
+   was tightened at the same time (RangeCards.css) to keep this short.
+   On a stacked layout nothing stretches it and it stays at its floor.
+   The Table view sits in the same box. */
+.pf-card .portfolio-forecast-body .chart-container {
+  flex: 1 0 auto;
+  min-height: 300px;
+}
+
+@media (max-width: 640px) {
+  .pf-card .portfolio-forecast-body .chart-container {
+    min-height: 240px;
+  }
+}
+
+/* Key takeaways: up to three numbered lines on a quiet panel. */
+.pf-takeaways {
+  margin-top: 14px;
+  padding: 12px 16px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+}
+
+.pf-takeaways-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.pf-takeaways-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pf-takeaway;
+}
+
+.pf-takeaways-list li {
+  position: relative;
+  padding-left: 32px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+  counter-increment: pf-takeaway;
+}
+
+.pf-takeaways-list li::before {
+  content: counter(pf-takeaway);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--color-forecast-bg, #EEE9FC);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #5B3FC4;
+}
+
+.pf-takeaways-list strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }

@@ -65,6 +65,30 @@ COUNT_FILLED_AND_GENERATED = False
 # them would show invented sales as the actuals of a forecast month.
 _LAST_REAL_SALES_MONTH_SQL = "SELECT MAX(period) FROM mart.sales_month WHERE data_kind = 'real'"
 
+# Each principal's first and latest month of REAL sales, in one small grouped read
+# (2026-10-20): what "now" is for the date filter on every page (GET /data-mode's
+# coverage), instead of a month typed into frontend/src/dataCoverage.js by hand.
+REAL_COVERAGE_SQL = """
+    SELECT principal, MIN(period) AS first, MAX(period) AS latest
+    FROM mart.sales_month WHERE data_kind = 'real' GROUP BY principal
+"""
+
+
+def real_coverage(db: Session) -> dict:
+    """{first_data_period, latest_data_period, latest_data_period_by_principal}: real
+    sales only, 'YYYY-MM'. The overall latest is the later principal's (the date
+    picker spans both); each principal's own latest is where its default range ends
+    (Del Monte's sell-out stops at 2025-12, Unilever's demand at 2026-02 as of
+    2026-10-20). Unknown principals are left out; None when nothing is loaded."""
+    rows = [r for r in batch.rows(db, REAL_COVERAGE_SQL) if r["principal"] in ("unilever", "delmonte")]
+    latest = {r["principal"]: r["latest"] for r in rows if r["latest"]}
+    firsts = [r["first"] for r in rows if r["first"]]
+    return {
+        "first_data_period": min(firsts) if firsts else None,
+        "latest_data_period": max(latest.values()) if latest else None,
+        "latest_data_period_by_principal": latest,
+    }
+
 
 def _kind_filter(mode: str, alias: str = "") -> str:
     """Real rows, plus the demonstration back-cast months in preview when DM_DEMO_ENABLED is on. The older
@@ -786,6 +810,104 @@ def product_sales(db: Session, start: str, end: str, principal: str, mode: str =
 
 
 # ---------------------------------------------------------------------------
+# Stock by product (2026-10-19): the products behind the stock cards
+# ---------------------------------------------------------------------------
+
+def stock_detail_query(principal: str, count_period: str, start: str, end: str) -> tuple[str, dict]:
+    """Each product in ONE principal's real count at `count_period`, with its real
+    product-level sales summed over start..end (NULL when it sold nothing)."""
+    return """
+        WITH stock AS (
+            SELECT product_key, pesos, pieces FROM mart.inventory_mart_real
+            WHERE principal = :principal AND period = :period
+        ), sold AS (
+            SELECT product_key, SUM(pesos) AS sales_pesos FROM mart.sales_mart
+            WHERE principal = :principal AND level = 'product' AND data_kind = 'real'
+              AND in_principal_total AND product_key IS NOT NULL
+              AND period BETWEEN :start AND :end
+            GROUP BY product_key
+        )
+        SELECT s.product_key, pd.sku_code, pd.product_name, pd.category_path,
+               s.pesos, s.pieces, so.sales_pesos
+        FROM stock s
+        LEFT JOIN sold so ON so.product_key = s.product_key
+        LEFT JOIN product_dimension pd ON pd.product_key = s.product_key
+        ORDER BY s.pesos DESC NULLS LAST, s.product_key
+    """, {"principal": principal, "period": count_period, "start": start, "end": end}
+
+
+def stock_detail(
+    db: Session, principal: str, count_period: str | None, window: list[str],
+    policy_weeks: float, weeks_per_month: float, with_items: bool = True,
+) -> dict:
+    """The products behind the stock cards, for ONE principal's count at `count_period`.
+
+    Per product: stock pesos (last purchase price) and pieces; its average weekly sales,
+    which is its sales over `window` / the months of the window with any sales on record
+    for the principal / weeks_per_month — the same months and the same divisor the
+    portfolio's weeks of cover uses, so a missing month is a month with no sale (Unilever's
+    rule) and the products' weekly sales add up to the portfolio's; its weeks of cover
+    (stock ÷ weekly sales; None when it sold nothing, all of its stock then being beyond any
+    number of weeks); and its pesos above SSM's rule, max(0, stock − policy_weeks × weekly
+    sales). The totals are those sums, the card's own figures. Del Monte's sales have no
+    product, so its products carry stock only and the cover fields say why."""
+    base = {"principal": principal, "count_period": count_period, "count_date": None,
+            "sales_window": None, "months_used": 0, "policy_weeks": policy_weeks,
+            "pesos_basis": PESOS_BASIS_LABEL["last_purchase_price"], "totals": None, "items": [],
+            "blocked_reason": None, "cover_blocked_reason": None}
+    if count_period is None:
+        return {**base, "blocked_reason": f"No real {principal} stock count on or before the range's end."}
+    by_month = sales_by_period(db, window, principal) if window else {}
+    months_used = sum(1 for v in by_month.values() if v is not None)
+    sales_total = _sum(by_month.values())
+    product_sales = principal == "unilever"
+    cover_blocked = (
+        None if product_sales and months_used else
+        "Del Monte's sales are by product category, so no product's weeks of cover can be worked out."
+        if not product_sales else "No sales on record in the 12 months up to the count."
+    )
+    rows = batch.rows(db, *stock_detail_query(principal, count_period, window[0], window[-1])) if window else []
+    items = []
+    for r in rows:
+        pesos = _f(r["pesos"])
+        weekly = None
+        cover = None
+        above = None
+        if not cover_blocked:
+            sold = _f(r["sales_pesos"])
+            weekly = max(sold or 0.0, 0.0) / months_used / weeks_per_month
+            cover = round(pesos / weekly, 2) if pesos is not None and weekly > 0 else None
+            above = round(max(pesos - policy_weeks * weekly, 0.0), 2) if pesos is not None else None
+            weekly = round(weekly, 2)
+        items.append({
+            "product_key": int(r["product_key"]), "sku_id": r["sku_code"], "product_name": r["product_name"],
+            "category_path": r["category_path"],
+            "pesos": round(pesos, 2) if pesos is not None else None,
+            "pieces": _f(r["pieces"]),
+            "weekly_sales": weekly, "weeks_of_cover": cover, "above_rule_pesos": above,
+            "no_sale_in_window": bool(not cover_blocked and weekly == 0),
+        })
+    stock_total = _sum(i["pesos"] for i in items)
+    weekly_total = (sales_total / months_used / weeks_per_month) if (not cover_blocked and sales_total) else None
+    above = [i for i in items if i["above_rule_pesos"]]
+    totals = {
+        "products": len(items),
+        "pesos": round(stock_total, 2) if stock_total is not None else None,
+        "pieces": _sum(i["pieces"] for i in items),
+        "weekly_sales": round(weekly_total, 2) if weekly_total else None,
+        "weeks_of_cover": round(stock_total / weekly_total, 2) if stock_total is not None and weekly_total else None,
+        "above_rule_pesos": round(sum(i["above_rule_pesos"] for i in above), 2) if not cover_blocked else None,
+        "above_rule_products": len(above) if not cover_blocked else None,
+        "no_sale_products": sum(1 for i in items if i["no_sale_in_window"]),
+    }
+    days = count_dates(db, [count_period], principal)
+    return {**base, "count_date": days.get(count_period),
+            "sales_window": {"start": window[0], "end": window[-1]} if window else None,
+            "months_used": months_used, "totals": totals,
+            "items": items if with_items else [], "cover_blocked_reason": cover_blocked}
+
+
+# ---------------------------------------------------------------------------
 # Idle stock
 # ---------------------------------------------------------------------------
 
@@ -860,6 +982,37 @@ def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, 
 # forecast applies it. The older runs (backtest_forecast_run.py: 5 unadjusted, 7 calendar-adjusted)
 # never scored a month with no sales row; they stay stored and selectable under their own labels.
 DEFAULT_BACKTEST_LABEL = "as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted"
+# A calendar-adjusted run is the at-the-time run with this suffix on its label
+# (scripts/backtest_forecast_run.py's at_the_time_calendar); its unadjusted twin is
+# the same label without it, so the card can show both from the run list alone.
+CALENDAR_ADJUSTED_SUFFIX = ", calendar-adjusted"
+
+
+def calendar_adjusted_state(run_labels: list[str]) -> str | None:
+    """'yes' when every run behind a range's figures is calendar-adjusted, 'partly' when
+    some are, 'no' when none, None with no runs (an empty range)."""
+    if not run_labels:
+        return None
+    adjusted = [label.endswith(CALENDAR_ADJUSTED_SUFFIX) for label in run_labels]
+    return "yes" if all(adjusted) else "partly" if any(adjusted) else "no"
+
+
+def unadjusted_twin_query(label: str) -> tuple[str, dict]:
+    """The stored run with `label` minus the calendar suffix (the same backtest, unadjusted)."""
+    return """
+        SELECT run_id, label FROM mart.forecast_run WHERE label = :label ORDER BY run_id DESC LIMIT 1
+    """, {"label": label[: -len(CALENDAR_ADJUSTED_SUFFIX)]}
+
+
+def accuracy_comparison(db: Session, summary: dict) -> dict | None:
+    """{run_id, label} of the unadjusted twin of the single calendar-adjusted run behind
+    `summary`, so the error card can show the same months before the adjustment; None when
+    the figures are not (all) from one adjusted run or no twin is stored."""
+    labels = summary.get("run_labels") or []
+    if len(labels) != 1 or calendar_adjusted_state(labels) != "yes":
+        return None
+    row = batch.first(db, *unadjusted_twin_query(labels[0]))
+    return {"run_id": int(row["run_id"]), "label": row["label"]} if row else None
 
 
 def accuracy_runs(db: Session) -> list[dict]:
@@ -1096,7 +1249,7 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
     """accuracy_summary from aggregates (accuracy_aggregates or accuracy_aggregates_from_query)."""
     if not agg["product_months"]:
         return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
-                "run_labels": [], "products": 0, "product_months": 0, "by_month": [],
+                "run_labels": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
                 **accuracy_headlines(None, None),
                 "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
                 "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
@@ -1142,6 +1295,9 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
         "start_period": start, "end_period": end, "label": range_label(months[0], months[-1]), "months": months,
         "forecast_source": "/".join(agg["sources"]),
         "run_labels": agg["run_labels"],
+        # Whether those runs' forecasts carry the company calendar factor (2026-10-19):
+        # 'yes' / 'partly' / 'no' (calendar_adjusted_state).
+        "calendar_adjusted": calendar_adjusted_state(agg["run_labels"]),
         "products": len(by_product), "product_months": agg["product_months"],
         **{k: round(v, 2) for k, v in totals.items()},
         "direction": "over" if net > 0 else "under" if net < 0 else "exact",

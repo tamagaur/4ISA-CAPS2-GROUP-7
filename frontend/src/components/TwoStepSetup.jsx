@@ -47,7 +47,7 @@ const TwoStepSetup = ({ setup, onConfirm, variant }) => {
           </details>
         </li>
         <li>
-          <strong>Enter the 6-digit code</strong> the app now shows for SAN2 Inventory DSS.
+          <strong>Enter the 6-digit code</strong> the app now shows for SAN2 (the account name starts with SAN2).
         </li>
       </ol>
       <TwoStepCodeForm onSubmit={onConfirm} submitLabel="Turn on two-step sign-in" variant={variant} />

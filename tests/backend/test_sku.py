@@ -111,6 +111,9 @@ class FakeSession:
             # way routers/sku.py does: latest snapshot per principal.
             if "MAX(inv.snapshot_date) AS count_date" in sql and "stock_count.principal = pd.principal" in sql:
                 out = [{**r, "stock_count_date": COUNT_DATES[r["principal"]]} for r in out]
+            # The count's month (latest _period per principal), joined the same way.
+            if "MAX(_period) AS count_period" in sql and "stock_period.principal = pd.principal" in sql:
+                out = [{**r, "stock_count_period": self.inventory_period_by_scope.get(r["principal"])} for r in out]
             return FakeResult(out)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
@@ -282,6 +285,19 @@ def test_list_states_each_principals_stock_count_date(client):
     assert items["U-1"]["stock_count_date"] == "2026-04-06"
     assert items["D-1"]["stock_count_date"] == "2025-12-01"
     assert body["planning_cycle_date"] == "2026-03-01"
+
+
+def test_list_names_each_principals_count_month(client):
+    """Audit NEW-FE-1 (2026-10-21): every principal in the list names its count's
+    month, so a principal whose count day is withheld (Del Monte) is not left to
+    borrow Unilever's "counted Apr 6, 2026"."""
+    body = client.get("/sku").json()
+    periods = body["stock_count_periods"]
+    assert set(periods) == {"unilever", "delmonte"}
+    items = {i["sku_id"]: i for i in body["items"]}
+    assert items["D-1"]["stock_count_period"] == periods["delmonte"]
+    assert items["U-1"]["stock_count_period"] == periods["unilever"]
+    assert set(client.get("/sku?principal=unilever").json()["stock_count_periods"]) == {"unilever"}
 
 
 def test_plan_cycle_is_left_out_without_lp_view(client, monkeypatch):

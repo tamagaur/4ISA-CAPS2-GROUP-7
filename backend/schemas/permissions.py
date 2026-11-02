@@ -50,6 +50,7 @@ class CatalogEntry(BaseModel):
     label: str
     group: str
     description: str
+    admin_only: bool = False  # never for staff (backend/permissions.ADMIN_ONLY_KEYS)
 
 
 class CatalogResponse(BaseModel):

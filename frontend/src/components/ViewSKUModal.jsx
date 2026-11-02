@@ -89,6 +89,11 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit, onOpenForecast, onOpenReor
                   <span className={getCatClass(sku.cat)}>{sku.cat}</span>
                   {sku.catPeriod && <span className="view-sku-asof">{formatMonth(sku.catPeriod)} run</span>}
                 </div>
+                {/* An old Del Monte sub-category (SKUManagement's preRegroup,
+                    2026-10-22): its class is history, not counted. */}
+                {sku.preRegroup && (
+                  <span className="view-sku-asof">before the Jan 2025 regrouping, so not counted in the class totals</span>
+                )}
               </div>
             )}
 
@@ -117,11 +122,17 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit, onOpenForecast, onOpenReor
                         {sku.currentStock.toLocaleString()} pieces
                         {sku.currentStockCases != null && <> ({sku.currentStockCases.toLocaleString()} cases)</>}
                       </>
-                    : <>{sku.currentStockCases.toLocaleString()} cases</>}
+                    : <>{Number(sku.currentStockCases).toLocaleString(undefined, { maximumFractionDigits: 2 })} cases</>}
                 </span>
+                {/* Cases only: no pack size to convert with (2026-10-22). */}
+                {sku.currentStock == null && (
+                  <span className="view-sku-asof">no pieces-per-case recorded, so pieces can&apos;t be shown</span>
+                )}
                 {/* The count's own day (GET /sku's stock_count_date): the
                     file filed as "Mar 2026" was counted on 6 Apr 2026. */}
-                {sku.stockCountDate && <span className="view-sku-asof">as of the count on {formatDate(sku.stockCountDate)}</span>}
+                {sku.stockCountDate
+                  ? <span className="view-sku-asof">as of the count on {formatDate(sku.stockCountDate)}</span>
+                  : sku.stockCountPeriod && <span className="view-sku-asof">from the {formatMonth(sku.stockCountPeriod)} count (exact day not recorded)</span>}
               </div>
             )}
 
@@ -133,13 +144,13 @@ const ViewSKUModal = ({ isOpen, sku, onClose, onEdit, onOpenForecast, onOpenReor
               </div>
             )}
 
-            {/* Avg Sales per Month */}
-            {sku.avgSalesPerMonth !== undefined && sku.avgSalesPerMonth !== null && (
-              <div className="view-sku-field">
-                <span className="view-sku-label">AVG SALES PER MONTH</span>
-                <span className="view-sku-value mono-val">{sku.avgSalesPerMonth.toLocaleString()} units</span>
-              </div>
-            )}
+            {/* An "avg sales per month … units" field sat here until
+                2026-10-22. Nothing ever filled it: GET /sku sends no average
+                (backend/routers/sku.py's _SELECT_ONE) and SKU Management maps
+                none, so it never rendered, and it named neither the unit
+                (pieces) nor the months averaged (Technical Adviser, 2 Oct
+                2026: every number with its period and unit). Removed rather
+                than given a window the backend does not state. */}
 
             {/* Target stock — GET /sku's reorder_point is the LP's rop_i, which
                 since the 2026-09-30 run is the order-up-to level, not a

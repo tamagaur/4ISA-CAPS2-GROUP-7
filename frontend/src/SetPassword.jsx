@@ -180,36 +180,44 @@ const SetPassword = () => {
           {/* Lets a password manager file the new password under this account. */}
           <input type="email" name="username" autoComplete="username" value={linkInfo.email} readOnly hidden />
 
-          <div className="input-group password-group">
-            <LockKeyhole className="input-icon" aria-hidden="true" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="New password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <button
-              type="button"
-              className="toggle-password"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}
-            >
-              {showPassword ? <EyeOff /> : <Eye />}
-            </button>
+          <div className="login-field">
+            <label htmlFor="set-password">New password</label>
+            <div className="input-group password-group">
+              <LockKeyhole className="input-icon" aria-hidden="true" />
+              <input
+                id="set-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter a new password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="toggle-password"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </button>
+            </div>
           </div>
 
-          <div className="input-group">
-            <LockKeyhole className="input-icon" aria-hidden="true" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Confirm new password"
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-            />
+          <div className="login-field">
+            <label htmlFor="set-confirm">Confirm new password</label>
+            <div className="input-group">
+              <LockKeyhole className="input-icon" aria-hidden="true" />
+              <input
+                id="set-confirm"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Re-enter the new password"
+                autoComplete="new-password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+              />
+            </div>
           </div>
           <p className="auth-hint">At least {MIN_CHARS} characters.</p>
 

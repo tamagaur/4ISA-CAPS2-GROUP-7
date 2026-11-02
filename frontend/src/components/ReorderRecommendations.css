@@ -29,7 +29,7 @@
   border-radius: 999px;
   background-color: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -49,7 +49,7 @@
 
 .reorder-page-subtitle {
   color: var(--color-text-subtle);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin: 0;
   letter-spacing: 0.02em;
 }
@@ -76,7 +76,7 @@
   padding: 0.55rem 1.15rem;
   border: 1px solid transparent;
   background: transparent;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: #3b6fe0;
@@ -102,11 +102,54 @@
 .reorder-tab-count {
   background-color: var(--color-brand-primary);
   color: var(--color-surface);
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 700;
   padding: 0.1rem 0.4rem;
   border-radius: 10px;
   letter-spacing: normal;
+}
+
+/* The page's three views (Recommendations / Decision log / Staff requests):
+   the shared segmented control (ui/ui.css), with the active view lifted to a
+   white chip in the brand coral so it reads at a glance. The Staff requests
+   tab carries a red badge, the requests waiting for a decision. */
+.segmented.reorder-tabs {
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin-bottom: 0.25rem;
+  padding: 4px;
+  border-radius: 14px;
+}
+
+.reorder-tabs .segmented-item {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.reorder-tabs .segmented-item.is-active,
+.reorder-tabs .segmented-item[aria-selected='true'] {
+  background-color: var(--color-surface);
+  color: var(--color-brand-primary);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), inset 0 0 0 1px rgba(232, 92, 74, 0.35);
+}
+
+.reorder-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background-color: var(--color-danger-ink, #B42318);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Summary Cards */
@@ -156,7 +199,7 @@
 }
 
 .reorder-card-label {
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   color: var(--color-text-subtle);
@@ -172,7 +215,7 @@
 }
 
 .reorder-card-desc {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-subtle);
   margin-top: 0.3rem;
 }
@@ -219,15 +262,25 @@
   min-width: 230px;
 }
 
-/* Urgency pill with the review badge under it, each on one line. */
+/* Urgency pill with the review badge under it. 2026-10-26: at 1440px the
+   one-line "Review before ordering" badge (nowrap, 150px floor) pushed the
+   column past the card's right edge; the badge now wraps its words under
+   the pill inside a narrower column, and the pill stays on one line. */
 .reorder-urgency-cell {
-  min-width: 150px;
+  min-width: 112px;
+  max-width: 132px;
+}
+
+.reorder-urgency-cell > span:first-child {
+  white-space: nowrap;
 }
 
 .reorder-urgency-cell .pending-review-badge {
   display: inline-flex;
   margin-top: 4px;
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.25;
 }
 
 /* The solver's weights inside the fold. */
@@ -272,7 +325,7 @@
 /* Group header rows: "Act now" and the collapsible "Review later". */
 .data-table .reorder-group-row td {
   padding: 0.45rem 1rem;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -329,14 +382,14 @@
   margin: 0;
   padding: 0.4rem 0.75rem;
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-body);
   background-color: var(--color-surface-sunken);
 }
 
 .reorder-pending-label {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -365,7 +418,7 @@
 /* Decision Log */
 .reorder-log-reason {
   max-width: 320px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.4;
 }
 
@@ -389,7 +442,7 @@
 }
 
 .loading-text {
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   color: var(--color-text-muted);
   font-style: italic;
 }
@@ -464,7 +517,7 @@
 
 .reorder-accept-body {
   margin: 0 0 1.3rem 0;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-body);
   line-height: 1.5;
 }
@@ -477,7 +530,7 @@
 /* Why the last Accept didn't save, kept after the red X gives way. */
 .reorder-accept-error {
   margin: -0.6rem 0 1rem 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-danger-text);
 }
 
@@ -486,7 +539,7 @@
   flex: 1;
   padding: 0.6rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -518,7 +571,7 @@
 .reorder-short-note {
   display: block;
   margin-top: 2px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--color-severity-urgent);
   white-space: nowrap;
@@ -531,7 +584,7 @@
 .reorder-cell-note {
   display: block;
   margin-top: 2px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 400;
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -544,7 +597,7 @@
 .data-table thead th .reorder-th-period {
   display: block;
   margin-top: 2px;
-  font-size: 0.66rem;
+  font-size: 0.79rem;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
@@ -597,9 +650,11 @@
   align-self: center;
 }
 
+/* gap: a narrow side panel read "Service level35%" with nothing between label and value (2026-10-26). */
 .reorder-how-weight dt {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   font-size: var(--text-meta);
   font-weight: 500;
   color: var(--color-text-body);
@@ -628,6 +683,193 @@
 
 @media (max-width: 900px) {
   .reorder-how {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* "Showing critical only: 16 SKUs below safety stock · Show all" — the
+   filter a dashboard link sets (?urgency=critical, 2026-10-19). */
+.reorder-filter-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #F5C2BD;
+  border-radius: 999px;
+  background: #FDECEC;
+  font-size: 13px;
+  color: #7A271A;
+}
+
+.reorder-filter-chip strong {
+  color: #B42318;
+}
+
+/* The weights with their status under them (2026-10-22): the grid's
+   second column, centred as the weights alone were. */
+.reorder-how-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: center;
+  min-width: 0;
+}
+
+.reorder-how-weight-note {
+  margin: 0;
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+/* "Changes since the previous plan" (2026-10-24): one line, collapsed by
+   default; open, four short lists side by side, one column on a phone. */
+.reorder-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 20px;
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
+}
+
+.reorder-compare-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reorder-compare-toggle:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.reorder-compare-period {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+.reorder-compare-summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-compare-summary strong {
+  color: var(--color-text);
+}
+
+.reorder-compare-muted {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.reorder-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin-top: 8px;
+}
+
+.reorder-compare-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reorder-compare-group-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.reorder-compare-count {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background-color: var(--color-surface-sunken);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-compare-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorder-compare-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.reorder-compare-product {
+  display: flex;
+  flex-direction: column;
+  color: var(--color-text-body);
+  overflow-wrap: anywhere;
+}
+
+.reorder-compare-code,
+.reorder-compare-empty {
+  font-size: var(--text-meta);
+  color: var(--color-text-muted);
+}
+
+.reorder-compare-empty {
+  margin: 0;
+}
+
+.reorder-compare-qty {
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-compare .reorder-compare-note {
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .reorder-compare-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .reorder-compare {
+    padding: 12px 14px;
+  }
+
+  .reorder-compare-grid {
     grid-template-columns: 1fr;
   }
 }

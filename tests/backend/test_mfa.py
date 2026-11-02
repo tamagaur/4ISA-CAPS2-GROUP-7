@@ -248,8 +248,8 @@ def test_spaces_in_a_code_are_ignored_and_junk_is_refused():
 
 def test_the_qr_link_names_the_app_and_the_account():
     uri = mfa.provisioning_uri("ABCDEF234567", "ana@ssm.test")
-    assert uri.startswith("otpauth://totp/SAN2%20Inventory%20DSS%3Aana%40ssm.test?")
-    assert "secret=ABCDEF234567" in uri and "issuer=SAN2%20Inventory%20DSS" in uri
+    assert uri.startswith("otpauth://totp/SAN2%20Inventory%20DSD%3Aana%40ssm.test?")
+    assert "secret=ABCDEF234567" in uri and "issuer=SAN2%20Inventory%20DSD" in uri
     assert "digits=6" in uri and "period=30" in uri
 
 
@@ -457,6 +457,22 @@ def test_remembering_ends_after_seven_days(client, db):
     assert sign_in_remembered(client, expired).json()["mfa_step"] == "verify"
     no_expiry = jwt.encode({k: v for k, v in claims.items() if k != "exp"}, mfa._remember_key(), algorithm="HS256")
     assert sign_in_remembered(client, no_expiry).json()["mfa_step"] == "verify"
+
+
+def test_a_shorter_limit_applies_to_devices_already_remembered(client, db):
+    """A token issued under the old 14-day limit still carried a 14-day
+    expiry; its age is checked against today's REMEMBER_DAYS instead."""
+    claims = jwt.decode(remember_device(client, db), mfa._remember_key(), algorithms=["HS256"])
+    now = datetime.now(timezone.utc)
+    old_rule = jwt.encode({**claims, "iat": now - timedelta(days=10), "exp": now + timedelta(days=4)},
+                          mfa._remember_key(), algorithm="HS256")
+    assert sign_in_remembered(client, old_rule).json()["mfa_step"] == "verify"
+    no_issue_time = jwt.encode({k: v for k, v in claims.items() if k != "iat"}, mfa._remember_key(), algorithm="HS256")
+    assert sign_in_remembered(client, no_issue_time).json()["mfa_step"] == "verify"
+    from_the_future = jwt.encode({**claims, "iat": now + timedelta(hours=1)}, mfa._remember_key(), algorithm="HS256")
+    assert sign_in_remembered(client, from_the_future).json()["mfa_step"] == "verify"
+    six_days = jwt.encode({**claims, "iat": now - timedelta(days=6)}, mfa._remember_key(), algorithm="HS256")
+    assert sign_in_remembered(client, six_days).json().get("access_token")
 
 
 def test_a_remember_token_is_no_other_kind_of_token(client, db):

@@ -3,7 +3,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -23,13 +23,13 @@
 
 .pending-error-line {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--color-text-heading);
 }
 
 .pending-error-direction {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }
 
@@ -45,7 +45,7 @@
   padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: 0.76rem;
+  font-size: 0.86rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -73,7 +73,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 
@@ -99,7 +99,7 @@
   border-radius: 999px;
   background-color: rgba(245, 166, 35, 0.14);
   color: #8a5a00;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -110,7 +110,7 @@
   align-items: flex-start;
   gap: 6px;
   margin: 8px 0 0;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-body);
 }
 
@@ -120,17 +120,62 @@
   color: var(--color-warning, #f5a623);
 }
 
-/* Entered / left Class A */
+/* Entered / left Class A (RangeCards.jsx ClassChanges, 2026-10-19, after
+   the mockup): two panels side by side, each a tinted header band over its
+   products, as tall as each other. */
 .pending-change-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.pending-change-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.pending-change-head {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pending-change-count {
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.pending-change-list.is-up .pending-change-head {
+  background: #ECF8F3;
+  color: #1F7A4D;
+}
+
+.pending-change-list.is-down .pending-change-head {
+  background: #FFF1EF;
+  color: #C7402B;
 }
 
 .pending-change-list ul {
-  margin: 8px 0 0;
-  padding: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0 14px;
   list-style: none;
+}
+
+/* "See all" opens the rest in place; past this height the list scrolls,
+   so the card keeps its height. */
+.pending-change-list ul.is-expanded {
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 .pending-change-list li {
@@ -138,9 +183,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 0;
+  padding: 10px 0;
   border-bottom: 1px solid #EEF1F4;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .pending-change-list li:last-child {
@@ -148,29 +193,43 @@
 }
 
 .pending-change-empty {
-  margin: 8px 0 0;
-  font-size: 0.8rem;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 14px;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }
 
 .pending-change-delta {
   flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.pending-change-delta.is-up { color: #2A8551; }
+.pending-change-delta.is-up { color: #1F7A4D; }
 .pending-change-delta.is-down { color: #D54848; }
 
-/* Product name over its code: the name readable, the code quiet. */
+/* Product name over its code: the name readable, at most two lines (the
+   whole name is its hover title; the max-height is the fallback where the
+   clamp does not apply), the code quiet. */
 .pending-change-list .product-name-title {
-  font-size: 12px;
-  font-weight: 500;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-height: 2.7em;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .pending-change-list .product-name-code {
   font-size: 11px;
+}
+
+.pending-change-more {
+  margin: 6px 14px 12px;
 }
 
 /* /preview */
@@ -188,7 +247,7 @@
   border: 1px dashed var(--color-warning, #f5a623);
   border-radius: 10px;
   background-color: rgba(245, 166, 35, 0.1);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-text-body);
 }
 
@@ -210,13 +269,13 @@
 
 .pending-preview-where {
   margin: 0 0 4px;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-muted);
 }
 
 .pending-preview-table {
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
 }
 
 .pending-preview-table th,
@@ -227,7 +286,7 @@
 }
 
 .pending-preview-table th {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
@@ -244,6 +303,6 @@
 /* SKU Forecast: a product with no scored forecast in the page's range. */
 .forecast-accuracy-none {
   margin: 14px 0 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--color-text-muted);
 }

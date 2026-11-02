@@ -72,7 +72,7 @@ from backend.auth_utils import _get_secret_key
 
 logger = logging.getLogger(__name__)
 
-ISSUER = "SAN2 Inventory DSS"
+ISSUER = "SAN2 Inventory DSD"
 DIGITS = 6
 STEP_SECONDS = 30
 DRIFT_STEPS = 1
@@ -323,20 +323,30 @@ def issue_remember_token(db: Session, user_id: int, password_hash: str | None) -
     row = _row(db, user_id)
     if not password_hash or row is None or row["enabled_at"] is None:
         return None
-    expire = datetime.now(timezone.utc) + timedelta(days=REMEMBER_DAYS)
-    payload = {"sub": str(user_id), "fp": _remember_fingerprint(password_hash, row), "exp": expire}
+    now = datetime.now(timezone.utc)
+    payload = {"sub": str(user_id), "fp": _remember_fingerprint(password_hash, row),
+               "iat": now, "exp": now + timedelta(days=REMEMBER_DAYS)}
     return jwt.encode(payload, _remember_key(), algorithm="HS256")
 
 
 def device_remembered(db: Session, user_id: int, password_hash: str | None, token: str | None) -> bool:
     """True if `token` is this account's, unexpired, and from its current
     password and authenticator setup. Anything else is simply not
-    remembered: the sign-in asks for the code as usual."""
+    remembered: the sign-in asks for the code as usual.
+
+    The age is checked against REMEMBER_DAYS as it is now, not only the
+    token's own expiry (2026-10-26): a token issued while the limit was 14
+    days kept skipping the code for 14 after it became 7. A token without an
+    issue time ('iat', added the same day) is refused, so every older one
+    asks for the code once more."""
     if not token or not password_hash:
         return False
     try:
-        payload = jwt.decode(token, _remember_key(), algorithms=["HS256"], options={"require": ["exp"]})
+        payload = jwt.decode(token, _remember_key(), algorithms=["HS256"], options={"require": ["exp", "iat"]})
     except JWTError:
+        return False
+    age = datetime.now(timezone.utc) - datetime.fromtimestamp(payload["iat"], timezone.utc)
+    if not timedelta(minutes=-1) <= age <= timedelta(days=REMEMBER_DAYS):
         return False
     if payload.get("sub") != str(user_id):
         return False

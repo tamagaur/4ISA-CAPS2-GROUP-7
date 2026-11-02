@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import SectionLede from './ui/SectionLede';
-import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List } from 'lucide-react';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List, Info, FolderTree } from 'lucide-react';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
 import { ClassBadge } from './ui/StatusBadge';
@@ -19,7 +19,10 @@ import { createLatestOnly } from '../utils/latestOnly';
 import Pagination from './Pagination';
 import ProductName from './ProductName';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import TierBasisLabel, { currentPeriodFor, isStaleTier, latestPeriod } from './TierBasisLabel';
+import { isPreRegroupDelMonte } from '../utils/abcMonth';
 import './SKUManagement.css';
 
 // Product names render verbatim. A helper used to pull a pack size out onto
@@ -36,6 +39,13 @@ const NO_BRAND = '__NO_BRAND__';
 // Category filter sentinel for SKUs with no ABC tier in any run (never
 // ranked: no sales in any classified month). Same underscore convention.
 const NOT_CLASSIFIED = '__NOT_CLASSIFIED__';
+// Class filter sentinel for Del Monte's old sub-categories, last ranked
+// before the Jan 2025 regrouping (2026-10-22). They keep their old class in
+// the table but are left out of Class A/B/C, as the ABC page leaves them out.
+const PRE_REGROUP = '__PRE_REGROUP__';
+
+// A case count, which can be fractional (loose pieces): "12.75 cases".
+const casesText = (n) => `${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })} cases`;
 
 // The code shown under a product's name. A Del Monte sell-out category has
 // no SKU code (its sku_id is the category path, DEC-03), so its name — the
@@ -60,6 +70,10 @@ const SKUManagement = () => {
   // every stock figure to state its count date: the file filed as "Mar
   // 2026" was counted on 6 Apr 2026. planCycle is null without lp.view.
   const [stockCountDates, setStockCountDates] = useState({});
+  // The MONTH of each principal's latest count (GET /sku's
+  // stock_count_periods, 2026-10-21). Del Monte has a month but no day: its
+  // stored day is a placeholder, so the backend withholds it (audit FE-5).
+  const [stockCountPeriods, setStockCountPeriods] = useState({});
   const [planCycle, setPlanCycle] = useState(null);
   // Each principal's latest ABC run (GET /sku's tier_a_periods).
   const [tierAPeriods, setTierAPeriods] = useState({});
@@ -83,12 +97,13 @@ const SKUManagement = () => {
         if (!isCurrent()) return;
         setRawItems(res.items || []);
         setStockCountDates(res.stock_count_dates || {});
+        setStockCountPeriods(res.stock_count_periods || {});
         setPlanCycle(res.planning_cycle_date ?? null);
         setTierAPeriods(res.tier_a_periods || {});
       })
       .catch((err) => {
         if (!isCurrent()) return;
-        setError(err.message || 'Failed to load SKUs');
+        setError(describeLoadError(err));
       })
       .finally(() => {
         if (isCurrent()) setLoading(false);
@@ -131,6 +146,18 @@ const SKUManagement = () => {
         // The period `cat` was computed in. A tier is the SKU's LAST KNOWN
         // classification, so this is what says whether it is current.
         catPeriod: item.tier_period,
+        // A Del Monte sub-category last ranked before the Jan 2025
+        // regrouping: it no longer exists as a series, so GET /abc leaves it
+        // out and this page keeps it out of its class counts too (Technical
+        // Adviser, 2 Oct 2026: the same thing gives the same number on every
+        // page; 2026-10-22).
+        preRegroup: isPreRegroupDelMonte(item.principal, item.tier_period),
+        // The product category, for the ?category= link from Category
+        // Trends. GET /sku sends category_path (Product_Dimension.category_path,
+        // backend/routers/sku.py): set on every Unilever SKU, null on Del
+        // Monte's item codes (no product-level sales). A Del Monte category
+        // row's sku_id IS its path (DEC-03), hence the fallback.
+        categoryPath: item.category_path ?? (item.grain === 'category' ? item.sku_id : null),
         leadTime: item.lead_time_days != null ? `${item.lead_time_days} days` : null,
         leadTimeDays: item.lead_time_days,
         reorderPt: item.reorder_point,
@@ -139,6 +166,8 @@ const SKUManagement = () => {
         currentStockCases: item.current_stock_cases,
         // The day this product's principal's latest stock was counted.
         stockCountDate: item.stock_count_date ?? null,
+        // Its month ('YYYY-MM'), for a principal with no count day (Del Monte).
+        stockCountPeriod: item.stock_count_period ?? null,
         // The LP cycle the target stock comes from (same for every row).
         planCycle,
         unitPrice: item.unit_price,
@@ -159,6 +188,16 @@ const SKUManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [brandFilter, setBrandFilter] = useState(ALL_BRANDS);
   const [categoryFilter, setCategoryFilter] = useState('All');
+  // ?category=<category_path> (Category Trends links here, 2026-10-22): the
+  // product category, matched exactly. Lives in the URL so the link, the
+  // chip and Clear all agree; clearing it removes the param.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const productCategory = searchParams.get('category') || null;
+  const clearProductCategory = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('category');
+    setSearchParams(next, { replace: true });
+  };
 
   // Combobox & Highlight State
   const [isComboboxOpen, setIsComboboxOpen] = useState(false);
@@ -228,10 +267,13 @@ const SKUManagement = () => {
         (brandFilter === NO_BRAND ? !sku.brand : sku.brand === brandFilter);
       const matchesCategory =
         categoryFilter === 'All' ||
-        (categoryFilter === NOT_CLASSIFIED ? !sku.cat : sku.cat === categoryFilter);
-      return matchesSearch && matchesBrand && matchesCategory;
+        (categoryFilter === NOT_CLASSIFIED ? !sku.cat
+          : categoryFilter === PRE_REGROUP ? sku.preRegroup
+            : sku.cat === categoryFilter && !sku.preRegroup);
+      const matchesProductCategory = !productCategory || sku.categoryPath === productCategory;
+      return matchesSearch && matchesBrand && matchesCategory && matchesProductCategory;
     });
-  }, [skus, searchQuery, brandFilter, categoryFilter]);
+  }, [skus, searchQuery, brandFilter, categoryFilter, productCategory]);
 
   // Pagination. The SKU master runs 2,000+ rows and this page renders the
   // whole table — unpaginated it built every row into the DOM at once, which
@@ -251,7 +293,7 @@ const SKUManagement = () => {
   // of a result set that just shrank to 2 pages shows nothing.
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, brandFilter, categoryFilter, pageSize]);
+  }, [searchQuery, brandFilter, categoryFilter, productCategory, pageSize]);
 
   const pagedSKUs = useMemo(() => {
     const start = (safeCurrentPage - 1) * pageSize;
@@ -262,7 +304,11 @@ const SKUManagement = () => {
   // old Active/Disabled pair (and matching tabs) could never change: every SKU
   // is ACTIVE in Product_Dimension and PATCH /sku doesn't write status yet.
   const totalSKUs = skus.length;
-  const categoryASKUs = skus.filter(s => s.cat === 'A').length;
+  // Del Monte's old sub-categories are left out (see preRegroup), so this is
+  // the ABC page's Class A for the same runs.
+  const categoryASKUs = skus.filter(s => s.cat === 'A' && !s.preRegroup).length;
+  const preRegroupA = skus.filter(s => s.cat === 'A' && s.preRegroup).length;
+  const preRegroupRows = skus.filter(s => s.preRegroup).length;
 
   // Each principal's newest classification period — its current ABC run.
   // Anything older is a carried-forward tier from a month the SKU last had
@@ -283,7 +329,7 @@ const SKUManagement = () => {
     && isStaleTier(s.catPeriod, latestPeriod(tierAPeriods, latestCatPeriodByPrincipal[s.principal]));
   // Category A's own carried-forward count — the card used to print every
   // tier's (821 of them, 20 of which are A).
-  const categoryACarried = skus.filter(s => s.cat === 'A' && s.catPeriod && !isCurrentTier(s)).length;
+  const categoryACarried = skus.filter(s => s.cat === 'A' && !s.preRegroup && s.catPeriod && !isCurrentTier(s)).length;
   const noBrandSKUs = skus.filter(s => !s.brand).length;
   // Del Monte's product master mixes item codes with sell-out categories
   // (DEC-03). Categories carry no brand, and item codes are never ranked one
@@ -296,14 +342,34 @@ const SKUManagement = () => {
   const notClassifiedSKUs = skus.filter(s => !s.cat).length;
 
   // The stock column's period line: "counted Apr 6, 2026", or each
-  // principal's own day when the list spans both (Unilever's latest count
-  // is 6 Apr 2026, Del Monte's 1 Dec 2025).
-  const countEntries = Object.entries(stockCountDates);
-  const stockCountText = countEntries.length === 1
-    ? `counted ${formatDate(countEntries[0][1])}`
-    : countEntries.length > 1
-      ? `counted ${countEntries.map(([p, d]) => `${labelForPrincipal(p)} ${formatDate(d)}`).join(', ')}`
+  // principal's own count when the list spans both: "Unilever counted Apr
+  // 6, 2026 · Del Monte Dec 2025 count". A principal with a count month but
+  // no day (Del Monte) is named by its month. Until 2026-10-21 only the days
+  // were listed, so with Del Monte's withheld the one Unilever day headed
+  // every row, Del Monte's included (audit NEW-FE-1).
+  const countWhen = (p) => (stockCountDates[p]
+    ? `counted ${formatDate(stockCountDates[p])}`
+    : stockCountPeriods[p] ? `${formatMonth(stockCountPeriods[p])} count` : null);
+  const countPrincipals = [...new Set([...Object.keys(stockCountPeriods), ...Object.keys(stockCountDates)])]
+    .filter((p) => countWhen(p));
+  const stockCountText = countPrincipals.length === 1
+    ? countWhen(countPrincipals[0])
+    : countPrincipals.length > 1
+      ? countPrincipals.map((p) => `${labelForPrincipal(p)} ${countWhen(p)}`).join(' · ')
       : null;
+  // The stock is always each principal's LATEST count, whatever range the
+  // Dashboard is on: said in plain words above the table (Technical Adviser,
+  // 2 Oct 2026: pages follow the filter or say plainly what period they
+  // show; 2026-10-22). Del Monte's count has a month but no recorded day.
+  const latestCountWhen = (p) => (stockCountDates[p]
+    ? formatDate(stockCountDates[p])
+    : stockCountPeriods[p] ? `${formatMonth(stockCountPeriods[p])} count, exact day not recorded` : null);
+  const latestCountText = countPrincipals.length === 1
+    ? latestCountWhen(countPrincipals[0])
+    : countPrincipals.map((p) => `${labelForPrincipal(p)} ${latestCountWhen(p)}`).join('; ');
+  // Rows with a count in cases but no pieces: no usable pack size to convert
+  // with (all of Del Monte's counted item codes today).
+  const casesOnlyCount = skus.filter(s => s.currentStock == null && s.currentStockCases != null).length;
   // Each principal's ABC run month, for the Class A card ("Feb 2026").
   const runMonthsText = Object.entries(latestCatPeriodByPrincipal)
     .map(([p, period]) => (Object.keys(latestCatPeriodByPrincipal).length > 1
@@ -396,6 +462,7 @@ const SKUManagement = () => {
   };
 
   const hasActiveFilters =
+    productCategory != null ||
     searchQuery !== '' ||
     brandFilter !== ALL_BRANDS ||
     categoryFilter !== 'All';
@@ -404,6 +471,7 @@ const SKUManagement = () => {
     setSearchQuery('');
     setBrandFilter(ALL_BRANDS);
     setCategoryFilter('All');
+    if (productCategory) clearProductCategory();
   };
 
   const getCatClass = (cat) => {
@@ -422,6 +490,9 @@ const SKUManagement = () => {
     if (!sku.cat) return 'No ABC classification in any period';
     if (!sku.catPeriod) return `Class ${sku.cat}`;
     const when = formatMonth(sku.catPeriod);
+    if (sku.preRegroup) {
+      return `Class ${sku.cat} — last ranked ${when}: an old Del Monte sub-category from before the Jan 2025 regrouping. It no longer exists, so it is left out of the class counts.`;
+    }
     return isCurrentTier(sku)
       ? `Class ${sku.cat} — current run (${when})`
       : `Class ${sku.cat} — last classified ${when}; no sales since, so this is carried forward${isStaleCat(sku) ? ' (stale: over 6 months old)' : ''}`;
@@ -429,13 +500,14 @@ const SKUManagement = () => {
 
   // Hover text for a stock cell: the figure with both units and its count.
   const stockTitle = (sku) => {
-    const when = sku.stockCountDate ? `, counted ${formatDate(sku.stockCountDate)}` : '';
+    const when = sku.stockCountDate ? `, counted ${formatDate(sku.stockCountDate)}`
+      : sku.stockCountPeriod ? `, from the ${formatMonth(sku.stockCountPeriod)} count` : '';
     if (sku.currentStock != null) {
       const cases = sku.currentStockCases != null ? ` (${sku.currentStockCases.toLocaleString()} cases)` : '';
       return `${sku.currentStock.toLocaleString()} pieces${cases}${when}`;
     }
     if (sku.currentStockCases != null) {
-      return `${sku.currentStockCases.toLocaleString()} cases${when}; no usable pack size to convert to pieces`;
+      return `${casesText(sku.currentStockCases)}${when}; no pack size is recorded to convert this to pieces`;
     }
     return 'No stock record in the latest count';
   };
@@ -482,7 +554,8 @@ const SKUManagement = () => {
             unit={countUnit}
             contextLine={`latest ABC run per SKU${runMonthsText ? ` · ${runMonthsText}` : ''}`}
             tooltip={`Each SKU's class in the most recent ABC run that ranked it.${categoryACarried > 0
-              ? ` ${categoryACarried.toLocaleString()} of these are carried forward from earlier runs.` : ''}`}
+              ? ` ${categoryACarried.toLocaleString()} of these are carried forward from earlier runs.` : ''}${preRegroupA > 0
+              ? ` Left out: ${preRegroupA.toLocaleString()} old Del Monte sub-categories ranked A before the Jan 2025 regrouping, which no longer exist (the ABC page leaves them out too).` : ''}`}
             icon={<Layers size={20} />}
           />
           <KPICard
@@ -514,6 +587,7 @@ const SKUManagement = () => {
         {loading && (
           <>
             <LoadingStatus>Loading SKUs…</LoadingStatus>
+            <SlowLoadNotice />
             <div className="sku-filters-row" aria-hidden="true">
               <SkeletonLine width="100%" height="2.25rem" />
             </div>
@@ -522,7 +596,7 @@ const SKUManagement = () => {
             </div>
           </>
         )}
-        {error && <p className="sku-page-subtitle">Error: {error}</p>}
+        {error && !loading && <LoadError what="the product list" message={error} onRetry={loadSKUs} />}
 
         {!loading && !error && (
           <>
@@ -667,6 +741,9 @@ const SKUManagement = () => {
                     <option value="B">Class B</option>
                     <option value="C">Class C</option>
                     <option value={NOT_CLASSIFIED}>Not classified</option>
+                    {preRegroupRows > 0 && (
+                      <option value={PRE_REGROUP}>Before the Jan 2025 regrouping (Del Monte)</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -678,6 +755,15 @@ const SKUManagement = () => {
                 <span className="chips-label">
                   <Filter size={12} /> Active Filters:
                 </span>
+
+                {productCategory && (
+                  <span className="sku-active-chip">
+                    <FolderTree size={12} aria-hidden="true" /> Category: {productCategory}
+                    <button className="sku-chip-remove" onClick={clearProductCategory} aria-label="Remove the category filter">
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
 
                 {searchQuery && (
                   <span className="sku-active-chip">
@@ -699,7 +785,8 @@ const SKUManagement = () => {
 
                 {categoryFilter !== 'All' && (
                   <span className="sku-active-chip">
-                    Class: {categoryFilter === NOT_CLASSIFIED ? 'Not classified' : `Class ${categoryFilter}`}
+                    Class: {categoryFilter === NOT_CLASSIFIED ? 'Not classified'
+                      : categoryFilter === PRE_REGROUP ? 'Before the Jan 2025 regrouping' : `Class ${categoryFilter}`}
                     <button className="sku-chip-remove" onClick={() => setCategoryFilter('All')}>
                       <X size={12} />
                     </button>
@@ -719,6 +806,30 @@ const SKUManagement = () => {
 
             {/* Table */}
             <SectionLede className="is-standalone">Every product and its details</SectionLede>
+            {/* What period the stock is, and why some rows are in cases
+                (2026-10-22). Figures and dates come from GET /sku only. */}
+            {latestCountText && (
+              <p className="ui-note is-info sku-stock-note">
+                <Info size={14} aria-hidden="true" />
+                <span>
+                  Stock: latest count ({latestCountText}), not your selected range.
+                  {casesOnlyCount > 0 && (
+                    <> {casesOnlyCount.toLocaleString()} {casesOnlyCount === 1 ? 'product has' : 'products have'} a count in cases only:
+                      no pieces-per-case is recorded for {casesOnlyCount === 1 ? 'it' : 'them'}, so pieces can&apos;t be shown.</>
+                  )}
+                </span>
+              </p>
+            )}
+            {productCategory && !skus.some((s) => s.categoryPath === productCategory) && (
+              <p className="ui-note is-warning">
+                <Info size={14} aria-hidden="true" />
+                <span>
+                  No product in this list is recorded under the category &ldquo;{productCategory}&rdquo;. Unilever products
+                  carry their category; Del Monte&apos;s item codes have none recorded (Del Monte has no product-level sales), so
+                  for Del Monte only its category rows match.
+                </span>
+              </p>
+            )}
             <div className="data-table-card">
               <table className="data-table sku-table">
                 <thead>
@@ -734,11 +845,15 @@ const SKUManagement = () => {
                         with its unit and period (Technical Adviser,
                         2026-10-03): the count's own date, not the month the
                         file is filed under, and the plan the target is from. */}
-                    <th className="table-num col-fit" title="Stock on hand at the latest count, in pieces (cases x pack size + loose pieces)">
-                      Stock (pieces)
+                    <th
+                      className="table-num col-fit"
+                      title={`Stock on hand at the latest count, in pieces (cases x pack size + loose pieces)${casesOnlyCount > 0
+                        ? '; in cases where no pack size is recorded to convert them' : ''}`}
+                    >
+                      {casesOnlyCount > 0 ? 'Stock (pieces or cases)' : 'Stock (pieces)'}
                       {stockCountText && <span className="sku-th-sub">{stockCountText}</span>}
                     </th>
-                    <th className="table-num col-fit" title="The stock level the LP orders up to: demand expected before the next delivery, plus safety stock">
+                    <th className="table-num col-fit" title="The stock level the order plan orders up to: demand expected before the next delivery, plus safety stock">
                       Target stock (pieces)
                       {planCycle && <span className="sku-th-sub">{formatMonth(planCycle)} plan</span>}
                     </th>
@@ -772,19 +887,21 @@ const SKUManagement = () => {
                           faded={Boolean(sku.catPeriod && !isCurrentTier(sku))}
                           title={catTitle(sku)}
                         />
-                        {isStaleCat(sku) && <span className="tier-chip-stale">stale</span>}
+                        {sku.preRegroup
+                          ? <span className="sku-chip-regroup">before the Jan 2025 regrouping</span>
+                          : isStaleCat(sku) && <span className="tier-chip-stale">stale</span>}
                       </td>
                       {/* Pieces when the pack size converts the warehouse's
                           case count; the cases alone, labelled, when it can't
                           (GET /sku sends no pieces then). */}
                       <td
-                        className={`table-num ${sku.currentStock != null ? '' : 'cell-empty'}`}
+                        className={`table-num ${sku.currentStock != null || sku.currentStockCases != null ? '' : 'cell-empty'}`}
                         title={stockTitle(sku)}
                       >
                         {sku.currentStock != null
                           ? formatUnits(sku.currentStock)
                           : sku.currentStockCases != null
-                            ? `${sku.currentStockCases.toLocaleString()} cases`
+                            ? casesText(sku.currentStockCases)
                             : '—'}
                       </td>
                       <td

@@ -240,11 +240,25 @@ const UserManagement = () => {
     }
   };
 
+  // "Now", re-read every 30 seconds, so an invite turns to "Invite expired"
+  // while the page is open, not only after a reload.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const handleSendLink = async (user) => {
     if (sendingLinkFor !== null) return;
     setSendingLinkFor(user.user_id);
     try {
       const result = await sendUserLink(user.user_id);
+      // A new invite replaces the old link: the row goes back to "Invite
+      // pending" with the new expiry at once.
+      if (result.purpose === 'invite' && result.expires_at) {
+        setUsers((prev) => prev.map((u) => (u.user_id === user.user_id ? { ...u, invite_expires_at: result.expires_at } : u)));
+        setNow(Date.now());
+      }
       reportLink(result, { purpose: result.purpose, name: user.full_name, email: user.email });
     } catch (err) {
       toast.error(err.message || 'Failed to send the link.');
@@ -338,6 +352,10 @@ const UserManagement = () => {
                   // Invited = the account exists but no password has been set
                   // yet, so the link to send is the invite again.
                   const invited = user.status === 'invited';
+                  // Expired = the newest invite link has stopped working
+                  // (GET /users invite_expires_at); they need a new one.
+                  const inviteExpiry = invited && user.invite_expires_at ? new Date(user.invite_expires_at) : null;
+                  const inviteExpired = inviteExpiry !== null && inviteExpiry.getTime() <= now;
                   const linkLabel = invited ? 'Resend invite' : 'Send password reset link';
                   const LinkIcon = invited ? Mail : KeyRound;
                   const isSending = sendingLinkFor === user.user_id;
@@ -361,10 +379,19 @@ const UserManagement = () => {
                         </span>
                       </td>
                       <td>
-                        {invited ? (
+                        {inviteExpired ? (
+                          <span
+                            className="badge badge-dot user-mgmt-invite-expired"
+                            title={`The invite link expired ${formatDateTime(user.invite_expires_at)}. Resend the invite to send a new link.`}
+                          >
+                            Invite expired
+                          </span>
+                        ) : invited ? (
                           <span
                             className="badge badge-warning badge-dot"
-                            title="Hasn't set a password yet, so can't sign in"
+                            title={inviteExpiry
+                              ? `Hasn't set a password yet, so can't sign in. The invite link expires ${formatDateTime(user.invite_expires_at)}.`
+                              : "Hasn't set a password yet, so can't sign in"}
                           >
                             Invite pending
                           </span>

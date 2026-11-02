@@ -40,7 +40,7 @@
 
 .at-risk-subtitle {
   margin: 4px 0 0;
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-text-muted);
 }
 
@@ -106,19 +106,19 @@
 }
 
 .at-risk-step-label {
-  font-size: 0.76rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text-body);
 }
 
 .at-risk-step-note {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   color: var(--color-text-muted);
 }
 
 .at-risk-money {
   margin: 12px 0 0;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   color: var(--color-text-body);
 }
 
@@ -143,7 +143,7 @@
 .at-risk-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .at-risk-table th,
@@ -160,7 +160,7 @@
   top: 0;
   z-index: 1;
   background-color: var(--color-surface-raised);
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -174,7 +174,7 @@
 .at-risk-th-sub {
   display: block;
   margin-top: 2px;
-  font-size: 0.66rem;
+  font-size: 0.79rem;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
@@ -211,7 +211,7 @@
 
 .at-risk-footnote {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: 0.84rem;
   color: var(--color-text-muted);
 }
 
@@ -230,7 +230,7 @@
   border-radius: 8px;
   background-color: var(--color-surface);
   color: var(--color-text-body);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -272,6 +272,16 @@
   .at-risk-btn {
     flex: 1;
     justify-content: center;
+  }
+
+  /* Headings on one or two lines at phone width: the grey second line
+     ("at last purchase price") is said in the note under the table. */
+  .at-risk-th-sub {
+    display: none;
+  }
+
+  .at-risk-table th:not(.at-risk-col-product) {
+    min-width: 6.5rem;
   }
 }
 

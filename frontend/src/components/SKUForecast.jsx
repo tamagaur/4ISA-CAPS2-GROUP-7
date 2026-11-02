@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
-import { Search, Star, ArrowRight, Clock, Filter, X, ArrowUp, ArrowDown, Minus, AlertTriangle } from 'lucide-react';
+import {
+  Search, Pin, ArrowRight, Clock, Filter, X, AlertTriangle, CheckCircle2, BarChart3, MoveVertical,
+  Package, ShieldCheck, ShoppingCart, ArrowUpRight, ArrowDownRight, Minus, ChevronDown,
+} from 'lucide-react';
 import {
   ComposedChart,
   Line,
@@ -10,24 +13,30 @@ import {
   YAxis,
   CartesianGrid,
   ReferenceLine,
+  ReferenceArea,
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
-import { COLORS, CHART_COLORS } from '../theme/colors';
-import { useChartZoom, ChartZoomSlider, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { CHART_COLORS } from '../theme/colors';
+import { useChartZoom, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import RangePicker from './RangePicker';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChart, SkeletonLine } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import { getABCClassification } from '../api/abc';
 import { getForecast } from '../api/forecast';
-import { getForecastAccuracy } from '../api/dashboard';
+import { getForecastAccuracy, getDashboardData } from '../api/dashboard';
+import { getRecommendations } from '../api/recommendations';
+import { getSKUs } from '../api/sku';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { describeServedModel, describeFallbackReason } from '../utils/forecastModel';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
 import TierBasisLabel from './TierBasisLabel';
-import DateFilter from './DateFilter';
+import { prefersReducedMotion } from '../theme/motion';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
 import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
@@ -42,7 +51,14 @@ import { DemoCategoryForecast, SyntheticForecastBanner, SyntheticTag } from './D
 import { gapLabel, originLabel } from '../utils/gapReasons';
 import { forecastLabels, SYNTHETIC_FORECAST_LABELS } from '../utils/syntheticForecast';
 import { isMissing, NOT_COLLECTED } from '../utils/formatters';
-import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCards';
+import { calendarFactorText, calendarSignoffText } from '../utils/calendarAdjustment';
+import { AccuracyLevels, ForecastErrorCard, StockLimitedNote, STOCK_LIMITED_TEXT } from './PendingCards';
+import ExactValue from './ExactValue';
+import { formatApprox } from '../utils/formatNumber';
+import {
+  PAGE_NAMES, RELIABILITY_SHORT, TIER_LABEL, tierBadge, tierSingular, tierTechnical,
+} from '../labels';
+import { URGENCY_HOVER, getUrgencyBadge } from '../utils/urgency';
 
 // Pinned-star colour: brand chrome (--color-brand-primary's hex — SVG
 // presentation attributes can't take a CSS var()). It used to be the
@@ -51,15 +67,106 @@ import { AccuracyLevels, ForecastErrorCard, StockLimitedNote } from './PendingCa
 // recomputed on the fairer test — see the stat block that reads this.
 const SHOW_ACCURACY_PCT = false;
 
+// Weeks in an average month (analytics/params.py WEEKS_PER_MONTH, 365.25/12/7):
+// a product outside the order plan has its weeks left as stock ÷ (forecast ÷ this).
+const WEEKS_PER_MONTH = 365.25 / 12 / 7;
+
+// The order plan's urgency (GET /recommendations), most urgent first, and its
+// pill: the Reorder page's own order and classes.
+const URGENCY_RANK = { CRITICAL: 0, URGENT: 1, PLANNED: 2, 'NO DATA': 3 };
+
+// A month the chart draws that was generated, not recorded (backend/
+// series_gaps.py): marked on the chart, and its note shown, only when drawn.
+const GENERATED_REASONS = new Set([
+  'no_data_recorded_before_2023', 'interpolated', 'taxonomy_change_bridge',
+  'no_observation_before_series_start', 'series_gap_forward_filled',
+]);
+
+// Which model a product's sales months pick (analytics/forecasting/router.py
+// LIVE_MODEL over length_v2's 3 / 12 / 24 thresholds).
+const modelRule = (months) => (months >= 24 ? '24 or more → XGBoost + MA3 average'
+  : months >= 12 ? '12–23 → TSB' : '3–11 → 3-month average');
+
+const fmtPcs = (v) => (v == null ? '—' : Math.round(v).toLocaleString());
+const fmtWeeks = (w) => (w == null || !Number.isFinite(w) ? '—' : `${w < 10 ? w.toFixed(1) : Math.round(w)} weeks`);
+
+// How long a plan row's stock lasts, in words (2026-10-20): a product the
+// plan reads as 0 because it is missing from the stock count says so; a
+// counted 0 is out of stock; under a day (1/7 of a week) says so instead of
+// "0.0 weeks". Display only: the cover is the plan's own figure.
+const NOT_IN_COUNT = 'Not in the stock count';
+const coverText = (item, weeks) => {
+  if (item.stock_not_in_count) return NOT_IN_COUNT;
+  if (item.current_stock === 0) return 'Out of stock';
+  if (weeks != null && Number.isFinite(weeks) && weeks < 1 / 7) return 'Less than a day';
+  return fmtWeeks(weeks);
+};
+
+
+// The order as the plan works it out (the Reorder page's own arithmetic,
+// ReorderRecommendations.jsx lpQtyTitle): the month's forecast + the
+// order-up-to level (which includes the keep-at-least level) − stock on hand,
+// never below 0, less any cut to fit the supplier allocation.
+const orderBreakdown = (item, month) => {
+  const n = (v) => Math.round(v).toLocaleString();
+  const stock = item.stock_not_in_count ? '0 (not in the stock count)' : n(item.current_stock ?? 0);
+  const parts = [
+    item.forecast_units != null ? `${n(item.forecast_units)} forecast${month ? ` for ${month}` : ''}` : null,
+    `${n(item.rop_i)} order up to (includes ${n(item.ss_i)} keep at least)`,
+  ].filter(Boolean).join(' + ');
+  const need = Math.max(0, (item.forecast_units ?? 0) + item.rop_i - (item.current_stock ?? 0));
+  const line = `${parts} − ${stock} in stock = ${n(need)} pcs.`;
+  return item.short_units > 0
+    ? `${line} ${n(item.short_units)} cut to fit the supplier allocation, so the order is ${n(item.q_i)} pcs.`
+    : line;
+};
+
+// Runs of consecutive chart points matching `pred`, as [first, last] labels.
+const pointRuns = (points, pred) => {
+  const runs = [];
+  let start = null;
+  let prev = null;
+  points.forEach((pt) => {
+    if (pred(pt)) {
+      if (start == null) start = pt.label;
+      prev = pt.label;
+    } else if (start != null) {
+      runs.push([start, prev]);
+      start = null;
+    }
+  });
+  if (start != null) runs.push([start, prev]);
+  return runs;
+};
+
 const PIN_COLOR = '#C74E3D';
+// The Show filter's "Pinned" option (2026-10-22): the search list and the
+// order-plan table keep only pinned products.
+const PINNED_FILTER = 'PINNED';
 const PIN_IDLE_COLOR = '#667085';
+// Months where stock may have run out: amber, the app's "watch" colour.
+const STOCK_LIMITED_FILL = CHART_COLORS.stockLimited;
+// "Past sales and the forecast" (redesign 2026-10-26, from the mockup):
+// actual sales, the same month a year earlier, and the forecast.
+const SKU_ACTUAL = CHART_COLORS.skuActual;
+const SKU_LAST_YEAR = CHART_COLORS.skuLastYear;
+const SKU_FORECAST = CHART_COLORS.skuForecast;
+// The chart's left edge in px (the ComposedChart's margin.left + the YAxis
+// width below), for placing the labels in the band above the plot.
+const PLOT_LEFT = 8 + 60;
+// The band above the plot that holds those labels.
+const ANNOTATION_BAND = 52;
+// A "Stock may have run out" label's width, and the room "Forecast starts"
+// takes either side of its divider.
+const STOCK_LABEL_W = 168;
+const FORECAST_LABEL_HALF = 46;
 
 // Del Monte's sales data is invoice-grain with no SKU column, so the pipeline
 // never forecasts it per SKU — its ABC rows are product categories. With the
 // Topbar on Del Monte this replaces the picker; it also heads the message
 // for a Del Monte row that reaches the chart card some other way.
 const DEL_MONTE_NO_FORECAST =
-  'No SKU-level forecast for Del Monte — it has no SKU-level sales data, only category sell-out.';
+  'No product forecast for Del Monte: its sales data has no product detail, only category sales.';
 
 // The SKU picked this session, held at module scope rather than in
 // component state or sessionStorage.
@@ -153,6 +260,52 @@ const formatAxisPeriod = (period) => {
   return `${NUM_TO_MONTH[num] || num} · ${year}`;
 };
 
+// "Aug – Sep 2025" / "Nov 2025 – Feb 2026": a run of months, for the chart's
+// stock-may-have-run-out labels.
+const formatPeriodSpan = (from, to) => {
+  if (!from || !to || from === to) return formatPeriod(from || to);
+  const [fy, fm] = from.split('-');
+  const [ty] = to.split('-');
+  return fy === ty ? `${NUM_TO_MONTH[fm] || fm} – ${formatPeriod(to)}` : `${formatPeriod(from)} – ${formatPeriod(to)}`;
+};
+
+// The label above one shaded stock-may-have-run-out run (redesign
+// 2026-10-26). It sits in the band above the plot, never on a line, centred
+// on the run (`cx`, worked out with the other labels in the component so
+// none overlap); a run with no room for one is left to the shading and the
+// hover. Drawn as a ReferenceArea's label, so it moves with the zoom window.
+const StockRunLabel = ({ viewBox, cx, text }) => {
+  if (!viewBox || cx == null) return null;
+  const left = cx - STOCK_LABEL_W / 2;
+  const top = viewBox.y - ANNOTATION_BAND + 6;
+  return (
+    <g pointerEvents="none" aria-hidden="true">
+      <rect x={left} y={top} width={STOCK_LABEL_W} height={36} rx={8}
+        fill={STOCK_LIMITED_FILL} fillOpacity={0.12} stroke={STOCK_LIMITED_FILL} strokeOpacity={0.35} />
+      {/* A small warning triangle, the lucide AlertTriangle's outline. */}
+      <g transform={`translate(${left + 10} ${top + 7}) scale(0.58)`} fill="none" stroke={CHART_COLORS.stockLimitedInk}
+        strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+      </g>
+      <text x={left + 30} y={top + 15} fontSize={11} fontWeight={600} fill={CHART_COLORS.stockLimitedInk}>Stock may have run out</text>
+      <text x={left + 30} y={top + 29} fontSize={10.5} fill="#556070">{text}</text>
+    </g>
+  );
+};
+
+// "Forecast begins" and the last actual month, above the divider.
+const ForecastStartLabel = ({ viewBox, cx, period }) => {
+  if (!viewBox || cx == null) return null;
+  return (
+    <g pointerEvents="none" aria-hidden="true">
+      <text x={cx} y={viewBox.y - 24} textAnchor="middle" fontSize={11} fontWeight={600} fill="#556070">Forecast begins</text>
+      <text x={cx} y={viewBox.y - 10} textAnchor="middle" fontSize={10.5} fill={CHART_COLORS.axisLabel}>{formatPeriod(period)}</text>
+    </g>
+  );
+};
+
 // Y-axis tick: 1.2M / 155k / 940. Monthly Unilever volumes run into the
 // hundreds of thousands, and the raw values were wide enough to crowd the
 // plot area.
@@ -164,7 +317,7 @@ const formatAxisQty = (value) => {
   return `${Math.round(value)}`;
 };
 
-const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range', bandLevel = null }) => {
+const CustomTooltip = ({ active, payload, label, bandLevel = null }) => {
   if (active && payload && payload.length) {
     // Each line is drawn twice — the Line, plus the Area shading under it —
     // so the raw payload carries every value twice over. The fills declare
@@ -172,49 +325,71 @@ const CustomTooltip = ({ active, payload, label, bandLabel = 'Likely range', ban
     // those leaves one entry per real series.
     const series = payload.filter(p => p.type !== 'none' && p.value != null);
     const hasActual = series.some(p => p.dataKey === 'actual');
-    // Last year reads after this month's own figures.
+    // This month's own figures first (the forecast, then its range), last
+    // year after them.
+    const ORDER = { actual: 0, forecast: 1, ci: 2, lastYear: 3 };
     const displayPayload = (hasActual
       ? series.filter(p => p.dataKey !== 'forecast')
       : series)
       .slice()
-      .sort((a, b) => (a.dataKey === 'lastYear') - (b.dataKey === 'lastYear'));
+      .sort((a, b) => (ORDER[a.dataKey] ?? 9) - (ORDER[b.dataKey] ?? 9));
 
-    const qty = (v) => Math.round(v).toLocaleString();
+    // A true minus sign: a month's net figure is below zero when returns
+    // outweighed sales, and "-12" read as a hyphen.
+    const qty = (v) => (Math.round(v) < 0 ? `−${Math.abs(Math.round(v)).toLocaleString()}` : Math.round(v).toLocaleString());
+    const point = payload[0]?.payload;
+    const forecastMonth = point?.actual == null && point?.forecast != null;
 
     return (
       <div className="forecast-tooltip">
-        <p className="tooltip-label">{formatAxisPeriod(label)}</p>
-        {payload[0]?.payload?.reason && (
-          <p className="tooltip-item tooltip-gap">{gapLabel(payload[0].payload.reason)}</p>
+        <p className="tooltip-label">
+          {formatPeriod(label)}
+          {forecastMonth && <span className="tooltip-label-tag"> (Forecast)</span>}
+        </p>
+        {point?.reason && (
+          <p className="tooltip-item tooltip-gap">{gapLabel(point.reason)}</p>
         )}
-        {displayPayload.map((entry, index) => {
-          if (entry.dataKey === 'ci') {
-            // Zero-width at the anchor point (see chartData) — that's the
-            // "no uncertainty yet" join, not a real interval, so skip it.
-            if (!Array.isArray(entry.value) || entry.value[0] === entry.value[1]) return null;
+        {point?.stockLimited && (
+          <p className="tooltip-item tooltip-gap tooltip-stock">Possibly stock-limited: {STOCK_LIMITED_TEXT}.</p>
+        )}
+        <dl className="tooltip-rows">
+          {displayPayload.map((entry, index) => {
+            if (entry.dataKey === 'ci') {
+              // Zero-width at the anchor point (see chartData) — that's the
+              // "no uncertainty yet" join, not a real interval, so skip it.
+              if (!Array.isArray(entry.value) || entry.value[0] === entry.value[1]) return null;
+              return (
+                <div key={index} className="tooltip-row">
+                  <dt>
+                    <span className="tooltip-dot tooltip-dot-band" style={{ borderColor: SKU_FORECAST }} />
+                    Likely range
+                  </dt>
+                  <dd>{qty(entry.value[0])} – {qty(entry.value[1])} pcs</dd>
+                </div>
+              );
+            }
             return (
-              <p key={index} className="tooltip-item">
-                <span className="tooltip-dot" style={{ backgroundColor: COLORS.forecastBg, border: `1px solid ${COLORS.forecast}` }}></span>
-                {bandLabel}: {qty(entry.value[0])} – {qty(entry.value[1])} pieces
-              </p>
+              <div key={index} className="tooltip-row">
+                <dt>
+                  <span className="tooltip-dot" style={{ backgroundColor: entry.color }} />
+                  {entry.name}
+                </dt>
+                <dd>{qty(entry.value)} pcs</dd>
+              </div>
             );
-          }
-          return (
-            <p key={index} className="tooltip-item">
-              <span className="tooltip-dot" style={{ backgroundColor: entry.color }}></span>
-              {entry.name}: {qty(entry.value)} pieces
-            </p>
-          );
-        })}
+          })}
+        </dl>
         {/* The band in plain words (Technical Adviser, 2 Oct 2026: "what is
             the range around the forecast?"). The level is GET /forecast's
-            own interval.level_pct, so "9 times in 10" is that figure. */}
+            own interval.level_pct, so "9 in 10" is that figure. It is what
+            the band is built for (z = 1.645), never measured, so it says
+            "meant to cover" (2026-10-22). */}
         {displayPayload.some((e) => e.dataKey === 'ci' && Array.isArray(e.value) && e.value[0] !== e.value[1]) && (
           <p className="tooltip-band-note">
             {bandLevel != null
-              ? `Sales should land in this band about ${Math.round(bandLevel / 10)} times in 10.`
-              : 'Sales usually land in this band.'}
-            {' '}Safety stock is the buffer for months near the top of it.
+              ? `This band is meant to cover about ${Math.round(bandLevel / 10)} in 10 months.`
+              : 'This band is meant to cover most months.'}
+            {' '}The keep-at-least level (safety stock) is the buffer for months near the top of it.
           </p>
         )}
       </div>
@@ -231,6 +406,15 @@ const SKUForecast = () => {
   // not forecast.view (which is all this page needs). Without it they are not fetched or drawn.
   const canSeeAccuracy = hasPermission(P.DASHBOARD_VIEW);
   const dropdownRef = useRef(null);
+  // "Show details: how this forecast was made" at the foot of the page, which
+  // the Next month card's "Show details" opens (2026-10-28).
+  const detailsRef = useRef(null);
+  const openDetails = () => {
+    const el = detailsRef.current;
+    if (!el) return;
+    el.open = true;
+    el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  };
 
   // This page's chart has its OWN date range, independent of the shared
   // cross-page one in DashboardLayout — seeded from the dashboard's
@@ -272,7 +456,8 @@ const SKUForecast = () => {
     const floorStart = { startMonth: 'Jan', startYear: String(FIRST_DATA_YEAR) };
     return Number(shared.endYear) >= FIRST_DATA_YEAR
       ? { ...shared, ...floorStart }
-      : { ...floorStart, endMonth: LATEST_DATA_PERIOD.month, endYear: LATEST_DATA_PERIOD.year };
+      : { ...floorStart, endMonth: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).month,
+        endYear: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).year };
   })();
   // The page follows the dashboard's range LIVE (Technical Adviser, 2 Oct
   // 2026: change the filter and the screen answers; one range across the
@@ -308,6 +493,9 @@ const SKUForecast = () => {
   const [tierAPeriods, setTierAPeriods] = useState({});
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState(null);
+  // Try again on a failed load re-runs that request (the list, the forecast).
+  const [listAttempt, setListAttempt] = useState(0);
+  const [forecastAttempt, setForecastAttempt] = useState(0);
 
   useEffect(() => {
     // Del Monte's ABC rows are product categories, not SKUs — there is
@@ -329,13 +517,13 @@ const SKUForecast = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setListError(err.message || 'Failed to load SKU list');
+        setListError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setListLoading(false);
       });
     return () => { cancelled = true; };
-  }, [principal]);
+  }, [principal, listAttempt]);
 
   // GET /abc has no brand field; this used to print 'Unilever' (the
   // principal) as every SKU's brand. Real brand comes from the product
@@ -489,10 +677,11 @@ const SKUForecast = () => {
         sku.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         sku.brand.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCat = selectedCategory === 'ALL' || sku.cat === selectedCategory;
+      const matchesCat = selectedCategory === 'ALL'
+        || (selectedCategory === PINNED_FILTER ? pinnedSKUs.includes(sku.code) : sku.cat === selectedCategory);
       return matchesSearch && matchesCat;
     });
-  }, [sourceSKUs, searchQuery, selectedCategory]);
+  }, [sourceSKUs, searchQuery, selectedCategory, pinnedSKUs]);
 
   const hasActiveFilterOrSearch = selectedCategory !== 'ALL' || searchQuery.trim() !== '';
 
@@ -597,10 +786,14 @@ const SKUForecast = () => {
     if (!rows.length) return { checked: false };
     const sum = (key) => rows.reduce((total, r) => total + (r[key] ?? 0), 0);
     const net = sum('miss_pieces');
+    const forecastTotal = sum('forecast_pieces');
     return {
       checked: true,
       error: {
         pieces_per_month: sum('abs_miss_pieces') / rows.length,
+        // Only when every month has both figures: a missing one is never read as 0.
+        share_of_forecast: rows.every((r) => r.forecast_pieces != null && r.abs_miss_pieces != null) && forecastTotal > 0
+          ? sum('abs_miss_pieces') / forecastTotal : null,
         pesos_per_month: rows.every((r) => r.abs_miss_pesos != null) ? sum('abs_miss_pesos') / rows.length : null,
         pesos_basis: accuracy.basis,
         direction: net > 0 ? 'surplus' : net < 0 ? 'shortage' : 'mixed',
@@ -614,6 +807,100 @@ const SKUForecast = () => {
       stockLimited: rows.filter((r) => r.possibly_stock_limited).map((r) => r.month),
     };
   }, [isDemonstration, canSeeAccuracy, selectedSKU, accuracy, accuracyKey]);
+
+  // The current order plan (GET /recommendations, its latest cycle): the
+  // "What to order" section and, with nothing selected, the table of planned
+  // products. Every status is kept, so an accepted row still counts as planned.
+  const [plan, setPlan] = useState({ principal: null, items: [], cycle: null, failed: false });
+  useEffect(() => {
+    if (principal === 'delmonte') return undefined;
+    let cancelled = false;
+    getRecommendations({ principal })
+      .then((res) => {
+        if (cancelled) return;
+        const items = res.items || [];
+        const cycle = items.reduce((max, i) => (max == null || i.planning_cycle_date > max ? i.planning_cycle_date : max), null);
+        setPlan({ principal, items: items.filter((i) => i.planning_cycle_date === cycle), cycle, failed: false });
+      })
+      .catch(() => { if (!cancelled) setPlan({ principal, items: [], cycle: null, failed: true }); });
+    return () => { cancelled = true; };
+  }, [principal]);
+  const planLoaded = plan.principal === principal;
+  const planBySku = useMemo(() => new Map(plan.items.map((i) => [String(i.sku_id), i])), [plan.items]);
+  const planItem = selectedSKU && planLoaded ? planBySku.get(String(selectedSKU.code)) ?? null : null;
+
+  // Stock on hand for a product outside the plan (GET /sku current_stock,
+  // pieces at the latest count). The same request useBrandLookup makes, so
+  // it is usually served from the cache.
+  const [skuStock, setSkuStock] = useState({ principal: null, map: null });
+  useEffect(() => {
+    if (principal === 'delmonte') return undefined;
+    let cancelled = false;
+    getSKUs({ principal })
+      .then((res) => {
+        if (!cancelled) setSkuStock({ principal, map: new Map((res.items || []).map((x) => [String(x.sku_id), x.current_stock])) });
+      })
+      .catch(() => { if (!cancelled) setSkuStock({ principal, map: null }); });
+    return () => { cancelled = true; };
+  }, [principal]);
+
+  // The latest forecast run's check against a "same as last month" guess
+  // (GET /dashboard's forecast block: evaluated, unreliable and total counts),
+  // for the line on why Class A products are missing from the plan.
+  const [reliability, setReliability] = useState(null);
+  useEffect(() => {
+    if (principal === 'delmonte') return undefined;
+    let cancelled = false;
+    getDashboardData({ principal })
+      .then((res) => { if (!cancelled) setReliability(res?.forecast || null); })
+      .catch(() => { if (!cancelled) setReliability(null); });
+    return () => { cancelled = true; };
+  }, [principal]);
+
+  // The planned products, most urgent first (then fewest weeks left), for the
+  // table shown while nothing is selected. Weeks left is the plan's own cover.
+  // Pinned products first (2026-10-22), each group most urgent first; the
+  // Show filter's "Pinned" keeps only those.
+  const planRows = useMemo(() => {
+    const byCode = new Map(sourceSKUs.map((x) => [String(x.code), x]));
+    const pinned = new Set(pinnedSKUs.map(String));
+    return plan.items
+      .map((item) => ({
+        item,
+        sku: byCode.get(String(item.sku_id)) ?? null,
+        weeks: item.days_of_cover != null ? item.days_of_cover / 7 : null,
+        pinned: pinned.has(String(item.sku_id)),
+      }))
+      .filter((r) => selectedCategory !== PINNED_FILTER || r.pinned)
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned)
+        || (URGENCY_RANK[a.item.urgency] ?? 9) - (URGENCY_RANK[b.item.urgency] ?? 9)
+        || (a.weeks ?? Infinity) - (b.weeks ?? Infinity));
+  }, [plan.items, sourceSKUs, pinnedSKUs, selectedCategory]);
+
+  // How many Class A products the plan leaves out, and why: the run's own
+  // counts (failed the check; no tested forecast), the rest being products
+  // the plan's input checks set aside (scripts/run_lp.py gate_out).
+  const notInPlanLine = useMemo(() => {
+    if (!planLoaded || plan.failed || !plan.cycle) return null;
+    const classA = sourceSKUs.filter((x) => x.cat === 'A');
+    const missing = classA.filter((x) => !planBySku.has(String(x.code))).length;
+    if (!classA.length || missing === 0) return null;
+    const head = `${missing.toLocaleString()} of ${classA.length.toLocaleString()} top sellers aren't in the plan`;
+    const failed = reliability?.unreliable_count;
+    const unscored = reliability?.total_count != null && reliability?.evaluated_count != null
+      ? reliability.total_count - reliability.evaluated_count : null;
+    const other = failed != null && unscored != null ? missing - failed - unscored : null;
+    if (other == null || other < 0) {
+      return `${head}: the plan takes only products whose forecast is reliable enough to use for ordering.`;
+    }
+    const parts = [
+      `${failed.toLocaleString()} whose forecast isn't reliable enough yet`,
+      unscored > 0 ? `${unscored.toLocaleString()} with no checked forecast yet (too few months of sales, or no recent sales)` : null,
+      other > 0 ? `${other.toLocaleString()} set aside by the plan's own checks` : null,
+    ].filter(Boolean);
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+    return `${head}: ${list}.`;
+  }, [planLoaded, plan.failed, plan.cycle, sourceSKUs, planBySku, reliability]);
 
   useEffect(() => {
     if (!selectedSKU) {
@@ -643,13 +930,13 @@ const SKUForecast = () => {
       })
       .catch((err) => {
         if (cancelled) return;
-        setForecastError(err.message || 'Failed to load forecast');
+        setForecastError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setForecastLoading(false);
       });
     return () => { cancelled = true; };
-  }, [selectedSKU, principal]);
+  }, [selectedSKU, principal, forecastAttempt]);
 
   // Combine real trailing actuals + real forecast horizon into one chart
   // series. It now dynamically fills missing months between the first and last
@@ -789,12 +1076,15 @@ const SKUForecast = () => {
   };
 
   const storedForecast = latestForecastRow(forecastResult);
+  // The order plan's candidate test (scripts/run_lp.py: Class A and MASE <
+  // MASE_GATE, 1.0), as the link below has used it.
+  const inOrderPlan = selectedSKU?.cat === 'A' && storedForecast?.mase != null && storedForecast.mase < 1;
   // The band's level, from GET /forecast's interval (backend/routers/
   // forecast.py, pinned to the runner's CONFIDENCE_Z): forecast +/- 1.645 x
   // the served model's holdout RMSE, a ~90% range. It was labelled a bare
   // "confidence interval".
   const bandLevel = forecastResult?.interval?.level_pct ?? null;
-  const bandLabel = bandLevel != null ? `~${bandLevel}% range` : 'Likely range';
+  const bandLabel = 'Most likely range';
   // Preview: the payload's own placeholder window, marked on the chart and
   // table the way the Dashboard and Category Trends mark it, so a 2021–22
   // placeholder month is never read as SSM's actual sales.
@@ -808,10 +1098,35 @@ const SKUForecast = () => {
   // is the served model's own scoring window; holdout_months is the same
   // count on rows written before it existed.
   const storedParams = storedForecast?.model_params || {};
+  // The calendar adjustment (model_params.calendar_factor, Kelvin 2026-10-19).
+  // The headline is the stored forecast_value, which IS the adjusted figure
+  // (analytics/forecasting/router.py: value × factor; run_baseline_forecast
+  // writes it as forecast_value) and the one the order plan reads (scripts/
+  // run_lp.py CANDIDATE_QUERY, fr.forecast_value; /recommendations'
+  // forecast_units). It used to lead with value_before_calendar while the
+  // plan, the Dashboard and the range used the adjusted one (2026-10-24):
+  // the figure before it is now in "Show details". "Pending" is said only
+  // when GET /forecast's calendar_signed_off is false (calendarSignoffText).
+  // A factor of exactly 1 (no earlier year of that month on record, router.py
+  // still writes value_before_calendar) changed nothing: it is not called an
+  // adjustment, and only "Why it may have changed" says there was none.
+  const calendarOnRecord = servedModel?.calendar?.before != null;
+  const calendarAdjusted = calendarOnRecord && servedModel.calendar.factor !== 1;
+  const calendarPendingText = calendarAdjusted ? calendarSignoffText(forecastResult?.calendar_signed_off) : '';
+  const calendarPending = calendarPendingText !== '';
+  const adjustedValue = storedForecast?.forecast_value ?? null;
+  const headlineStoredValue = adjustedValue;
+  // "March", the month the adjustment is for.
+  const adjustmentMonth = storedForecastPeriod
+    ? new Date(`${storedForecastPeriod}-01T00:00:00`).toLocaleString('en-US', { month: 'long' })
+    : null;
   // The months where stock may have run out, from this product's accuracy
   // rows (productAccuracy below; GET /dashboard/accuracy, migration 0043's
   // stock-limited rule).
-  const stockLimitedPeriods = productAccuracy?.stockLimited || [];
+  const stockLimitedPeriods = useMemo(() => productAccuracy?.stockLimited || [], [productAccuracy]);
+  // The chart below depends on the months themselves, not on the array's
+  // identity, so a refetch with the same months doesn't rebuild it.
+  const stockLimitedKey = stockLimitedPeriods.join(',');
   const holdoutMonths = storedParams.holdout_metrics_served?.months ?? storedParams.holdout_months ?? null;
 
   // The months behind the accuracy figures and the MA3 benchmark, so each
@@ -843,7 +1158,8 @@ const SKUForecast = () => {
 
     const stored = {
       period: storedForecastPeriod,
-      value: storedForecast.forecast_value,
+      // The stored forecast_value: the headline figure (calendar-adjusted when adjusted).
+      value: storedForecast.forecast_value ?? null,
       confidenceLower: storedForecast.confidence_lower,
       confidenceUpper: storedForecast.confidence_upper,
       mape: storedForecast.mape,
@@ -881,6 +1197,7 @@ const SKUForecast = () => {
 
   const chartData = useMemo(() => {
     if (!forecastResult) return [];
+    const stockLimitedSet = new Set(stockLimitedKey ? stockLimitedKey.split(',') : []);
 
     // Sort actuals to ensure they are chronologically ordered, trimmed to
     // this page's own local range (never selected yet -> full history).
@@ -918,6 +1235,7 @@ const SKUForecast = () => {
             lastYear: lastYearOf(currentPeriod),
             // Why this month is 0 or empty (backend/series_gaps.py), for the tooltip.
             reason: sortedActuals[actualIndex].reason ?? null,
+            stockLimited: stockLimitedSet.has(currentPeriod),
           });
           actualIndex++;
         } else {
@@ -925,6 +1243,7 @@ const SKUForecast = () => {
             label: currentPeriod,
             actual: 0,
             lastYear: lastYearOf(currentPeriod),
+            stockLimited: stockLimitedSet.has(currentPeriod),
           });
         }
 
@@ -973,11 +1292,20 @@ const SKUForecast = () => {
       }]
       : [];
     return [...actualPoints, ...forecastPoints];
-  }, [forecastResult, rangeStartPeriod, rangeEndPeriod, derivedForecast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forecastResult, rangeStartPeriod, rangeEndPeriod, derivedForecast, stockLimitedKey]);
 
   // Windowing for the chart below — see ./ChartZoom. This page's range can
   // run well past what the X axis can label without skipping months.
   const zoom = useChartZoom(chartData);
+
+  // The shaded spans: months where stock may have run out (from this
+  // product's accuracy rows) and months that were generated, not recorded.
+  const stockLimitedRuns = useMemo(() => pointRuns(zoom.view, (pt) => pt.stockLimited), [zoom.view]);
+  const generatedRuns = useMemo(() => pointRuns(zoom.view, (pt) => GENERATED_REASONS.has(pt.reason)), [zoom.view]);
+  // The reasons on the months the chart draws: the note under it explains
+  // only those (a generated month's note never shows for a chart without one).
+  const drawnReasons = useMemo(() => new Set(chartData.map((pt) => pt.reason).filter(Boolean)), [chartData]);
 
   // Chart or its table twin ("view as table", design pass 2026-09-26).
   const [chartView, setChartView] = useState('chart');
@@ -994,7 +1322,7 @@ const SKUForecast = () => {
   const labels = isDemonstration ? SYNTHETIC_FORECAST_LABELS : forecastLabels(forecastResult);
   const isDemoForecast = labels.isDemo;
   const forecastName = labels.name;
-  const forecastColor = isDemoForecast ? CHART_COLORS.syntheticForecast : COLORS.forecast;
+  const forecastColor = isDemoForecast ? CHART_COLORS.syntheticForecast : SKU_FORECAST;
   const forecastEndLabels = useMemo(() => {
     const end = [...zoom.view].reverse().find((pt) => pt.forecast != null && pt.actual == null);
     return pointLabels(zoom.view, end
@@ -1010,6 +1338,60 @@ const SKUForecast = () => {
     () => [...chartData].reverse().find((pt) => pt.actual != null)?.label ?? null,
     [chartData]
   );
+  // The actual line's one dot, on its latest month in view, like the
+  // Dashboard's forecast card; any month gets one on hover.
+  const latestActualDot = useCallback(({ cx, cy, payload }) => (
+    cx != null && cy != null && payload?.label === lastPlottedActualPeriod
+      ? <circle key="latest" cx={cx} cy={cy} r={4.5} fill={SKU_ACTUAL} stroke="var(--color-surface, #fff)" strokeWidth={2} />
+      : null
+  ), [lastPlottedActualPeriod]);
+
+  // The labels in the band above the plot (redesign 2026-10-26): "Forecast
+  // starts" over the divider, then one "Stock may have run out" per shaded
+  // run, each placed from its months' position on the axis (the axis spreads
+  // the window's months evenly from PLOT_LEFT to the right margin). A label
+  // that would run off the chart or into one already placed is left out; the
+  // shading and the hover still say it.
+  const chartAnnotations = useMemo(() => {
+    const n = zoom.view.length;
+    const width = zoom.width;
+    const none = { dividerX: null, stockX: {} };
+    if (!width || n < 2) return none;
+    const plotW = width - PLOT_LEFT - EDGE_LABEL_MARGIN;
+    if (plotW <= 0) return none;
+    const xAt = (period) => {
+      const i = zoom.view.findIndex((pt) => pt.label === period);
+      return i < 0 ? null : PLOT_LEFT + (i / (n - 1)) * plotW;
+    };
+    const taken = [];
+    const clear = (lo, hi) => taken.every(([a, z]) => hi + 6 <= a || lo >= z + 6);
+    let dividerX = null;
+    if (derivedForecast?.plotted && lastPlottedActualPeriod) {
+      const x = xAt(lastPlottedActualPeriod);
+      if (x != null) {
+        dividerX = Math.min(Math.max(x, FORECAST_LABEL_HALF), width - FORECAST_LABEL_HALF);
+        taken.push([dividerX - FORECAST_LABEL_HALF, dividerX + FORECAST_LABEL_HALF]);
+      }
+    }
+    const stockX = {};
+    const half = STOCK_LABEL_W / 2;
+    stockLimitedRuns.forEach(([x1, x2]) => {
+      const a = xAt(x1);
+      const z = xAt(x2);
+      if (a == null || z == null) return;
+      // Centred on the run, pulled in from the chart's edges; if that runs
+      // into a label already placed, slid to just clear it. Kept only while
+      // it still sits over its own run.
+      const inside = (c) => Math.min(Math.max(c, half + 4), width - half - 4);
+      const candidates = [inside((a + z) / 2)];
+      taken.forEach(([lo, hi]) => candidates.push(inside(lo - 6 - half), inside(hi + 6 + half)));
+      const cx = candidates.find((c) => c - half <= z && c + half >= a && clear(c - half, c + half));
+      if (cx == null) return;
+      taken.push([cx - half, cx + half]);
+      stockX[x1] = cx;
+    });
+    return { dividerX, stockX };
+  }, [zoom.view, zoom.width, derivedForecast, lastPlottedActualPeriod, stockLimitedRuns]);
 
   // The month the forecast is projected from, so the "vs. last actual"
   // comparison always pairs the forecast with the observation it was
@@ -1042,33 +1424,183 @@ const SKUForecast = () => {
     return ((derivedForecast.value - latestActualPoint.quantity) / latestActualPoint.quantity) * 100;
   }, [derivedForecast, servedModel, latestActualPoint]);
 
+  // Why this product got its model (item 1, 2026-10-19): the sales months
+  // that picked it, the guard that set it aside, or the demonstration.
+  const whyModel = (() => {
+    if (storedParams.demonstration) {
+      return 'Sample data: a 3-month average for every product. Turn sample data off to see this product\u2019s real forecast.';
+    }
+    const months = storedParams.sales_months;
+    if (servedModel?.fallback) {
+      return `${months != null ? `Its ${months} months of sales call for ${modelRule(months).split('→ ')[1]}, but` : 'Its usual model was set aside because'} `
+        + `${describeFallbackReason(storedParams.backup_reason)}, so the 3-month average was used.`;
+    }
+    return months != null ? `Chosen because it has ${months} months of sales (${modelRule(months)}).` : null;
+  })();
+
+  // MASE to two decimals, three near 1 (where two would round 0.996 to 1.00).
+  const maseText = storedForecast?.mase != null
+    ? storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2) : null;
+
+  // The headline's reliability sentence (src/labels.js): MASE below 1 is
+  // reliable; sample data, a browser preview or no score is "not checked".
+  const reliabilityState = !storedForecast || storedParams.demonstration || derivedForecast?.source !== 'stored'
+    || storedForecast.mase == null ? 'unchecked' : storedForecast.mase < 1 ? 'reliable' : 'unreliable';
+  // The usual miss is the real forecasts' record: not said beside the sample
+  // forecast, which is never checked (rule 2). Shown in "Show details" only,
+  // beside the MASE (2026-10-24): no percentage on the page face.
+  const missShare = productAccuracy?.checked && !storedParams.demonstration
+    ? productAccuracy.error?.share_of_forecast ?? null : null;
+  // The verdict sentence beside the number: how the forecast performs (the
+  // MASE check), in words, kept apart from any approval (2026-10-24): it
+  // says how the forecast performs and nothing more. What is pending (the
+  // calendar adjustment, calendar_signed_off === false) is said once, on the
+  // line under the headline that names the adjustment; no flag records an
+  // "ordering review", so none is claimed. The plan's own gate is unchanged
+  // (scripts/run_lp.py).
+  const verdictText = reliabilityState === 'reliable'
+    ? 'Forecast performs better than a simple last-month estimate.'
+    : reliabilityState === 'unreliable'
+      ? 'Forecast does not perform better than a simple last-month estimate.'
+      : RELIABILITY_SHORT[reliabilityState];
+  // The months scored for the usual miss, for its line in "Show details".
+  const missWindow = productAccuracy?.error?.window_start && productAccuracy.error.window_end
+    ? (productAccuracy.error.window_start === productAccuracy.error.window_end
+      ? formatPeriod(productAccuracy.error.window_start)
+      : `${formatPeriod(productAccuracy.error.window_start)} – ${formatPeriod(productAccuracy.error.window_end)}`)
+    : null;
+
+
+  // A product outside the plan: its stock and weeks left at this forecast
+  // (stock ÷ (forecast ÷ weeks per month)), and why the plan leaves it out,
+  // checked in order.
+  const outsideStock = selectedSKU && skuStock.principal === principal
+    ? skuStock.map?.get(String(selectedSKU.code)) ?? null : null;
+  const outsideForecast = servedModel?.kind === 'forecast' ? headlineStoredValue ?? null : null;
+  const outsideWeeks = outsideStock != null && outsideForecast > 0
+    ? outsideStock / (outsideForecast / WEEKS_PER_MONTH) : null;
+  const notPlannedReason = (() => {
+    if (!selectedSKU) return null;
+    if (selectedSKU.cat !== 'A') return `The plan covers top sellers only; this one is a ${tierSingular(selectedSKU.cat)}.`;
+    if (storedParams.demonstration) {
+      return 'The plan is built from real forecasts only. Turn sample data off to see why this product isn\u2019t in it.';
+    }
+    if (!storedForecast || servedModel?.kind === 'provisional') return 'It has no forecast yet (too few months of sales), and the plan needs one.';
+    if (servedModel?.kind === 'no_order') return 'No sales in the last 6 months, so no order is planned.';
+    if (storedForecast.mase != null && storedForecast.mase >= 1) {
+      return 'Its forecast isn\u2019t reliable enough to use for ordering yet, so the plan leaves it out; nothing forecasts it '
+        + 'another way.';
+    }
+    return 'Its forecast is reliable, but one of the plan\u2019s own checks set it aside.';
+  })();
+
   // Small print under the provisional / no-order notice in the stat row:
   // what the pipeline stored and why it isn't a forecast. The counts come
   // from the run's own model_params, not recounted here.
   const describePlaceholder = () => {
     if (servedModel?.kind === 'no_order') {
-      return 'Stored as 0 pieces: the reorder plan orders nothing for this SKU.';
+      return 'Stored as 0 pcs: the order plan orders nothing for this product.';
     }
     const params = storedForecast?.model_params || {};
     const months = params.observed_months_used ?? params.months_with_sales;
     const needed = params.min_months_threshold ?? MIN_SALES_MONTHS;
     const basis = months != null ? `${months} month${months === 1 ? '' : 's'} of sales` : 'its sales so far';
     const value = Math.round(storedForecast?.forecast_value ?? 0).toLocaleString();
-    return `Trailing average of ${basis}: ${value} pieces a month. A forecast needs at least ${needed} months of sales.`;
+    return `Average of ${basis}: ${value} pcs a month. A forecast needs at least ${needed} months of sales.`;
   };
+
+  // The three figures under the chart (redesign 2026-10-26), from what the
+  // page already shows: the "Next month" headline's forecast and range (the
+  // same derivedForecast values), and this product's urgency in the current
+  // order plan (the "What to order" card's row, GET /recommendations). No
+  // new figure: what isn't there reads "Not available" or "Not assessed".
+  const summaryForecast = derivedForecast && (!servedModel || servedModel.kind === 'forecast') ? derivedForecast : null;
+  const summaryLabel = isDemoForecast ? labels.statLabel
+    : summaryForecast?.source === 'recomputed' ? 'Preview forecast' : 'Next month forecast';
+  const summaryHasRange = summaryForecast?.confidenceLower != null && summaryForecast?.confidenceUpper != null;
+  const stockRisk = (() => {
+    if (isDelMonte) return { value: 'Not assessed', note: 'The order plan does not cover Del Monte.', tone: 'neutral' };
+    if (!planLoaded) return { value: 'Checking…', note: 'Loading the order plan.', tone: 'neutral' };
+    if (plan.failed) return { value: 'Not available', note: 'The order plan couldn’t be loaded.', tone: 'neutral' };
+    if (!planItem) return { value: 'Not assessed', note: 'Not in the current order plan.', tone: 'neutral' };
+    const urgency = planItem.urgency;
+    if (!urgency || urgency === 'NO DATA') {
+      return { value: 'Not assessed', note: URGENCY_HOVER['NO DATA'], tone: 'neutral' };
+    }
+    return {
+      value: urgency.charAt(0) + urgency.slice(1).toLowerCase(),
+      note: `${URGENCY_HOVER[urgency] ?? ''}${plan.cycle ? ` (${formatPeriod(plan.cycle)} plan)` : ''}.`,
+      tone: { CRITICAL: 'critical', URGENT: 'warning', PLANNED: 'ok' }[urgency] ?? 'neutral',
+    };
+  })();
+  // The months the chart shades, in words, under the urgency.
+  const shadedStockRuns = pointRuns(chartData, (pt) => pt.stockLimited).map(([a, z]) => formatPeriodSpan(a, z));
+  const exactPcs = (v) => `${Math.round(v).toLocaleString()} pcs`;
+  const forecastSummaryRow = (
+    <div className="forecast-summary" role="group" aria-label="Forecast summary">
+      <div className="forecast-summary-item">
+        <span className="forecast-summary-icon is-forecast" aria-hidden="true"><BarChart3 size={20} /></span>
+        <div className="forecast-summary-body">
+          <span className="forecast-summary-label">{summaryLabel}</span>
+          {summaryForecast?.value != null ? (
+            <span className="forecast-summary-value" title={exactPcs(summaryForecast.value)}>
+              {formatAxisQty(summaryForecast.value)} pcs
+            </span>
+          ) : (
+            <span className="forecast-summary-value is-empty">Not available</span>
+          )}
+          <span className="forecast-summary-note">{summaryForecast ? formatPeriod(summaryForecast.period) : 'No forecast for this product'}</span>
+        </div>
+      </div>
+      <div className="forecast-summary-item">
+        <span className="forecast-summary-icon is-range" aria-hidden="true"><MoveVertical size={20} /></span>
+        <div className="forecast-summary-body">
+          <span className="forecast-summary-label">Likely range</span>
+          {summaryHasRange ? (
+            <span className="forecast-summary-value"
+              title={`${exactPcs(summaryForecast.confidenceLower)} – ${exactPcs(summaryForecast.confidenceUpper)}`}>
+              {formatAxisQty(summaryForecast.confidenceLower)} – {formatAxisQty(summaryForecast.confidenceUpper)} pcs
+            </span>
+          ) : (
+            <span className="forecast-summary-value is-empty">Not available</span>
+          )}
+          <span className="forecast-summary-note">
+            {summaryHasRange ? formatPeriod(summaryForecast.period) : 'No range for this forecast'}
+          </span>
+        </div>
+      </div>
+      <div className="forecast-summary-item">
+        <span className={`forecast-summary-icon is-risk is-${stockRisk.tone}`} aria-hidden="true"><AlertTriangle size={20} /></span>
+        <div className="forecast-summary-body">
+          <span className="forecast-summary-label">Stockout risk</span>
+          <span className={`forecast-summary-value${stockRisk.tone === 'neutral' ? ' is-empty' : ''}`}>{stockRisk.value}</span>
+          <span className="forecast-summary-note">
+            {stockRisk.note}
+            {shadedStockRuns.length > 0 && ` Stock may have run out in ${shadedStockRuns.join(' and ')}.`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="forecast-page">
       <div className="forecast-content" data-enter-cycle={enterCycle}>
         <PageHeader
-          title="Demand"
-          accent="forecast"
-          subtitle="Next month's demand for each Class A SKU, from its own sales history; the model used depends on how many months of sales it has."
+          title="SKU"
+          accent="Forecast"
+          subtitle="Forecast demand and get order recommendations for your SKUs."
           actions={(
             <>
-              {/* The range only trims the chart, and Del Monte has none. */}
+              {/* The Dashboard's range picker (quick ranges and custom
+                  months) on this page's own range (2026-10-28; it replaced
+                  the month selects here and the slider under the chart).
+                  The range only sets which months the chart, its table and
+                  the notes show: the forecast is the stored one whatever the
+                  range (a range ending early gets the labelled preview), and
+                  Del Monte has no chart to trim. */}
               {!isDelMonte && (
-                <DateFilter
+                <RangePicker
                   localValue={localRange}
                   onLocalChange={setLocalRange}
                   onReset={isCustomRange ? resetToDashboardRange : undefined}
@@ -1080,9 +1612,9 @@ const SKUForecast = () => {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => navigate('/sku-management')}
-                title="Go to SKU Management table"
+                title={`Go to the ${PAGE_NAMES.products} page`}
               >
-                Browse all SKUs <ArrowRight size={14} aria-hidden="true" />
+                Browse all products <ArrowRight size={14} aria-hidden="true" />
               </button>}
             </>
           )}
@@ -1102,16 +1634,16 @@ const SKUForecast = () => {
             )}
             {whatIf && !syntheticOn && (
               <p className="chart-placeholder-note">
-                Preview: this forecast is a what-if run of the same models on the five-year history, 2021–22
-                placeholder months included (built {String(dashboardRange.previewInfo.outputs.built_at).slice(0, 10)}).
+                Sample data: this forecast is a what-if run of the same models on the five-year history, 2021–22
+                sample months included (built {String(dashboardRange.previewInfo.outputs.built_at).slice(0, 10)}).
                 It is never saved and is not the live forecast.
               </p>
             )}
             {realFloor && !syntheticOn && (
               <p className="chart-placeholder-note">
-                Preview is on, but forecasts are made from real data only, so this chart starts no earlier than
-                Jan {FIRST_DATA_YEAR}. The &ldquo;Demand pattern&rdquo; panel below does include the
-                2021–22 placeholder months.
+                Sample data is on, but forecasts are made from real data only, so this chart starts no earlier than
+                Jan {FIRST_DATA_YEAR}. The &ldquo;Sales pattern&rdquo; panel below does include the
+                2021–22 sample months.
               </p>
             )}
         </PageHeader>
@@ -1128,7 +1660,7 @@ const SKUForecast = () => {
             <h3 className="forecast-empty-title">{DEL_MONTE_NO_FORECAST}</h3>
             <p className="forecast-empty-body">
               Del Monte is ranked by product category on the ABC Classification page. Switch the scope to
-              Unilever to forecast a SKU.
+              Unilever to forecast a product.
             </p>
             {hasPermission(P.ABC_VIEW) && (
               <button className="forecast-range-fix-btn" onClick={() => navigate('/abc')}>
@@ -1142,7 +1674,7 @@ const SKUForecast = () => {
         {!isDelMonte && (
         <div className="forecast-selection">
           <div className="selection-top-bar">
-            <label className="selection-label">SELECT SKU TO FORECAST</label>
+            <label className="selection-label">CHOOSE A PRODUCT</label>
             {/* The "Unilever only" scope badge that used to sit here was
                 removed 2026-09-17: the app is no longer Unilever-only, and
                 scope is now the Topbar's principal filter, which this page
@@ -1155,7 +1687,7 @@ const SKUForecast = () => {
             {/* Filter Chips / Dropdowns */}
             <div className="forecast-filter-group">
               <div className="filter-dropdown-wrapper">
-                <span className="filter-icon-label"><Filter size={12} /> Class:</span>
+                <span className="filter-icon-label"><Filter size={12} /> Show:</span>
                 <select
                   className="filter-select"
                   value={selectedCategory}
@@ -1164,10 +1696,11 @@ const SKUForecast = () => {
                     setIsDropdownOpen(true);
                   }}
                 >
-                  <option value="ALL">All classes</option>
-                  <option value="A">Class A</option>
-                  <option value="B">Class B</option>
-                  <option value="C">Class C</option>
+                  <option value="ALL">All products</option>
+                  <option value={PINNED_FILTER}>Pinned</option>
+                  <option value="A">{TIER_LABEL.A}</option>
+                  <option value="B">{TIER_LABEL.B}</option>
+                  <option value="C">{TIER_LABEL.C}</option>
                 </select>
               </div>
 
@@ -1175,7 +1708,7 @@ const SKUForecast = () => {
                 <button
                   className="clear-filters-btn"
                   onClick={handleClearSelection}
-                  title="Clear the selected SKU and all filters"
+                  title="Clear the selected product and all filters"
                 >
                   <X size={12} />
                   <span>Clear</span>
@@ -1189,7 +1722,7 @@ const SKUForecast = () => {
                 <Search className="search-icon" size={18} />
                 <input
                   type="text"
-                  placeholder="Search by product name, SKU code or brand…"
+                  placeholder="Search by product name, code or brand…"
                   value={searchQuery}
                   onFocus={() => setIsDropdownOpen(true)}
                   onChange={(e) => {
@@ -1224,15 +1757,15 @@ const SKUForecast = () => {
                             <button
                               className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                               onClick={(e) => togglePinSKU(sku.code, e)}
-                              title={pinnedSKUs.includes(sku.code) ? "Unpin SKU" : "Pin SKU to top"}
+                              title={pinnedSKUs.includes(sku.code) ? "Unpin product" : "Pin product"}
                               aria-label={`${pinnedSKUs.includes(sku.code) ? 'Unpin' : 'Pin'} ${sku.name} (${sku.code})`}
                               aria-pressed={pinnedSKUs.includes(sku.code)}
                             >
-                              <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
+                              <Pin size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                             </button>
                             <ProductName name={sku.name} code={sku.code} className="result-product" />
                             {sku.brand && <span className="result-brand">{sku.brand}</span>}
-                            <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
+                            <span className={`forecast-cat-badge cat-${sku.cat}`} title={tierTechnical(sku.cat)}>{tierBadge(sku.cat)}</span>
                           </div>
                         ))
                       ) : (
@@ -1246,8 +1779,8 @@ const SKUForecast = () => {
                       {pinnedSKUObjects.length > 0 && (
                         <div className="combobox-section">
                           <div className="section-header-title">
-                            <Star size={12} fill={PIN_COLOR} color={PIN_COLOR} />
-                            <span>PINNED SKUS</span>
+                            <Pin size={12} fill={PIN_COLOR} color={PIN_COLOR} />
+                            <span>PINNED PRODUCTS</span>
                           </div>
                           {pinnedSKUObjects.map(sku => (
                             <div
@@ -1258,15 +1791,15 @@ const SKUForecast = () => {
                               <button
                                 className="star-pin-btn pinned"
                                 onClick={(e) => togglePinSKU(sku.code, e)}
-                                title="Unpin SKU"
+                                title="Unpin product"
                                 aria-label={`Unpin ${sku.name} (${sku.code})`}
                                 aria-pressed={true}
                               >
-                                <Star size={15} fill={PIN_COLOR} />
+                                <Pin size={15} fill={PIN_COLOR} />
                               </button>
                               <ProductName name={sku.name} code={sku.code} className="result-product" />
                               {sku.brand && <span className="result-brand">{sku.brand}</span>}
-                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
+                              <span className={`forecast-cat-badge cat-${sku.cat}`} title={tierTechnical(sku.cat)}>{tierBadge(sku.cat)}</span>
                             </div>
                           ))}
                         </div>
@@ -1277,7 +1810,7 @@ const SKUForecast = () => {
                         <div className="combobox-section">
                           <div className="section-header-title">
                             <Clock size={12} />
-                            <span>RECENTLY FORECASTED</span>
+                            <span>RECENTLY VIEWED</span>
                           </div>
                           {recentSKUObjects.map(sku => (
                             <div
@@ -1288,15 +1821,15 @@ const SKUForecast = () => {
                               <button
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
-                                title="Pin SKU"
+                                title="Pin product"
                                 aria-label={`Pin ${sku.name} (${sku.code})`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
-                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
+                                <Pin size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
                               <ProductName name={sku.name} code={sku.code} className="result-product" />
                               {sku.brand && <span className="result-brand">{sku.brand}</span>}
-                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
+                              <span className={`forecast-cat-badge cat-${sku.cat}`} title={tierTechnical(sku.cat)}>{tierBadge(sku.cat)}</span>
                             </div>
                           ))}
                         </div>
@@ -1306,7 +1839,7 @@ const SKUForecast = () => {
                       {catASKUObjects.length > 0 && (
                         <div className="combobox-section">
                           <div className="section-header-title">
-                            <span>CLASS A SKUS (HIGH PRIORITY)</span>
+                            <span>TOP SELLERS</span>
                           </div>
                           {catASKUObjects.map(sku => (
                             <div
@@ -1317,15 +1850,15 @@ const SKUForecast = () => {
                               <button
                                 className={`star-pin-btn ${pinnedSKUs.includes(sku.code) ? 'pinned' : ''}`}
                                 onClick={(e) => togglePinSKU(sku.code, e)}
-                                title="Pin SKU"
+                                title="Pin product"
                                 aria-label={`Pin ${sku.name} (${sku.code})`}
                                 aria-pressed={pinnedSKUs.includes(sku.code)}
                               >
-                                <Star size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
+                                <Pin size={15} fill={pinnedSKUs.includes(sku.code) ? PIN_COLOR : 'none'} />
                               </button>
                               <ProductName name={sku.name} code={sku.code} className="result-product" />
                               {sku.brand && <span className="result-brand">{sku.brand}</span>}
-                              <span className={`forecast-cat-badge cat-${sku.cat}`}>Class {sku.cat}</span>
+                              <span className={`forecast-cat-badge cat-${sku.cat}`} title={tierTechnical(sku.cat)}>{tierBadge(sku.cat)}</span>
                             </div>
                           ))}
                         </div>
@@ -1343,7 +1876,8 @@ const SKUForecast = () => {
             the list lands, so that panel replaces this one in place. */}
         {!isDelMonte && listLoading && (
           <>
-            <LoadingStatus>Loading SKU list…</LoadingStatus>
+            <LoadingStatus>Loading products…</LoadingStatus>
+            <SlowLoadNotice />
             <div className="forecast-empty-state" aria-hidden="true">
               <SkeletonLine className="skeleton-circle" width="56px" height="56px" />
               <SkeletonLine width="18rem" height="1rem" />
@@ -1351,25 +1885,109 @@ const SKUForecast = () => {
             </div>
           </>
         )}
-        {!isDelMonte && listError && <p className="forecast-subtitle">Error: {listError}</p>}
+        {!isDelMonte && listError && !listLoading && (
+          <LoadError what="the SKU list" message={listError} onRetry={() => setListAttempt((n) => n + 1)} />
+        )}
 
         {/* The page's resting state until the user picks a SKU — nothing is
             auto-selected, so this is what a fresh visit (or a refresh)
             shows. Also covers the genuinely empty list. */}
-        {!isDelMonte && !selectedSKU && !listLoading && !listError && (
+        {/* With nothing selected: the products in the current order plan,
+            most urgent first, each opening its forecast (2026-10-19); the
+            old prompt only when there is no plan to list. */}
+        {!isDelMonte && !selectedSKU && !listLoading && !listError && sourceSKUs.length > 0 && planLoaded && plan.items.length > 0 && (
+          <div className="forecast-plan-card">
+            <h3 className="forecast-card-title ui-card-title">Products in the current order plan</h3>
+            <SectionLede>
+              {selectedCategory === PINNED_FILTER
+                ? `${planRows.length.toLocaleString()} pinned of ${plan.items.length.toLocaleString()} products`
+                : `${plan.items.length.toLocaleString()} products`}
+              {plan.cycle ? ` for ${formatPeriod(plan.cycle)}` : ''}, pinned first, then most urgent. Pick one to see its
+              forecast, or search above.
+            </SectionLede>
+            {notInPlanLine && <p className="forecast-plan-missing">{notInPlanLine}</p>}
+            <TierBasisLabel periods={tierAPeriods} />
+            <div className="forecast-plan-scroll">
+              <table className="forecast-plan-table">
+                <thead>
+                  <tr>
+                    <th scope="col" className="forecast-plan-pin-col"><span className="visually-hidden">Pin</span></th>
+                    <th scope="col">Product</th>
+                    <th scope="col" className="num">Next month (pcs)</th>
+                    <th scope="col" className="num">In stock (pcs)</th>
+                    <th scope="col" className="num">
+                      Lasts about
+                      <InfoTip label="About how long stock lasts" size={12}>
+                        How long the stock on hand lasts at the forecast, in weeks: the plan&apos;s own cover (days of
+                        cover ÷ 7).
+                      </InfoTip>
+                    </th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {planRows.map(({ item, sku, weeks, pinned }) => {
+                    const target = sku ?? {
+                      code: String(item.sku_id), name: item.product_name || 'Unknown Product', brand: '', cat: item.tier, principal: item.principal,
+                    };
+                    return (
+                      <tr
+                        key={item.sku_id}
+                        tabIndex={0}
+                        onClick={() => handleSelectSKU(target)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectSKU(target); } }}
+                      >
+                        <td className="forecast-plan-pin-col">
+                          {/* Pins or unpins without opening the product. */}
+                          <button
+                            type="button"
+                            className={`star-pin-btn ${pinned ? 'pinned' : ''}`}
+                            onClick={(e) => togglePinSKU(target.code, e)}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            title={pinned ? 'Unpin product' : 'Pin product'}
+                            aria-label={`${pinned ? 'Unpin' : 'Pin'} ${target.name} (${target.code})`}
+                            aria-pressed={pinned}
+                          >
+                            <Pin size={15} fill={pinned ? PIN_COLOR : 'none'} />
+                          </button>
+                        </td>
+                        <td><ProductName name={target.name} code={target.code} /></td>
+                        <td className="num" title={item.forecast_units != null ? `${fmtPcs(item.forecast_units)} pcs (exact)` : undefined}>{formatApprox(item.forecast_units)}</td>
+                        <td className="num" title={item.stock_not_in_count ? 'Missing from the stock count: the plan reads it as 0 on hand' : item.current_stock != null ? `${fmtPcs(item.current_stock)} pcs (exact)` : undefined}>
+                          {item.stock_not_in_count ? 'Not in count' : formatApprox(item.current_stock)}
+                        </td>
+                        <td className="num">{item.stock_not_in_count ? '—' : coverText(item, weeks)}</td>
+                        <td><span className={getUrgencyBadge(item.urgency)} title={URGENCY_HOVER[item.urgency]}>{item.urgency}</span></td>
+                      </tr>
+                    );
+                  })}
+                  {planRows.length === 0 && (
+                    <tr className="table-empty-row">
+                      <td colSpan={6}>No pinned products in this plan yet. Use the pin at the start of a row to pin one.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {!isDelMonte && !selectedSKU && !listLoading && !listError && sourceSKUs.length > 0 && !planLoaded && (
+          <LoadingStatus>Loading the order plan…</LoadingStatus>
+        )}
+        {!isDelMonte && !selectedSKU && !listLoading && !listError && (sourceSKUs.length === 0 || (planLoaded && plan.items.length === 0)) && (
           <div className="forecast-empty-state">
             <div className="forecast-empty-icon">
               <Search size={28} strokeWidth={1.6} />
             </div>
             <h3 className="forecast-empty-title">
               {sourceSKUs.length === 0
-                ? 'No classified SKUs for this principal'
-                : 'Select or search a SKU to display forecast'}
+                ? 'No ranked products for this principal'
+                : 'Choose a product to see its forecast'}
             </h3>
             <p className="forecast-empty-body">
               {sourceSKUs.length === 0
-                ? 'GET /abc returned no rows for the selected principal, so there is nothing to forecast yet.'
-                : 'Search by product name, SKU code or brand above — or pick one from your pinned and recently viewed SKUs.'}
+                ? 'There are no ranked products for this principal yet, so there is nothing to forecast.'
+                : 'Search by product name, code or brand above, or pick one from your pinned and recently viewed products.'}
             </p>
           </div>
         )}
@@ -1384,12 +2002,12 @@ const SKUForecast = () => {
                   <button
                     className={`card-star-btn ${isSelectedPinned ? 'pinned' : ''}`}
                     onClick={(e) => togglePinSKU(selectedSKU.code, e)}
-                    title={isSelectedPinned ? "Unpin SKU" : "Pin SKU to top of search"}
+                    title={isSelectedPinned ? "Unpin product" : "Pin product"}
                     aria-label={`${isSelectedPinned ? 'Unpin' : 'Pin'} ${selectedSKU.name} (${selectedSKU.code})`}
                     aria-pressed={isSelectedPinned}
                   >
-                    <Star size={15} fill={isSelectedPinned ? PIN_COLOR : 'none'} color={isSelectedPinned ? PIN_COLOR : PIN_IDLE_COLOR} />
-                    <span className="pin-text">{isSelectedPinned ? 'Pinned' : 'Pin SKU'}</span>
+                    <Pin size={15} fill={isSelectedPinned ? PIN_COLOR : 'none'} color={isSelectedPinned ? PIN_COLOR : PIN_IDLE_COLOR} />
+                    <span className="pin-text">{isSelectedPinned ? 'Unpin product' : 'Pin product'}</span>
                   </button>
                 </div>
                 {/* Name first, SKU code under it (Sir Catubag, 2 Oct 2026). */}
@@ -1399,13 +2017,13 @@ const SKUForecast = () => {
                 </div>
               </div>
               <div className="sku-info-right">
-                <span className={`forecast-cat-badge cat-${selectedSKU.cat}`}>Class {selectedSKU.cat}</span>
+                <span className={`forecast-cat-badge cat-${selectedSKU.cat}`} title={tierTechnical(selectedSKU.cat)}>{tierBadge(selectedSKU.cat)}</span>
                 {/* From the forecast to what was ordered on it. The plan
                     covers Class A products whose forecast passed the
                     last-month-guess check (the same test Reliability
                     states below), so the link shows for those; the Reorder
                     page says so if the plan has no row for it after all. */}
-                {canOpenReorder && selectedSKU.cat === 'A' && storedForecast?.mase != null && storedForecast.mase < 1 && (
+                {canOpenReorder && planItem && (
                   <button
                     type="button"
                     className="forecast-plan-link"
@@ -1415,21 +2033,22 @@ const SKUForecast = () => {
                     <ArrowRight size={13} aria-hidden="true" />
                   </button>
                 )}
+                {/* Why there is no link (Technical Adviser, 2 Oct 2026: the
+                    next step, or why there isn't one; 2026-10-22). The test
+                    is analytics/params.py MASE_GATE, still an open question
+                    to the adviser (reports/ADVISER_QUESTIONS_SIRCG.md §3). */}
+                {/* Shown only when the plan has no row for it (planItem, the
+                    link's own test), so the link and the reason never disagree.
+                    Del Monte has no order plan at all (category-level sales). */}
+                {!planItem && planLoaded && (isDelMonte || !inOrderPlan) && showingThisSKU && !forecastLoading && (
+                  <p style={{ margin: 0, maxWidth: '22rem', textAlign: 'right', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                    {isDelMonte
+                      ? 'Not in the order plan: the plan does not cover Del Monte, which has no product-level sales to forecast.'
+                      : 'Not in the order plan: only Class A products whose forecast beats a simple last-month guess (pending adviser confirmation) get an order.'}
+                  </p>
+                )}
               </div>
             </div>
-
-            {/* Demand pattern (trend and variability, D4), placed between
-                the identity card and the chart so it reads as part of the
-                SKU's story, not a footnote under the graph.
-                Keyed on the SKU for the same reason the chart below is:
-                the remount replays the card's entrance, so switching
-                products visibly rebuilds the explanation instead of
-                silently swapping the words inside a static box. */}
-            <SkuDemandPatternPanel
-              key={`pattern-${selectedSKU.code}`}
-              skuId={selectedSKU.code}
-              principal={principal}
-            />
 
             {/* Chart Section */}
             {/* Keyed on the selected SKU so switching products replays the
@@ -1447,18 +2066,24 @@ const SKUForecast = () => {
                 buys elsewhere is pointer-events off over stale reorder and
                 SKU links, and this card holds a chart, not navigation. The
                 note above states the staleness on its own. */}
-            <SectionLede className="is-standalone">Past sales and the forecast, side by side</SectionLede>
             <div
               className="forecast-chart-container"
               key={`chart-${selectedSKU?.code || 'none'}`}
               aria-busy={isForecastRefreshing}
             >
+              <h3 className="forecast-card-title ui-card-title">Next month forecast</h3>
+              {derivedForecast && servedModel?.kind === 'forecast' && (
+                <p className="forecast-card-sub">
+                  Forecast demand for {formatPeriod(derivedForecast.period)}, with its likely range.
+                </p>
+              )}
               {/* First load for this SKU: the headline stat row, the "how
                   this forecast was made" box and the 420px chart, in the
                   loaded card's own classes. */}
               {isForecastColdLoad && (
                 <>
                   <LoadingStatus>Loading forecast…</LoadingStatus>
+                  <SlowLoadNotice />
                   <div className="forecast-accuracy-row" aria-hidden="true">
                     {[0, 1, 2, 3].map((k) => (
                       <div className="forecast-stat-block" key={k}>
@@ -1476,7 +2101,13 @@ const SKUForecast = () => {
                 </>
               )}
               {isForecastRefreshing && <RefreshingNote>Updating {selectedSKU.name}…</RefreshingNote>}
-              {forecastError && <p className="forecast-subtitle">Error: {forecastError}</p>}
+              {forecastError && !forecastLoading && (
+                <LoadError
+                  what={`the forecast for ${selectedSKU.name}`}
+                  message={forecastError}
+                  onRetry={() => setForecastAttempt((n) => n + 1)}
+                />
+              )}
 
               {/* A null result (GET /forecast 404 -> getForecast null) gets a
                   message, never a blank card: every block below needs a
@@ -1487,7 +2118,7 @@ const SKUForecast = () => {
               {!forecastLoading && !forecastError && showingThisSKU && !forecastResult && (
                 <p className="forecast-subtitle">
                   {selectedSKU.principal === 'delmonte'
-                    ? `${DEL_MONTE_NO_FORECAST} ${selectedSKU.name} is a product category, not a SKU.`
+                    ? `${DEL_MONTE_NO_FORECAST} ${selectedSKU.name} is a product category, not a product.`
                     : `No product record was found for ${selectedSKU.code}, so there is no forecast to show.`}
                 </p>
               )}
@@ -1500,7 +2131,7 @@ const SKUForecast = () => {
                     ? forecastResult.blocked_reason
                     : selectedSKU.cat === 'A'
                     ? `No forecast has been generated for ${selectedSKU.name} (${selectedSKU.code}) yet.`
-                    : `Forecasts are only produced for Class A SKUs.${selectedSKU.cat ? ` ${selectedSKU.name} (${selectedSKU.code}) is Class ${selectedSKU.cat}.` : ''}`}
+                    : `Forecasts are made for top sellers only.${selectedSKU.cat ? ` ${selectedSKU.name} (${selectedSKU.code}) is a ${tierSingular(selectedSKU.cat)}.` : ''}`}
                 </p>
               )}
 
@@ -1517,7 +2148,7 @@ const SKUForecast = () => {
                   <p className="forecast-range-error-body">
                     Your start date (<strong>{formatPeriod(rangeStartPeriod)}</strong>) is after your end date
                     (<strong>{formatPeriod(rangeEndPeriod)}</strong>). Pick a start date on or before the end date
-                    to see this SKU&apos;s demand history and forecast.
+                    to see this product&apos;s sales history and forecast.
                   </p>
                   <button
                     className="forecast-range-fix-btn"
@@ -1549,7 +2180,7 @@ const SKUForecast = () => {
                     <strong>{formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}</strong> isn&apos;t
                     enough points for a readable trend. Select at least <strong>{effectiveMinMonths} month{effectiveMinMonths === 1 ? '' : 's'}</strong>
                     {effectiveMinMonths < MIN_RANGE_MONTHS
-                      ? ` — this SKU only has ${effectiveMinMonths} month${effectiveMinMonths === 1 ? '' : 's'} of real history, so that's this SKU's full available range.`
+                      ? `: this product only has ${effectiveMinMonths} month${effectiveMinMonths === 1 ? '' : 's'} of sales, so that's all it has.`
                       : '.'}
                   </p>
                   <button
@@ -1578,27 +2209,19 @@ const SKUForecast = () => {
                   </span>
                   <p className="forecast-range-error-body">
                     You selected <strong>{formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}</strong>,
-                    but this SKU only has recorded sales from{' '}
+                    but this product only has recorded sales from{' '}
                     <strong>{formatPeriod(skuCoverage?.start)}</strong> to{' '}
                     <strong>{formatPeriod(skuCoverage?.end)}</strong>. Pick a range inside that window to see its
-                    demand history and forecast.
+                    sales history and forecast.
                   </p>
                   <button className="forecast-range-fix-btn" onClick={applySkuCoverageRange}>
-                    Use this SKU&apos;s range ({formatPeriod(skuCoverage?.start)} – {formatPeriod(skuCoverage?.end)})
+                    Use this product&apos;s range ({formatPeriod(skuCoverage?.start)} – {formatPeriod(skuCoverage?.end)})
                   </button>
                 </div>
               )}
 
               {!isForecastColdLoad && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
                 <>
-                  {/* Headline Forecast Stat Row — the number this whole page
-                      exists to produce (next period's forecast) plus how it
-                      compares to the last real month, so a reviewer doesn't
-                      have to read it off the chart by eye. Replaces MAPE/
-                      HORIZON: every served model is one-step-ahead, so
-                      "accuracy of the latest run" and "how many points" (always
-                      1) aren't meaningful headline numbers the way they
-                      were for the old multi-point SARIMA forecast. */}
                   {isDemonstration && (
                     <div className="demo-forecasts-head" role="note">
                       <SyntheticTag />
@@ -1615,266 +2238,130 @@ const SKUForecast = () => {
                       </p>
                     </div>
                   )}
-                  <SectionLede className="is-standalone">Next month in one number</SectionLede>
-                  <div className="forecast-accuracy-row">
-                    {servedModel && servedModel.kind !== 'forecast' ? (
-                      /* A provisional average (under 3 sales months) or a
-                         no-order row is a placeholder, not a forecast: no
-                         headline number and no trend chip, so it can't be
-                         read as one. The stored value is still named in the
-                         small print, so what the pipeline holds isn't hidden. */
-                      <div className="forecast-stat-block">
-                        <span className="forecast-stat-label">Forecast status</span>
-                        <span className="forecast-stat-value forecast-stat-value-notice">
-                          {servedModel.kind === 'provisional'
-                            ? 'Insufficient data — provisional average, not a forecast'
-                            : 'No sales in the last 6 months — no order planned'}
-                        </span>
-                        <span className="forecast-stat-desc">{describePlaceholder()}</span>
-                      </div>
-                    ) : (
-                    <>
-                    {/* Each value is tinted to match the chart series it
-                        refers to (violet = forecast line, indigo = actual
-                        line, pale violet = confidence band), so the numbers
-                        and the graph read as one thing. What the model does
-                        sits under the number, in plain words: which model
-                        made it varies per SKU (utils/forecastModel.js); its
-                        name is in "How this forecast was made". */}
-                    <div className="forecast-stat-block">
-                      <span className="forecast-stat-label">
-                        {isDemoForecast ? labels.statLabel : derivedForecast && !derivedForecast.plotted ? 'Stored forecast' : 'Forecast'}
-                        {derivedForecast ? ` for ${formatPeriod(derivedForecast.period)}` : ''}
-                      </span>
-                      <span className="forecast-stat-value forecast-stat-value-forecast">
-                        {derivedForecast ? (
-                          <>
-                            <span className="forecast-stat-swatch" style={{ backgroundColor: forecastColor }} aria-hidden="true" />
-                            <span className="forecast-stat-number">
-                              {Math.round(derivedForecast.value).toLocaleString()}
-                            </span>
-                            <span className="forecast-stat-unit">pieces</span>
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </span>
-                      <span className="forecast-stat-desc">
-                        {derivedForecast
-                          ? (servedModel?.plain?.short ?? servedModel?.label ?? '')
-                          : storedForecast
-                            ? 'no sales in the selected range'
-                            : selectedSKU.cat === 'A' ? 'no forecast yet' : 'Class A SKUs only'}
-                      </span>
+                  {/* The headline (2026-10-20): next month's forecast rounded (the
+                      exact figure in the hover), its most likely range, whether
+                      it is reliable enough to order on, how far off past
+                      forecasts were, and the change from last month. Every
+                      technical figure is in "Show details" at the bottom. */}
+                  {servedModel && servedModel.kind !== 'forecast' ? (
+                    <div className="forecast-headline">
+                      <p className="forecast-headline-main">
+                        {servedModel.kind === 'provisional'
+                          ? 'Not enough sales yet for a forecast.'
+                          : 'No sales in the last 6 months, so no order is planned.'}
+                      </p>
+                      <p className="forecast-headline-sub">{describePlaceholder()}</p>
                     </div>
-
-                    <div className="forecast-stat-divider" />
-
-                    <div className="forecast-stat-block">
-                      <span className="forecast-stat-label">
-                        Vs. {latestActualPoint ? formatPeriod(latestActualPoint.period) : 'last'} actual (%)
-                      </span>
-                      {forecastTrendPct === null ? (
-                        <span className="forecast-stat-value forecast-stat-value-neutral">—</span>
-                      ) : (
-                        <span
-                          className={`forecast-stat-value forecast-trend-chip ${forecastTrendPct > 0.5 ? 'trend-up' : forecastTrendPct < -0.5 ? 'trend-down' : 'trend-flat'
-                            }`}
-                        >
-                          {forecastTrendPct > 0.5 ? (
-                            <ArrowUp size={16} className="forecast-trend-icon" />
-                          ) : forecastTrendPct < -0.5 ? (
-                            <ArrowDown size={16} className="forecast-trend-icon" />
-                          ) : (
-                            <Minus size={16} className="forecast-trend-icon" />
-                          )}
-                          {Math.abs(forecastTrendPct).toFixed(1)}%
-                        </span>
-                      )}
-                      <span className="forecast-stat-desc">
-                        {latestActualPoint
-                          ? `${latestActualPoint.quantity.toLocaleString()} pieces in ${formatPeriod(latestActualPoint.period)}`
-                          : 'no sales history yet'}
-                      </span>
-                    </div>
-
-                    {/* Surfaces the band the chart draws as an actual number.
-                        Worth its own slot: the intervals on this data are
-                        often wide, and that spread is a real caveat a reader
-                        should see rather than having to eyeball off the cone. */}
-                    {derivedForecast?.confidenceLower != null &&
-                      derivedForecast?.confidenceUpper != null && (
-                        <>
-                          <div className="forecast-stat-divider" />
-                          <div className="forecast-stat-block">
-                            <span className="forecast-stat-label">{bandLabel} (pieces)</span>
-                            <span className="forecast-stat-value forecast-stat-value-range">
-                              <span className="forecast-stat-swatch forecast-stat-swatch-band" aria-hidden="true" />
-                              <span className="range-low">
-                                {Math.round(derivedForecast.confidenceLower).toLocaleString()}
-                              </span>
-                              <span className="range-dash">–</span>
-                              <span className="range-high">
-                                {Math.round(derivedForecast.confidenceUpper).toLocaleString()}
-                              </span>
-                            </span>
-                            <span className="forecast-stat-desc">
-                              for {formatPeriod(derivedForecast.period)}{bandLevel != null ? ', from past forecast errors' : ''}
-                            </span>
-                          </div>
-                        </>
-                      )}
-
-                    {/* Per-SKU accuracy on the served model's own basis: WAPE
-                        from its rolling one-month-ahead holdout (fraction in
-                        model_params.wape). Only for the stored number — a
-                        browser preview has no holdout behind it. Never
-                        labelled an 80/20 score: that split was retired. */}
-                    {/* Not shown for now (3 Oct 2026 analysis): the accuracy
-                        percentages are being recomputed on a fairer test
-                        (products that were top sellers at the time), so no
-                        accuracy % is on screen until then. Flip
-                        SHOW_ACCURACY_PCT to bring this block back. */}
-                    {SHOW_ACCURACY_PCT && derivedForecast?.source === 'stored' && storedParams.wape != null && (
-                      <>
-                        <div className="forecast-stat-divider" />
-                        <div className="forecast-stat-block">
-                          <span className="forecast-stat-label">
-                            Typical forecast miss
-                            <InfoTip label="About typical forecast miss">
-                              How far off this model was, on average, when it forecast past months it hadn&apos;t seen,
-                              one month ahead at a time (WAPE, weighted absolute percentage error). Lower is better.
-                              {storedParams.holdout_protocol ? ` Test protocol: ${storedParams.holdout_protocol}.` : ''}
+                  ) : derivedForecast ? (
+                    // Two columns (2026-10-28, from the mockup): the figures on
+                    // the left, the observations about them on the right. Every
+                    // figure and sentence is the one this card showed before.
+                    <div className="forecast-headline forecast-next">
+                    <div className="forecast-next-main">
+                    <div className="forecast-next-panel">
+                      <p className="forecast-next-label">
+                        {isDemoForecast ? labels.statLabel : derivedForecast.source === 'recomputed' ? 'Preview' : 'Next month'} ({formatPeriod(derivedForecast.period)})
+                      </p>
+                      <p className="forecast-headline-main forecast-next-value">
+                        <span className="forecast-next-about">about</span>{' '}
+                        <strong className="forecast-headline-number" style={{ color: forecastColor }}>
+                          <ExactValue value={derivedForecast.value} label="Exact forecast" /> pcs
+                        </strong>
+                      </p>
+                      {/* The verdict under the number (2026-10-20); the MASE
+                          behind it is in "Show details". */}
+                      <p className={`forecast-headline-verdict forecast-next-verdict is-${reliabilityState}`}>
+                        {reliabilityState === 'unreliable' && <AlertTriangle size={16} aria-hidden="true" />}
+                        {reliabilityState === 'reliable' && <CheckCircle2 size={16} aria-hidden="true" />}
+                        {verdictText}
+                      </p>
+                      <dl className="forecast-next-facts">
+                        <div>
+                          <dt>
+                            Likely range
+                            <InfoTip label="About the most likely range" size={12}>
+                              {bandLevel != null
+                                ? `This range is meant to cover about ${Math.round(bandLevel / 10)} in 10 months.`
+                                : 'This range is meant to cover most months.'}
+                              {' '}It is the shaded band on the chart; how it is worked out is in &ldquo;Show details&rdquo;.
                             </InfoTip>
-                          </span>
-                          <span className="forecast-stat-value forecast-stat-value-neutral">
-                            {(storedParams.wape * 100).toFixed(1)}%
-                          </span>
-                          <span className="forecast-stat-desc">
-                            WAPE{holdoutWindow ? `, tested on ${holdoutWindow}` : ''}, one month ahead
-                            {holdoutMonths != null && holdoutSplitMonths != null && holdoutMonths < holdoutSplitMonths
-                              ? ` (${holdoutMonths} of ${holdoutSplitMonths} months scored)`
-                              : ''}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    </>
-                    )}
-                  </div>
-
-                  {/* The forecast's miss in pieces and pesos and any
-                      stock-limited months, from this product's accuracy rows
-                      over the page's range (productAccuracy). The accuracy
-                      percentages stay held back (SHOW_ACCURACY_PCT). */}
-                  {productAccuracy?.checked && (
-                    <div className="forecast-pending-cards">
-                      <ForecastErrorCard error={productAccuracy.error} />
-                      {SHOW_ACCURACY_PCT && <AccuracyLevels accuracy={forecastResult?.accuracy} />}
-                      <StockLimitedNote periods={stockLimitedPeriods} />
-                    </div>
-                  )}
-                  {productAccuracy && !productAccuracy.checked && (
-                    <p className="forecast-accuracy-none">
-                      Not checked against sales in {formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}:
-                      no forecast for this product was scored in those months.
-                    </p>
-                  )}
-
-                  {/* How this forecast was made — the stored number's
-                      provenance, straight from model_params: the served
-                      model, the history bin that picked it, the MA3
-                      benchmark (computed for every SKU), and for the
-                      XGBoost + MA3 average both components. Shown only
-                      beside the stored number it describes: a browser preview
-                      is explained by its own note, and a provisional /
-                      no-order row isn't a forecast. Names models only; no
-                      claim that one is more accurate than MA3. */}
-                  {!isDemonstration && servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
-                    <div className="forecast-howmade">
-                      <span className="forecast-howmade-title">How this forecast was made</span>
-                      <SectionLede>Where the number comes from</SectionLede>
-                      <dl className="forecast-howmade-list">
-                        <div className="forecast-howmade-item">
-                          <dt>Model</dt>
+                          </dt>
                           <dd>
-                            {servedModel.label ?? storedParams.method ?? '—'}
-                            {servedModel.plain ? `: ${servedModel.plain.long}` : ''}
+                            {derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null ? (
+                              <>
+                                <ExactValue value={derivedForecast.confidenceLower} label="Exact low end" /> –{' '}
+                                <ExactValue value={derivedForecast.confidenceUpper} label="Exact high end" /> pcs
+                              </>
+                            ) : <span className="forecast-next-none">Not available</span>}
                           </dd>
                         </div>
-                        {/* Whether the forecast knows what time of year it is. */}
-                        {servedModel.plain?.season && (
-                          <div className="forecast-howmade-item">
-                            <dt>Time of year</dt>
-                            <dd>{servedModel.plain.season}</dd>
-                          </div>
-                        )}
-                        {storedParams.bin && (
-                          <div className="forecast-howmade-item">
-                            <dt>History</dt>
-                            <dd>
-                              {storedParams.sales_months != null
-                                ? `${storedParams.sales_months} sales month${storedParams.sales_months === 1 ? '' : 's'} → `
-                                : ''}
-                              {storedParams.bin}
-                            </dd>
-                          </div>
-                        )}
-                        {storedParams.ma3_value != null && (
-                          <div className="forecast-howmade-item">
-                            <dt>3-month average (MA3){ma3Window ? `, ${ma3Window}` : ''}</dt>
-                            <dd>{Math.round(storedParams.ma3_value).toLocaleString()} pieces a month</dd>
-                          </div>
-                        )}
-                        {/* Reliability on the same basis as the dashboard's
-                            count and the LP's gate: MASE < 1 means the
-                            served model beat a naive last-month forecast
-                            on its own rolling holdout. */}
-                        {storedForecast?.mase != null && (
-                          <div className="forecast-howmade-item">
-                            <dt>
-                              Reliability
-                              <InfoTip label="About reliability">
-                                MASE compares this model&apos;s errors with simply repeating last month&apos;s sales.
-                                Below 1 means the model does better than that; 1 or more means it doesn&apos;t.
-                                {/* Three decimals near 1, where two would round
-                                    0.996 up to "1.00" beside "beats a simple
-                                    last-month guess" (the verdict uses the
-                                    stored value). */}
-                                {' '}This product: MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}.
-                              </InfoTip>
-                            </dt>
-                            <dd className={storedForecast.mase < 1 ? '' : 'forecast-howmade-warn'}>
-                              {/* The verdict in plain words; the score is
-                                  behind the "?" for the adviser. */}
-                              {storedForecast.mase < 1 ? 'Beats a simple last-month guess' : 'No better than a simple last-month guess'}
-                              {holdoutWindow ? ` · tested on ${holdoutWindow}` : ''}
-                            </dd>
-                          </div>
-                        )}
-                        {storedParams.method === 'xgb_ma3_avg' && storedParams.components && (
-                          <div className="forecast-howmade-item">
-                            <dt>Components</dt>
-                            <dd>
-                              XGBoost {storedParams.components.xgb != null ? Math.round(storedParams.components.xgb).toLocaleString() : '—'}
-                              {' + '}
-                              MA3 {storedParams.components.ma3 != null ? Math.round(storedParams.components.ma3).toLocaleString() : '—'}
-                              {' '}pieces, averaged
-                            </dd>
-                          </div>
-                        )}
+                        {/* The forecast against the last actual month (the
+                            month it projects from): the same percentage this
+                            card has said since 2026-10-20, now as a figure.
+                            Neutral ink: a fall in demand isn't a verdict. */}
+                        <div>
+                          <dt>Change from {latestActualPoint ? formatPeriod(latestActualPoint.period) : 'last month'}</dt>
+                          <dd>
+                            {forecastTrendPct != null && latestActualPoint ? (
+                              <>
+                                <span className="forecast-next-change">
+                                  {forecastTrendPct > 0.5 ? <ArrowUpRight size={18} aria-hidden="true" />
+                                    : forecastTrendPct < -0.5 ? <ArrowDownRight size={18} aria-hidden="true" />
+                                      : <Minus size={18} aria-hidden="true" />}
+                                  {forecastTrendPct > 0.5
+                                    ? `+${Math.round(forecastTrendPct)}%`
+                                    : forecastTrendPct < -0.5 ? `−${Math.round(-forecastTrendPct)}%` : 'About the same'}
+                                </span>
+                                <span className="forecast-next-change-sub">
+                                  vs {formatPeriod(latestActualPoint.period)}, about{' '}
+                                  <ExactValue value={latestActualPoint.quantity} label="Exact sales that month" /> pcs
+                                </span>
+                              </>
+                            ) : (
+                              <span className="forecast-next-none">
+                                {latestActualPoint && !(latestActualPoint.quantity > 0)
+                                  ? `Not worked out: ${formatPeriod(latestActualPoint.period)} sold nothing (or returns outweighed sales)`
+                                  : 'Not available'}
+                              </span>
+                            )}
+                          </dd>
+                        </div>
                       </dl>
-                      {/* The guard rejected the TSB / XGBoost value and MA3
-                          was served instead (router.py). The raw code stays
-                          in the tooltip; the chip restates it plainly. */}
-                      {storedParams.backup_fired === true && (
-                        <span className="forecast-fallback-chip" title={storedParams.backup_reason || undefined}>
-                          <AlertTriangle size={13} aria-hidden="true" />
-                          Served MA3 as a fallback — {describeFallbackReason(storedParams.backup_reason)}
-                        </span>
+                    </div>
+                      {/* The headline is the adjusted figure the order plan
+                          uses; the figure before it is in "Show details". */}
+                      {calendarAdjusted && derivedForecast.source === 'stored' && (
+                        <p className="forecast-headline-sub">
+                          Includes a calendar adjustment for {adjustmentMonth ?? 'this month'}
+                          {calendarPending ? `, ${calendarPendingText}` : ''}. The figure before it is in &ldquo;Show details&rdquo;.
+                        </p>
+                      )}
+                      {productAccuracy && !productAccuracy.checked && !storedParams.demonstration && (
+                        <p className="forecast-headline-sub">
+                          Our forecasts for this product haven&apos;t been checked against past sales in this date range yet.
+                        </p>
                       )}
                     </div>
+                    {/* The page states figures only (2026-10-28, Audrey: no
+                        written-out reasons for why a result is high or low;
+                        the system has no language model and the dashboard is
+                        to be explicit). "Why it may have changed" is gone;
+                        how the forecast was made stays in "Show details". */}
+                    <div className="forecast-next-side">
+                      <button type="button" className="forecast-next-details" onClick={openDetails}>
+                        <ChevronDown size={15} aria-hidden="true" />
+                        Show details
+                      </button>
+                    </div>
+                    </div>
+                  ) : (
+                    <p className="forecast-headline-main">
+                      {storedForecast
+                        ? 'No sales in the selected range.'
+                        : selectedSKU.cat === 'A' ? 'No forecast yet for this product.' : 'Forecasts are made for top sellers only.'}
+                    </p>
                   )}
+                  <StockLimitedNote periods={stockLimitedPeriods} />
 
                   {/* Partial overlap: the chart is real but narrower than what
                       was picked. Says exactly which end fell short and why,
@@ -1893,7 +2380,7 @@ const SKUForecast = () => {
                             : `, so the end of your range (${formatPeriod(rangeEndPeriod)}) has no data.`}
                       </div>
                       <button className="forecast-range-fix-btn" onClick={applySkuCoverageRange}>
-                        Use this SKU&apos;s range
+                        Use this product&apos;s range
                       </button>
                     </div>
                   )}
@@ -1906,13 +2393,11 @@ const SKUForecast = () => {
                       scripts/run_baseline_forecast.py performs. */}
                   {derivedForecast?.source === 'recomputed' && (
                     <p className="forecast-range-note">
-                      <strong>Preview forecast for {formatPeriod(derivedForecast.period)}.</strong>{' '}
-                      Because your range ends before {formatPeriod(skuCoverage?.end)}, this is the 3-month moving
-                      average (this SKU&apos;s model) recalculated from {formatPeriod(derivedForecast.windowStart)} –{' '}
-                      {formatPeriod(derivedForecast.basisPeriod)}, the same way the pipeline computes it. No
-                      confidence interval or accuracy score is shown — those come from the pipeline&apos;s holdout
-                      evaluation, which only exists for the stored {formatPeriod(storedForecastPeriod)} forecast.
-                      Extend the range to {formatPeriod(skuCoverage?.end)} to see it.
+                      <strong>A preview for {formatPeriod(derivedForecast.period)}.</strong>{' '}
+                      Your range ends before {formatPeriod(skuCoverage?.end)}, so this is the average of the 3 months up to{' '}
+                      {formatPeriod(derivedForecast.basisPeriod)}, worked out the same way as the real forecast. It has no
+                      &ldquo;most likely&rdquo; range and no reliability check: those exist only for the{' '}
+                      {formatPeriod(storedForecastPeriod)} forecast. Extend the range to {formatPeriod(skuCoverage?.end)} to see it.
                     </p>
                   )}
 
@@ -1922,40 +2407,189 @@ const SKUForecast = () => {
                       says why nothing was recomputed in its place. */}
                   {servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && !derivedForecast.plotted && (
                     <p className="forecast-range-note">
-                      <strong>Showing the stored {formatPeriod(derivedForecast.period)} forecast.</strong>{' '}
+                      <strong>Showing the {formatPeriod(derivedForecast.period)} forecast.</strong>{' '}
                       {servedModel.recomputable
-                        ? `This SKU had fewer than ${MIN_SALES_MONTHS} months of sales up to ${formatPeriod(derivedForecast.earlierCutoff)}, so no forecast can be recomputed for a range ending there.`
-                        : servedModel.fallback
-                          ? `The pipeline fell back to the 3-month moving average for this SKU, and whether it would for an earlier end date can't be checked in the browser, so nothing is recomputed for a range ending ${formatPeriod(derivedForecast.earlierCutoff)}.`
-                          : `This SKU's model${servedModel.label ? ` (${servedModel.label})` : ''} only runs in the forecasting pipeline, so its forecast can't be recomputed in the browser for a range ending ${formatPeriod(derivedForecast.earlierCutoff)}.`}
+                        ? `This product had fewer than ${MIN_SALES_MONTHS} months of sales up to ${formatPeriod(derivedForecast.earlierCutoff)}, so no forecast can be worked out for a range ending there.`
+                        : `This product's forecast can only be worked out by the forecasting run, not on this page, so nothing is shown for a range ending ${formatPeriod(derivedForecast.earlierCutoff)}.`}
                       {' '}Extend the range to {formatPeriod(derivedForecast.basisPeriod)} to see it on the chart.
                     </p>
                   )}
 
+                </>
+              )}
+            </div>
+
+            {/* What to order (2026-10-19): from the current order plan, or
+                for a product outside it, its stock, weeks left at this
+                forecast and why the plan leaves it out. */}
+            {showingThisSKU && !isForecastColdLoad && !forecastError && (
+              <section className="forecast-order-card" aria-label="What to order">
+                <h3 className="forecast-card-title ui-card-title">What to order</h3>
+                {!planLoaded ? (
+                  <LoadingStatus>Loading the order plan…</LoadingStatus>
+                ) : plan.failed ? (
+                  <p className="forecast-order-reason">The order plan couldn&apos;t be loaded.</p>
+                ) : planItem ? (
+                  <>
+                    <SectionLede>From the current order plan{plan.cycle ? ` for ${formatPeriod(plan.cycle)}` : ''}.</SectionLede>
+                    {/* Said only from the plan's own forecast_units: the same
+                        figure as the headline, or a different one named as such. */}
+                    {calendarAdjusted && planItem.forecast_units != null && adjustedValue != null
+                      && String(plan.cycle ?? '').slice(0, 7) === storedForecastPeriod && (
+                      <p className="forecast-order-reason">
+                        {Math.round(planItem.forecast_units) === Math.round(adjustedValue)
+                          ? `This plan uses the forecast above (${fmtPcs(planItem.forecast_units)} pcs), calendar adjustment included.`
+                          : `This plan was worked out on a forecast of ${fmtPcs(planItem.forecast_units)} pcs, not the `
+                            + `${fmtPcs(adjustedValue)} pcs above.`}
+                      </p>
+                    )}
+                    <dl className="forecast-order-grid">
+                      <div>
+                        <dt><span className="forecast-order-icon is-stock" aria-hidden="true"><Package size={20} /></span>In stock now</dt>
+                        <dd>
+                          {planItem.stock_not_in_count ? (
+                            <>
+                              {NOT_IN_COUNT}
+                              <InfoTip label="About a product missing from the stock count" size={12}>
+                                This product is missing from the stock count, so the plan reads it as 0 on hand. The stock
+                                file lists no zero rows, so a missing product is most likely out of stock.
+                              </InfoTip>
+                            </>
+                          ) : planItem.current_stock != null ? <><ExactValue value={planItem.current_stock} /> pcs</> : 'no stock count'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span className="forecast-order-icon is-cover" aria-hidden="true"><Clock size={20} /></span>
+                          Lasts about
+                          <InfoTip label="About how long stock lasts" size={12}>
+                            How long the stock on hand lasts at the forecast: the plan&apos;s own cover (days of cover ÷ 7).
+                          </InfoTip>
+                        </dt>
+                        <dd>{coverText(planItem, planItem.days_of_cover != null ? planItem.days_of_cover / 7 : null)}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span className="forecast-order-icon is-safety" aria-hidden="true"><ShieldCheck size={20} /></span>
+                          Keep at least
+                          <InfoTip label="About keep at least" size={12}>
+                            Safety stock: the buffer the plan keeps for a month that sells more than forecast.
+                          </InfoTip>
+                        </dt>
+                        <dd><ExactValue value={planItem.ss_i} /> pcs</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span className="forecast-order-icon is-order" aria-hidden="true"><ShoppingCart size={20} /></span>
+                          Order
+                          <InfoTip label="How the order is worked out" size={12}>
+                            {orderBreakdown(planItem, plan.cycle ? formatPeriod(plan.cycle) : null)}
+                            {/* A planner's accepted quantity (plan_q_i, the row's
+                                decided_q_i, else q_i; Main-BE 16f4f4b, 2026-10-24)
+                                replaces the plan's own figure, as on Reorder and the
+                                Dashboard; the sum above is the plan's. */}
+                            {planItem.plan_q_i != null && planItem.plan_q_i !== planItem.q_i
+                              && ` A planner accepted ${Math.round(planItem.plan_q_i).toLocaleString()} pcs instead of the plan's ${Math.round(planItem.q_i).toLocaleString()} pcs.`}
+                          </InfoTip>
+                        </dt>
+                        <dd><strong><ExactValue value={planItem.plan_q_i ?? planItem.q_i} /> pcs</strong></dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span className={`forecast-order-icon is-status is-${String(planItem.urgency || '').toLowerCase().replace(/\s+/g, '-')}`} aria-hidden="true">
+                            <AlertTriangle size={20} />
+                          </span>
+                          Status
+                        </dt>
+                        <dd>
+                          <span className={getUrgencyBadge(planItem.urgency)} title={URGENCY_HOVER[planItem.urgency]}>
+                            {planItem.urgency}
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                    {canOpenReorder && (
+                      <button
+                        type="button"
+                        className="forecast-plan-link"
+                        onClick={() => navigate(`/reorder?sku=${encodeURIComponent(selectedSKU.code)}`)}
+                      >
+                        Open in Reorder Recommendations
+                        <ArrowRight size={13} aria-hidden="true" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="forecast-order-reason"><strong>Not in the current order plan.</strong> {notPlannedReason}</p>
+                    <dl className="forecast-order-grid">
+                      <div>
+                        <dt><span className="forecast-order-icon is-stock" aria-hidden="true"><Package size={20} /></span>In stock now</dt>
+                        <dd>{outsideStock != null ? <><ExactValue value={outsideStock} /> pcs</> : 'no stock count'}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span className="forecast-order-icon is-cover" aria-hidden="true"><Clock size={20} /></span>
+                          Lasts about
+                          <InfoTip label="About how long stock lasts" size={12}>
+                            Stock on hand ÷ (this forecast ÷ {WEEKS_PER_MONTH.toFixed(2)} weeks a month): how long the stock
+                            lasts if sales match the forecast. Not from the plan.
+                          </InfoTip>
+                        </dt>
+                        <dd>{fmtWeeks(outsideWeeks)}</dd>
+                      </div>
+                    </dl>
+                  </>
+                )}
+              </section>
+            )}
+
+            {/* How this product sells, in plain words (the measures are in
+                "Show details"), above the chart since 2026-10-28 (Audrey). Keyed on
+                the product so it replays its entrance. */}
+            <SkuDemandPatternPanel
+              key={`pattern-${selectedSKU.code}`}
+              skuId={selectedSKU.code}
+              principal={principal}
+            />
+
+            {/* The chart, in its own card under What to order (2026-10-20). */}
+            {!isForecastColdLoad && !forecastError && forecastResult && (rangeStatus === 'ok' || rangeStatus === 'partial') && (
+              <div className="forecast-chart-container forecast-chart-card" key={`chartcard-${selectedSKU.code}`}>
+                {/* Title, subtitle and the chart/table toggle on one row
+                    (redesign 2026-10-26); the toggle wraps under the title
+                    on a narrow screen. */}
+                <div className="forecast-chart-head">
+                  <div className="forecast-chart-heading">
+                    <h3 className="forecast-card-title ui-card-title">Past sales and the forecast</h3>
+                    <p className="forecast-chart-subtitle">Monthly units sold and projected demand</p>
+                  </div>
+                  <div className="forecast-chart-tools">
+                    <ChartViewToggle view={chartView} onChange={setChartView} label="Forecast: chart or table" />
+                  </div>
+                </div>
                   {/* Chart, or its table twin. The legend sits ABOVE the
                       plot (under the stat rows), so the key is met before
                       the marks — same order as the dashboard's charts. */}
                   {isDemoForecast && (
                     <SyntheticForecastBanner />
                   )}
-                  <div className="forecast-chart-tools">
-                    <ChartViewToggle view={chartView} onChange={setChartView} label="Forecast: chart or table" />
-                  </div>
                   {chartView === 'table' ? (
+                    <>
                     <ChartTable
-                      caption="Actual sales and forecast by month, in pieces"
+                      caption="Actual sales and forecast by month, in pcs"
                       columns={[
                         {
                           key: 'period',
                           label: 'Month',
-                          format: (v) => `${formatAxisPeriod(v)}${isPlaceholderPeriod(v, placeholder) ? ' (placeholder)' : ''}`,
+                          format: (v) => `${formatAxisPeriod(v)}${isPlaceholderPeriod(v, placeholder) ? ' (sample data)' : ''}`,
                           align: 'left',
                         },
-                        { key: 'actualV', label: 'Actual (pieces)', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'forecastV', label: `${forecastName} (pieces)`, format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'lastYearV', label: 'Same month last year (pieces)', format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'ciLow', label: `${bandLabel} low (pieces)`, format: (v) => Math.round(v).toLocaleString() },
-                        { key: 'ciHigh', label: `${bandLabel} high (pieces)`, format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'actualV', label: 'Actual (pcs)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'forecastV', label: `${forecastName} (pcs)`, format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'lastYearV', label: 'Same month last year (pcs)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'ciLow', label: 'Most likely, low (pcs)', format: (v) => Math.round(v).toLocaleString() },
+                        { key: 'ciHigh', label: 'Most likely, high (pcs)', format: (v) => Math.round(v).toLocaleString() },
                       ]}
                       rows={chartData.map((pt) => ({
                         period: pt.label,
@@ -1969,13 +2603,16 @@ const SKUForecast = () => {
                         ciHigh: pt.actual == null && Array.isArray(pt.ci) ? pt.ci[1] : null,
                       }))}
                     />
+                    {forecastSummaryRow}
+                    </>
                   ) : (
                   <>
                   <div className="chart-legend">
                     {chartData.some((pt) => pt.actual != null) && (
                       <div className="legend-item">
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="2.5" strokeLinecap="round" />
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={SKU_ACTUAL} strokeWidth="2.5" strokeLinecap="round" />
+                          <circle cx="14" cy="6" r="3.5" fill={SKU_ACTUAL} stroke="#FFFFFF" strokeWidth="1.5" />
                         </svg>
                         <span className="legend-label">Actual Sales</span>
                       </div>
@@ -1983,7 +2620,7 @@ const SKUForecast = () => {
                     {chartData.some((pt) => pt.lastYear != null) && (
                       <div className="legend-item">
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={CHART_COLORS.salesSeries} strokeWidth="1.5" strokeOpacity="0.55" strokeLinecap="round" strokeDasharray="3 3" />
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={SKU_LAST_YEAR} strokeWidth="1.8" strokeLinecap="round" strokeDasharray="4 3" />
                         </svg>
                         <span className="legend-label">Same month last year</span>
                       </div>
@@ -2005,11 +2642,27 @@ const SKUForecast = () => {
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
                           <rect
                             x="1" y="1.5" width="26" height="9" rx="2.5"
-                            fill={COLORS.forecast} fillOpacity="0.16"
-                            stroke={COLORS.forecast} strokeOpacity="0.35" strokeWidth="1"
+                            fill={SKU_FORECAST} fillOpacity="0.15"
+                            stroke={SKU_FORECAST} strokeOpacity="0.3" strokeWidth="1"
                           />
                         </svg>
                         <span className="legend-label">{bandLabel}</span>
+                      </div>
+                    )}
+                    {chartData.some((pt) => pt.stockLimited) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <rect x="1" y="1.5" width="26" height="9" rx="2.5" fill={STOCK_LIMITED_FILL} fillOpacity="0.22" />
+                        </svg>
+                        <span className="legend-label">Stock may have run out</span>
+                      </div>
+                    )}
+                    {chartData.some((pt) => GENERATED_REASONS.has(pt.reason)) && (
+                      <div className="legend-item">
+                        <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
+                          <rect x="1" y="1.5" width="26" height="9" rx="2.5" fill={CHART_COLORS.placeholder} fillOpacity="0.3" />
+                        </svg>
+                        <span className="legend-label">Sample data, not SSM&apos;s</span>
                       </div>
                     )}
                     {chartData.some((pt) => isPlaceholderPeriod(pt.label, placeholder)) && (
@@ -2017,7 +2670,7 @@ const SKUForecast = () => {
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
                           <rect x="1" y="1.5" width="26" height="9" rx="2.5" fill={CHART_COLORS.placeholder} fillOpacity="0.3" />
                         </svg>
-                        <span className="legend-label">Placeholder months — not SSM&apos;s data</span>
+                        <span className="legend-label">Sample data, not SSM&apos;s</span>
                       </div>
                     )}
                   </div>
@@ -2030,19 +2683,64 @@ const SKUForecast = () => {
                         margin keeps the title off the SVG's edge (with
                         bottom:0 the month labels were once clipped). */}
                     <ResponsiveContainer width="100%" height={420}>
-                      <ComposedChart data={zoom.view} margin={{ top: 20, right: EDGE_LABEL_MARGIN, left: 8, bottom: 12 }}>
-                        <CartesianGrid {...GRID_PROPS} />
+                      <ComposedChart data={zoom.view} margin={{ top: ANNOTATION_BAND, right: EDGE_LABEL_MARGIN, left: 8, bottom: 12 }}>
+                        {/* The wash under actual sales: the Dashboard's
+                            forecast card's own gradient (Charts.jsx
+                            pf-fill-actual), in this chart's teal. */}
+                        <defs>
+                          <linearGradient id="skuf-fill-actual" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={SKU_ACTUAL} stopOpacity={0.26} />
+                            <stop offset="100%" stopColor={SKU_ACTUAL} stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid {...GRID_PROPS} stroke={CHART_COLORS.gridline} />
                         {renderPlaceholderBand(placeholderSpan(zoom.view.map((pt) => ({ period: pt.label })), placeholder))}
+                        {/* Generated months, then the months where stock may
+                            have run out (the reason is in the hover). */}
+                        {generatedRuns.map(([x1, x2]) => (
+                          <ReferenceArea
+                            key={`gen-${x1}`}
+                            x1={x1}
+                            x2={x2}
+                            fill={CHART_COLORS.placeholder}
+                            fillOpacity={0.18}
+                            stroke="none"
+                            label={{ value: 'Sample data', position: 'insideTop', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          />
+                        ))}
+                        {stockLimitedRuns.map(([x1, x2]) => (
+                          <ReferenceArea
+                            key={`sl-${x1}`}
+                            x1={x1}
+                            x2={x2}
+                            fill={STOCK_LIMITED_FILL}
+                            fillOpacity={0.12}
+                            stroke="none"
+                            label={<StockRunLabel cx={chartAnnotations.stockX[x1]} text={formatPeriodSpan(x1, x2)} />}
+                          />
+                        ))}
+                        {/* The forecast side of the divider, faintly tinted. */}
+                        {derivedForecast?.plotted && lastPlottedActualPeriod && zoom.view.length > 1
+                          && zoom.view.some((pt) => pt.label === lastPlottedActualPeriod)
+                          && zoom.view[zoom.view.length - 1].label !== lastPlottedActualPeriod && (
+                          <ReferenceArea
+                            x1={lastPlottedActualPeriod}
+                            x2={zoom.view[zoom.view.length - 1].label}
+                            fill={SKU_FORECAST}
+                            fillOpacity={0.05}
+                            stroke="none"
+                          />
+                        )}
                         <XAxis
                           dataKey="label"
-                          axisLine={true}
-                          tickLine={true}
+                          axisLine={{ stroke: '#D5DBE3' }}
+                          tickLine={false}
                           tick={<MonthTick fill="#556070" fontSize={11} />}
                           tickFormatter={monthName}
                           tickMargin={10}
                           minTickGap={12}
                           height={44 + MONTH_TICK_EXTRA_HEIGHT}
-                          label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          label={{ value: 'Month', position: 'insideBottom', offset: 0, fontSize: 11, fill: CHART_COLORS.axisLabel }}
                           // Recharts' default tick-skip anchors from the END
                           // of the axis (interval="preserveEnd") — harmless
                           // at the old fixed ~12-point series, but with a
@@ -2064,15 +2762,19 @@ const SKUForecast = () => {
                           interval={zoom.labelInterval}
                         />
                         <YAxis
-                          axisLine={true}
-                          tickLine={true}
+                          axisLine={false}
+                          tickLine={false}
                           tick={{ fill: '#556070', fontSize: 11 }}
                           tickFormatter={formatAxisQty}
                           width={60}
                           tickMargin={8}
-                          label={{ value: 'Pieces', angle: -90, position: 'insideLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                          // From 0, never below (2026-10-20): sales can't be
+                          // negative, so a range's low end under 0 is cut at 0.
+                          domain={[0, 'auto']}
+                          allowDataOverflow
+                          label={{ value: 'Units (pcs)', angle: -90, position: 'insideLeft', offset: 2, fontSize: 11, fill: CHART_COLORS.axisLabel, style: { textAnchor: 'middle' } }}
                         />
-                        <Tooltip content={<CustomTooltip bandLabel={bandLabel} bandLevel={bandLevel} />} />
+                        <Tooltip content={<CustomTooltip bandLevel={bandLevel} />} cursor={{ stroke: '#CBD2DC', strokeDasharray: '3 3' }} />
 
                         {/* Where actuals hand over to the forecast — the
                             divider the dashed style is read against. Only
@@ -2081,9 +2783,9 @@ const SKUForecast = () => {
                           zoom.view.some((pt) => pt.label === lastPlottedActualPeriod) && (
                           <ReferenceLine
                             x={lastPlottedActualPeriod}
-                            stroke={CHART_COLORS.axisLabel}
+                            stroke="#9AA4B2"
                             strokeDasharray="4 4"
-                            label={{ value: 'Forecast starts', position: 'insideTopRight', fontSize: 10, fill: CHART_COLORS.axisLabel }}
+                            label={<ForecastStartLabel cx={chartAnnotations.dividerX} period={lastPlottedActualPeriod} />}
                           />
                         )}
 
@@ -2094,11 +2796,11 @@ const SKUForecast = () => {
                         <Area
                           type="linear"
                           dataKey="ci"
-                          stroke={COLORS.forecast}
-                          strokeOpacity={0.35}
+                          stroke={SKU_FORECAST}
+                          strokeOpacity={0.3}
                           strokeWidth={1}
-                          fill={COLORS.forecast}
-                          fillOpacity={0.16}
+                          fill={SKU_FORECAST}
+                          fillOpacity={0.15}
                           name={bandLabel}
                           {...zoom.zoomAnim(0)}
                           connectNulls={false}
@@ -2119,37 +2821,40 @@ const SKUForecast = () => {
                             dotted and faded (the dashboard hero chart's rule:
                             colour = metric, line style = year). */}
                         <Line
-                          type="linear"
+                          type="monotone"
                           dataKey="lastYear"
-                          stroke={CHART_COLORS.salesSeries}
-                          strokeWidth={1.5}
-                          strokeOpacity={0.55}
-                          strokeDasharray="3 3"
+                          stroke={SKU_LAST_YEAR}
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeDasharray="5 4"
                           dot={false}
                           activeDot={{ r: 4 }}
                           name="Same month last year"
                           {...zoom.zoomAnim(1)}
                         />
-                        <Line
-                          type="linear"
+                        <Area
+                          type="monotone"
                           dataKey="actual"
-                          stroke={CHART_COLORS.salesSeries}
-                          strokeWidth={2}
-                          dot={seriesDot({ color: CHART_COLORS.salesSeries })}
-                          activeDot={{ r: 6 }}
+                          stroke={SKU_ACTUAL}
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          fill="url(#skuf-fill-actual)"
+                          dot={latestActualDot}
+                          activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                           name="Actual Sales"
                           {...zoom.zoomAnim(1)}
                           connectNulls
                         />
 
                         <Line
-                          type="linear"
+                          type="monotone"
                           dataKey="forecast"
                           stroke={forecastColor}
-                          strokeWidth={2}
-                          strokeDasharray={isDemoForecast ? '2 5' : '5 5'}
+                          strokeWidth={2.5}
+                          strokeLinecap="round"
+                          strokeDasharray={isDemoForecast ? '2 5' : '5 3'}
                           dot={seriesDot({ color: forecastColor, r: 4, skip: (p) => p?.actual != null })}
-                          activeDot={{ r: 6 }}
+                          activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
                           name={forecastName}
                           label={forecastEndLabels}
                           {...zoom.zoomAnim(2)}
@@ -2169,18 +2874,201 @@ const SKUForecast = () => {
                       dashed stroke, filled band) — a CSS-only swatch faking
                       the dash via a background gradient rendered as a lumpy
                       bowtie at this size. */}
-                  <ChartZoomSlider zoom={zoom} />
+                  {forecastSummaryRow}
                   {/* What the chart's zero and empty months mean, in the
                       backend's words: only the reasons still on the chart. */}
-                  <GapNote
-                    note={forecastResult?.gap_note}
-                    codes={new Set((forecastResult?.actuals || []).map((a) => a.reason).filter(Boolean))}
-                  />
+                  <GapNote note={forecastResult?.gap_note} codes={drawnReasons} />
                   </>
                   )}
-                </>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Everything technical, closed by default (2026-10-20): the model
+                and why, bin, MASE, the range's method, the past misses with
+                the backtest source and the pesos basis, the sales-pattern
+                measures and the top-seller rule with its adviser caveat. */}
+            {showingThisSKU && !isForecastColdLoad && !forecastError && forecastResult && (
+              <details className="forecast-details ui-details" ref={detailsRef}>
+                <summary>Show details: how this forecast was made</summary>
+                <div className="forecast-details-body">
+                  {/* How this forecast was made — the stored number's
+                      provenance, straight from model_params: the served
+                      model, the history bin that picked it, the MA3
+                      benchmark (computed for every SKU), and for the
+                      XGBoost + MA3 average both components. Shown only
+                      beside the stored number it describes: a browser preview
+                      is explained by its own note, and a provisional /
+                      no-order row isn't a forecast. Names models only; no
+                      claim that one is more accurate than MA3. */}
+                  {!isDemonstration && servedModel?.kind === 'forecast' && derivedForecast?.source === 'stored' && (
+                    <div className="forecast-howmade">
+                      <span className="forecast-howmade-title">The forecast model</span>
+                      <dl className="forecast-howmade-list">
+                        <div className="forecast-howmade-item">
+                          <dt>Model</dt>
+                          <dd>
+                            {servedModel.label ?? storedParams.method ?? '—'}
+                            {servedModel.plain ? `: ${servedModel.plain.long}` : ''}
+                            {whyModel && <span className="forecast-howmade-why">{whyModel}</span>}
+                          </dd>
+                        </div>
+                        {/* Whether the forecast knows what time of year it is. */}
+                        {servedModel.plain?.season && (
+                          <div className="forecast-howmade-item">
+                            <dt>Time of year</dt>
+                            <dd>{servedModel.plain.season}</dd>
+                          </div>
+                        )}
+                        {/* The figure before the calendar adjustment and the
+                            factor; the headline is the adjusted figure. */}
+                        {calendarAdjusted && adjustedValue != null && (
+                          <div className="forecast-howmade-item">
+                            <dt>Calendar adjustment{adjustmentMonth ? ` (${adjustmentMonth})` : ''}</dt>
+                            <dd>
+                              Before the adjustment: {fmtPcs(servedModel.calendar.before)} pieces. The calendar factor,
+                              {' '}{calendarFactorText({ factor: servedModel.calendar.factor })}, takes it to the{' '}
+                              {fmtPcs(adjustedValue)} pcs shown above: how this month has sold against the 3 months before it
+                              {servedModel.calendar.years != null ? ` in ${servedModel.calendar.years} earlier ${servedModel.calendar.years === 1 ? 'year' : 'years'}` : ''}
+                              {' '}(company total).
+                              {calendarPending
+                                ? ` The adjustment is ${calendarPendingText}.`
+                                : ''}
+                              {' '}The order plan uses the adjusted figure.
+                            </dd>
+                          </div>
+                        )}
+                        {storedParams.bin && (
+                          <div className="forecast-howmade-item">
+                            <dt>Bin (history)</dt>
+                            <dd>
+                              {storedParams.sales_months != null
+                                ? `${storedParams.sales_months} sales month${storedParams.sales_months === 1 ? '' : 's'} → `
+                                : ''}
+                              {storedParams.bin}
+                            </dd>
+                          </div>
+                        )}
+                        {storedParams.ma3_value != null && (
+                          <div className="forecast-howmade-item">
+                            <dt>3-month average (MA3){ma3Window ? `, ${ma3Window}` : ''}</dt>
+                            <dd>{Math.round(storedParams.ma3_value).toLocaleString()} pcs a month</dd>
+                          </div>
+                        )}
+                        {/* Reliability on the same basis as the dashboard's
+                            count and the LP's gate: MASE < 1 means the
+                            served model beat a naive last-month forecast
+                            on its own rolling holdout. */}
+                        {storedForecast?.mase != null && (
+                          <div className="forecast-howmade-item">
+                            <dt>
+                              Reliability
+                              <InfoTip label="About reliability">
+                                MASE compares this model&apos;s errors with simply repeating last month&apos;s sales.
+                                Below 1 means the model does better than that; 1 or more means it doesn&apos;t.
+                                {/* Three decimals near 1, where two would round
+                                    0.996 up to "1.00" beside "beats a simple
+                                    last-month guess" (the verdict uses the
+                                    stored value). */}
+                                {' '}This product: MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}.
+                                {/* MASE_GATE is an open question to the adviser
+                                    (reports/ADVISER_QUESTIONS_SIRCG.md §3; 2026-10-22). */}
+                                {' '}Using this check to decide which products get an order is pending adviser confirmation.
+                              </InfoTip>
+                            </dt>
+                            <dd className={storedForecast.mase < 1 ? '' : 'forecast-howmade-warn'}>
+                              {/* The verdict in plain words; the score is
+                                  behind the "?" for the adviser. */}
+                              {storedForecast.mase < 1
+                                ? 'Performs better than a simple last-month estimate'
+                                : 'Does not perform better than a simple last-month estimate'}:
+                              {' '}MASE {maseText} (below 1 beats simply repeating last month&apos;s sales)
+                              {holdoutWindow ? `, tested on ${holdoutWindow}` : ''}
+                              {calendarAdjusted ? '. Worked out on the adjusted forecast; there is no separate check without the adjustment.' : ''}
+                            </dd>
+                          </div>
+                        )}
+                        {/* The usual miss, moved here from the page face
+                            (2026-10-24): the past-misses card below
+                            leaves it out (showShare), so it is said once. */}
+                        {missShare != null && (
+                          <div className="forecast-howmade-item">
+                            <dt>Typical miss</dt>
+                            <dd>
+                              About {Math.round(missShare * 100)}% of the forecast: how far past forecasts for this product
+                              {' '}were off, too high or too low, added up and divided by what was forecast
+                              {missWindow ? `, over ${missWindow}` : ''}.
+                            </dd>
+                          </div>
+                        )}
+                        {storedParams.method === 'xgb_ma3_avg' && storedParams.components && (
+                          <div className="forecast-howmade-item">
+                            <dt>Components</dt>
+                            <dd>
+                              Trained model (XGBoost) {storedParams.components.xgb != null ? Math.round(storedParams.components.xgb).toLocaleString() : '—'}
+                              {' + '}
+                              3-month average (MA3) {storedParams.components.ma3 != null ? Math.round(storedParams.components.ma3).toLocaleString() : '—'}
+                              {' '}pcs, averaged
+                            </dd>
+                          </div>
+                        )}
+                        {derivedForecast.confidenceLower != null && derivedForecast.confidenceUpper != null && (
+                          <div className="forecast-howmade-item">
+                            <dt>Most likely range</dt>
+                            <dd>
+                              {fmtPcs(derivedForecast.confidenceLower)}–{fmtPcs(derivedForecast.confidenceUpper)} pcs: the forecast
+                              {' '}± 1.645 × the model&apos;s error on past months (holdout root-mean-square error)
+                              {bandLevel != null ? `, meant to cover about ${Math.round(bandLevel / 10)} in 10 months (a design target, not a measured hit rate)` : ''}.
+                              {calendarAdjusted ? ' Worked out around the adjusted forecast; there is no separate range without the adjustment.' : ''}
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                      {/* The guard rejected the TSB / XGBoost value and MA3
+                          was served instead (router.py). The raw code stays
+                          in the tooltip; the chip restates it plainly. */}
+                      {storedParams.backup_fired === true && (
+                        <span className="forecast-fallback-chip">
+                          <AlertTriangle size={13} aria-hidden="true" />
+                          Served MA3 as a fallback — {describeFallbackReason(storedParams.backup_reason)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {productAccuracy?.checked && (
+                    <div className="forecast-details-section">
+                      <ForecastErrorCard error={productAccuracy.error} detailed showShare={false} />
+                      {SHOW_ACCURACY_PCT && <AccuracyLevels accuracy={forecastResult?.accuracy} />}
+                    </div>
+                  )}
+                  {productAccuracy && !productAccuracy.checked && (
+                    <p className="forecast-accuracy-none">
+                      Not checked against sales in {formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}:
+                      no forecast for this product was scored in those months.
+                    </p>
+                  )}
+                  <div className="forecast-details-section">
+                    <span className="forecast-howmade-title">Sales pattern, measured</span>
+                    <SkuDemandPatternPanel
+                      key={`pattern-details-${selectedSKU.code}`}
+                      skuId={selectedSKU.code}
+                      principal={principal}
+                      variant="details"
+                    />
+                  </div>
+                  <div className="forecast-details-section">
+                    <span className="forecast-howmade-title">Top sellers</span>
+                    <TierBasisLabel periods={tierAPeriods} />
+                    {tierAPeriods?.Unilever && (
+                      <p className="forecast-details-note">
+                        Unilever&apos;s rule (Class A over the last 12 months, plus new products that are Class A over the
+                        last 3) is pending adviser confirmation.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </details>
+            )}
           </>
         )}
       </div>

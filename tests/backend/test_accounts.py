@@ -6,6 +6,8 @@ tests/backend/test_accounts.py — the 2026-09-28 account changes:
     the database rather than the token
   - one-time links: POST /auth/link-info, /auth/set-password,
     /auth/forgot-password
+  - POST /auth/change-password (My profile), and refusing a new password
+    that is the same as the current one
   - backend.mailer setting its own Date and Message-ID headers
 
 FakeDB keeps users, links and audit entries in memory and answers only the
@@ -57,6 +59,7 @@ class FakeDB:
         self.tokens: list[dict] = []  # auth_token rows
         self.audit: list[dict] = []
         self.revoked: list[int] = []
+        self.kept_sessions: list[str] = []  # the session revoke_other_sessions left signed in
         self.idle_closed = False
         self.commits = 0
         self.principal_row = None  # what deps.ACTIVE_PRINCIPAL_SQL returns
@@ -107,6 +110,12 @@ class FakeDB:
             u = self.user(user_id=t["user_id"])
             return FakeResult({"purpose": t["purpose"], "expires_at": t["expires_at"],
                                "email": u["email"], "full_name": u["full_name"]})
+        if sql.startswith("SELECT u.password_hash FROM auth_token"):
+            t = self._open_token(p["token_hash"], now)
+            return FakeResult({"password_hash": self.user(user_id=t["user_id"])["password_hash"]} if t else None)
+        if sql.startswith("SELECT password_hash FROM users WHERE user_id"):
+            u = self.user(user_id=p["user_id"])
+            return FakeResult({"password_hash": u["password_hash"]} if u else None)
         if sql.startswith("UPDATE auth_token SET used_at = now() WHERE token_hash"):
             t = self._open_token(p["token_hash"], now)
             if t is None:
@@ -119,6 +128,8 @@ class FakeDB:
             return FakeResult({k: u[k] for k in ("email", "full_name", "role")})
         if "end_reason = 'revoked'" in sql:
             self.revoked.append(p["user_id"])
+            if "keep_session_id" in p:
+                self.kept_sessions.append(p["keep_session_id"])
             return FakeResult()
         if "end_reason = 'idle'" in sql:
             self.idle_closed = True
@@ -251,6 +262,8 @@ def test_the_invite_email_says_who_sent_it_the_role_and_when_it_expires(client, 
         assert "Philippine time" in part
     assert 'src="cid:ssm-dsd-logo"' in sent["html"]
     assert sent["inline_images"]["ssm-dsd-logo"][:8] == b"\x89PNG\r\n\x1a\n"
+    # The logo's space is kept while Gmail fetches it, so the email doesn't jump.
+    assert 'width="150" height="51"' in sent["html"]
 
 
 def test_the_real_mailer_sends_text_html_and_the_logo_together(monkeypatch):
@@ -409,6 +422,77 @@ def test_without_email_forgot_password_says_to_ask_an_admin(client, db, outbox, 
         assert resp.status_code == 202
         assert resp.json() == {"detail": auth_router.FORGOT_PASSWORD_NO_EMAIL_MESSAGE}
     assert outbox == [] and db.tokens == [] and db.audit == []
+
+
+# --- the same password again -------------------------------------------------
+
+
+def test_a_reset_link_refuses_the_current_password_and_still_works(client, db, outbox):
+    client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"})
+    token = link_token(outbox[-1])
+    same = client.post("/auth/set-password", json={"token": token, "password": "staff-password-1"})
+    assert same.status_code == 422
+    assert same.json()["code"] == "same_password"
+    assert same.json()["detail"] == auth_router.SAME_PASSWORD
+    assert db.revoked == []
+    # Refused before the link was used up: a different password goes through.
+    assert client.post("/auth/set-password", json={"token": token, "password": "brand-new-pass"}).status_code == 204
+
+
+# --- change password (My profile) --------------------------------------------
+
+
+def change(client, current, new, session_id="sid-1"):
+    return client.post(
+        "/auth/change-password", json={"current_password": current, "new_password": new},
+        headers=admin_headers(session_id),
+    )
+
+
+def test_changing_your_password_needs_the_current_one(client, db):
+    resp = change(client, "admin-password-1", "a-new-password")
+    assert resp.status_code == 204
+    admin = db.user(user_id=1)
+    assert auth_utils.verify_password("a-new-password", admin["password_hash"])
+    assert [a["action"] for a in db.audit] == ["Password Changed"]
+    # This browser stays signed in; every other one is signed out.
+    assert (db.revoked, db.kept_sessions) == ([1], ["sid-1"])
+
+
+def test_a_wrong_current_password_is_refused_without_signing_out(client, db):
+    resp = change(client, "not-my-password", "a-new-password")
+    # 400, not 401: the app signs out on any 401.
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": auth_router.WRONG_CURRENT_PASSWORD, "code": "wrong_current_password"}
+    assert auth_utils.verify_password("admin-password-1", db.user(user_id=1)["password_hash"])
+    assert db.audit == [] and db.revoked == []
+
+
+def test_the_new_password_cant_be_the_current_one(client, db):
+    resp = change(client, "admin-password-1", "admin-password-1")
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "same_password"
+    assert db.audit == [] and db.revoked == []
+
+
+def test_guessing_the_current_password_hits_the_sign_in_lock(client, db):
+    for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+        assert change(client, "guess", "a-new-password").status_code == 400
+    locked = change(client, "guess", "a-new-password")
+    assert locked.status_code == 429
+    assert [a["action"] for a in db.audit] == ["Sign-in Locked"]
+    # While locked, even the right password is refused.
+    assert change(client, "admin-password-1", "a-new-password").status_code == 429
+
+
+@pytest.mark.parametrize("password", ["short", "x" * 73], ids=["too-short", "73-bytes"])
+def test_the_new_password_follows_the_same_length_rules(client, password):
+    assert change(client, "admin-password-1", password).status_code == 422
+
+
+def test_changing_the_password_needs_a_sign_in(client):
+    resp = client.post("/auth/change-password", json={"current_password": "a", "new_password": "a-new-password"})
+    assert resp.status_code == 401
 
 
 # --- backend.mailer ----------------------------------------------------------
