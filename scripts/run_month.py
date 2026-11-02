@@ -43,8 +43,8 @@ sys.path.insert(0, str(REPO))
 from analytics.params import abc_method  # noqa: E402
 from scripts import close_cycle  # noqa: E402
 from scripts.close_cycle import PRINCIPAL, cycle_params, parse_cycle, transaction  # noqa: E402
-from scripts.cycle_feedback import SYNTHETIC_SQL  # noqa: E402
-from scripts.report_target import is_live_target  # noqa: E402
+from scripts.cycle_feedback import GENERATED_IN_SCORE_SQL, SYNTHETIC_SQL  # noqa: E402
+from scripts.report_target import PRACTICE_MARKER, is_live_target  # noqa: E402
 
 LATEST_SALES_SQL = "SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real"
 PLAN_SQL = """
@@ -227,7 +227,9 @@ def _facts(params: dict) -> dict:
         cur.execute(LATEST_SALES_SQL)
         latest = cur.fetchone()[0]
         cur.execute(SYNTHETIC_SQL, params)
-        return {"latest_sales_month": latest, "synthetic_rows": int(cur.fetchone()[0])}
+        synthetic = int(cur.fetchone()[0])
+        cur.execute(GENERATED_IN_SCORE_SQL, params)
+        return {"latest_sales_month": latest, "synthetic_rows": synthetic, "generated_rows": max(int(cur.fetchone()[0]), synthetic)}
     return _read(read)
 
 
@@ -318,7 +320,10 @@ def main() -> int:
     for line in close_cycle.describe(status, params):
         print(line)
     print(f"  database: {'LIVE' if live else 'local (not live)'}; calendar factor {args.calendar_factor}")
-    refusals = preflight_refusals(args.month, _facts(params), status["checks"], args.slice, live)
+    facts = _facts(params)
+    if facts["generated_rows"]:
+        print(f"  {PRACTICE_MARKER}: {facts['generated_rows']} generated sales rows in the history up to this month")
+    refusals = preflight_refusals(args.month, facts, status["checks"], args.slice, live)
     if refusals:
         print("REFUSED: " + "; ".join(refusals))
         return 2

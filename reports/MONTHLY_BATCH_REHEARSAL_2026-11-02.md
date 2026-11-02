@@ -21,6 +21,59 @@ Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a loc
 
 It proves the month runs on labelled generated data on a local copy. It does not prove a real new monthly file runs: none has ever existed.
 
+## Everything a practice month writes, and how each says so (2026-11-03)
+
+Measured, not read from the code: `python -m scripts.practice_artefacts` fingerprints every repo file and table, runs the month, and diffs; it calls every GET route on the practice copy; it exits 1 on anything unlabelled. Run from `backups/full_backup_20261102T170343Z`: 3 files, 14 tables, 51 GET routes, 0 unlabelled. April plan unchanged by the labels: 121 rows, 110 ordering, 1,213,168 pieces. A row deliberately inserted with the trigger off was caught. "Before" is the same measurement on e93bcea.
+
+**Files** (marker text `PRACTICE RUN ON GENERATED SALES, NOT A RESULT`)
+
+| File | Before | Marker now |
+|---|---|---|
+| `local/nonlive_reports/reports/BASELINE_FORECAST_RUN.md` | None | First line |
+| `local/cycle_feedback/feedback_<cycle>_nonlive.txt` | Yes, only if generated rows were in that month itself | First line, also when they are only in the history |
+| `local/cycle_feedback/feedback_<cycle>_nonlive.csv` | None (a bare header) | First line, a `#` comment |
+| `local/baseline_forecast_per_sku.csv` | Not written by a practice run (fixed earlier) | Not written |
+| `local/baseline_forecast_per_sku.GENERATED_SALES_practice_2026-11-03.csv`, leftover from before that fix | Its file name only | First line, a `#` comment |
+| `reports/lp_runs/retired_*.csv`. Did not fire in this run; written when a rerun retires rows | None, and in a folder for live's files | Moved to `local/nonlive_reports/`, `practice_marker` column; its own test |
+| `run_lp --csv PATH`. `run_month` does not pass it | None | `practice_marker` column; its own test |
+| `local/monthly_batch/uploads/`. The page's upload; a person's input file, not an output | Not generated data | None needed |
+
+**Tables.** Every row written carries `practice_run`, stamped by a trigger in that copy only. Rows are written, then counted against `ssm_local`. "Updated" rows count as written, and the older version of each as deleted.
+
+| Table | Written | Deleted | Other marker it already had |
+|---|---|---|---|
+| `public.unilever_sku_demand_fact` | 709 | 644 (the copy's retired backfill) | `is_demo`, `_src_file` |
+| `public.abc_classification` | 1,083 | 0 | None |
+| `public.forecast_result` | 191 | 0 | `model_params.run.generated_sales_in_history` |
+| `public.lp_run` | 1 | 0 | None |
+| `public.lp_recommendation` | 231 (121 new, 110 closed) | 110 | None |
+| `public.planning_cycle` | 1 | 0 | None |
+| `mart.sales_mart` | 709 | 644 | `data_kind = 'generated'` |
+| `mart.sales_month` | 1 | 1 | `data_kind = 'generated'` |
+| `mart.planning_mart` | 410 | 289 | None |
+| `mart.forecast_run` | 1 | 0 | None |
+| `mart.forecast_run_value` | 380 | 0 | None |
+| `mart.accuracy_mart` | 380 | 0 | None |
+| `mart.error_decomposition` | 104 | 104 (`refreshed_at` only) | None |
+| `mart.refresh_log` | 6 | 0 | None |
+
+A mart rebuild stamps rows of real months too: the label says the row was written on the practice copy, not that its own month is generated.
+
+**API**
+
+| Answer | Before | Now |
+|---|---|---|
+| The other 47 GET routes, on a process connected to `ssm_practice` | Answered with no marker; `/abc`, `/category-trends`, `/dashboard`, `/dashboard/forecast-runs`, `/forecast/{sku}`, `/fsn`, `/inventory/current`, `/policy-comparison`, `/recommendations` and `/sku` visibly differed from `ssm_local` | 409 `practice_copy_not_served` (`/status` included) |
+| `GET /batch/status` | `synthetic_rows`, for the month in play only | `practice_note`, `generated_rows` |
+| `GET /batch/feedback` | `synthetic_rows`, withheld reason | `practice_note`, `generated_rows` |
+| `GET /batch/job` | The log; the forecast's lines prefixed | `practice_note` (the log can lose its first lines to its 400-line limit), and `run_month` opens with the marker |
+| `GET /health` | Holds no figure | Unchanged |
+| `POST /batch/*` | Answer a job name or a file name; no figure | Unchanged |
+
+Printed output: the forecast's lines stay prefixed `[computed on generated sales]`, `run_month` prints the marker first, and `local_pg run --practice` prints it before the child starts.
+
+Not looked at, because the run never reaches it: the loader's transform folder and layout cache, written only when a real file is uploaded and loaded.
+
 ## What the loop is
 
 | Signal | Reaches the next plan? | How |

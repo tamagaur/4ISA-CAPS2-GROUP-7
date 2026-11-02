@@ -2463,7 +2463,8 @@ const SKUForecast = () => {
                           <span className="forecast-order-icon is-cover" aria-hidden="true"><Clock size={20} /></span>
                           Lasts about
                           <InfoTip label="About how long stock lasts" size={12}>
-                            How long the stock on hand lasts at the forecast: the plan&apos;s own cover (days of cover ÷ 7).
+                            How long the stock on hand lasts at recent actual sales, not the forecast: pieces in stock ÷ the
+                            3-month average of pieces sold, at 30.44 calendar days a month (the plan&apos;s days of cover ÷ 7).
                           </InfoTip>
                         </dt>
                         <dd>{coverText(planItem, planItem.days_of_cover != null ? planItem.days_of_cover / 7 : null)}</dd>

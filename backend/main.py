@@ -30,6 +30,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
 from backend import mailer
 from backend.api_errors import ApiError, api_error_handler
@@ -149,6 +150,12 @@ app.include_router(data_mode.router)
 app.include_router(demo.router)
 if monthly_batch.enabled():   # local practice database only: the deployed API does not have these routes (docs/CHAPTER4_CODE_FIGURES.json)
     app.include_router(monthly_batch.router)
+
+if monthly_batch.on_practice_copy():   # never the deployed API: it is not connected to ssm_practice
+    @app.middleware("http")
+    async def refuse_practice_copy(request, call_next):
+        refusal = monthly_batch.practice_copy_refusal(request.url.path)
+        return JSONResponse(refusal, status_code=409) if refusal else await call_next(request)
 
 
 @app.get("/health", tags=["health"])

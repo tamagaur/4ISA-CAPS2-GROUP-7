@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scripts.report_target import report_path
+from scripts.report_target import PRACTICE_MARKER, report_path
 from scripts.run_guards import stale_abc_refusal
 from analytics.forecasting.split import train_holdout_split
 from analytics.classification.fsn import no_sale_in_last_months
@@ -561,7 +561,7 @@ def main():
 
     # ---- write files ------------------------------------------------- #
     _write_csv(df, labelled)
-    _write_md(df, abc_period, latest_demand_month)
+    _write_md(df, abc_period, latest_demand_month, labelled)
 
     # ---- optional DB write ----------------------------------------- #
     if args.write:
@@ -873,9 +873,14 @@ def _write_csv(df, labelled: bool = False):
     print(f"\nWrote {PER_SKU_CSV}  ({len(out)} rows, every real Tier A SKU)")
 
 
-def _write_md(df, abc_period, latest_demand_month):
+def _md_opening(labelled: bool) -> list[str]:
+    """`labelled`: as in _write_csv. The markdown is still written, so its first line says what it is computed on."""
+    return [f"**{PRACTICE_MARKER}.** Every figure below, accuracy included, is computed partly on generated sales (is_demo = true).\n"] if labelled else []
+
+
+def _write_md(df, abc_period, latest_demand_month, labelled: bool = False):
     df_ok = df[df["status"] == "ok"].copy()
-    lines = []
+    lines = _md_opening(labelled)
     lines.append("# Baseline Forecast Run - Unilever Category A (MA3 / Naive / SBA)\n")
     lines.append(f"- ABC period used: `{abc_period}`  (latest real demand month: `{latest_demand_month}`)")
     lines.append(f"- Methods: naive, ma3 (window={MA_WINDOW}), sba (alpha={SBA_ALPHA}, tuned={SBA_ALPHA_TUNED})")

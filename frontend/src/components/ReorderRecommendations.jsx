@@ -88,9 +88,9 @@ const URGENCY_LABEL = {
 };
 
 const COVER_BASIS_NOTE =
-  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day, last 3 sales months). Understates cover by the '
-  + 'margin, since stock is valued at last purchase cost while sales are at selling price. (The Dashboard’s weeks of '
-  + 'cover for Unilever is in pieces instead, so the two can differ.)';
+  'Pieces in stock ÷ average pieces sold per day: the last 3 sales months (a month with no sales counts as 0), at 30.44 '
+  + 'calendar days a month. Actual sales, not the forecast. (The Dashboard’s weeks of cover is also in pieces but '
+  + 'averages 12 months, so the two can differ.)';
 
 // Every quantity on this page is in PIECES — the LP's unit (q_i, rop_i,
 // ss_i and the forecast all come from the pieces demand series) — while SSM

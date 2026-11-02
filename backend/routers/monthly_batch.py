@@ -49,6 +49,8 @@ LOG_LINES = 400
 SCRIPT_TIMEOUT_S = 120
 
 LOCAL_ONLY = "The monthly batch only runs on the local practice database for now."
+# On every /batch answer that holds a figure. The job log can lose its first lines to LOG_LINES, so the log's own marker is not enough.
+PRACTICE_NOTE = "Read from the practice copy (ssm_practice), whose sales may be generated. Practice, not a result."
 
 router = APIRouter(prefix="/batch", tags=["monthly-batch"])
 
@@ -70,6 +72,19 @@ def step_env() -> dict:
     require_local()
     url = urlparse(os.environ["SUPABASE_DB_URL"])._replace(path=f"/{PRACTICE_DB}").geturl()
     return {**os.environ, "SUPABASE_DB_URL": url, "SUPABASE_DIRECT_URL": url, "DATABASE_URL": url, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+
+
+def on_practice_copy() -> bool:
+    return urlparse(os.environ.get("SUPABASE_DB_URL") or "").path == f"/{PRACTICE_DB}"
+
+
+def practice_copy_refusal(path: str) -> dict | None:
+    """The 409 body for a request an API running on ssm_practice must not answer, else None. The data routes have no way to say their
+    figures rest on generated sales, and no page reads that copy (the pages' process stays on ssm_local, step_env), so they answer
+    nothing there. /batch says what it is (PRACTICE_NOTE); /health holds no figure."""
+    if path == "/health" or path == "/batch" or path.startswith("/batch/"):
+        return None
+    return {"detail": f"This API is connected to {PRACTICE_DB}, which holds generated sales. Its figures are not served.", "code": "practice_copy_not_served"}
 
 
 class Job:
@@ -112,7 +127,7 @@ class Job:
 
     def state(self) -> dict:
         with self._lock:
-            return {"status": self.status, "kind": self.kind, "exit_code": self.exit_code, "started_at": self.started_at,
+            return {"practice_note": PRACTICE_NOTE, "status": self.status, "kind": self.kind, "exit_code": self.exit_code, "started_at": self.started_at,
                     "finished_at": self.finished_at, "log": "\n".join(self.lines)}
 
 
@@ -174,7 +189,7 @@ def status(month: str | None = Query(default=None, pattern=MONTH),
     if not enabled():
         return {"enabled": False}
     current = read_status(month)
-    return {"enabled": True, **current, "files": uploaded_files(current["month"]), "practice_month": PRACTICE_MONTH, "job": JOB.state()}
+    return {"enabled": True, "practice_note": PRACTICE_NOTE, **current, "files": uploaded_files(current["month"]), "practice_month": PRACTICE_MONTH, "job": JOB.state()}
 
 
 @router.get("/job")
@@ -186,7 +201,7 @@ def job(_user: TokenPayload = Depends(require_permission("upload.run"))) -> dict
 @router.get("/feedback")
 def feedback(cycle: str = Query(pattern=MONTH), _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     require_local()
-    return _script_json("scripts.cycle_feedback", "--cycle", cycle, "--json")
+    return {"practice_note": PRACTICE_NOTE, **_script_json("scripts.cycle_feedback", "--cycle", cycle, "--json")}
 
 
 @router.post("/files", status_code=201)

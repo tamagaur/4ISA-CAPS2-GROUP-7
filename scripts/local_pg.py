@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from scripts.local_pipeline_qa import TAG  # noqa: E402
+from scripts.report_target import PRACTICE_MARKER  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 PGBIN = Path(os.environ.get("PG_BIN", r"C:\Program Files\PostgreSQL\17\bin"))
@@ -46,6 +47,22 @@ PRACTICE_VIEW_SQL = f"""
     SELECT demand_key, product_key, sku_code, calendar_month, region, quantity_sold, net_amount, _src_file, _src_sheet, is_demo, gsv
     FROM public.unilever_sku_demand_fact
     WHERE is_demo = false OR (is_demo = true AND _src_file = '{TAG}')
+"""
+# Its second difference: every table gets a practice_run column, NULL on the rows the copy started with, and a trigger that stamps it
+# on every row inserted or updated afterwards, so a row says where it came from whichever script wrote it and no writer has to know.
+# The rows the run deletes leave no row to mark: scripts/practice_artefacts.py counts them. Only in this copy: never a migration.
+PRACTICE_ROW_LABEL = "written on ssm_practice, which holds generated sales: practice, not a result"
+PRACTICE_ROW_LABEL_SQL = f"""
+    CREATE OR REPLACE FUNCTION public.practice_run_label() RETURNS trigger LANGUAGE plpgsql AS $f$
+    BEGIN NEW.practice_run := '{PRACTICE_ROW_LABEL}'; RETURN NEW; END $f$;
+    DO $d$ DECLARE t record; BEGIN
+      FOR t IN SELECT n.nspname, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE c.relkind IN ('r', 'p') AND NOT c.relispartition AND n.nspname IN ('public', 'mart', 'demo', 'app') LOOP
+        EXECUTE format('ALTER TABLE %I.%I ADD COLUMN practice_run text', t.nspname, t.relname);
+        EXECUTE format('CREATE TRIGGER practice_run_label BEFORE INSERT OR UPDATE ON %I.%I FOR EACH ROW EXECUTE FUNCTION public.practice_run_label()',
+                       t.nspname, t.relname);
+      END LOOP;
+    END $d$;
 """
 
 
@@ -98,7 +115,10 @@ def make_practice() -> None:
     r = _psql(PRACTICE_DB, PRACTICE_VIEW_SQL)
     if r.returncode != 0:
         sys.exit(f"could not open {PRACTICE_DB}'s demand view to its generated rows: {r.stderr.strip()}")
-    print(f"{PRACTICE_DB} is a fresh copy of {DB}; its demand view also admits rows tagged {TAG}")
+    r = _psql(PRACTICE_DB, PRACTICE_ROW_LABEL_SQL)
+    if r.returncode != 0:
+        sys.exit(f"could not give {PRACTICE_DB}'s tables their practice_run label: {r.stderr.strip()}")
+    print(f"{PRACTICE_DB} is a fresh copy of {DB}; its demand view also admits rows tagged {TAG}; every row written to it is stamped practice_run")
 
 
 def _pg_array(v):
@@ -182,6 +202,8 @@ def run(cmd: list[str], practice: bool = False) -> int:
                           f"import sys;sys.exit(0 if (u.hostname,u.port)==('127.0.0.1',{PORT}) else 7)"], cwd=REPO, env=env)
     if chk.returncode != 0:
         sys.exit("REFUSED: child process would not resolve to the throwaway database")
+    if practice:
+        print(f"[{PRACTICE_MARKER}] on {PRACTICE_DB}: everything below runs on the practice copy", flush=True)
     return subprocess.call(cmd, cwd=REPO, env=env)
 
 

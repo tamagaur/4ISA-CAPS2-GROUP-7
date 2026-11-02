@@ -62,3 +62,17 @@ Anti-loop: noticed, not done (except where the task listed it).
 | 10 | tests/test_planning_mart.py's live test is skipped unless SUPABASE_DB_URL is already in the environment; it ran in the full suite only because an earlier test's import loads .env. Order-dependent, not a defect in the mart. | tests/test_planning_mart.py:287 |
 | 11 | The manifest staging/_manifest.json is 14 Sep 2026 and git-ignored; the extraction totals in the manuscript cannot be re-checked by a reader without it. PROJECT_STATE_2026-09.md quotes 2,089,347 rows (8 families) for an earlier build. | reports/CLAIM_CHECK_2026-10-22.md |
 | 12 | The LP only solves because of a loosened hold: with `HOLD_SLACK_REL` at 0 the cycle-2026-03 plan has no solution, and the committed retry slack of 1e-7 (analytics/optimization/lp.py, `HOLD_SLACK_REL`, used in `solve_lp`; lowered from 1e-6 on 2026-10-22) leaves two products ordered under their need: 64985759 by 0.033 and 68395711 by 0.009 pieces (0.042 in all; need 431,443.460, orders 431,443.418 before case-pack rounding; at the old 1e-6 it was 0.34, 0.08 and 0.01 = 0.43). The case-pack-rounded plan total is 435,988 at both settings. The slack solved every cycle tried: 2026-03 on the stored forecasts, and 2025-06, 2025-09, 2025-11, 2026-01 and 2026-02 on the as-served backtest forecasts (run 11) with each month's own opening count (a solver check, not stored plans). | Not a business constraint. Checked 2026-10-22 against the live inputs: the first two stages (fill demand, fill safety stock) solve; the third (fill the rest of the target) is Infeasible. Dropping the warehouse ceiling (3,816,842; 1.15M pieces of room) or the allocation ceiling (1,264,829; about 829,000 of room) changes nothing, so neither binds. Dropping `hold_fill_safety_stock` makes it Optimal, and so does loosening all holds to a relative 1e-8, so the binding constraint is that hold: the safety-stock layer is pinned at the sum of its upper bounds (131,954.677 pieces) within about 1e-4, below CBC's own feasibility tolerance on rows of this size. A relative slack of 1e-8 would be enough here; 1e-6 was 100 times larger than needed, which let the cost stage pull 0.43 pieces under need. Changed to 1e-7 on 2026-10-22 (under-need 0.43 -> 0.042 pieces); still under one piece in 431,443. | analytics/optimization/lp.py (`HOLD_SLACK_REL`, `solve_lp`), scratch probe `infeas_probe.py` |
+
+## Two cover measures, two windows (recorded 2026-11-03)
+
+Both are Unilever pieces over pieces. They differ in how much history the sales average covers, so the two pages can read differently. Neither is wrong.
+
+| | Dashboard: weeks of cover | Reorder page: days of cover |
+|---|---|---|
+| Grain | Portfolio | One product |
+| Stock | Pieces at the count | Pieces at the cycle's opening count |
+| Sales window | **12 months** up to the count | **3 sales months** up to the count (`SKU_COVER_HISTORY_MONTHS`); a month with no sales counts as 0 |
+| Rate | Average pieces per week | Average pieces per month ÷ 30.44 calendar days (`DAYS_PER_MONTH`) |
+| Code | `backend/marts.py` (`weeks_of_cover`), tooltip in `frontend/src/components/Dashboard.jsx` | `backend/routers/recommendations.py` `_cover`, notes in `ReorderRecommendations.jsx`, `ReorderModal.jsx` and `SKUForecast.jsx` |
+
+Neither reads the forecast. Del Monte has no pieces, so its Dashboard card stays in pesos. The list behind the Dashboard's "Above the rule" card also stays in pesos, and says so in its tooltip.

@@ -38,7 +38,7 @@ def main() -> int:
     print(json.dumps({
         "month": f"{month:%Y-%m}", "next_month": f"{params['next_cycle']:%Y-%m}", "live": is_live_target(),
         "checks": status["checks"], "cycle_state": row["state"] if row else "open",
-        "latest_sales_month": facts["latest_sales_month"], "synthetic_rows": facts["synthetic_rows"],
+        "latest_sales_month": facts["latest_sales_month"], "synthetic_rows": facts["synthetic_rows"], "generated_rows": facts["generated_rows"],
         "plan": rm._plan(params, params["cycle"]), "next_plan": rm._plan(params, params["next_cycle"]),
         "count_lines": [line.strip() for line in rm.count_lines(rm._counts(params))],
     }))

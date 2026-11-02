@@ -33,7 +33,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from scripts.close_cycle import PRINCIPAL, cycle_params, parse_cycle, transaction  # noqa: E402
-from scripts.report_target import is_live_target  # noqa: E402
+from scripts.report_target import PRACTICE_MARKER, is_live_target  # noqa: E402
 
 SYNTHETIC_TAG = "qa_synthetic%%"   # scripts/local_pipeline_qa.py's _src_file on generated sales; practice database only
 
@@ -101,7 +101,9 @@ def summarize_decisions(rows: list[dict]) -> dict:
 def render(report: dict) -> list[str]:
     lines = []
     if report["synthetic_rows"]:
-        lines.append(f"SYNTHETIC REHEARSAL: {report['synthetic_rows']} generated sales rows in this month. Not a result.")
+        lines.append(f"SYNTHETIC REHEARSAL: {report['synthetic_rows']} generated sales rows in this month. {PRACTICE_MARKER}.")
+    elif report.get("generated_rows"):
+        lines.append(f"SYNTHETIC REHEARSAL: {report['generated_rows']} generated sales rows in the history up to this month. {PRACTICE_MARKER}.")
     lines.append(f"Feedback for cycle {report['cycle']} (Unilever). Read-only; none of this changes the next plan.")
     fc = report["forecast"]
     if fc["status"] == "blocked":
@@ -139,7 +141,7 @@ def read_report(cur, params: dict) -> tuple[dict, list[dict]]:
     decisions = [dict(zip(("status", "q_i", "decided_q_i", "decision_reason", "in_plan"), r)) for r in cur.fetchall()]
     cur.execute(RECEIPTS_SQL, params)
     receipts = [dict(zip(("state", "not_visible", "n", "pieces", "overdue"), r)) for r in cur.fetchall()]
-    return ({"cycle": params["period"], "synthetic_rows": synthetic, "forecast": score(rows, loaded, generated),
+    return ({"cycle": params["period"], "synthetic_rows": synthetic, "generated_rows": generated, "forecast": score(rows, loaded, generated),
              "decisions": summarize_decisions(decisions), "receipts": receipts}, rows if loaded and not generated else [])
 
 
@@ -150,6 +152,8 @@ def save(report: dict, rows: list[dict], lines: list[str], live: bool) -> Path:
     (folder / f"{stem}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     with open(folder / f"{stem}.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
+        if report.get("generated_rows"):
+            f.write(f"# {PRACTICE_MARKER}: {report['generated_rows']} generated sales rows, so no product is listed (forecast error withheld)\n")
         w.writerow(["sku_code", "forecast", "actual", "reason"])
         for r in rows:
             reason = "blank_capture" if r["blanks"] else ("sold" if r["has_row"] else "no_sale")

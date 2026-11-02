@@ -45,10 +45,9 @@ const objectiveWeights = (lpModel) => {
 // "9 times in 10" from the served service level (90), never retyped.
 const timesInTen = (pct) => (pct % 10 === 0 ? `${pct / 10} times in 10` : `${pct} times in 100`);
 
-// Stock is valued at purchase cost and sales at selling price, so cover
-// reads a little short (backend/routers/recommendations.py days_of_cover).
+// Pieces over pieces (backend/routers/recommendations.py _cover).
 const COVER_BASIS_NOTE =
-  'Stock at last purchase price (₱) ÷ average daily sales value (₱/day over the last 3 sales months; a month with no sales counts as 0). Cost against selling price, so cover reads slightly short.';
+  'Pieces in stock ÷ average pieces sold per day: the last 3 sales months (a month with no sales counts as 0), at 30.44 calendar days a month. Actual sales, not the forecast.';
 
 // `periods` — the dates the page read its figures at (GET /recommendations'
 // label_context, passed through by ReorderRecommendations), so each figure
