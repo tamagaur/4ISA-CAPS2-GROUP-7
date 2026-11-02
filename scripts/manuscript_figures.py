@@ -7,7 +7,7 @@ Every number comes from a query, a stored report or the pinned frozen rows, neve
   live, read-only   GET /dashboard, /category-trends, /dashboard/yoy, /abc, /fsn, /recommendations,
                     /policy-comparison called in-process (scripts/smoke_api.py's pattern), and SQL on
                     mart.sales_month and unilever_sku_demand_fact_real inside BEGIN; SET TRANSACTION READ ONLY
-  pinned            local/published_snapshot_2026-10-24/*.csv (git-ignored, hard rule 9): the frozen rows behind
+  pinned            docs/published_snapshot_2026-10-24/*.csv (tracked, trimmed columns; hard rule 9 exception of 2026-10-23): the frozen rows behind
                     docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json (accuracy, MASE, error decomposition)
   stored reports    reports/model_bakeoff_unilever_tierA_allmetrics.csv (bake-off),
                     reports/experiment_artifacts/cells_all.csv (half-year block results)
@@ -41,7 +41,7 @@ from scripts.report_target import report_path  # noqa: E402
 FIG_DIR = REPO / "reports" / "figures"
 MANIFEST = FIG_DIR / "FIGURES.md"
 TABLE_DOC = REPO / "docs" / "MANUSCRIPT_TABLE_DATA_2026-10-30.md"
-SNAP = REPO / "local" / "published_snapshot_2026-10-24"
+SNAP = REPO / "docs" / "published_snapshot_2026-10-24"
 SNAP_JSON = REPO / "docs" / "PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json"
 BAKEOFF = REPO / "reports" / "model_bakeoff_unilever_tierA_allmetrics.csv"
 CELLS = REPO / "reports" / "experiment_artifacts" / "cells_all.csv"
@@ -649,7 +649,7 @@ def check_monthly(f: Fig, m: pd.DataFrame, cols: tuple[str, ...]):
                 f.check(f"{mo} {col}", round(got), exp[col], tol=1, basis="Table 4.2.18")
 
 
-ACC_SOURCE = ("local/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by "
+ACC_SOURCE = ("docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by "
               "docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them")
 
 
@@ -740,7 +740,7 @@ def fig_j(plt, d) -> Fig:
 
 def fig_k(plt, d) -> Fig:
     f = Fig("k", "fig_k_mase_distribution.png", "MASE Distribution of the 175 Forecast Products, Unilever Tier A "
-            "(as of 2026-02)", "Forecast_Result for March 2026, status ok (frozen in local/published_snapshot_2026-10-24/"
+            "(as of 2026-02)", "Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/"
             "mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175')", "forecast month March 2026 (served model's "
             "rolling one-step holdout, DEC-25)",
             "the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size "
@@ -1013,7 +1013,7 @@ def fig_o(plt, d) -> Fig:
     return f
 
 
-DEC_SOURCE = ("local/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, "
+DEC_SOURCE = ("docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, "
               "Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json)")
 
 

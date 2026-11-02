@@ -1,6 +1,6 @@
 # Published accuracy figures, pinned (2026-10-24)
 
-Why: `mart.accuracy_mart` and `mart.error_decomposition` read real sales at every mart refresh, so loading March 2026 would have moved every figure the manuscript quotes, with no trace. These are pinned to the data they used. Machine-readable copy: `PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json` (aggregates only, with the sha256 of every input). Per-product input rows are in the git-ignored `local/published_snapshot_2026-10-24/` (hard rule 9).
+Why: `mart.accuracy_mart` and `mart.error_decomposition` read real sales at every mart refresh, so loading March 2026 would have moved every figure the manuscript quotes, with no trace. These are pinned to the data they used. Machine-readable copy: `PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json` (aggregates only, with the sha256 of every input). Per-product input rows are in `docs/published_snapshot_2026-10-24/`, tracked and trimmed to the columns the check reads (hard rule 9 exception of 2026-10-23: these figures are published). Product keys, months and quantities only; no prices, names or safety-stock values.
 
 **Actuals version: `actuals-2026-02-b31bf58d9b5e`** (Unilever per-SKU sales through 2026-02, 24,906 rows; the md5 of one month:rows:pieces:pesos line per calendar month, `analytics/actuals_version.py`). Mart refresh 41 (2026-10-22 14:25 UTC). Unilever sales have no `etl_load_event` rows, so a content fingerprint is the version key.
 

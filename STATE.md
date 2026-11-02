@@ -12,7 +12,7 @@ Governance (2026-11-02): docs/DATA_GOVERNANCE.md on Main-BE (pushed 2026-11-02);
 Next free migration: 0073. 0070 (dismissal requests + stock observations), 0071 (notification bell) and 0072 (audit_log append-only triggers) are APPLIED to public 2026-11-02 by Kelvin's go-ahead (additive: 0 rows written, audit_log 120 rows unchanged, lp_recommendation 289 unchanged; UPDATE/DELETE/TRUNCATE on app.audit_log confirmed refused). The files are on Main-BE (pushed 2026-11-02). Main-BE's own STATE.md still says 0070 is free: update it when this branch is merged.
 
 Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, frozen rows in
-  local/published_snapshot_2026-10-24/ (git-ignored). Headline: MASE < 1 for 109 of 175; Tier A exceeds safety stock 749 months.
+  docs/published_snapshot_2026-10-24/ (tracked, trimmed to the columns the check reads). Headline: MASE < 1 for 109 of 175; Tier A exceeds safety stock 749 months.
   Verify: python -m scripts.snapshot_published_figures --verify   (or scripts/check.sh --fast, which runs it)
   Loading March 2026 sales moves the live marts, never the pinned figures.
 
