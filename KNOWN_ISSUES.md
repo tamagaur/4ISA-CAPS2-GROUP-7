@@ -7,8 +7,8 @@ Sources: findings 5-13 of `reports/AUDIT_2026-10-23.md` (A#), 8-15 of `reports/Q
 
 **Tally.** Open at the start of 2026-10-30: 17 (7 carried in this file; 10 in `QA_PIPELINE_2026-10-30.md`, not yet in it).
 First session that day: 8 left the list (5 fixed: A11 P5-forecast-half P7 P8 P10; 2 already fixed: P4 P9; 1 not a defect: P6); one row
-added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3). On 2026-10-31 a full-suite run added T1 (a guard test failing at 4a80d41): 4 open.** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7).
-Four client items are closed with a written limitation (L1-L4); they were not rows before.
+added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3). On 2026-10-31 a full-suite run added T1 (a guard test failing at 4a80d41): 4 open. On 2026-11-02 T1 was fixed and M1 added: 4 open (A7 C1 M1 P3).** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7), a decision (M1).
+Eight client items are closed with a written limitation (L1-L8); they were not rows before.
 
 ## Open
 
@@ -16,7 +16,7 @@ Four client items are closed with a written limitation (L1-L4); they were not ro
 |---|---|---|---|---|
 | A7 | Med | With `DM_DEMO_ENABLED` on and `X-Data-Mode: preview`, a real Unilever SKU's forecast marks its `real_copy` months `demonstration: true` and shows the demo MA3 forecast. | It is the sanctioned demonstration path as built: CLAUDE.md rule 2 (Kelvin, 2026-10-15/16) wires the Unilever demo forecast into `GET /forecast/{sku}` behind the flag AND the preview header, labelled at top level and per row, with `origin: real_copy` telling real from generated. Nothing reaches a `_Real` view or the real forecast. | **won't-fix (by recorded decision, rule 2)**; reopen if you read the rule differently |
 | C1 | Low | `/recommendations` on the mart path runs three statements per cycle, not two: the mart has pesos only and weeks of cover is in pieces (D3), so `_attach_avg_pieces` reads `quantity_sold` live. | The fix adds a column to `mart.planning_mart`: a migration on planning data. Out of scope, as the brief says. | **needs a migration** (next free 0070) |
-| T1 | Low | `tests/backend/test_recommendation_decisions.py::test_only_the_displayed_plan_total_reads_the_decided_quantity` fails at 4a80d41: it finds `plan_q_i` in `scripts/manuscript_figures.py` (added in 4a80d41), which reads it from the API response to draw a figure and feeds nothing back. Found 2026-10-31 by the full suite (`docs/TEST_PLAN.md` TC83). | The fix is either the test's exemption list (as for the QA harness on 2026-10-30) or the script, and both were outside the 2026-10-31 brief. | **needs Kelvin's decision** |
+| M1 | Low | Once a month after 2026-02 is loaded, `scripts/accuracy_as_served.py` stops at its check that the latest sales month equals the window end (`scripts/backtest_forecast_run.WINDOW`, hand-set to 2026-02). | It stops rather than give a wrong figure, and moving the window moves quoted figures, so that should be done on purpose. The batch does not call it; `scripts/cycle_feedback.py` scores the new month. Not reachable until a new month loads. | **needs Kelvin's decision** when a real month arrives |
 | P3 | Med-Low | After a second ABC re-run, cached `GET /abc` keeps the old classes: the cache's data version (`mart.refresh_status`) does not carry `abc_classification.computed_at`. | Adding `MAX(computed_at)` to the per-request version query costs about 23 ms a read on 75,430 rows (measured on the local copy) because no index covers it; the cheap fix is an index or a view change, i.e. a migration. Bites only on an ABC run on its own. | **needs a migration** |
 
 ## Surfaced for decision (item 3 of the brief): effect on the published figures
@@ -32,6 +32,12 @@ plan = 109 rows, 435,988.00 pieces; of them 73 have q_i > 0 (sum 435,988.00) and
 | **A13** | Leave it out of `cycle=all` (hide or delete the row). | The cycle table reads 109 and nothing in the plan changes; the accepted decision's audit trail is the cost. | |
 
 A12 was then done as the additive field only (second session; see Closed). A13 was then done as the label (2026-10-31, see Closed on 2026-10-31): row 4 stays out of the plan.
+
+## Closed on 2026-11-02
+
+| ID | How | Evidence |
+|---|---|---|
+| T1 | **fixed**: `scripts/manuscript_figures.py` exempted from the guard test, because it reads the field from the API response to draw a figure and feeds nothing back. | `tests/backend/test_recommendation_decisions.py` |
 
 ## Closed on 2026-10-31 (Kelvin's decisions, implemented; not committed)
 
@@ -82,3 +88,7 @@ manuscript text itself is not in git, so where no location is on record it says 
 | L2 | There is no promotion calendar. Stockout exposure (months where the forecast fell short of actual sales) can be measured; whether a promotion, a price change or a supply failure caused a miss cannot be said. | the error decomposition and forecast-error cards state a size, never a cause | **No location on record.** Proposed: §4.4.4. |
 | L3 | There are no Unilever delivery records. Stock on hand cannot be reconciled against movement (opening + deliveries - sales = closing), so a count that looks wrong (the 2 Mar count, about twice its neighbours) can be flagged but not corrected. The only stock evidence is the monthly count. | `expected_receipt` settles against the next count, not against a delivery document; DEC-34 | **No location on record.** Proposed: §4.4.4. |
 | L4 | Prices (procurement cost per piece, from the stock file; the 33.48 median default is applied to no product this cycle), storage cost (0.50), warehouse capacity (3,816,842, the most stock held in one count) and supplier ceilings (103% of last year's sales) are set from SSM's stock file and recorded stock levels, not confirmed by SSM. **The review and lead days (`review_days` 5, `lead_days` 3: weekly orders delivered 2-3 days later) were stated by SSM (Sir Abe) at the 2026-09-28 meeting, not confirmed in writing.** (Date as given by Kelvin 2026-10-30; `analytics/params.py:267` names Sir Abe without a date and lines 221 and 257 date the meeting 2026-09-29: unresolved which.) | `analytics/params.py` `PLACEHOLDERS` (lines 262-284) | **Cost inputs: Table 4.2.23 "Cost inputs" row and §4.4.4 "Four LP inputs ... SSM has not confirmed them", and §5.2.3** (`docs/CH4-5_EDITS_2026-10-22_corrected.md`, items near lines 172-174, 216, 269, 305; also §4.1.3 as referenced there). **Review and lead days: no location on record.** |
+| L5 | New monthly files may not arrive: per-SKU sales end 2026-02. The live plan stays at cycle 2026-03 until a real month exists. The monthly loop has only been shown on generated sales, on the local database. | `scripts/run_month.py` refuses a month with no sales; `reports/MONTHLY_BATCH_REHEARSAL_2026-11-02.md` | **No location on record.** Proposed: §4.4.4. |
+| L6 | Stock counts come from Ilocos Sur and per-SKU sales from La Union (UNVERIFIED). They are treated as one stock position; this is an assumption, not something the data shows. | Plans compare the two directly | **No location on record.** Proposed: §4.4.4. |
+| L7 | Whether SSM's sales listing omits zero-sale months cannot be confirmed. A Unilever month with no row is treated as zero sales, on the evidence in `CLAUDE.md` ("Why data is missing"). | `backend/series_gaps.py`, `scripts/cycle_feedback.py` | **No location on record.** Proposed: §4.4.4. |
+| L8 | Monthly stock counts swing widely (1.69M to 3.80M pieces in the last seven) and plan size moves with them. A count cannot be checked with SSM, so it is accepted as recorded. | `scripts/run_month.py` prints each count against the median of the six before it for the person approving; it corrects nothing and sets no threshold | **No location on record.** Proposed: §4.4.4. |

@@ -276,6 +276,8 @@ def test_only_the_displayed_plan_total_reads_the_decided_quantity():
                 continue
             if path.name.startswith("local_api_qa"):
                 continue  # the QA harness reads the API response; it feeds nothing back (added 2026-10-30)
+            if path.name == "manuscript_figures.py":
+                continue  # reads the field from the API response to draw a figure; it feeds nothing back (T1, 2026-11-02)
             assert "plan_q_i" not in path.read_text(encoding="utf-8", errors="ignore"), path
 
 
@@ -303,6 +305,8 @@ ALLOWED = {
     "tests/backend/test_qa_findings_8_15.py",
     "tests/optimization/test_run_lp_projected.py", "scripts/rollover_scratch_test.py",
     "analytics/db/migrations/0069_rollover_ledger.sql",
+    # 2026-11-02: the read-only monthly feedback report shows decisions to a person; it writes nothing and nothing reads it.
+    "scripts/cycle_feedback.py", "tests/test_cycle_feedback.py",
 }
 
 
