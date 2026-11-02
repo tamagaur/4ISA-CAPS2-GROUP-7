@@ -7,7 +7,7 @@ Sources: findings 5-13 of `reports/AUDIT_2026-10-23.md` (A#), 8-15 of `reports/Q
 
 **Tally.** Open at the start of 2026-10-30: 17 (7 carried in this file; 10 in `QA_PIPELINE_2026-10-30.md`, not yet in it).
 First session that day: 8 left the list (5 fixed: A11 P5-forecast-half P7 P8 P10; 2 already fixed: P4 P9; 1 not a defect: P6); one row
-added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3).** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7).
+added (P5b). Second session that day: 4 more fixed (A6 A12 P1 P2). **On 2026-10-30 12 of the 17 closed; on 2026-10-31 A13, Q15 and P5b closed too, so the table holds 3 (A7 C1 P3). On 2026-10-31 a full-suite run added T1 (a guard test failing at 4a80d41): 4 open.** Each has an owner: a migration (C1 P3), won't-fix with a reason (A7).
 Four client items are closed with a written limitation (L1-L4); they were not rows before.
 
 ## Open
@@ -16,6 +16,7 @@ Four client items are closed with a written limitation (L1-L4); they were not ro
 |---|---|---|---|---|
 | A7 | Med | With `DM_DEMO_ENABLED` on and `X-Data-Mode: preview`, a real Unilever SKU's forecast marks its `real_copy` months `demonstration: true` and shows the demo MA3 forecast. | It is the sanctioned demonstration path as built: CLAUDE.md rule 2 (Kelvin, 2026-10-15/16) wires the Unilever demo forecast into `GET /forecast/{sku}` behind the flag AND the preview header, labelled at top level and per row, with `origin: real_copy` telling real from generated. Nothing reaches a `_Real` view or the real forecast. | **won't-fix (by recorded decision, rule 2)**; reopen if you read the rule differently |
 | C1 | Low | `/recommendations` on the mart path runs three statements per cycle, not two: the mart has pesos only and weeks of cover is in pieces (D3), so `_attach_avg_pieces` reads `quantity_sold` live. | The fix adds a column to `mart.planning_mart`: a migration on planning data. Out of scope, as the brief says. | **needs a migration** (next free 0070) |
+| T1 | Low | `tests/backend/test_recommendation_decisions.py::test_only_the_displayed_plan_total_reads_the_decided_quantity` fails at 4a80d41: it finds `plan_q_i` in `scripts/manuscript_figures.py` (added in 4a80d41), which reads it from the API response to draw a figure and feeds nothing back. Found 2026-10-31 by the full suite (`docs/TEST_PLAN.md` TC83). | The fix is either the test's exemption list (as for the QA harness on 2026-10-30) or the script, and both were outside the 2026-10-31 brief. | **needs Kelvin's decision** |
 | P3 | Med-Low | After a second ABC re-run, cached `GET /abc` keeps the old classes: the cache's data version (`mart.refresh_status`) does not carry `abc_classification.computed_at`. | Adding `MAX(computed_at)` to the per-request version query costs about 23 ms a read on 75,430 rows (measured on the local copy) because no index covers it; the cheap fix is an index or a view change, i.e. a migration. Bites only on an ABC run on its own. | **needs a migration** |
 
 ## Surfaced for decision (item 3 of the brief): effect on the published figures
