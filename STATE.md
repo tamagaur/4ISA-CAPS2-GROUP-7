@@ -5,7 +5,7 @@ plan: rows=109 pieces=435988 cycle=2026-03-01 lp_run=6
   (Unilever, t12m_new Tier A as of 2026-02; 73 rows order >0; total = sum of plan_q_i. Nothing decided yet except legacy row 4.)
 
 Main-BE: a29d683 on newrepo (pushed 2026-10-31, ls-remote verified; it was 90da3d6 before; this line itself lags by one STATE commit). Read the tip from `git log newrepo/Main-BE`.
-Main-FE merge (2026-11-02): newrepo/Main-FE 1590a97 merged into Main-BE a29d683 on local branch kelvin/fe-merge, NOT pushed, invariants and pinned-figure checks not run there (no .env, no local/ snapshot). Needs review before it goes to Main-BE.
+Main-FE merge (2026-11-02): newrepo/Main-FE 1590a97 merged into Main-BE a29d683 on local branch kelvin/fe-merge, NOT pushed (Kelvin: no pushing). scripts/check.sh --fast GREEN there 2026-11-02 (51 pinned figures, 12 invariants). lp.decide stays admin-only; quantity-change reason required (8+ chars).
   Latest 4: D3 per-SKU cover in pieces, D2/BE-2 Del Monte class changes, D1 audit-log session cap, D4 range-card cache.
   Then (2026-10-28): lp.view gate on error-decomposition + /inventory/current + the /dashboard demonstration plan; lp.decide implies lp.view (permissions.IMPLIES).
 Next free migration: 0070 (0069 rollover ledger is applied to public; 0068 before it).
