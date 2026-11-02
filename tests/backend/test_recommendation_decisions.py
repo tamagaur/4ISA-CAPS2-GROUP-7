@@ -267,15 +267,25 @@ def test_the_item_carries_plan_q_i_and_still_the_lp_q_i():
     assert (item.q_i, item.recommended_q_i, item.plan_q_i) == (50.0, 50.0, 40.0)
 
 
+# File-name prefixes that may mention plan_q_i. Each reads the API's or the database's displayed plan figure and feeds
+# nothing back into forecasting, safety stock or the LP. Bounded on purpose: the list may not grow past three.
+PLAN_Q_I_EXEMPT = (
+    "local_api_qa",          # the QA harness reads the API response (added 2026-10-30)
+    "manuscript_figures",    # scripts/manuscript_figures.py renders the plan figures read-only (added 2026-11-02)
+)
+PLAN_Q_I_EXEMPT_MAX = 3
+
+
 def test_only_the_displayed_plan_total_reads_the_decided_quantity():
+    assert len(PLAN_Q_I_EXEMPT) <= PLAN_Q_I_EXEMPT_MAX, "the plan_q_i exemption list is bounded: justify a change in review"
     dashboard = (REPO / "backend/routers/dashboard.py").read_text(encoding="utf-8")
     assert "decided_q_i" not in dashboard and "plan_q_i" in dashboard  # it reads the derived field only
     for root in ("analytics", "scripts", "transform", "tools"):
         for path in (REPO / root).rglob("*.py"):
             if any(p in path.parts for p in (".venv", "__pycache__")):
                 continue
-            if path.name.startswith("local_api_qa"):
-                continue  # the QA harness reads the API response; it feeds nothing back (added 2026-10-30)
+            if path.name.startswith(PLAN_Q_I_EXEMPT):
+                continue
             assert "plan_q_i" not in path.read_text(encoding="utf-8", errors="ignore"), path
 
 
