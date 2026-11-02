@@ -468,18 +468,15 @@ export const ForecastErrorSummaryCard = ({
         <h4 className="fc-title"><span>How <span className="title-accent">close</span> the forecasts were</span></h4>
         <span className="fc-period">{accuracy.label}</span>
       </div>
-      <SectionLede>Where the forecast was right, and where it missed</SectionLede>
       {scope && <p className="chart-placeholder-note">{scope}</p>}
 
-      {/* 1. The answer, in plain words. */}
       <p className="fc-answer">
         {company != null && (
-          <>Across the whole company, forecasts were within <strong>{wholePct(company)}</strong> of actual sales.</>
+          <>Company-wide miss: <strong>{wholePct(company)}</strong></>
         )}
         {typical != null && (
           <>
-            {' '}Product by product, the typical miss is {company != null && typical > company ? 'bigger' : 'about the same'}:{' '}
-            <strong>{wholePct(typical)}</strong>.
+            {' '}· Typical product miss: <strong>{wholePct(typical)}</strong>
           </>
         )}
         <InfoTip label="How these two figures are measured">
@@ -502,20 +499,8 @@ export const ForecastErrorSummaryCard = ({
         </InfoTip>
       </p>
 
-      {/* How to read this (2026-10-21, mockup pass): the comparison in one
-          plain sentence, then which forecasts are scored. That part keeps
-          its switch (calendar-adjusted, or the same months before the
-          adjustment: GET /dashboard's forecast_accuracy.compare_run) and the
-          pending-confirmation notice on its face; the two runs' figures and
-          the method sit one click down. Shown even with
-          SHOW_CHART_DESCRIPTIONS off: asked for by name. */}
-      <div className="fc-read">
-        <p className="fc-read-title">How to read this</p>
-        <p className="fc-read-text">
-          Compare what we predicted with what actually sold. Forecasts that are too high may lead to excess stock,
-          while forecasts that are too low may increase the risk of stockouts.
-        </p>
-        {served.calendar_adjusted && served.calendar_adjusted !== 'no' && (
+      {served.calendar_adjusted && served.calendar_adjusted !== 'no' && (
+        <div className="fc-read">
           <div className="fc-read-method">
             <div className="fc-read-method-row">
               {twinData && (
@@ -523,16 +508,16 @@ export const ForecastErrorSummaryCard = ({
               )}
               <p className="fc-read-status">
                 {showingBefore
-                  ? <>Showing the same months <strong>before the calendar adjustment</strong>, as the backtest was first published.</>
+                  ? <strong>Before adjustment</strong>
                   : served.calendar_adjusted === 'partly'
-                    ? 'Some of these months are scored on calendar-adjusted forecasts and some are not.'
-                    : <>Scored on <strong>calendar-adjusted</strong> forecasts, as the live forecast is made</>}
+                    ? <strong>Mixed: adjusted and unadjusted</strong>
+                    : <strong>Calendar-adjusted</strong>}
                 {!showingBefore && served.calendar_adjusted === 'yes'
-                  && (calendarSignoffText(calendar?.signed_off) ? <> — {calendarSignoffText(calendar.signed_off)}.</> : '.')}
+                  && (calendarSignoffText(calendar?.signed_off) ? ' · pending adviser confirmation' : '')}
               </p>
             </div>
             <details className="fc-read-more">
-              <summary>About the calendar adjustment</summary>
+              <summary>Method details</summary>
               {twinData && (
                 <p className="fc-basis-compare">
                   Same months, company total · typical product: calendar-adjusted <strong>{pct(served.company_total?.value)}</strong> ·{' '}
@@ -548,8 +533,8 @@ export const ForecastErrorSummaryCard = ({
               )}
             </details>
           </div>
+          </div>
         )}
-      </div>
 
       {/* 2. The evidence: forecast against actual, month by month. */}
       {months.length > 0 && (

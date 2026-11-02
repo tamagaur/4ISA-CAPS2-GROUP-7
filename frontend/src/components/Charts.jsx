@@ -1534,11 +1534,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-// `planTier` ({ count, label: 'Tier A as of Feb 2026' }, 2026-10-22): the
-// order plan's own Class A count, which the page shows on its plan cards. The
-// ring ranks the selected range instead, so the card names both and says why
-// they differ (Technical Adviser, 2 Oct 2026: Class A defined).
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null, planTier = null }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -1624,18 +1620,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     </InfoTip>
   ) : null;
   const tierA = data.find((d) => d.tier === 'A');
-  const rangeLabel = revenue?.label || rankedMonth;
-  // `planTier.inPlan` false (All principals): the count is both principals'
-  // own lists, of which the plan holds Unilever's only (`planTier.note`).
-  const planInPlan = planTier?.inPlan !== false;
-  const tierNote = planTier && tierA && rangeLabel && planTier.count !== tierA.count
-    ? `Top sellers, ${rangeLabel}: ${tierA.count.toLocaleString()}. ${planInPlan ? `In the order plan, ${planTier.label}` : planTier.label}: `
-      + `${planTier.count.toLocaleString()}.${!planInPlan && planTier.note ? ` ${planTier.note}` : ''} `
-      + `They differ because this ring ranks only the selected range, while ${planInPlan ? 'the plan keeps its own list:' : 'Unilever\'s list is'} `
-      + 'Class A over the last 12 months, plus new products that are Class A over their last 3 (pending adviser confirmation).'
-    : null;
   const notes = [
-    tierNote,
     coverage,
     !sharesAddUp ? revenue?.blocked_reason : null,
     note,
@@ -2726,6 +2711,7 @@ export const ReorderRecommendationWidget = ({
   // That the quantities are built on the calendar-adjusted forecast, and
   // whether it awaits sign-off (Dashboard.jsx planCalendarNote, 2026-10-19).
   calendarNote = null,
+  calendarSummary = null,
   // The plan's cost and capacity inputs are still placeholders (GET
   // /dashboard's policy_comparison.inputs_are_placeholders); the Reorder
   // page says so, and so does this card.
@@ -2793,26 +2779,16 @@ export const ReorderRecommendationWidget = ({
         <p className="dashboard-empty-note">{emptyReason || 'No pending recommendations'}</p>
       ) : (
         <>
-          {/* How the order was worked out, in one line (2026-10-19; it was a
-              heading and three weight bars that, by their own blurbs, only
-              decide anything when the supplier allocation runs short, and
-              storage decides nothing today). The weights and what each does
-              are behind the "?". Read-only: GET /dashboard's reorder_preview
-              .lp_weights docstring is explicit that this is "read-only
-              display... not an adjustable control". */}
+          {/* Keep the decision summary brief; the info tip retains the full
+              explanation and data caveats. */}
           <p className="reorder-priorities-line">
-            Each product is ordered up to its target stock. When the supplier can&apos;t fill every order, the
-            priorities decide which products get less:{' '}
+            Target stock · Short-supply priorities:{' '}
             {LP_PRIORITY_ROWS.map((p, i) => (
               <React.Fragment key={p.key}>
                 {i > 0 && ' · '}
                 {p.label.toLowerCase()} <strong>{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</strong>
               </React.Fragment>
             ))}
-            {/* The weights are recorded as asserted, in no scribe note
-                (analytics/params.py, LP_WEIGHTS): said where they are shown
-                (Technical Adviser, 2 Oct 2026; 2026-10-22). */}
-            {' '}({LP_WEIGHTS_SOURCE_NOTE}).
             <InfoTip label="How the order was worked out">
               <span className="chart-tip-line">
                 Each product is ordered up to its target stock, in layers: this month&apos;s demand, then safety stock,
@@ -2833,9 +2809,17 @@ export const ReorderRecommendationWidget = ({
               )}
               {calendarNote && <span className="chart-tip-line">{calendarNote}</span>}
             </InfoTip>
-            {inputsArePlaceholders && ' Cost and capacity figures are placeholders until SSM confirms them.'}
-            {calendarNote && ` ${calendarNote}`}
           </p>
+          {(inputsArePlaceholders || calendarSummary) && (
+            <p className="reorder-plan-status">
+              {inputsArePlaceholders && (
+                <span>Cost/capacity placeholders · storage weight inactive</span>
+              )}
+              {calendarSummary && (
+                <span>{inputsArePlaceholders ? ' · ' : ''}Forecast adjustment: {calendarSummary}</span>
+              )}
+            </p>
+          )}
 
           <div
             className="reorder-mini-strip"
