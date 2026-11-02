@@ -14,8 +14,9 @@ def test_the_pinned_totals_add_up():
     v = {f["id"]: f["value"] for f in json.loads(cf.PIN.read_text(encoding="utf-8"))["figures"]}
     assert v["routes_total"] == v["routes_public"] + v["routes_require_sign_in"]
     assert v["routes_require_sign_in"] == v["routes_named_permission"] + v["routes_sign_in_only"]
-    assert v["tests_passed_clean_clone"] + v["tests_skipped_clean_clone"] + v["tests_failed"] == v["tests_collected"]
-    assert v["tests_passed_with_real_data"] + v["tests_skipped_with_real_data"] + v["tests_failed"] == v["tests_collected"]
+    assert v["tests_passed_clean_clone"] + v["tests_skipped_clean_clone"] + v["tests_failed"] == v["tests_collected_clean_clone"]
+    assert v["tests_passed_with_real_data"] + v["tests_skipped_with_real_data"] + v["tests_failed"] == v["tests_collected_with_real_data"]
+    assert v["tests_collected_with_real_data"] - v["tests_collected_clean_clone"] == v["real_corpus_cases"]
     assert v["tests_skipped_clean_clone"] - v["tests_skipped_with_real_data"] == len(cf.REAL_DATA_TESTS)
 
 

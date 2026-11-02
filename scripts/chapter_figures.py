@@ -17,6 +17,9 @@ The test totals: a run on a clean clone skips all of the opt-in list; a machine 
 per-product policy table runs REAL_DATA_TESTS and skips that many fewer. The check expects exactly
 (opt-in list size) minus (REAL_DATA_TESTS that ran), so a partial environment is not a false alarm and a new unlisted
 skip is still a failure (scripts/check_helpers.py already fails it).
+
+The collected total also depends on the machine: tests/etl/test_extract.py parametrizes its six raw-file tests over
+"synthetic" and, only where data/raw exists, "real_corpus". The pin holds both totals (REAL_CORPUS_MARK counts the cases).
 """
 from __future__ import annotations
 
@@ -73,21 +76,26 @@ def opt_in_list_size() -> int:
     return len(load_allowed())
 
 
-def collect_count() -> int:
+REAL_CORPUS_MARK = "[real_corpus]"
+
+
+def collect_count() -> tuple[int, int]:
+    """(tests collected, of which real_corpus cases) on this machine."""
     out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", "tests"],
                          cwd=REPO, capture_output=True, text=True).stdout
     m = re.search(r"(\d+) tests? collected", out)
     if not m:
         raise SystemExit("could not read the collected-test count from pytest --collect-only")
-    return int(m.group(1))
+    return int(m.group(1)), sum(1 for line in out.splitlines() if "::" in line and REAL_CORPUS_MARK in line)
 
 
 def read_junit(paths) -> dict:
-    total = failed = skipped = 0
+    total = failed = skipped = real_cases = 0
     ran, skipped_ids = set(), set()
     for p in paths:
         for case in ET.parse(p).getroot().iter("testcase"):
             total += 1
+            real_cases += REAL_CORPUS_MARK in (case.get("name") or "")
             tid = f"{case.get('classname')}::{case.get('name')}"
             if case.find("skipped") is not None:
                 skipped += 1
@@ -98,7 +106,7 @@ def read_junit(paths) -> dict:
                 ran.add(tid)
     real_ran = sum(1 for t in REAL_DATA_TESTS if t in ran)
     return {"tests_collected": total, "tests_failed": failed, "tests_skipped": skipped, "tests_passed": total - skipped - failed,
-            "real_data_tests_that_ran": real_ran}
+            "real_data_tests_that_ran": real_ran, "real_corpus_cases": real_cases}
 
 
 def measure_static() -> dict:
@@ -113,7 +121,9 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
     ("routes_public", "Routes that need no sign-in (test_permissions.PUBLIC)", "python -m scripts.chapter_figures --measure routes_public"),
     ("cached_get_routes", "GET routes behind the response cache", "grep -rhE '^@cached\\(\"GET ' backend/routers | wc -l"),
     ("opt_in_list_size", "Tests allowed to skip in the whole suite (scripts/known_opt_in_skips.txt)", "grep -vc '^#' scripts/known_opt_in_skips.txt"),
-    ("tests_collected", "Tests in the whole run (invariants plus suite)", "python -m pytest --collect-only -q tests | tail -1"),
+    ("tests_collected_clean_clone", "Tests in the whole run on a clean clone (invariants plus suite)", "python -m pytest --collect-only -q tests | tail -1  (on a clone with no data/raw)"),
+    ("tests_collected_with_real_data", "Tests in the whole run where data/raw exists (adds the real_corpus cases)", "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"),
+    ("real_corpus_cases", "Extract test cases that exist only where data/raw exists", "python -m pytest --collect-only -q tests | grep -c 'real_corpus]'  (where data/raw exists)"),
     ("tests_failed", "Failed tests in a full run", "scripts/check.sh --full"),
     ("tests_skipped_clean_clone", "Skipped tests on a clean clone (the whole opt-in list)", "scripts/check.sh --full on a clone with no data/raw and no local/"),
     ("tests_skipped_with_real_data", "Skipped tests on a machine with SSM's data/raw and the per-product policy table", "scripts/check.sh --full there"),
@@ -122,18 +132,26 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
 ]
 
 
-def derived(static: dict, collected: int, failed: int = 0) -> dict:
+def derived(static: dict, collected: int, real_cases: int, failed: int = 0) -> dict:
+    """collected and real_cases are as measured on the machine that writes the pin; the clean-clone total is collected minus real_cases."""
     n = static["opt_in_list_size"]
     r = len(REAL_DATA_TESTS)
-    return {**static, "tests_collected": collected, "tests_failed": failed, "tests_skipped_clean_clone": n,
-            "tests_skipped_with_real_data": n - r, "tests_passed_clean_clone": collected - n - failed,
-            "tests_passed_with_real_data": collected - (n - r) - failed}
+    clean, withdata = collected - real_cases, collected
+    return {**static, "tests_collected_clean_clone": clean, "tests_collected_with_real_data": withdata, "real_corpus_cases": real_cases,
+            "tests_failed": failed, "tests_skipped_clean_clone": n, "tests_skipped_with_real_data": n - r,
+            "tests_passed_clean_clone": clean - n - failed, "tests_passed_with_real_data": withdata - (n - r) - failed}
 
 
 def cmd_write(junit) -> int:
     static = measure_static()
-    collected = read_junit(junit)["tests_collected"] if junit else collect_count()
-    vals = derived(static, collected)
+    if junit:
+        j = read_junit(junit)
+        collected, real_cases = j["tests_collected"], j["real_corpus_cases"]
+    else:
+        collected, real_cases = collect_count()
+    if not real_cases:
+        raise SystemExit("this machine has no data/raw, so the real_corpus cases cannot be counted: re-pin on the machine that has it")
+    vals = derived(static, collected, real_cases)
     out = {"pinned_on": "2026-11-02",
            "rule": "Chapter 4 prints these from the code or the live system. Re-pin only on purpose, in the commit that changes the code; "
                    "the chapter must take every figure from one commit. scripts/check.sh fails on drift.",
@@ -170,8 +188,12 @@ def cmd_verify_junit(paths) -> int:
     n_ran = got["real_data_tests_that_ran"]
     want_skipped = pin["tests_skipped_clean_clone"] - n_ran
     bad = []
-    if got["tests_collected"] != pin["tests_collected"]:
-        bad.append(f"tests_collected: pinned {pin['tests_collected']}, ran {got['tests_collected']}")
+    real = got["real_corpus_cases"]
+    if real not in (0, pin["real_corpus_cases"]):
+        bad.append(f"real_corpus_cases: pinned {pin['real_corpus_cases']} (or 0 without data/raw), ran {real}")
+    want_collected = pin["tests_collected_with_real_data"] if real else pin["tests_collected_clean_clone"]
+    if got["tests_collected"] != want_collected:
+        bad.append(f"tests_collected: pinned {want_collected} ({'with' if real else 'without'} data/raw), ran {got['tests_collected']}")
     if got["tests_failed"] != pin["tests_failed"]:
         bad.append(f"tests_failed: pinned {pin['tests_failed']}, ran {got['tests_failed']}")
     if got["tests_skipped"] != want_skipped:
@@ -182,7 +204,7 @@ def cmd_verify_junit(paths) -> int:
         print("FAIL: the pytest totals drifted from docs/CHAPTER4_CODE_FIGURES.json. If intended: python -m scripts.chapter_figures --write --junit <invariants.xml> <full.xml>")
         return 1
     print(f"OK: {got['tests_passed']} passed, {got['tests_skipped']} skipped, {got['tests_failed']} failed of {got['tests_collected']} "
-          f"({n_ran} of {len(REAL_DATA_TESTS)} real-data tests ran here)")
+          f"({n_ran} of {len(REAL_DATA_TESTS)} real-data tests ran here; {real} real_corpus cases)")
     return 0
 
 
@@ -202,7 +224,7 @@ def main() -> int:
         elif a.measure in now:
             print(now[a.measure])
         elif a.measure == "tests_collected":
-            print(collect_count())
+            print(collect_count()[0])
         else:
             raise SystemExit(f"{a.measure} is a test-run figure: scripts/check.sh --full measures it")
         return 0
