@@ -100,21 +100,23 @@ legal opinion; the Data Privacy Act of 2012 (RA 10173) points are for the team a
 
 ## 8. Platform checklist (tick in the dashboards; none of these could be checked from the repo)
 
-| Where | Setting | Why |
-|---|---|---|
-| Render | `APP_ENV=production` | Turns on HSTS and hides `/docs`, `/redoc`, `/openapi.json` |
-| Render | `CORS_ALLOWED_ORIGINS` = the Vercel production URL only (no localhost) | The default allows localhost |
-| Render | `FRONTEND_URL` = the Vercel URL | Invite and reset links; the app builds none without it in production |
-| Render | `JWT_SECRET_KEY` a long random string (32+ characters), different from local | Signs every session; the example file holds a placeholder |
-| Render | `MFA_ENCRYPTION_KEY` set and backed up apart from the database, before `MFA_ENABLED=true` | Without it authenticator secrets cannot be read |
-| Render | Secrets set as environment variables in the dashboard, not in the repo | `.env` is git-ignored but a render.yaml would not be |
-| Vercel | `VITE_API_URL` = the Render URL (https) | Build-time; the CSP allows any https connection |
-| Vercel | Production deploys from `Main-Final` or `Main-FE` only, preview deploys without production secrets | Previews are public URLs |
-| Supabase | Backups: plan, retention, and whether point-in-time recovery is on | Section 5 |
-| Supabase | Network restrictions and SSL enforcement on | The code already requires SSL |
-| Supabase | Region, and who holds dashboard access with MFA on their own accounts | Section 7 |
-| Supabase | Service-role and database passwords rotated when a person leaves | Access review (G7) |
-| GitHub | Repo stays private; 2FA on every member | Branch protection is not available on the free plan |
+Any group member who has access to that dashboard can do these; it does not have to be one person. Write your initials and the date in the last column, and note any value you changed. Never paste a secret into this file.
+
+| Where | Setting | Why | Done by / date |
+|---|---|---|---|
+| Render | `APP_ENV=production` | Turns on HSTS and hides `/docs`, `/redoc`, `/openapi.json` | `[ ]` |
+| Render | `CORS_ALLOWED_ORIGINS` = the Vercel production URL only (no localhost) | The default allows localhost | `[ ]` |
+| Render | `FRONTEND_URL` = the Vercel URL | Invite and reset links; the app builds none without it in production | `[ ]` |
+| Render | `JWT_SECRET_KEY` a long random string (32+ characters), different from local | Signs every session; the example file holds a placeholder | `[ ]` |
+| Render | `MFA_ENCRYPTION_KEY` set and backed up apart from the database, before `MFA_ENABLED=true` | Without it authenticator secrets cannot be read | `[ ]` |
+| Render | Secrets set as environment variables in the dashboard, not in the repo | `.env` is git-ignored but a render.yaml would not be | `[ ]` |
+| Vercel | `VITE_API_URL` = the Render URL (https) | Build-time; the CSP allows any https connection | `[ ]` |
+| Vercel | Production deploys from `Main-Final` or `Main-FE` only, preview deploys without production secrets | Previews are public URLs | `[ ]` |
+| Supabase | Backups: plan, retention, and whether point-in-time recovery is on | Section 5 | `[ ]` |
+| Supabase | Network restrictions and SSL enforcement on | The code already requires SSL | `[ ]` |
+| Supabase | Region, and who holds dashboard access with MFA on their own accounts | Section 7 | `[ ]` |
+| Supabase | Service-role and database passwords rotated when a person leaves | Access review (G7) | `[ ]` |
+| GitHub | Repo stays private; 2FA on every member | Branch protection is not available on the free plan | `[ ]` |
 
 ## 9. Review
 
