@@ -1,0 +1,19 @@
+/* A rounded figure whose exact value is in the hover: the dotted underline
+   the Summary cards use for the same thing (HeroKpis.css .hero-hover). */
+.exact-value {
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted #98A2B3;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+.exact-value:hover,
+.exact-value[aria-expanded='true'] {
+  text-decoration-color: #475467;
+}
+
+.info-tip.exact-value-wrap {
+  margin-left: 0;
+  vertical-align: baseline;
+}

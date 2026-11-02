@@ -1,14 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, LockKeyhole, Mail } from 'lucide-react';
+import { ArrowRight, Lock, LockKeyhole, Mail, Sparkles } from 'lucide-react';
 import {
-  confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup, verifyLoginCode,
+  API_URL, confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup,
+  verifyLoginCode,
 } from './auth';
 import TwoStepCodeForm from './components/TwoStepCodeForm';
 import TwoStepSetup from './components/TwoStepSetup';
 import RecoveryCodes from './components/RecoveryCodes';
 import { beginHandoff, holdForHandoff } from './components/AuthHandoff';
 import AuthShell from './components/AuthShell';
+
+// Waking the server (audit SEC-6, 2026-10-21). The backend is on Render's free
+// plan, which sleeps after about 15 minutes idle; the first request after that
+// takes about a minute while it starts. The page now pings GET /status (no
+// sign-in needed, backend/main.py; the sidebar's light uses it too) as soon as
+// it opens, so the server is starting while the person types. If it hasn't
+// answered within WAKE_NOTICE_MS (the audit's "about 5 s") the form says so,
+// and it asks again every WAKE_RETRY_MS until the server answers.
+// After WAKE_GIVE_UP_MS with no answer (2026-10-22, audit NEW3-FE-3) a cold
+// start is no longer the likely reason, so the notice says the server can't
+// be reached instead; the pings carry on quietly, every WAKE_SLOW_RETRY_MS
+// rather than every WAKE_RETRY_MS (2026-10-24, audit #16: a page left open on
+// a down server pinged it every 5 s forever), and the notice goes as soon as
+// one is answered. One ping at a time: the next is scheduled only after the
+// last has failed. This is a wake/status check only; sign-in doesn't wait on it.
+const WAKE_NOTICE_MS = 5000;
+const WAKE_RETRY_MS = 5000;
+const WAKE_GIVE_UP_MS = 90000;
+const WAKE_SLOW_RETRY_MS = 30000;
 
 const Login = () => {
   const location = useLocation();
@@ -40,6 +60,10 @@ const Login = () => {
   //   { step: 'codes', codes }             setup done: save the recovery codes
   // null = the password form.
   const [mfa, setMfa] = useState(null);
+  // True once GET /status has gone WAKE_NOTICE_MS without answering, until it does.
+  const [serverWaking, setServerWaking] = useState(false);
+  // True once it has gone WAKE_GIVE_UP_MS without answering, until it does.
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   // The password (and code) accepted: the hand-off screen ("Signing in to
   // the dashboard…", shown by App.jsx's SignInHandoff) for a moment, then
   // the dashboard, with the screen staying up until the dashboard is in.
@@ -57,6 +81,43 @@ const Login = () => {
         sessionStorage.removeItem(SESSION_EXPIRED_KEY);
       }
     } catch { /* storage unavailable — just skip the notice */ }
+  }, []);
+
+  useEffect(() => {
+    let done = false;
+    let retry = null;
+    const controller = new AbortController();
+    const noticeTimer = setTimeout(() => { if (!done) setServerWaking(true); }, WAKE_NOTICE_MS);
+    const giveUpTimer = setTimeout(() => { if (!done) setServerUnreachable(true); }, WAKE_GIVE_UP_MS);
+    const startedAt = Date.now();
+    const ping = () => {
+      retry = null;
+      if (done) return;
+      fetch(`${API_URL}/status`, { cache: 'no-store', signal: controller.signal })
+        .then((res) => {
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          done = true;
+          setServerWaking(false);
+          setServerUnreachable(false);
+        })
+        .catch(() => {
+          // Render answers 502/503 while it boots, or the connection drops;
+          // ask again until it is up (or the page is left), less often once
+          // it has been down past WAKE_GIVE_UP_MS.
+          if (done || controller.signal.aborted) return;
+          const delay = Date.now() - startedAt < WAKE_GIVE_UP_MS ? WAKE_RETRY_MS : WAKE_SLOW_RETRY_MS;
+          clearTimeout(retry);
+          retry = setTimeout(ping, delay);
+        });
+    };
+    ping();
+    return () => {
+      done = true;
+      controller.abort();
+      clearTimeout(noticeTimer);
+      clearTimeout(giveUpTimer);
+      clearTimeout(retry);
+    };
   }, []);
 
   useEffect(() => {
@@ -161,21 +222,22 @@ const Login = () => {
     );
   };
 
-  // The look (2026-10-16, Audrey's twilight prototype): the evening
-  // warehouse yard, the logo top left and the frosted-glass card are
-  // AuthShell, shared with Forgot password and Set password; the card is
-  // CSS over real form fields, not a picture of one.
+  // The look (2026-10-19, Audrey's golden-hour redesign, after the
+  // 2026-10-16 twilight glass): the warehouse yard at sunset, the logo top
+  // left, the introduction on the left and the white card at the right are
+  // all AuthShell, shared with Forgot password and Set password, and stay
+  // up through the two-step screens. The card is CSS over real form
+  // fields, not a picture of one. "Welcome *Back*" carries the brand's
+  // red-to-orange and a small sparkle (Audrey: colour, and welcoming).
   return (
     <AuthShell>
       {mfa ? renderSecondStep() : (
             <>
-              <h2>
-                Welcome <span className="page-title-accent">back</span>
-                <svg className="login-title-spark" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 13V6M9.2 14.8l5-5M11 19h7" />
-                </svg>
+              <h2 className="login-welcome">
+                Welcome <span className="page-title-accent login-welcome-accent">Back</span>
+                <Sparkles className="login-welcome-spark" aria-hidden="true" />
               </h2>
-              <p className="subtitle">Sign in with your assigned account</p>
+              <p className="subtitle">Sign in to access the SAN2 Decision Support Dashboard</p>
 
               <form onSubmit={handleSubmit} className="login-form">
                 {notice && !error && (
@@ -187,49 +249,70 @@ const Login = () => {
                   </div>
                 )}
                 {error && <div className="error-message" role="alert">{error}</div>}
-                <div className="input-group">
-                  <Mail className="input-icon" aria-hidden="true" />
-                  <input
-                    type="email"
-                    placeholder="Email address"
-                    aria-label="Email address"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (!rememberTouched) setRemember(isDeviceRemembered(e.target.value));
-                    }}
-                    required
-                  />
+                {serverWaking && !serverUnreachable && !error && (
+                  <div className="auth-info-message" role="status">
+                    Starting the server… It sleeps when nobody has used the dashboard for a while and takes up to
+                    a minute to wake. You can sign in now; it goes through as soon as the server is up.
+                  </div>
+                )}
+                {serverUnreachable && !error && (
+                  <div className="auth-info-message" role="status">
+                    Can&apos;t reach the server. Check your connection or try again later.
+                  </div>
+                )}
+                {/* Visible labels (2026-10-19): the placeholder is a hint now,
+                    not the field's only name. */}
+                <div className="login-field">
+                  <label htmlFor="login-email">Email address</label>
+                  <div className="input-group">
+                    <Mail className="input-icon" aria-hidden="true" />
+                    <input
+                      id="login-email"
+                      type="email"
+                      placeholder="Enter your email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (!rememberTouched) setRemember(isDeviceRemembered(e.target.value));
+                      }}
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="input-group password-group">
-                  <LockKeyhole className="input-icon" aria-hidden="true" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Password"
-                    aria-label="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="toggle-password"
-                    onClick={() => setShowPassword(!showPassword)}
-                    aria-label="Toggle password visibility"
-                  >
-                    {showPassword ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                        <line x1="1" y1="1" x2="23" y2="23"></line>
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                      </svg>
-                    )}
-                  </button>
+                <div className="login-field">
+                  <label htmlFor="login-password">Password</label>
+                  <div className="input-group password-group">
+                    <LockKeyhole className="input-icon" aria-hidden="true" />
+                    <input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="toggle-password"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                          <line x1="1" y1="1" x2="23" y2="23"></line>
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="login-forgot-row login-options-row">

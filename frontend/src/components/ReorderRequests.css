@@ -1,0 +1,879 @@
+/* Staff requests on the Reorder page (ReorderRequests.jsx, 2026-10-28).
+   The dialogs reuse the Dismiss dialog's shell (OverrideReasonModal.css
+   .override-*); these are the parts it didn't have: the quantity fields, the
+   warnings, the request cards and the history list. */
+
+.rq-modal-card {
+  max-width: 560px;
+}
+
+.rq-icon-change {
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
+}
+
+.rq-icon-approve {
+  background-color: var(--color-severity-planned-bg);
+  color: var(--color-severity-planned);
+}
+
+.rq-help {
+  margin: 0.4rem 0 0.8rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.rq-muted {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* Label/value pairs: the recommended order, plan month, a card's figures. */
+.rq-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.rq-facts dt {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.rq-facts dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.92rem;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rq-qty-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.rq-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.rq-field-grow {
+  flex: 1 1 160px;
+}
+
+.rq-input {
+  height: 38px;
+  padding: 0 0.7rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.rq-input:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+.rq-live {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  min-height: 1.4rem;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: var(--color-text-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.rq-live .override-hint-error {
+  margin-top: 0;
+}
+
+.rq-diff-up,
+.rq-diff-down {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.rq-alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.86rem;
+  color: var(--color-text-body);
+}
+
+/* Constraint warnings: amber, the "watch" colour, never blocking on their own. */
+.rq-warnings {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0 0 0.9rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-severity-urgent-border);
+  border-radius: 8px;
+  background-color: var(--color-severity-urgent-bg);
+  color: var(--color-severity-urgent);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.rq-warnings svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.rq-warnings ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.rq-check {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+  cursor: pointer;
+}
+
+.rq-check input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--color-brand-primary);
+}
+
+/* The optional stock count, folded until opened. */
+.rq-count {
+  margin-top: 1rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-surface-raised);
+}
+
+.rq-count summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-body);
+  min-height: 24px;
+  display: list-item;
+}
+
+.rq-count summary:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.rq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+/* ── Row actions in the plan table ────────────────────────────────────── */
+.rq-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.rq-row-actions .table-btn-group {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rq-row-more {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.15rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+/* Link buttons in a table row: at least 24px tall to tap (WCAG 2.5.8). */
+.rq-row-more .link-button,
+.rq-open-cell .link-button {
+  min-height: 24px;
+  font-size: 0.82rem;
+}
+
+.rq-open-cell {
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.rq-plan-note {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* ── The requests tab (redesign 2026-10-28) ────────────────────────────
+   Summary cards, a toolbar (search + status chips), the requests table
+   (stacked cards at ≤720px), stock counts awaiting verification. White
+   cards on the warm page, the shared card shadow and border. */
+.rq-tab {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.rq-tab-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.rq-subheading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.rq-tab-lede {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.rq-loading {
+  margin-bottom: 0.5rem;
+}
+
+/* Summary: Pending (amber), Approved (green), Rejected (muted red). The
+   accent is a thin left rule and the icon tint; the card stays white. */
+.rq-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--card-gap, 16px);
+}
+
+.rq-summary-card {
+  --rq-accent: var(--color-text-muted);
+  --rq-accent-bg: var(--color-surface-sunken);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 16px 18px;
+  border: var(--card-border);
+  border-left: 3px solid var(--rq-accent);
+  border-radius: 14px;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.rq-summary-card:hover {
+  box-shadow: var(--shadow-card), 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.rq-summary-card:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.rq-summary-card[aria-pressed='true'] {
+  box-shadow: var(--shadow-card), inset 0 0 0 1px var(--rq-accent);
+}
+
+.rq-tone-pending {
+  --rq-accent: var(--color-warning);
+  --rq-accent-bg: var(--badge-warning-bg);
+}
+
+.rq-tone-approved {
+  --rq-accent: var(--color-success);
+  --rq-accent-bg: var(--badge-success-bg);
+}
+
+.rq-tone-rejected {
+  --rq-accent: #C98A86;
+  --rq-accent-bg: var(--badge-critical-bg);
+}
+
+.rq-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background-color: var(--rq-accent-bg);
+  color: var(--rq-accent);
+}
+
+.rq-tone-pending .rq-summary-icon { color: var(--badge-warning-fg); }
+.rq-tone-approved .rq-summary-icon { color: var(--badge-success-fg); }
+.rq-tone-rejected .rq-summary-icon { color: var(--badge-critical-fg); }
+
+.rq-summary-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rq-summary-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.rq-summary-value {
+  margin-top: 0.15rem;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rq-summary-caption {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+/* Toolbar: search grows, the status chips beside it. */
+.rq-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.9rem;
+}
+
+.rq-search {
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.rq-status-filter {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.rq-status-filter .segmented-item[aria-pressed='true'] .segmented-count {
+  color: inherit;
+}
+
+/* The table. */
+.rq-table-card {
+  overflow-x: auto;
+}
+
+.rq-table .rq-cell-product {
+  min-width: 200px;
+}
+
+.rq-table .rq-cell-date {
+  white-space: nowrap;
+}
+
+.rq-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rq-table tbody tr:hover td {
+  background-color: #FCFBF9;
+}
+
+.rq-id {
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rq-person {
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rq-person-name {
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.rq-person-email {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rq-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* Rejected: red ink, a quieter tint than the "critical" rows elsewhere. */
+.rq-pill-rejected {
+  background-color: #F7ECEB;
+  color: var(--color-danger-ink, #B42318);
+}
+
+.rq-cell-action .table-btn {
+  min-width: 96px;
+}
+
+/* Empty / not set up. */
+.rq-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  border: var(--card-border);
+  border-radius: 14px;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+
+.rq-empty-card .rq-muted {
+  justify-content: center;
+}
+
+/* The deep link's "not in this list" notice. */
+.rq-link-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-severity-urgent-border);
+  border-radius: 10px;
+  background-color: var(--color-severity-urgent-bg);
+  color: var(--color-severity-urgent);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.rq-link-notice svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.rq-link-notice span {
+  flex: 1;
+}
+
+.rq-link-notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rq-link-notice-close:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+/* ── The detail panel ─────────────────────────────────────────────────── */
+.rq-panel {
+  max-width: 620px;
+}
+
+.rq-panel-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rq-panel-facts .rq-fact-wide {
+  grid-column: 1 / -1;
+}
+
+.rq-compare {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+}
+
+.rq-compare > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+}
+
+.rq-compare-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.rq-compare-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.rq-compare-note {
+  font-size: 0.8rem;
+  color: var(--color-severity-critical);
+}
+
+.rq-block {
+  margin: 0 0 0.9rem;
+}
+
+.rq-block-text {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text-body);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.rq-decision {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+}
+
+.rq-muted-inline {
+  color: var(--color-text-muted);
+}
+
+.rq-self {
+  margin: 0 0 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-body);
+  font-size: 0.88rem;
+}
+
+.rq-save-error {
+  display: block;
+  margin: 0.5rem 0 0;
+}
+
+.rq-panel-actions {
+  flex-wrap: wrap;
+}
+
+.rq-history-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 24px;
+  margin-right: auto;
+}
+
+/* ── Stock counts awaiting verification ───────────────────────────────── */
+.rq-other-obs {
+  padding: 16px 18px;
+  border: var(--card-border);
+  border-radius: 14px;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.rq-other-obs-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-subtle);
+}
+
+.rq-obs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rq-obs-list li {
+  padding: 0.75rem 0;
+  border-top: 1px solid #EDF0F4;
+}
+
+.rq-obs-list li:first-child {
+  border-top: none;
+  padding-top: 0.25rem;
+}
+
+.rq-obs-by {
+  margin: 0.2rem 0 0.4rem;
+}
+
+/* A stock count's line: what was counted, its check, an admin's buttons. */
+.rq-obs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+  color: var(--color-text-body);
+}
+
+.rq-obs-main {
+  overflow-wrap: anywhere;
+}
+
+.rq-obs-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.rq-obs-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rq-stale {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  background-color: var(--color-severity-critical-bg);
+  color: var(--color-severity-critical);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+/* index.css .table-btn has no disabled look; a disabled action must read as
+   unavailable, not just ignore the click. */
+.rq-row-actions .table-btn:disabled,
+.rq-row-more .link-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── History ──────────────────────────────────────────────────────────── */
+.rq-history {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.9rem;
+  border-left: 2px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.rq-history li {
+  position: relative;
+}
+
+.rq-history li::before {
+  content: '';
+  position: absolute;
+  left: calc(-0.9rem - 6px);
+  top: 0.4rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border-strong);
+}
+
+.rq-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.rq-history-summary,
+.rq-history-qty,
+.rq-history-reason {
+  margin: 0.2rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--color-text-body);
+  overflow-wrap: anywhere;
+}
+
+.rq-history-qty {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ≤720px: the table becomes one card per request, label above value; no
+   horizontal scroll. */
+@media (max-width: 720px) {
+  .rq-summary {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .rq-summary-card {
+    align-items: center;
+    padding: 12px 14px;
+  }
+
+  .rq-summary-value {
+    font-size: 1.35rem;
+  }
+
+  .rq-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .rq-table-card {
+    overflow-x: visible;
+  }
+
+  .rq-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .rq-table,
+  .rq-table tbody,
+  .rq-table tr,
+  .rq-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .rq-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem 0.9rem;
+    padding: 14px 16px;
+    border-bottom: 1px solid #EDF0F4;
+  }
+
+  .rq-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .rq-table tbody td {
+    padding: 0;
+    border-bottom: none;
+    text-align: left;
+    min-width: 0;
+  }
+
+  .rq-table tbody tr:hover td {
+    background: none;
+  }
+
+  .rq-table tbody td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.15rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+  }
+
+  .rq-table .rq-cell-product,
+  .rq-table .rq-cell-action {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .rq-table .rq-cell-action::before {
+    display: none;
+  }
+
+  .rq-table .rq-cell-action .table-btn {
+    width: 100%;
+    height: 36px;
+  }
+
+  .rq-table .rq-cell-date {
+    white-space: normal;
+  }
+
+  .rq-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .rq-grid,
+  .rq-panel-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .rq-panel-actions .override-btn {
+    flex: 1 1 auto;
+  }
+
+  .rq-history-link {
+    flex-basis: 100%;
+  }
+}
+
+/* The detail window's second link (History) beside the forecast link. */
+.reorder-modal-link + .reorder-modal-link {
+  margin-left: 1rem;
+}

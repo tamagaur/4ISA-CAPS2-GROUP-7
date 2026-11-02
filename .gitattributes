@@ -3,3 +3,5 @@
 *.sql text eol=lf
 # Shell scripts are LF on every checkout: bash refuses a CRLF script (scripts/check.sh, the Stop hook runs it).
 *.sh text eol=lf
+tests/fixtures/extract_raw/* -text
+tests/fixtures/*.csv -text

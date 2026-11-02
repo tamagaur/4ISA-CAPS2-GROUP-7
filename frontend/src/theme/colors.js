@@ -1,4 +1,4 @@
-// SAN2 Inventory DSS Design Tokens
+// SAN2 Inventory DSD Design Tokens
 export const COLORS = {
   // Data Visualization Color System
   critical: '#D9534F',       // Red: KPI negative deltas, critical reorders
@@ -125,4 +125,28 @@ export const CHART_COLORS = {
   // generated forecast cannot be read as SSM's own (CLAUDE.md rule 2).
   syntheticForecast: '#B45309',
   lpWeight: SEMANTIC.recommendation,
+  // Forecast vs actual (RangeCards.jsx, 2026-10-24): the miss each way.
+  // Too low was CHART_COLORS.salesSeries, the actual line's own teal, so the
+  // legend's "Actual sales" and "Forecast too low" swatches were one colour.
+  // It is now the deeper teal the miss cards already used for "too low" ink:
+  // still teal (colors.js's hue-pair rule keeps blue/navy/indigo out of a
+  // chart with the violet forecast), told apart from the line by lightness.
+  // Mirrored as --color-miss-too-high / --color-miss-too-low in index.css.
+  missTooHigh: '#F25F76',
+  missTooLow: '#0E7490',
+  // Annual View (AnnualViewChart.jsx): past years' bars, and the year in
+  // progress with its target band (fill and the band's ink).
+  annualHistory: '#8FA3C4',
+  annualYtd: '#F28C28',
+  annualYtdInk: '#C2410C',
+  // SKU Forecast's "Past sales and the forecast" chart (redesign of
+  // 2026-10-26, from the mockup): the actual line a deeper teal, last year a
+  // light cyan (same hue, so colour = metric and the dash = year), and the
+  // forecast violet. Teal beside violet, per the hue-pair rule above.
+  skuActual: '#089FB5',
+  skuLastYear: '#67CFE0',
+  skuForecast: '#8956F6',
+  // The stock-may-have-run-out shading and its labels on that chart.
+  stockLimited: '#F59E0B',
+  stockLimitedInk: '#B45309',
 };

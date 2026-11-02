@@ -96,7 +96,7 @@
 }
 
 .view-sku-label {
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   color: var(--color-text-subtle);
@@ -104,7 +104,7 @@
 }
 
 .view-sku-value {
-  font-size: 0.88rem;
+  font-size: 0.96rem;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -128,7 +128,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
@@ -153,7 +153,7 @@
   align-items: center;
   padding: 0.15rem 0.5rem;
   border-radius: 12px;
-  font-size: 0.68rem;
+  font-size: 0.79rem;
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -178,7 +178,7 @@
 /* The period a figure belongs to ("as of the count on Apr 6, 2026",
    "Mar 2026 plan", "Feb 2026 run"), under or beside the value. */
 .view-sku-asof {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-text-subtle);
 }
 
@@ -190,7 +190,7 @@
 }
 
 .view-sku-notes-text {
-  font-size: 0.83rem;
+  font-size: 0.93rem;
   color: var(--color-text-heading);
   margin: 0;
   line-height: 1.5;
@@ -211,7 +211,7 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text-heading);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;
@@ -228,7 +228,7 @@
   background-color: var(--color-brand-accent);
   border: none;
   color: var(--color-surface);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   border-radius: 8px;
   cursor: pointer;

@@ -1,31 +1,19 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Check, Calendar, FlaskConical } from 'lucide-react';
+import { FlaskConical } from 'lucide-react';
 import { DEFAULT_PRINCIPAL, SELECTABLE_PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
+import NotificationBell from './NotificationBell';
 import './Topbar.css';
 
+// The date range moved into each page's own RangePicker (2026-10-09); the
+// range props DashboardLayout still passes are not read here.
 const Topbar = ({
   toggleSidebar,
   isSidebarOpen = true,
   rightSlot,
-  startMonth,
-  startYear,
-  endMonth,
-  endYear,
-  pendingStartMonth,
-  setPendingStartMonth,
-  pendingStartYear,
-  setPendingStartYear,
-  pendingEndMonth,
-  setPendingEndMonth,
-  pendingEndYear,
-  setPendingEndYear,
-  isPending,
-  handleApplyPeriod,
-  handleResetToToday,
-  realWorldMonth = 'Aug',
-  realWorldYear = '2026',
   principal = DEFAULT_PRINCIPAL,
   setPrincipal = () => {},
   dataMode = DATA_MODES.REAL,
@@ -36,21 +24,39 @@ const Topbar = ({
 }) => {
   const preview = isPreviewMode(dataMode);
   const location = useLocation();
-  const isToday =
-    pendingStartMonth === realWorldMonth &&
-    pendingStartYear === realWorldYear &&
-    pendingEndMonth === realWorldMonth &&
-    pendingEndYear === realWorldYear;
-  const isForecastPage = location.pathname === '/forecast';
+  const { role, hasPermission } = usePermissions();
+  const showBell = role === 'admin' || hasPermission(P.LP_PROPOSE) || hasPermission(P.LP_DECIDE);
 
-  // Principal filter is only meaningful on analytics & management pages.
-  // Admin-only pages (audit log, data upload, user management) operate
-  // across all data and have no per-principal view, so it's hidden there.
-  const ADMIN_PAGES = ['/audit-log', '/upload', '/users'];
-  const showPrincipalFilter = !ADMIN_PAGES.includes(location.pathname);
+  // The bar's own height as --topbar-h on the pane that scrolls
+  // (.main-content, its parent), kept current as the bar wraps or unwraps,
+  // so a toolbar that sticks under it (the dashboard's section chips,
+  // Dashboard.css .dash-toolbar) sits just below it rather than behind it.
+  const barRef = useRef(null);
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const pane = bar?.parentElement;
+    if (!bar || !pane) return undefined;
+    const publish = () => pane.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(publish);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+
+  // The principal filter (and the synthetic-data switch beside it) only on
+  // the pages whose data it filters (Audrey, 2026-10-16, again 2026-10-18):
+  // the dashboard, the analysis pages and the inventory pages, each of which
+  // reads `principal` to load its data. Everything else (Reference Guide,
+  // audit log, data upload, user management, the card preview, My profile)
+  // shows the same thing whichever principal is picked. A list of the pages
+  // that use it, not of those that don't, so a new page has no switch until
+  // it reads the principal.
+  const PAGES_WITH_PRINCIPAL = ['/', '/forecast', '/category-trends', '/abc', '/sku-management', '/reorder'];
+  const showPrincipalFilter = PAGES_WITH_PRINCIPAL.includes(location.pathname);
 
   return (
-    <header className="topbar">
+    <header className="topbar" ref={barRef}>
       <div className="topbar-left">
         {/* Three lines while the sidebar is open; once it is closed on a
             desktop the SAN2 logo takes their place, so the brand stays on
@@ -135,7 +141,15 @@ const Topbar = ({
         )}
       </div>
 
+      {/* The greeting sat here until 2026-10-21; it is the dashboard's
+          welcome banner now (ui/Greeting.jsx). */}
+
       {rightSlot}
+
+      {/* The notification bell (2026-10-28): admins hear about staff
+          requests, staff about the decisions on theirs. Shown to whoever can
+          make or settle a request. */}
+      {showBell && <NotificationBell />}
 
       {/* The topbar used to end with a second, bare "who am I" avatar here
           (no menu, no action — just initials in a circle) that duplicated

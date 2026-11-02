@@ -22,24 +22,45 @@
   --section-gap: 40px;
   --page-padding-x: 32px;
 
-  /* Shape and depth: a card sits on the page, it does not float. */
+  /* Shape and depth. Since 2026-10-28 (Audrey: "make the KPIs and all the
+     cards pop, like they are elevated") a card is lifted off the warm page:
+     a hairline shadow for its edge and a soft, wide one under it, the same
+     recipe as the sign-in panel (AuthHandoff.css), a little lighter. */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-card: 14px;
   --radius-pill: 999px;
-  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 2px rgba(17, 26, 53, 0.05), 0 12px 30px -12px rgba(17, 26, 53, 0.18);
+  --shadow-card-hover: 0 2px 4px rgba(17, 26, 53, 0.06), 0 18px 40px -14px rgba(17, 26, 53, 0.24);
   --shadow-raised: 0 6px 16px rgba(16, 24, 40, 0.10);
-  --card-border: 1px solid #E7EBF0;
+  --card-border: 1px solid rgba(17, 26, 53, 0.07);
+
+  /* The page behind every screen (2026-10-28, Audrey: match the sign-in
+     page): the sign-in screen's golden-hour cream (AuthHandoff.css), a warm
+     glow at the top and a faint one at the bottom. The bars that pin to the
+     top of a scrolling page (the top bar, the Dashboard's section toolbar)
+     use a frosted copy of it so the page shows through without the cards
+     sliding under them reading through. */
+  --app-canvas:
+    radial-gradient(55% 45% at 50% 0%, rgba(255, 116, 72, 0.16) 0%, rgba(255, 116, 72, 0) 70%),
+    radial-gradient(60% 45% at 50% 100%, rgba(214, 56, 61, 0.08) 0%, rgba(214, 56, 61, 0) 70%),
+    linear-gradient(180deg, #FFF9F4 0%, #FFF1E8 100%);
+  --app-canvas-bar: rgba(255, 247, 241, 0.82);
 
   /* Type scale. */
-  --text-page-title: 30px;
+  --text-page-title: 28px;
   --text-page-subtitle: 14px;
   --text-section: 20px;
   --text-card-title: 15px;
   --text-kpi: 30px;
-  --text-body: 13.5px;
-  --text-meta: 12px;
-  --text-micro: 11px;
+  --text-body: 14px;
+  --text-secondary: 13px;
+  --text-table: 13.5px;
+  --text-table-header: 12px;
+  --text-label: 12px;
+  --text-caption: 12px;
+  --text-meta: 12.5px;
+  --text-micro: 11.5px;
 
   /* Soft badge tints: light background, darker ink of the same hue. */
   --badge-critical-bg: #FDECEC;
@@ -77,7 +98,7 @@
   margin: 0;
   font-size: var(--text-page-title);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1.2;
   letter-spacing: -0.01em;
   color: var(--color-text);
 }
@@ -174,7 +195,7 @@
   border-radius: 9px;
   border: 1px solid transparent;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -396,7 +417,7 @@
   outline: none;
   background: none;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text);
 }
 
@@ -688,4 +709,122 @@
   background-clip: text;
   color: #C74E3D;
   -webkit-text-fill-color: transparent;
+}
+
+/* A button that reads as a link inside a sentence ("… Try again"). */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-info, #1D4ED8);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--color-brand-primary, #E85C4A);
+  outline-offset: 2px;
+}
+
+/* Fingers, not a mouse (2026-10-18): the small controls every page shares
+   get a touch area of about 32px or more on touch screens only. The "?"
+   icons and the "Change filters" link keep their look; an invisible margin
+   around them takes the tap. (The dashboard's own rule, Dashboard.css, did
+   this for that page alone.) */
+@media (pointer: coarse) {
+  .info-tip-btn {
+    position: relative;
+  }
+
+  .info-tip-btn::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+
+  .period-strip-link {
+    display: inline-block;
+    padding-block: 8px;
+    margin-block: -8px;
+  }
+
+  .chart-view-toggle button {
+    min-height: 32px;
+  }
+
+  .segmented-item {
+    min-height: 36px;
+  }
+
+  .filter-select,
+  .sku-filter-select-wrapper select,
+  .abc-filter-select-wrapper select {
+    min-height: 36px;
+  }
+
+  /* ABC: the breakdown's Brand / Category and Month / 12 months, and the
+     class filter; every table's page buttons. */
+  .abcb-toggle button,
+  .abc-cat-toggle-btn,
+  .table-pagination-btn,
+  .table-pagination-row input,
+  .table-pagination-size select,
+  .page-jump-input,
+  .page-jump-btn {
+    min-height: 36px;
+  }
+
+  /* Links set in a line of text (a product's name, the dashboard's story
+     line, a card's "682 products"): the line keeps its look, the tap area
+     grows. */
+  button.product-name-link,
+  button.hero-story-link,
+  button.hero-inline-link {
+    padding-block: 9px;
+    margin-block: -9px;
+  }
+
+  /* A checkbox is tapped through its label. */
+  .abc-current-run-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+  }
+}
+
+/* ── One card title and one "Show details" section (2026-10-25) ──────────
+   Shared by the Sales forecast and Category Trends pages, so their card
+   titles and closed technical sections look the same. */
+.ui-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ui-details {
+  margin-top: 1.25rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0.9rem 2rem;
+}
+
+.ui-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.ui-details[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .ui-details {
+    padding: 0.75rem 1rem;
+  }
 }

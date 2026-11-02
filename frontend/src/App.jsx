@@ -19,6 +19,7 @@ import './App.css';
 // around its <Outlet>, so the sidebar and top bar stay put while a page's
 // code arrives.
 const Dashboard = lazy(pageLoaders.dashboard);
+const DataDictionary = lazy(pageLoaders.dataDictionary);
 const SKUManagement = lazy(pageLoaders.skuManagement);
 const ABCClassification = lazy(pageLoaders.abc);
 const SKUForecast = lazy(pageLoaders.forecast);
@@ -37,10 +38,12 @@ const routeTitles = {
   '/forgot-password': 'SAN2 | Reset Password',
   '/set-password': 'SAN2 | Set Password',
   '/': 'SAN2 | Dashboard',
+  '/data-dictionary': 'SAN2 | Reference Guide',
   '/sku-management': 'SAN2 | SKU Management',
   '/abc': 'SAN2 | ABC Classification',
   '/forecast': 'SAN2 | SKU Forecast',
   '/reorder': 'SAN2 | Reorder Recommendations',
+  '/category-trends': 'SAN2 | Category Trends',
   '/audit-log': 'SAN2 | Audit Log',
   '/upload': 'SAN2 | Data Management',
   '/users': 'SAN2 | User Management',
@@ -52,7 +55,8 @@ function DynamicTitle() {
   const location = useLocation();
 
   useEffect(() => {
-    document.title = routeTitles[location.pathname] || 'SAN2 | Inventory DSS';
+    // The project is the DSD (Decision Support Dashboard), never "DSS" (audit FE-12).
+    document.title = routeTitles[location.pathname] || 'SAN2 | SSM Decision Support Dashboard';
   }, [location]);
 
   return null;
@@ -95,6 +99,7 @@ function App() {
           }
         >
           <Route index element={<HomeRoute />} />
+          <Route path="data-dictionary" element={guard(P.DASHBOARD_VIEW, <DataDictionary />)} />
           <Route path="sku-management" element={guard(P.SKU_VIEW, <SKUManagement />)} />
           <Route path="abc" element={guard(P.ABC_VIEW, <ABCClassification />)} />
           <Route path="forecast" element={guard(P.FORECAST_VIEW, <SKUForecast />)} />

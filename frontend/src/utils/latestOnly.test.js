@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLatestOnly } from './latestOnly.js';
-import { monthToSelect, latestRunFor } from './abcMonth.js';
+import { latestRunFor, requestedAbcPeriod, shownAbcPeriod } from './abcMonth.js';
 
 test('a response from a superseded request is never current, even if it lands last', async () => {
   const gate = createLatestOnly();
@@ -22,22 +22,22 @@ test('invalidate() drops the response of a request still in flight', () => {
   assert.equal(gate.isCurrent(tag), false);
 });
 
-test('the equivalent month is kept when the principal has a run for it', () => {
-  assert.equal(monthToSelect('2025-12', '2025-12'), null);
+test('with no pick the ABC page asks for the range end, for every principal', () => {
+  // Del Monte then Unilever: the same request both times, so Unilever is back on 2026-02.
+  assert.equal(requestedAbcPeriod(null, '2026-02'), '2026-02');
+  assert.equal(requestedAbcPeriod(undefined, '2026-02'), '2026-02');
 });
 
-test('a month after the latest run of the principal moves to that latest run', () => {
-  assert.equal(monthToSelect('2026-02', '2025-12'), '2025-12');
+test("the person's pick is asked for as it is, never moved by a response", () => {
+  assert.equal(requestedAbcPeriod('2025-05', '2026-02'), '2025-05');
 });
 
-test('a month with no run inside the history moves back to the nearest earlier run, never forward', () => {
-  assert.equal(monthToSelect('2025-05', '2025-04'), '2025-04');
-  assert.equal(monthToSelect('2025-05', '2025-06'), null);
-});
-
-test('nothing is selected when there is no request or no resolved period', () => {
-  assert.equal(monthToSelect(undefined, '2025-12'), null);
-  assert.equal(monthToSelect('2025-12', null), null);
+test('the picker shows the run on screen once its answer is current, else the month asked for', () => {
+  // Del Monte asked for 2026-02 and answered with its latest run, 2025-12.
+  assert.equal(shownAbcPeriod('2026-02', '2025-12', true), '2025-12');
+  // The previous principal's answer is still on screen while the new one loads.
+  assert.equal(shownAbcPeriod('2026-02', '2025-12', false), '2026-02');
+  assert.equal(shownAbcPeriod('2026-02', null, true), '2026-02');
 });
 
 test('latestRunFor reads one principal, or the latest of any', () => {

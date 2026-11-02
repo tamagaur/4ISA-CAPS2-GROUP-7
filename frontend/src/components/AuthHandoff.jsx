@@ -1,6 +1,7 @@
 // The full-screen moment between the sign-in form and the dashboard, and
-// between the dashboard and the sign-in page (2026-10-16): the SAN2 logo,
-// a turning ring and a line saying what is happening ("Signing in to the
+// between the dashboard and the sign-in page (2026-10-16; in the sign-in
+// page's golden-hour theme since 2026-10-19): the SAN2 logo, a turning
+// ring and a line saying what is happening ("Signing in to the
 // dashboard…", "Logging out of the dashboard…"). It is drawn in a portal
 // on <body>, above every dialog and toast, and takes every click while it
 // is up. A screen reader hears the line (role="status").
@@ -96,7 +97,7 @@ export default function AuthHandoff({ kind, ending = false }) {
   return createPortal(
     <div className={`auth-handoff${ending ? ' is-ending' : ''}`} role="status" aria-live="polite">
       <div className="auth-handoff-panel">
-        <img src="/images/login-logo-red-light.png" alt="SAN2 Corporation" className="auth-handoff-logo" />
+        <img src="/images/login-logo-red.png" alt="SAN2 Corporation" className="auth-handoff-logo" />
         <span className="auth-handoff-ring" aria-hidden="true" />
         <p className="auth-handoff-title">{text.title}</p>
         <p className="auth-handoff-detail">{text.detail}</p>

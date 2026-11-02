@@ -24,20 +24,28 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // 2023 is the floor, so all of its months are valid; the latest year is the
 // ceiling, so only its months up to the latest data month are. The years in
 // between sit entirely inside the range and need no month restriction.
-// Both ends come from dataCoverage.js — the one place to edit when a new
-// month of data loads.
+// The ceiling is the layout's `dataLatest` — the latest month with data for
+// either principal, from GET /data-mode (2026-10-20) — so a new month of
+// data appears in the lists by itself; dataCoverage.js's constant is only
+// the fallback until that answer arrives.
 //
 // Preview mode (src/dataMode.js) moves the floor back to the first
 // placeholder year, 2021, so the five-year span is pickable. A page that
 // reads real data only in preview too (SKU Forecast: forecasts never see a
 // placeholder month) passes `realOnly` and keeps the real floor.
-const yearsFrom = (firstYear) => Array.from(
-  { length: Number(LATEST_DATA_PERIOD.year) - firstYear + 1 },
-  (_, i) => String(firstYear + i)
-);
-const LATEST_YEAR = LATEST_DATA_PERIOD.year;
-const LATEST_YEAR_MONTHS = MONTHS.slice(0, MONTHS.indexOf(LATEST_DATA_PERIOD.month) + 1);
-const monthsForYear = (year) => (year === LATEST_YEAR ? LATEST_YEAR_MONTHS : MONTHS);
+const pickerBounds = (ceiling) => {
+  const latestYear = String(ceiling.year);
+  const latestYearMonths = MONTHS.slice(0, MONTHS.indexOf(ceiling.month) + 1);
+  return {
+    latestYear,
+    latestYearMonths,
+    monthsForYear: (year) => (year === latestYear ? latestYearMonths : MONTHS),
+    yearsFrom: (firstYear) => Array.from(
+      { length: Number(ceiling.year) - firstYear + 1 },
+      (_, i) => String(firstYear + i)
+    ),
+  };
+};
 
 // year*12+monthIndex sorts (month, year) pairs correctly across a year
 // boundary (Dec 2024 < Jan 2025) — used to catch a start-after-end pick
@@ -67,7 +75,7 @@ const noop = () => {};
 // SKU Forecast, ABC Classification, Reorder Recs) so the control stays in
 // one uniform place app-wide.
 //
-// Two modes, same bounded Jan 2023 - Feb 2026 option logic either way:
+// Two modes, same bounded option logic either way (Jan 2023 to the latest month with data):
 //   SHARED (default — no `localValue`/`onLocalChange` passed): edits the
 //     *pending* period held in DashboardLayout, not the applied one —
 //     nothing the rest of the app reads changes until Save is clicked
@@ -94,6 +102,8 @@ const DateFilter = ({
   showToday = true, ceiling = null,
 }) => {
   const outlet = useOutletContext() || {};
+  const dataCeiling = outlet.dataLatest || LATEST_DATA_PERIOD;
+  const { latestYear, latestYearMonths, monthsForYear, yearsFrom } = pickerBounds(dataCeiling);
   const years = yearsFrom(
     !realOnly && isPreviewMode(outlet.dataMode) ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR
   );
@@ -101,9 +111,9 @@ const DateFilter = ({
   const isSingleMonth = isLocal && singleMonth;
 
   const sm = (isLocal ? localValue.startMonth : outlet.pendingStartMonth) ?? 'Jan';
-  const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? LATEST_YEAR;
-  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? LATEST_DATA_PERIOD.month;
-  const ey = (isLocal ? localValue.endYear : outlet.pendingEndYear) ?? LATEST_YEAR;
+  const sy = (isLocal ? localValue.startYear : outlet.pendingStartYear) ?? latestYear;
+  const em = (isLocal ? localValue.endMonth : outlet.pendingEndMonth) ?? dataCeiling.month;
+  const ey = (isLocal ? localValue.endYear : outlet.pendingEndYear) ?? latestYear;
 
   const startMonthOptions = monthsForYear(sy);
   const endMonthOptions = monthsForYear(ey);
@@ -121,18 +131,18 @@ const DateFilter = ({
     ? (isRangeValid && isRangeLongEnough)
     : (outlet.canApplyPendingPeriod ?? (isRangeValid && isRangeLongEnough));
 
-  // Changing TO 2026 can strand the other field's already-selected month
+  // Changing TO the latest year can strand the other field's already-selected month
   // outside Jan-Mar (e.g. start year was 2025 with month=Aug, then the
   // user picks 2026) — clamp it to the boundary rather than leaving an
   // option selected that no longer exists in that side's own dropdown.
   // Never clamps unnecessarily: only fires when the current month isn't
-  // already within LATEST_YEAR_MONTHS. In local mode both fields live in
+  // already within latestYearMonths. In local mode both fields live in
   // ONE object, so the clamp is folded into a single onLocalChange call —
   // two separate calls would have the second overwrite the first's year
   // change, since each would spread the same still-stale `localValue`.
   const handleStartYearChange = (year) => {
-    const nextMonth = (year === LATEST_YEAR && !LATEST_YEAR_MONTHS.includes(sm))
-      ? LATEST_YEAR_MONTHS[LATEST_YEAR_MONTHS.length - 1]
+    const nextMonth = (year === latestYear && !latestYearMonths.includes(sm))
+      ? latestYearMonths[latestYearMonths.length - 1]
       : sm;
     if (isLocal) {
       onLocalChange({ ...localValue, startYear: year, startMonth: nextMonth });
@@ -143,8 +153,8 @@ const DateFilter = ({
   };
 
   const handleEndYearChange = (year) => {
-    const nextMonth = (year === LATEST_YEAR && !LATEST_YEAR_MONTHS.includes(em))
-      ? LATEST_YEAR_MONTHS[LATEST_YEAR_MONTHS.length - 1]
+    const nextMonth = (year === latestYear && !latestYearMonths.includes(em))
+      ? latestYearMonths[latestYearMonths.length - 1]
       : em;
     if (isLocal) {
       onLocalChange({ ...localValue, endYear: year, endMonth: nextMonth });
@@ -171,9 +181,9 @@ const DateFilter = ({
   };
 
   // Single-month mode only: `ceiling` ({month, year}, a page's own latest month, e.g. a principal's
-  // latest ABC run) lowers the pickable end below the app-wide LATEST_DATA_PERIOD.
-  const cap = ceiling && periodValue(ceiling.month, ceiling.year) < periodValue(LATEST_DATA_PERIOD.month, LATEST_DATA_PERIOD.year)
-    ? ceiling : LATEST_DATA_PERIOD;
+  // latest ABC run) lowers the pickable end below the data's own latest month (dataCeiling).
+  const cap = ceiling && periodValue(ceiling.month, ceiling.year) < periodValue(dataCeiling.month, dataCeiling.year)
+    ? ceiling : dataCeiling;
   const singleYears = years.filter((y) => Number(y) <= Number(cap.year));
   const singleMonthsFor = (year) => (year === cap.year ? MONTHS.slice(0, MONTHS.indexOf(cap.month) + 1) : MONTHS);
 
@@ -240,6 +250,7 @@ const DateFilter = ({
         {sm}
         <ChevronDown size={14} />
         <select
+          aria-label="Start month"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={sm}
           onChange={(e) => handleStartMonthChange(e.target.value)}
@@ -254,6 +265,7 @@ const DateFilter = ({
         {sy}
         <ChevronDown size={14} />
         <select
+          aria-label="Start year"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={sy}
           onChange={(e) => handleStartYearChange(e.target.value)}
@@ -264,13 +276,14 @@ const DateFilter = ({
         </select>
       </div>
 
-      <span style={{ color: '#667085', fontSize: '0.85rem', margin: '0 4px' }}>to</span>
+      <span style={{ color: '#667085', fontSize: '0.95rem', margin: '0 4px' }}>to</span>
 
       <div className="date-select-btn" style={{ position: 'relative' }}>
         <Calendar size={14} />
         {em}
         <ChevronDown size={14} />
         <select
+          aria-label="End month"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={em}
           onChange={(e) => handleEndMonthChange(e.target.value)}
@@ -285,6 +298,7 @@ const DateFilter = ({
         {ey}
         <ChevronDown size={14} />
         <select
+          aria-label="End year"
           style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
           value={ey}
           onChange={(e) => handleEndYearChange(e.target.value)}

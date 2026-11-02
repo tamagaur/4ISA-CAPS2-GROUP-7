@@ -18,10 +18,10 @@
  },
  "forecast_result_date": "2026-03-01",
  "inputs_sha256": {
-  "accuracy_as_served_rows.csv": "f7cca072fef5375f723dfa8263f494f9c84248d46cc43fc4444173c1476eee02",
+  "accuracy_as_served_rows.csv": "fdec5b1d4af9c295d972f616b651617bf285c468e679b4682e9a75a95b160d9e",
   "demand_money.csv": "1ed3f5e84366fac6c8a13d04e4f7e3428dbf72b67804411093fbf27fdc2d5d47",
-  "error_decomposition_row.csv": "d053005874d3dc4100efee0f5af031310e136e4b5e62db8ad53ef1839ea1d67d",
-  "mase_rows.csv": "28e0c96e75a804fa76b6fe9a6b4e48fb2e86481c3b7bb3486d0217707c9cf655"
+  "error_decomposition_row.csv": "734eb553f5ce566f6642f23bef3127895e9a26d17adb02b06c4ed3cd6cd8333c",
+  "mase_rows.csv": "bcb70ea93214c5597f5290f878b6a0043969a392786ded84542fbffd6e3bead4"
  },
  "figures": {
   "headline_wape": {

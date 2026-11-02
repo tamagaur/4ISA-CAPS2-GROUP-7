@@ -1,0 +1,65 @@
+/* The hover's boxes (ChartParts.jsx: Callouts, Callout, CalloutLine,
+   CalloutNote), every dashboard chart's since 2026-10-19: one box per
+   series, in the series' tint (--chart-callout, set inline), the value
+   large and in INK — text never wears the data colour. The bubble itself
+   is bare, so the boxes float as separate cards, and a note under them
+   gets a plain card of its own. The base .chart-tooltip rules are in
+   Charts.css, which ChartParts.jsx imports. */
+.chart-callouts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.chart-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 9.5rem;
+  padding: 0.45rem 0.75rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--chart-callout) 32%, transparent);
+  background-color: color-mix(in srgb, var(--chart-callout) 9%, var(--color-surface));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  color: var(--color-text-body);
+}
+
+.chart-callout-period {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+}
+
+.chart-callout-value {
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.chart-callout-name {
+  font-size: 0.78rem;
+}
+
+.chart-callout-line {
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.chart-callout-line strong {
+  font-weight: 600;
+  color: var(--color-text-body);
+}
+
+.chart-callouts .chart-tooltip-placeholder {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-surface);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}

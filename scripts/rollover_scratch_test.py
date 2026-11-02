@@ -245,10 +245,10 @@ def main(keep: bool = False) -> int:
         patch(k_direct, admin, status="accepted", decided_quantity=q[k_direct] + pack[k_direct])
         with scratch_tx(pg, write=True) as cur:
             cur.execute("INSERT INTO lp_direct_apply_grant (user_id, granted_by) VALUES (%s, 'scratch')", (granted.user_id,))
-        out = call(lambda db: ra.change_quantity(k_grant, QuantityChangeRequest(quantity=q[k_grant] + 2 * pack[k_grant], reviewed=True),
+        out = call(lambda db: ra.change_quantity(k_grant, QuantityChangeRequest(quantity=q[k_grant] + 2 * pack[k_grant], reviewed=True, reason="direct apply (scratch test)"),
                                                   type("R", (), {"status_code": 200})(), db=db, current_user=granted))
         check("a granted user's change applied at once", out.outcome == "applied")
-        held = call(lambda db: ra.change_quantity(k_appr, QuantityChangeRequest(quantity=q[k_appr] + 3 * pack[k_appr], reviewed=True),
+        held = call(lambda db: ra.change_quantity(k_appr, QuantityChangeRequest(quantity=q[k_appr] + 3 * pack[k_appr], reviewed=True, reason="held for approval (scratch test)"),
                                                    type("R", (), {"status_code": 200})(), db=db, current_user=planner))
         check("a planner's change is held", held.outcome == "held")
         with scratch_tx(pg) as cur:

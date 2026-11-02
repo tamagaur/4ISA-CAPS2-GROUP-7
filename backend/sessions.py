@@ -38,6 +38,19 @@ REVOKE_USER_SESSIONS_SQL = """
 """
 
 
+REVOKE_OTHER_SESSIONS_SQL = """
+    UPDATE user_session SET ended_at = now(), end_reason = 'revoked'
+     WHERE user_id = :user_id AND ended_at IS NULL AND session_id <> :keep_session_id
+"""
+
+
+def revoke_other_sessions(db: Session, user_id: int, keep_session_id: str) -> None:
+    """Like revoke_user_sessions, but the session making the request stays
+    signed in: someone who just changed their own password keeps working
+    here, and every other browser signed in to the account is signed out."""
+    db.execute(text(REVOKE_OTHER_SESSIONS_SQL), {"user_id": user_id, "keep_session_id": keep_session_id})
+
+
 def revoke_user_sessions(db: Session, user_id: int) -> None:
     """Ends every open session of one account, so its next request is refused
     and the person signs in again: after their role or email changes, their

@@ -43,6 +43,7 @@ for the derivations and the unit caveats):
 from __future__ import annotations
 
 import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -191,6 +192,17 @@ DISMISS_REASON_MIN = 8      # Q15 (2026-10-31); measured after trimming, so spac
 DISMISS_REASON_MAX = 500
 
 
+class StockObservationIn(BaseModel):
+    """Stock someone says they counted (migration 0070, lp_stock_observation). An observation, never stock on hand:
+    the plan keeps reading Inventory_Fact. `unit` is pieces or cases; cases need the product's pieces per case
+    (Product_Dimension.pack_size) and a whole number, and are stored converted to pieces beside what was typed."""
+    quantity: float = Field(ge=0, le=999_999_999_999, allow_inf_nan=False)
+    unit: Literal["pieces", "cases"] = "pieces"
+    counted_at: datetime.datetime | None = None   # when it was counted, as reported
+    location: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class RecommendationDecision(BaseModel):
     status: str  # 'accepted' | 'dismissed'
     # Why. It is stored on the row (migration 0062) and goes into the audit log entry. REQUIRED, non-blank,
@@ -205,6 +217,9 @@ class RecommendationDecision(BaseModel):
     # person confirms they checked it. The page sends it only from a single
     # row's confirm dialog, never from bulk accept.
     reviewed: bool = Field(default=False, strict=True)   # yes or 1 is not a confirmation
+    # Stock the person says they counted, with a direct dismissal only (migration 0070). Kept as an observation in
+    # lp_stock_observation; never written to Inventory_Fact.
+    stock_observation: StockObservationIn | None = None
 
     @model_validator(mode="after")
     def _decision_shape(self):
@@ -215,6 +230,8 @@ class RecommendationDecision(BaseModel):
                 raise ValueError(f"a dismissal reason needs at least {DISMISS_REASON_MIN} characters")
             if self.decided_quantity is not None:
                 raise ValueError("decided_quantity applies to an accepted recommendation, not a dismissed one")
+        elif self.stock_observation is not None:
+            raise ValueError("stock_observation goes with a dismissal, not an accept")
         return self
 
 
@@ -223,12 +240,30 @@ class RecommendationDecision(BaseModel):
 # an admin (state 'pending_approval'), unless the planner may apply directly (an admin always, anyone else with
 # an admin's grant). Quantities are pieces, the unit of q_i.
 
+# A staff request's reason and an admin's rejection reason: 8 to 500 characters once trimmed, the same as the
+# Reorder page's reason box (OverrideReasonModal.jsx, ReorderRequests.jsx), checked here too (Yuan, 2026-10-28).
+REQUEST_REASON_MIN = 8
+
+
+def _require_reason(reason: str, what: str) -> None:
+    if len(reason.strip()) < REQUEST_REASON_MIN:
+        raise ValueError(f"a reason of at least {REQUEST_REASON_MIN} characters is required {what}")
+
+
 class QuantityChangeRequest(BaseModel):
-    """POST /recommendations/{key}/quantity-change."""
+    """POST /recommendations/{key}/quantity-change. The reason is REQUIRED (2026-10-28): an admin approving a
+    different quantity reads why it was asked for."""
     quantity: float = Field(ge=0, le=999_999_999_999, allow_inf_nan=False, strict=True)  # the quantity wanted instead of q_i
-    reason: str | None = Field(default=None, max_length=500)
+    reason: str = Field(min_length=1, max_length=500)
     # As on PATCH: required (true) when the product is flagged for review, i.e. the person checked it.
     reviewed: bool = Field(default=False, strict=True)   # yes or 1 is not a confirmation
+    # Optional supporting count (migration 0070); recorded only when the change is held for approval.
+    stock_observation: StockObservationIn | None = None
+
+    @model_validator(mode="after")
+    def _reason_not_blank(self):
+        _require_reason(self.reason, "to propose a different quantity")
+        return self
 
 
 class QuantityChange(BaseModel):
@@ -251,6 +286,10 @@ class QuantityChange(BaseModel):
     # Set on an approved change whose accepted decision an admin later reversed (the state stays 'approved').
     reversed_by: str | None = None
     reversed_at: datetime.datetime | None = None
+    # The stock count sent with the proposal, if any (migration 0070).
+    stock_observation: StockObservation | None = None
+    # The requester's name from users, for the Staff Requests table (2026-10-28); None for an unknown email.
+    proposed_by_name: str | None = None
 
 
 class QuantityChangeOutcome(BaseModel):
@@ -272,13 +311,13 @@ class ApprovalNote(BaseModel):
 
 
 class RejectRequest(BaseModel):
-    """POST /recommendations/changes/{key}/reject. A reason is required (stored as resolution_note)."""
+    """POST /recommendations/changes/{key}/reject and /dismissal-requests/{key}/reject. A reason is required (stored
+    as resolution_note)."""
     reason: str = Field(min_length=1, max_length=500)
 
     @model_validator(mode="after")
     def _reason_not_blank(self):
-        if not self.reason.strip():
-            raise ValueError("a reason is required to reject a quantity change")
+        _require_reason(self.reason, "to reject a request")
         return self
 
 
@@ -310,3 +349,163 @@ class DirectApplyStatus(BaseModel):
     can_apply_directly: bool
     reason: str  # 'admin' | 'granted' | 'not_granted'
     approval_ready: bool  # false until migration 0068 is applied: a quantity edit then still applies at once
+
+
+# ── Staff requests and stock counts (2026-10-28, migration 0070) ────────────────────────────────────────────
+# backend/routers/reorder_requests.py. A dismissal request is held for an admin like a quantity change. A stock
+# count is an observation (lp_stock_observation), never Inventory_Fact.
+
+class StockObservation(BaseModel):
+    """One lp_stock_observation row. verification_state: unverified | verified | rejected."""
+    observation_key: int
+    recommendation_key: int | None = None
+    sku_code: str | None = None
+    product_name: str | None = None
+    quantity_entered: float
+    unit_entered: str               # 'pieces' | 'cases'
+    pieces_per_case: float | None = None
+    quantity_pieces: float          # the same amount in pieces
+    counted_at: datetime.datetime | None = None
+    location: str | None = None
+    notes: str | None = None
+    context: str                    # 'quantity_change' | 'dismissal_request' | 'direct_dismissal'
+    quantity_change_key: int | None = None
+    dismissal_request_key: int | None = None
+    reported_by: str
+    reporter_role: str | None = None
+    reported_at: datetime.datetime
+    verification_state: str
+    verified_by: str | None = None
+    verified_at: datetime.datetime | None = None
+    verification_note: str | None = None
+
+
+class StockObservationList(BaseModel):
+    count: int
+    items: list[StockObservation]
+
+
+class VerifyObservationBody(BaseModel):
+    """POST /recommendations/stock-observations/{key}/verify. A note is required when `verified` is false."""
+    verified: bool
+    note: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _note_on_rejection(self):
+        if not self.verified and not (self.note and self.note.strip()):
+            raise ValueError("a note is required to reject a stock count")
+        return self
+
+
+class DismissalRequestIn(BaseModel):
+    """POST /recommendations/{key}/dismissal-request. A reason is required."""
+    reason: str = Field(min_length=1, max_length=500)
+    stock_observation: StockObservationIn | None = None
+
+    @model_validator(mode="after")
+    def _reason_not_blank(self):
+        _require_reason(self.reason, "to ask for a dismissal")
+        return self
+
+
+class DismissalRequest(BaseModel):
+    """One lp_dismissal_request row. state: pending_approval | approved | rejected."""
+    request_key: int
+    recommendation_key: int
+    sku_code: str | None = None
+    product_name: str | None = None
+    planning_cycle_date: datetime.date | None = None
+    recommended_q_i: float          # q_i when requested
+    reason: str
+    state: str
+    requested_by: str
+    requested_at: datetime.datetime
+    resolved_by: str | None = None
+    resolved_at: datetime.datetime | None = None
+    resolution_note: str | None = None
+    reversed_by: str | None = None  # an approved request whose dismissal an admin later reversed
+    reversed_at: datetime.datetime | None = None
+    stock_observation: StockObservation | None = None
+    requested_by_name: str | None = None  # the requester's name from users (2026-10-28)
+
+
+class DismissalRequestList(BaseModel):
+    count: int
+    items: list[DismissalRequest]
+
+
+class OpenRequest(BaseModel):
+    """GET /recommendations/open-requests: one row per request awaiting an admin, so every viewer of the table can
+    see a row is under review. `requested_by` is filled for an admin and for the requester only."""
+    kind: str                       # 'quantity_change' | 'dismissal'
+    key: int                        # change_key or request_key
+    recommendation_key: int
+    recommended_q_i: float
+    proposed_q_i: float | None = None
+    requested_at: datetime.datetime
+    mine: bool = False
+    requested_by: str | None = None
+
+
+class OpenRequestList(BaseModel):
+    ready: bool                     # false until migration 0070 is applied (dismissal requests then never appear)
+    items: list[OpenRequest]
+
+
+class HistoryEvent(BaseModel):
+    at: datetime.datetime | None = None
+    kind: str                       # recommended | change_proposed | change_approved | change_rejected |
+                                    # dismissal_requested | dismissal_approved | dismissal_rejected | decided |
+                                    # reversed | stock_reported | stock_verified | stock_rejected
+    actor: str | None = None
+    summary: str
+    quantity_before: float | None = None
+    quantity_after: float | None = None
+    reason: str | None = None
+
+
+class RecommendationHistory(BaseModel):
+    recommendation_key: int
+    sku_code: str | None = None
+    product_name: str | None = None
+    planning_cycle_date: datetime.date | None = None
+    recommended_q_i: float
+    pack_size: float | None = None
+    status: str
+    events: list[HistoryEvent]
+
+
+# Defined above StockObservation, so resolved here.
+QuantityChange.model_rebuild()
+QuantityChangeOutcome.model_rebuild()
+QuantityChangeList.model_rebuild()
+
+
+# ── The notification bell (migration 0071, backend/notifications.py, 2026-10-28) ────────────────────────────
+class Notification(BaseModel):
+    """One row of the signed-in user's bell. A pointer to a request: `request_state` is the request's own state,
+    read from its row, and is never changed by reading the notification."""
+    notification_key: int
+    kind: str                        # backend.notifications.KINDS
+    request_kind: str                # 'quantity_change' | 'dismissal'
+    request_key: int                 # change_key or request_key
+    recommendation_key: int | None = None
+    sku_code: str | None = None
+    product_name: str | None = None
+    actor_email: str
+    actor_name: str | None = None
+    summary: str
+    created_at: datetime.datetime
+    read_at: datetime.datetime | None = None
+    request_state: str | None = None  # pending_approval | approved | rejected
+
+
+class NotificationList(BaseModel):
+    ready: bool                      # false until migration 0071 is applied: the bell then shows nothing
+    unread_count: int = 0
+    items: list[Notification] = []
+
+
+class NotificationReadResult(BaseModel):
+    updated: int                     # how many rows were newly marked read (0 when they already were)
+    unread_count: int

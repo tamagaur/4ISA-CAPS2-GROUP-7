@@ -1,0 +1,9 @@
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_NextPart_SYNTH"
+
+------=_NextPart_SYNTH
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><body><table><tr><th>Calendar Month</th><th>Product</th><th>Pack Size</th><th>Quantity Sold</th></tr><tr><td>01.2023</td><td>UNI0001</td><td>12X100G</td><td>10</td></tr><tr><td>01.2023</td><td>UNI0002</td><td>24X50G</td><td>20</td></tr><tr><td>02.2023</td><td>UNI0001</td><td>12X100G</td><td>11</td></tr><tr><td>02.2023</td><td>UNI0002</td><td>24X50G</td><td>21</td></tr><tr><td>03.2023</td><td>UNI0001</td><td>12X100G</td><td>12</td></tr><tr><td>03.2023</td><td>UNI0002</td><td>24X50G</td><td>22</td></tr></table></body></html>
+------=_NextPart_SYNTH--

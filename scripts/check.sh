@@ -2,10 +2,11 @@
 # scripts/check.sh - the project's one check command.
 #
 #   scripts/check.sh --fast   (target < 90 s; run constantly)
-#       backend lint, frontend lint, the pinned-figure verification, the cross-endpoint invariants
-#   scripts/check.sh --full   everything above + the whole pytest suite + the frontend production build
+#       backend lint, frontend lint, the pinned-figure verification, the Chapter 4 code figures
+#       (docs/CHAPTER4_CODE_FIGURES.json: route count and sign-in split, @cached GET routes, opt-in list size), the cross-endpoint invariants
+#   scripts/check.sh --full   everything above + the whole pytest suite + its pinned totals + the frontend production build
 #
-# Skipped is not passed, with ONE exception: the 18 opt-in tests named in scripts/known_opt_in_skips.txt (whole suite only;
+# Skipped is not passed, with ONE exception: the 21 opt-in tests named in scripts/known_opt_in_skips.txt (whole suite only;
 # listed as NOT RUN, never as passed; any other skip, or a listed one skipping for a new reason, fails). If a check cannot run (a live database variable is unset, a test skips itself, node
 # modules are missing) this script FAILS and says why. It never reports green over a skipped check.
 #
@@ -45,7 +46,7 @@ pytest_strict() {
   local xml="$TMP/$label.xml"
   "$PY" -m pytest -q -p no:cacheprovider -rs --junitxml="$xml" "$@"; local rc=$?
   [ -f "$xml" ] || { echo "FAIL: pytest wrote no result file"; return 1; }
-  # only the whole suite may skip, and only the 18 named in scripts/known_opt_in_skips.txt; every other run allows none
+  # only the whole suite may skip, and only the 21 named in scripts/known_opt_in_skips.txt; every other run allows none
   local allow=""; [ "$label" = "full" ] && allow="--allow-listed"
   "$PY" scripts/check_helpers.py junit "$xml" $allow || rc=1
   return $rc
@@ -61,6 +62,8 @@ pinned() {
   grep -q "not read" "$TMP/pinned.txt" && { echo "FAIL: the live actuals version could not be read, so the check was only partly run"; rc=1; }
   return $rc
 }
+chapter_static() { "$PY" -m scripts.chapter_figures --verify; }
+chapter_totals() { "$PY" -m scripts.chapter_figures --verify-junit "$TMP/invariants.xml" "$TMP/full.xml"; }
 invariants()    { pytest_strict invariants tests/invariants; }
 full_suite()    { pytest_strict full tests --ignore=tests/invariants; }
 frontend_build(){
@@ -72,9 +75,11 @@ step "live database configured and reachable" "$PY" scripts/check_helpers.py env
 step "backend lint (ruff, correctness rules)" lint_backend
 step "frontend lint (oxlint, errors)" lint_frontend
 step "pinned figures reproduce" pinned
+step "Chapter 4 code figures (routes, sign-in split, cached GETs, opt-in list)" chapter_static
 step "cross-endpoint invariants (tests/invariants)" invariants
 if [ "$MODE" = "--full" ]; then
   step "whole pytest suite (skips fail)" full_suite
+  step "Chapter 4 pytest totals (collected, skipped, failed)" chapter_totals
   step "frontend production build" frontend_build
 fi
 
@@ -88,4 +93,4 @@ done
 echo "  total ${ELAPSED}s"
 if [ "$MODE" = "--fast" ] && [ "$ELAPSED" -gt 90 ]; then echo "  NOTE: over the 90 s target for --fast"; fi
 if [ "$FAILS" -gt 0 ]; then echo "RED: $FAILS check(s) failed"; exit 1; fi
-echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 18 opt-in tests in scripts/known_opt_in_skips.txt were NOT RUN)"
+echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 21 opt-in tests in scripts/known_opt_in_skips.txt are NOT RUN wherever their inputs are absent)"

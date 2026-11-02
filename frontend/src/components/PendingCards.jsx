@@ -11,12 +11,15 @@
 // ForecastErrorCard's `error` (SKUForecast.jsx productAccuracy):
 //   { pieces_per_month, pesos_per_month, pesos_basis, direction: 'surplus' |
 //   'shortage' | 'mixed' (the net miss's sign), over_months, under_months,
-//   months_scored, window_start, window_end, source }
+//   months_scored, window_start, window_end, source, share_of_forecast }
+//   share_of_forecast: the summed miss ÷ the summed forecast over the same
+//   rows (a fraction), or null when the forecasts sum to 0.
 import React from 'react';
 import { AlertTriangle, Eye } from 'lucide-react';
-import { formatMonth } from '../utils/formatDate';
+import { formatMonth, formatMonthSpans } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { formatExactPesos } from '../utils/formatters';
+import InfoTip from './InfoTip';
 import './PendingCards.css';
 
 const WEEKS_PER_MONTH = 4.3;
@@ -31,24 +34,47 @@ const DIRECTION_TEXT = {
   shortage: 'Overall below sales (a net shortage)',
   mixed: 'Above and below sales cancel out',
 };
-export const ForecastErrorCard = ({ error }) => {
+// `detailed` (Sales forecast's "Show details", 2026-10-20): the direction,
+// months, source and pesos basis written out instead of behind a "?".
+// `showShare` false leaves the percentage out where the page already says it
+// (Sales forecast's "Typical miss" row beside the MASE, 2026-10-24).
+export const ForecastErrorCard = ({ error, detailed = false, showShare = true }) => {
   if (!error || error.pieces_per_month == null) return null;
   const perMonth = error.pieces_per_month;
+  const share = showShare ? error.share_of_forecast : null;
   const window = !error.window_start || !error.window_end ? null
     : error.window_start === error.window_end ? formatMonth(error.window_start)
       : `${formatMonth(error.window_start)} – ${formatMonth(error.window_end)}`;
   return (
     <div className="pending-error-card">
-      <span className="pending-card-label">Typical forecast miss</span>
+      <span className="pending-card-label">How far off past forecasts were</span>
       <p className="pending-error-line">
-        Off by about <strong>{formatUnits(perMonth)} pieces</strong>
+        Off by about <strong>{formatUnits(perMonth)} pcs</strong>
         {error.pesos_per_month != null && <> ({pesos(error.pesos_per_month)})</>} per month, or about{' '}
-        <strong>{formatUnits(perMonth / WEEKS_PER_MONTH)} pieces</strong> per week.
+        <strong>{formatUnits(perMonth / WEEKS_PER_MONTH)} pcs</strong> per week
+        {share != null && <> &middot; <strong>~{Math.round(share * 100)}%</strong> of the forecast</>}
+        .
+        {/* The direction, months and source sit behind the "?" (2026-10-19),
+            or written out under the line in a details section. */}
+        {!detailed && <InfoTip label="About this forecast miss" size={12}>
+          {share != null && (
+            <>The percentage is the total miss divided by the total forecast over the months scored. </>
+          )}
+          {DIRECTION_TEXT[error.direction] ?? ''}
+          {DIRECTION_TEXT[error.direction] && error.months_scored != null && error.over_months != null
+            ? `: above sales in ${error.over_months} and below in ${error.under_months} of ${error.months_scored} `
+              + `month${error.months_scored === 1 ? '' : 's'}`
+            : ''}
+          {window ? ` · ${window}` : ''}
+          {error.source ? ` · ${error.source}` : ''}
+          {error.pesos_per_month != null && error.pesos_basis ? ` · pesos at ${error.pesos_basis}` : ''}.
+        </InfoTip>}
       </p>
-      {DIRECTION_TEXT[error.direction] && (
+      {detailed && (
         <p className="pending-error-direction">
-          {DIRECTION_TEXT[error.direction]}
-          {error.months_scored != null && error.over_months != null
+          {share != null && 'The percentage is the total miss divided by the total forecast over the months scored. '}
+          {DIRECTION_TEXT[error.direction] ?? ''}
+          {DIRECTION_TEXT[error.direction] && error.months_scored != null && error.over_months != null
             ? `: above sales in ${error.over_months} and below in ${error.under_months} of ${error.months_scored} `
               + `month${error.months_scored === 1 ? '' : 's'}`
             : ''}
@@ -109,14 +135,14 @@ export const ReviewBadge = ({ reason }) => {
 };
 
 // A month where stock may have run out, so its sales may understate demand.
-export const STOCK_LIMITED_TEXT = 'stock may have run out; sales may understate demand';
+export const STOCK_LIMITED_TEXT = 'stock may have run out';
 export const StockLimitedNote = ({ periods = [] }) => {
   if (!periods.length) return null;
   return (
     <p className="pending-stock-limited">
       <AlertTriangle size={12} aria-hidden="true" />
       <span>
-        <strong>Possibly stock-limited: {periods.map((p) => formatMonth(p)).join(', ')}</strong> — {STOCK_LIMITED_TEXT}.
+        <strong>Stock may have run out in {formatMonthSpans(periods)}</strong>.
       </span>
     </p>
   );

@@ -200,7 +200,7 @@ export const ParetoCard = ({ principal, period }) => {
                       angle={-40}
                       textAnchor="end"
                       height={56}
-                      tick={{ fill: CHART_COLORS.axisLabel, fontSize: 10 }}
+                      tick={{ fill: CHART_COLORS.axisLabel, fontSize: 11 }}
                     />
                     <YAxis
                       domain={[0, 100]}
@@ -218,10 +218,10 @@ export const ParetoCard = ({ principal, period }) => {
                     {/* The run's own cutoffs (GET /pareto payload) — drawn
                         only when the API sent them, never a retyped 80/95. */}
                     {aCutPct != null && (
-                      <ReferenceLine y={aCutPct} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="4 3" label={{ value: `A ${Math.round(aCutPct)}%`, position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }} />
+                      <ReferenceLine y={aCutPct} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="4 3" label={{ value: `A ${Math.round(aCutPct)}%`, position: 'insideTopLeft', fontSize: 11, fill: CHART_COLORS.axisLabel }} />
                     )}
                     {bCutPct != null && (
-                      <ReferenceLine y={bCutPct} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="2 3" label={{ value: `B ${Math.round(bCutPct)}%`, position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.axisLabel }} />
+                      <ReferenceLine y={bCutPct} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="2 3" label={{ value: `B ${Math.round(bCutPct)}%`, position: 'insideTopLeft', fontSize: 11, fill: CHART_COLORS.axisLabel }} />
                     )}
                     <Bar dataKey="sharePct" name="Revenue share" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false}>
                       {rows.map((r) => <Cell key={r.name} fill={PARETO_BAR_COLOR[r.tier]} />)}

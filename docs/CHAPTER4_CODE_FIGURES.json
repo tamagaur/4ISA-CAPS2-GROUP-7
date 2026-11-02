@@ -1,0 +1,96 @@
+{
+ "pinned_on": "2026-11-02",
+ "rule": "Chapter 4 prints these from the code or the live system. Re-pin only on purpose, in the commit that changes the code; the chapter must take every figure from one commit. scripts/check.sh fails on drift.",
+ "figures": [
+  {
+   "id": "routes_total",
+   "what": "Method/path pairs the API serves",
+   "value": 84,
+   "command": "python -m scripts.chapter_figures --measure routes_total  (= tests/backend/test_permissions.py ROUTE_COUNT)"
+  },
+  {
+   "id": "routes_require_sign_in",
+   "what": "Routes that need a signed-in user (every route but the public ones)",
+   "value": 74,
+   "command": "python -m scripts.chapter_figures --measure routes_require_sign_in"
+  },
+  {
+   "id": "routes_named_permission",
+   "what": "...of which gated by a named permission key",
+   "value": 59,
+   "command": "python -m scripts.chapter_figures --measure routes_named_permission"
+  },
+  {
+   "id": "routes_sign_in_only",
+   "what": "...of which sign-in only, no permission key",
+   "value": 15,
+   "command": "python -m scripts.chapter_figures --measure routes_sign_in_only"
+  },
+  {
+   "id": "routes_public",
+   "what": "Routes that need no sign-in (test_permissions.PUBLIC)",
+   "value": 10,
+   "command": "python -m scripts.chapter_figures --measure routes_public"
+  },
+  {
+   "id": "cached_get_routes",
+   "what": "GET routes behind the response cache",
+   "value": 22,
+   "command": "grep -rhE '^@cached\\(\"GET ' backend/routers | wc -l"
+  },
+  {
+   "id": "opt_in_list_size",
+   "what": "Tests allowed to skip in the whole suite (scripts/known_opt_in_skips.txt)",
+   "value": 21,
+   "command": "grep -vc '^#' scripts/known_opt_in_skips.txt"
+  },
+  {
+   "id": "tests_collected_clean_clone",
+   "what": "Tests in the whole run on a clean clone (invariants plus suite)",
+   "value": 2200,
+   "command": "python -m pytest --collect-only -q tests | tail -1  (on a clone with no data/raw)"
+  },
+  {
+   "id": "tests_collected_with_real_data",
+   "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
+   "value": 2206,
+   "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
+  },
+  {
+   "id": "real_corpus_cases",
+   "what": "Extract test cases that exist only where data/raw exists",
+   "value": 6,
+   "command": "python -m pytest --collect-only -q tests | grep -c 'real_corpus]'  (where data/raw exists)"
+  },
+  {
+   "id": "tests_failed",
+   "what": "Failed tests in a full run",
+   "value": 0,
+   "command": "scripts/check.sh --full"
+  },
+  {
+   "id": "tests_skipped_clean_clone",
+   "what": "Skipped tests on a clean clone (the whole opt-in list)",
+   "value": 21,
+   "command": "scripts/check.sh --full on a clone with no data/raw and no local/"
+  },
+  {
+   "id": "tests_skipped_with_real_data",
+   "what": "Skipped tests on a machine with SSM's data/raw and the per-product policy table",
+   "value": 18,
+   "command": "scripts/check.sh --full there"
+  },
+  {
+   "id": "tests_passed_clean_clone",
+   "what": "Passed tests on a clean clone (collected minus skipped)",
+   "value": 2179,
+   "command": "scripts/check.sh --full on a clone with no data/raw and no local/"
+  },
+  {
+   "id": "tests_passed_with_real_data",
+   "what": "Passed tests with SSM's real files present (collected minus skipped)",
+   "value": 2188,
+   "command": "scripts/check.sh --full there"
+  }
+ ]
+}

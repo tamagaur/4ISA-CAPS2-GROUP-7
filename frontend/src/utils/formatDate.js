@@ -33,3 +33,21 @@ export function formatMonth(value) {
   if (m) return `${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
   return String(value);
 }
+
+// 'YYYY-MM' months as runs of consecutive months, in words: "May–Jul 2024",
+// "Oct 2024–Jan 2025", "Jun 2024"; several joined with commas and "and".
+export function formatMonthSpans(periods = []) {
+  const idx = (p) => { const [y, m] = String(p).split('-').map(Number); return y * 12 + m - 1; };
+  const sorted = [...new Set(periods.map(String))].sort();
+  const runs = [];
+  sorted.forEach((p) => {
+    const last = runs[runs.length - 1];
+    if (last && idx(p) === idx(last[1]) + 1) last[1] = p; else runs.push([p, p]);
+  });
+  const words = runs.map(([a, b]) => {
+    if (a === b) return formatMonth(a);
+    const [ma, ya] = formatMonth(a).split(' ');
+    return ya === formatMonth(b).split(' ')[1] ? `${ma}–${formatMonth(b)}` : `${formatMonth(a)}–${formatMonth(b)}`;
+  });
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0] || '';
+}

@@ -80,7 +80,9 @@ CATALOG = [
     {"key": "lp.view", "label": "View reorder recommendations", "group": "LP / Reorder",
      "description": "Also the LP figures shown on other pages."},
     {"key": "lp.decide", "label": "Accept or dismiss recommendations", "group": "LP / Reorder",
-     "description": "Changes what SSM orders."},
+     "description": "Changes what SSM orders.", "admin_only": True},
+    {"key": "lp.propose", "label": "Propose reorder changes", "group": "LP / Reorder",
+     "description": "Ask for a different quantity or a dismissal, and report stock counted; an admin decides."},
     {"key": "audit_log.view", "label": "View the audit log", "group": "Audit Log",
      "description": "Who changed what, and when."},
     {"key": "upload.run", "label": "Use Data Management", "group": "Data Management",
@@ -89,12 +91,15 @@ CATALOG = [
      "description": "Invite users, set roles and permissions."},
 ]
 ALL_KEYS = tuple(entry["key"] for entry in CATALOG)
+# Never granted to staff, by preset or override (Yuan, 2026-10-28): staff propose (lp.propose) and an admin
+# decides. A stored staff grant of one of these is ignored, and saving one is refused (422 admin_only_permission).
+ADMIN_ONLY_KEYS = frozenset(entry["key"] for entry in CATALOG if entry.get("admin_only"))
 
 # The proposal's Design table. Staff's preset is also today's staff access,
 # which is why this code changes nobody's access before 0034 is applied.
 PRESETS = {
     "staff": ("dashboard.view", "abc.view", "forecast.view", "category_trends.view",
-              "sku.view", "lp.view"),
+              "sku.view", "lp.view", "lp.propose"),  # lp.propose: Yuan, 2026-10-28
 }
 
 MISSING_PERMISSION = "You don't have access to this. Ask an admin."
@@ -196,7 +201,7 @@ def effective(role: str, overrides: dict[str, bool]) -> set[str]:
     if role == "admin":
         return keys
     for key, granted in overrides.items():
-        if key not in ALL_KEYS:
+        if key not in ALL_KEYS or key in ADMIN_ONLY_KEYS:
             continue
         if granted:
             keys.add(key)
@@ -211,7 +216,8 @@ def normalize(role: str, overrides: dict[str, bool]) -> dict[str, bool]:
     if role == "admin":
         return {}
     base = preset(role)
-    stored = {key: bool(granted) for key, granted in overrides.items() if (key in base) != bool(granted)}
+    stored = {key: bool(granted) for key, granted in overrides.items()
+              if (key in base) != bool(granted) and key not in ADMIN_ONLY_KEYS}
     # A removal that an implied grant undoes (lp.view:false beside lp.decide:true) changes nothing; storing it
     # would show the admin a revoke that does not hold.
     held = effective(role, stored)

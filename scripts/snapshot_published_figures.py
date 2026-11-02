@@ -12,9 +12,10 @@ reproduced after new actuals land (2026-10-24).
 Writes
   docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json   aggregates only (tracked): every figure, the actuals version
                                                       (analytics/actuals_version.py), the sha256 of every input
-  local/published_snapshot_2026-10-24/*.csv         the per-product rows the figures were computed from
-                                                      (git-ignored, hard rule 9): frozen as-served rows, demand
-                                                      money, stored MASE rows, error-decomposition rows
+  docs/published_snapshot_2026-10-24/*.csv          the per-product rows the figures were computed from (tracked,
+                                                      hard rule 9's exception of 2026-10-23: the figures are published),
+                                                      trimmed to KEEP_COLUMNS: frozen as-served rows, demand money,
+                                                      stored MASE rows, error-decomposition rows
 
 --verify recomputes the headline WAPE, the MASE pass rate and median, the error-decomposition split, the
 17.14% exceedance and the peso figure from the FROZEN rows (not the live database), checks the input hashes,
@@ -39,14 +40,30 @@ sys.path.insert(0, str(REPO))
 from scripts.report_target import report_path  # noqa: E402
 
 SNAP_DATE = "2026-10-24"
-SNAP_DIR = REPO / "local" / f"published_snapshot_{SNAP_DATE}"
+SNAP_DIR = REPO / "docs" / f"published_snapshot_{SNAP_DATE}"
 SNAP_JSON = REPO / "docs" / f"PUBLISHED_FIGURES_SNAPSHOT_{SNAP_DATE}.json"
 DOC = REPO / "docs" / "ACCURACY_AS_SERVED.md"
-FROZEN = {  # frozen file -> where it is copied from (local/, git-ignored)
+FROZEN = {  # frozen file -> where it is read from (local/, git-ignored), then trimmed
     "accuracy_as_served_rows.csv": REPO / "local" / "accuracy_as_served_rows.csv",
     "demand_money.csv": REPO / "local" / "error_direction_money.csv",
 }
 FIGURE_TOLERANCE = 1e-9
+# The only columns of each frozen file that --verify, --march-impact, scripts/manuscript_figures.py or a test reads. Anything
+# else the source carries (prices, safety-stock values, run ids, model bins) is not committed.
+KEEP_COLUMNS = {
+    "accuracy_as_served_rows.csv": ["product_key", "month", "actual", "value", "ma3", "run"],
+    "demand_money.csv": ["product_key", "month", "net_amount", "quantity_raw"],
+    "mase_rows.csv": ["product_key", "status", "mase"],
+    "error_decomposition_row.csv": ["tier", "product_key", "month", "forecast_pieces", "actual_pieces", "over_pieces",
+                                    "under_pieces", "absorbed_pieces", "beyond_pieces", "exceeds_safety_stock",
+                                    "over_pesos", "absorbed_pesos", "beyond_pesos"],
+}
+
+
+def write_frozen(name: str, df: pd.DataFrame) -> None:
+    """Write one frozen file with only its KEEP_COLUMNS, in that order."""
+    SNAP_DIR.mkdir(parents=True, exist_ok=True)
+    df[KEEP_COLUMNS[name]].to_csv(SNAP_DIR / name, index=False)
 
 
 def sha256(path: Path) -> str:
@@ -145,7 +162,7 @@ def cmd_write() -> int:
     from analytics import actuals_version
     SNAP_DIR.mkdir(parents=True, exist_ok=True)
     for name, src in FROZEN.items():
-        (SNAP_DIR / name).write_bytes(src.read_bytes())
+        write_frozen(name, pd.read_csv(src))
     conn, cur = connect()
     try:
         stamp = actuals_version.read(cur)
@@ -164,8 +181,8 @@ def cmd_write() -> int:
     for c in dec.columns:
         if dec[c].dtype == object and c not in ("principal", "tier", "month", "forecast_source", "ss_method"):
             dec[c] = pd.to_numeric(dec[c], errors="coerce")
-    mase.to_csv(SNAP_DIR / "mase_rows.csv", index=False)
-    dec.to_csv(SNAP_DIR / "error_decomposition_row.csv", index=False)
+    write_frozen("mase_rows.csv", mase)
+    write_frozen("error_decomposition_row.csv", dec)
     rows, money, mase_f, dec_f = read_frozen()
     figures = compute(rows, money, mase_f, dec_f)
     published = doc_sections(DOC.read_text(encoding="utf-8"), ("Headline (quote these)", "MASE pass rate (quote this one number)",

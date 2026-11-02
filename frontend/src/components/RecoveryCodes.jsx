@@ -11,7 +11,7 @@ const RecoveryCodes = ({ codes, email, onDone, doneLabel = 'Done', variant }) =>
   const isLogin = variant === 'login';
 
   const asText = [
-    `SAN2 Inventory DSS recovery codes${email ? ` for ${email}` : ''}`,
+    `SAN2 | SSM Decision Support Dashboard recovery codes${email ? ` for ${email}` : ''}`,
     'Each code works once, in place of the code from your authenticator app.',
     '',
     ...codes,

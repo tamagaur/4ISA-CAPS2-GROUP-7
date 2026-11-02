@@ -37,11 +37,16 @@ def test_a_stale_allow_list_entry_fails(tmp_path):
     assert ch.cmd_junit(_xml(tmp_path, [("t.mod", "test_ok", None)]), ALLOWED) == 1
 
 
-def test_the_committed_list_is_exactly_the_eighteen():
+def test_the_committed_list_is_exactly_the_twenty_one():
+    """18 decided 2026-10-30; 3 added 2026-11-02 for tests that pin SSM's real files, which are never committed."""
     allowed = ch.load_allowed()
-    assert len(allowed) == 18
+    assert len(allowed) == 21
     assert sum(n.startswith("tests.etl.test_fills_db::") for n in allowed) == 17
     assert "tests.etl.test_rollover_scratch::test_rollover_on_a_scratch_schema_with_a_synthetic_march" in allowed
+    assert {n for n in allowed if "real" in allowed[n] or "issue4" in allowed[n]} == {
+        "tests.etl.test_layout_regression::test_content_identification_reproduces_todays_family_and_month_for_every_file",
+        "tests.etl.test_extract::test_parse_unilever_sku_against_real_file",
+        "tests.backend.test_policy_comparison::test_pesos_reproduce_the_lp_logic_check_totals"}
 
 
 def test_no_allow_list_means_no_skip_is_allowed(tmp_path):

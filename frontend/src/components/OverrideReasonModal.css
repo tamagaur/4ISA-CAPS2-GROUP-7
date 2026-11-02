@@ -66,7 +66,7 @@
 }
 
 .override-modal-subtitle {
-  font-size: 0.78rem;
+  font-size: 0.89rem;
   color: var(--color-slate-500);
   margin: 0;
 }
@@ -95,7 +95,7 @@
 }
 
 .override-modal-copy {
-  font-size: 0.83rem;
+  font-size: 0.93rem;
   color: var(--color-text-body);
   line-height: 1.55;
   margin: 0 0 1.1rem 0;
@@ -103,7 +103,7 @@
 
 .override-label {
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--color-text-body);
   letter-spacing: 0.05em;
@@ -120,7 +120,7 @@
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--color-border-strong);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--color-slate-900);
   outline: none;
   resize: vertical;
@@ -136,7 +136,7 @@
 .override-hint-error {
   display: block;
   margin-top: 0.4rem;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: var(--color-brand-accent);
   font-weight: 600;
 }
@@ -156,7 +156,7 @@
   justify-content: center;
   padding: 0.6rem 1.3rem;
   border-radius: 8px;
-  font-size: 0.83rem;
+  font-size: 0.93rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s ease;

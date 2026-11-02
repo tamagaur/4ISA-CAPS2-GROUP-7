@@ -237,3 +237,32 @@ def test_pesos_reproduce_the_lp_logic_check_totals():
     assert pesos["average"]["lp_stock_pesos"] == pytest.approx(5_906_832, abs=25)
     assert pesos["average"]["rule_stock_pesos"] == pytest.approx(8_211_106, abs=25)
     assert pesos["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"] == -13.7
+
+
+def test_pesos_on_the_synthetic_per_product_table():
+    """The same table shape as the real one above, with four INVENTED products (tests/fixtures/policy_card_synthetic.csv),
+    so the arithmetic and its column mapping run on every checkout. The expected pesos were worked by hand from the four
+    rows: rule = sum(price x 3 weeks), peak = sum(price x order-up-to), average = sum(price x (safety stock + half a
+    weekly order)). It says nothing about SSM's real totals; the test above does, and is opt-in."""
+    import csv
+    from pathlib import Path
+
+    from backend.routers.policy_comparison import pesos_comparison
+
+    path = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "policy_card_synthetic.csv"
+    with path.open(encoding="utf-8") as f:
+        table = list(csv.DictReader(f))
+    assert len(table) == 4
+    rows = [{"ss_units": float(r["safety_stock_pcs"]), "target_units": float(r["order_up_to_pcs"]),
+             "weekly_units": float(r["forecast_mar2026_pcs"]) / AVG_WEEKS_PER_MONTH,
+             "rule_units": 3 * float(r["forecast_mar2026_pcs"]) / AVG_WEEKS_PER_MONTH,
+             "price": float(r["cost_per_piece_php"])} for r in table]
+    pesos = pesos_comparison(rows)
+    assert pesos["sku_count"] == 4 and pesos["skus_without_price"] == 0
+    assert pesos["average"]["rule_stock_pesos"] == pytest.approx(11_216.09, abs=0.01)
+    assert pesos["average"]["lp_stock_pesos"] == pytest.approx(5_519.35, abs=0.01)
+    assert pesos["peak"]["lp_stock_pesos"] == pytest.approx(9_050.00, abs=0.01)
+    assert pesos["average"]["pct_vs_rule"] == -50.8
+    assert pesos["peak"]["pct_vs_rule"] == -19.3
+    assert pesos["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"] == -40.9
+    assert pesos["average"]["direction"] == "less"

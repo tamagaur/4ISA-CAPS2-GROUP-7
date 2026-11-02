@@ -1,9 +1,9 @@
 """
 backend.routers.monthly_batch — /batch, the Data Management page's monthly batch (2026-11-02).
 
-LOCAL ONLY FOR NOW. Every route answers only when MONTHLY_BATCH_ENABLED is on AND the database is the throwaway local
-one (scripts/local_pg.py). Otherwise GET /batch/status says {"enabled": false} and the page stays as it was, and every
-other route refuses with 409 batch_local_only. No route passes --target-public, so scripts.run_month could not write to
+LOCAL ONLY FOR NOW. backend/main.py mounts these routes only when MONTHLY_BATCH_ENABLED is on AND the database is the
+throwaway local one (scripts/local_pg.py), so the deployed API does not have them and the page stays as it was. The routes
+check again per request: GET /batch/status says {"enabled": false} and the rest refuse with 409 batch_local_only. No route passes --target-public, so scripts.run_month could not write to
 live even if this check were wrong. Turning this on for live is a separate decision: it would also have to solve where
 uploaded files live on the server.
 

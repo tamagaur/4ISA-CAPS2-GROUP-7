@@ -5,7 +5,7 @@ Guards against: loading March 2026 sales silently moving every accuracy figure t
 (scripts/snapshot_published_figures.py, docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json) and recomputed from the
 frozen rows; the published text of docs/ACCURACY_AS_SERVED.md is compared with what was pinned.
 
-Unlike tests/test_published_snapshot.py this FAILS, not skips, when the git-ignored frozen rows are absent.
+The frozen rows are tracked (docs/published_snapshot_2026-10-24/, trimmed columns); this FAILS if they are missing.
 """
 import json
 
@@ -17,7 +17,7 @@ _META = ("source", "doc_sha256")
 def test_frozen_rows_are_present():
     missing = [n for n in ("accuracy_as_served_rows.csv", "demand_money.csv", "mase_rows.csv", "error_decomposition_row.csv")
                if not (sp.SNAP_DIR / n).exists()]
-    assert not missing, f"frozen rows missing from {sp.SNAP_DIR}: {missing} (git-ignored; restore from the backup)"
+    assert not missing, f"frozen rows missing from {sp.SNAP_DIR}: {missing} (tracked in git; restore with git checkout)"
 
 
 def test_every_pinned_figure_reproduces_from_the_frozen_rows(live_env, capsys):

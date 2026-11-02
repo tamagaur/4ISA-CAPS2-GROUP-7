@@ -1,0 +1,231 @@
+/* The notification bell (NotificationBell.jsx): a round button like the top
+   bar's other controls, a red unread badge, and a panel floating under it. */
+.notif {
+  position: relative;
+  display: inline-flex;
+}
+
+.notif-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #E7EBF0;
+  border-radius: 50%;
+  background: #FFFFFF;
+  color: var(--color-text-body);
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.notif-btn:hover,
+.notif-btn.is-open {
+  border-color: #CBD2DC;
+  box-shadow: 0 2px 6px rgba(17, 26, 53, 0.08);
+}
+
+.notif-btn:focus-visible,
+.notif-open:focus-visible,
+.notif-read:focus-visible,
+.notif-markall:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid #FFFFFF;
+  border-radius: 999px;
+  background: #D92D20;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 14px;
+  color: #FFFFFF;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 380px;
+  max-height: min(70vh, 480px);
+  display: flex;
+  flex-direction: column;
+  border: var(--card-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised), var(--shadow-card);
+  overflow: hidden;
+}
+
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notif-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.notif-markall {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  padding: 4px 2px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.notif-markall:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.notif-empty {
+  margin: 0;
+  padding: 20px 16px;
+  font-size: 0.86rem;
+  color: var(--color-text-muted);
+}
+
+.notif-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notif-item:last-child {
+  border-bottom: none;
+}
+
+.notif-item.is-unread {
+  background: #FFF7F3;
+}
+
+.notif-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 6px 12px 14px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.notif-open:hover .notif-summary {
+  color: var(--color-text);
+}
+
+.notif-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.is-unread .notif-dot {
+  background: #D92D20;
+}
+
+.notif-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.notif-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-size: 0.86rem;
+  color: var(--color-text);
+}
+
+.notif-kind {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.notif-summary {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--color-text-body);
+  overflow-wrap: anywhere;
+}
+
+.notif-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--color-text-subtle);
+}
+
+.notif-read {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 10px 10px 0 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.notif-read:hover {
+  color: var(--color-text);
+  border-color: #CBD2DC;
+}
+
+/* A phone: the panel spans the screen under the top bar. */
+@media (max-width: 560px) {
+  .notif-panel {
+    position: fixed;
+    top: 64px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}

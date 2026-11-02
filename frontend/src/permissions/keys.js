@@ -17,6 +17,7 @@ export const P = {
   SKU_EDIT: 'sku.edit',
   LP_VIEW: 'lp.view',
   LP_DECIDE: 'lp.decide',
+  LP_PROPOSE: 'lp.propose',
   AUDIT_LOG_VIEW: 'audit_log.view',
   UPLOAD_RUN: 'upload.run',
   USERS_MANAGE: 'users.manage',
@@ -36,6 +37,7 @@ export const roleLabel = (role) => ROLES.find((r) => r.value === role)?.label ||
 // can't be hidden in one place and still reachable in another.
 export const PAGES = [
   { path: '/', label: 'Dashboard', permission: P.DASHBOARD_VIEW },
+  { path: '/data-dictionary', label: 'Reference Guide', permission: P.DASHBOARD_VIEW },
   { path: '/forecast', label: 'SKU Forecast', permission: P.FORECAST_VIEW },
   { path: '/category-trends', label: 'Category Trends', permission: P.CATEGORY_TRENDS_VIEW },
   { path: '/sku-management', label: 'SKU Management', permission: P.SKU_VIEW },
@@ -59,6 +61,7 @@ export const permissionForPath = (path) => PAGES.find((page) => page.path === pa
 // reports/PERMISSIONS_FRONTEND_2026-09-30.md).
 export const LEGACY_STAFF_ACCESS = [
   P.DASHBOARD_VIEW, P.FORECAST_VIEW, P.CATEGORY_TRENDS_VIEW, P.SKU_VIEW, P.ABC_VIEW, P.LP_VIEW,
+  P.LP_PROPOSE, // staff propose, an admin decides (Yuan, 2026-10-28)
 ];
 
 // TEMPORARY, same lifetime as LEGACY_STAFF_ACCESS: the permission list in
@@ -75,7 +78,8 @@ export const LEGACY_CATALOG = {
     { key: P.SKU_VIEW, label: 'View SKU Management', group: 'SKU Management', description: 'The product list.' },
     { key: P.SKU_EDIT, label: 'Add or edit SKUs', group: 'SKU Management', description: 'Changes the product master.' },
     { key: P.LP_VIEW, label: 'View reorder recommendations', group: 'LP / Reorder', description: 'Also the LP figures shown on other pages.' },
-    { key: P.LP_DECIDE, label: 'Accept or dismiss recommendations', group: 'LP / Reorder', description: 'Changes what SSM orders.' },
+    { key: P.LP_DECIDE, label: 'Accept or dismiss recommendations', group: 'LP / Reorder', description: 'Changes what SSM orders.', admin_only: true },
+    { key: P.LP_PROPOSE, label: 'Propose reorder changes', group: 'LP / Reorder', description: 'Ask for a different quantity or a dismissal, and report stock counted; an admin decides.' },
     { key: P.AUDIT_LOG_VIEW, label: 'View the audit log', group: 'Audit Log', description: 'Who changed what, and when.' },
     { key: P.UPLOAD_RUN, label: 'Use Data Management', group: 'Data Management', description: 'Uploads (Module 07); a mock page for now.' },
     { key: P.USERS_MANAGE, label: 'Manage users', group: 'User Management', description: 'Invite users, set roles and permissions.' },

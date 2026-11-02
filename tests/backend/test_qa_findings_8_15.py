@@ -154,8 +154,8 @@ def test_a_quantity_must_be_a_json_number(bad):
 
 
 def test_numbers_still_pass():
-    assert QuantityChangeRequest(quantity=13824).quantity == 13824.0
-    assert QuantityChangeRequest(quantity=12.5).quantity == 12.5
+    assert QuantityChangeRequest(quantity=13824, reason="count is wrong").quantity == 13824.0
+    assert QuantityChangeRequest(quantity=12.5, reason="count is wrong").quantity == 12.5
 
 
 @pytest.mark.parametrize("bad", ["yes", 1, "true"])

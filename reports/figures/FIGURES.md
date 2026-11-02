@@ -157,7 +157,7 @@ Gate: 34 of 34 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_k_mase_distribution.png`
 
-Caption: Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02). Source: Forecast_Result for March 2026, status ok (frozen in local/published_snapshot_2026-10-24/mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175'). Period: forecast month March 2026 (served model's rolling one-step holdout, DEC-25). Not shown: the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size of each product's sales.
+Caption: Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02). Source: Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175'). Period: forecast month March 2026 (served model's rolling one-step holdout, DEC-25). Not shown: the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size of each product's sales.
 
 Gate: 3 of 3 checks agree with the manuscript or the edit list.
 
@@ -174,7 +174,7 @@ Gate: 2 of 3 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_h_forecast_vs_actual.png`
 
-Caption: Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest). Source: local/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (this is a backtest: each month forecast from the months before it); per-product error, which is far larger than the total's (median product WAPE about 40%); products not forecast that month.
+Caption: Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (this is a backtest: each month forecast from the months before it); per-product error, which is far larger than the total's (median product WAPE about 40%); products not forecast that month.
 
 Gate: 37 of 37 checks agree with the manuscript or the edit list.
 
@@ -182,7 +182,7 @@ Gate: 37 of 37 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_i_monthly_wape.png`
 
-Caption: Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest). Source: local/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (a backtest); the median product WAPE (35.49% for this window, a different measure); error in pesos; months before March 2025.
+Caption: Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (a backtest); the median product WAPE (35.49% for this window, a different measure); error in pesos; months before March 2025.
 
 Gate: 12 of 12 checks agree with the manuscript or the edit list.
 
@@ -190,7 +190,7 @@ Gate: 12 of 12 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_j_surplus_shortage.png`
 
-Caption: Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos). Source: local/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: observed stockouts or overstock (these are forecast misses valued at each product's average selling price, not stock outcomes); live performance; products with no price (net pesos or pieces not positive).
+Caption: Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: observed stockouts or overstock (these are forecast misses valued at each product's average selling price, not stock outcomes); live performance; products with no price (net pesos or pieces not positive).
 
 Gate: 24 of 24 checks agree with the manuscript or the edit list.
 
@@ -198,7 +198,7 @@ Gate: 24 of 24 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_p_error_decomposition.png`
 
-Caption: Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces). Source: local/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months), 4,370 Tier A product-months. Not shown: Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, ₱38,187,551, are a separate figure); observed stockouts (a miss beyond safety stock is potential exposure, not a recorded stockout); live performance (a backtest).
+Caption: Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces). Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months), 4,370 Tier A product-months. Not shown: Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, ₱38,187,551, are a separate figure); observed stockouts (a miss beyond safety stock is potential exposure, not a recorded stockout); live performance (a backtest).
 
 Gate: 7 of 7 checks agree with the manuscript or the edit list.
 
@@ -206,7 +206,7 @@ Gate: 7 of 7 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_q_exposure_concentration.png`
 
-Caption: Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A. Source: local/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months). Not shown: Tier B and C products; products with no miss beyond safety stock (not ranked); observed stockouts (exposure is potential, not recorded); pieces.
+Caption: Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A. Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months). Not shown: Tier B and C products; products with no miss beyond safety stock (not ranked); observed stockouts (exposure is potential, not recorded); pieces.
 
 Chart note: 17 products carry half and 53 carry 80% of the ₱38,187,551 beyond safety stock (204 products have any).
 

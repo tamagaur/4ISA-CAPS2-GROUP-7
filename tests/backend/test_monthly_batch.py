@@ -5,15 +5,22 @@ from __future__ import annotations
 import io
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.api_errors import ApiError, api_error_handler
 from backend.auth_utils import TokenPayload
 from backend.deps import get_current_user, get_db
-from backend.main import app
+from backend.main import app as deployed_app
 from backend.routers import monthly_batch as mb
 
 LOCAL = "postgresql://postgres@127.0.0.1:55432/ssm_local"
 LIVE = "postgresql://user:pw@aws-0.pooler.supabase.com:6543/postgres"
+
+# backend/main.py mounts the router only on the local database, so the routes are tested on their own app.
+app = FastAPI()
+app.add_exception_handler(ApiError, api_error_handler)
+app.include_router(mb.router)
 
 
 def _user(perms=("upload.run",)):
@@ -46,6 +53,10 @@ def _run_body(**kw):
 
 
 # ---- local only ------------------------------------------------------------------------------------------------------
+
+def test_the_deployed_api_does_not_have_the_routes():
+    assert not [r.path for r in deployed_app.routes if getattr(r, "path", "").startswith("/batch")]
+
 
 def test_off_by_default(monkeypatch, client):
     monkeypatch.delenv("MONTHLY_BATCH_ENABLED", raising=False)

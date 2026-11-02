@@ -23,6 +23,11 @@ const post = (path, payload, fallback) =>
 // available is false until the server has migration 0035 and its key.
 export const getMfaStatus = () => call('/auth/mfa', {}, 'Could not load two-step sign-in.');
 
+// Raised on window, with the status as `detail`, whenever the Account
+// security dialog loads one, so the sidebar's line and the My profile
+// page follow a change made from either place.
+export const MFA_STATUS_EVENT = 'san2:mfa-status';
+
 // -> { secret, otpauth_uri } for the QR code.
 export const startMfaSetup = () => post('/auth/mfa/setup', null, 'Could not start the setup.');
 

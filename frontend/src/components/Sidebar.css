@@ -4,7 +4,10 @@
    top-to-bottom ombre in that navy, with a faint cool sheen behind the
    logo, so the pane has depth instead of reading as a flat block. */
 .sidebar {
-  width: 250px;
+  /* 264px (was 250, 2026-10-18): "Reorder Recommendations" ran past the
+     edge. One value for the pane, its column and the slide. */
+  --sidebar-width: 264px;
+  width: var(--sidebar-width);
   background-color: var(--color-nav-bg);
   background-image:
     radial-gradient(120% 40% at 0% 0%, rgba(120, 140, 180, 0.10) 0%, rgba(120, 140, 180, 0) 70%),
@@ -50,7 +53,7 @@
   .sidebar-shell {
     position: relative;
     z-index: 20; /* its shadow stays over the page while both slide */
-    width: 250px;
+    width: 264px;
   }
 
   .sidebar-shell.is-closed {
@@ -67,11 +70,11 @@
 }
 
 @keyframes main-slide-from-left {
-  from { transform: translateX(-250px); }
+  from { transform: translateX(-264px); }
 }
 
 @keyframes main-slide-from-right {
-  from { transform: translateX(250px); }
+  from { transform: translateX(264px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -164,7 +167,7 @@
   background-color: var(--color-info);
   width: 32px;
   height: 32px;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
 }
 
 .profile-info {
@@ -178,19 +181,25 @@
 .profile-name {
   font-weight: 600;
   color: var(--color-nav-heading);
-  font-size: 0.95rem;
+  font-size: 1rem;
+  /* A long name ("Mikhaella Audrey Bugayong") wraps onto a second line
+     rather than running under the sidebar's edge (.sidebar is nowrap for
+     the labels' slide animation). */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .profile-role {
   color: var(--color-nav-subheading);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .sidebar-nav-section {
-  margin-bottom: 12px;
-  padding-top: 12px;
+  margin-bottom: 10px;
+  padding-top: 14px;
   border-top: 1px solid var(--color-nav-border);
 }
 
@@ -200,13 +209,13 @@
 }
 
 .sidebar-modules-header {
-  padding: 0 1.5rem;
-  margin-bottom: 0.5rem;
+  padding: 0 24px;
+  margin-bottom: 6px;
 }
 
 .modules-title {
   color: var(--color-nav-group-label);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -214,7 +223,71 @@
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 auto;
+  /* On a short screen the menu scrolls on its own, so the footer (name,
+     account security, Log out) is never pushed off the bottom (2026-10-18:
+     at 1280 x 720 it was cut off). */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* No visible scrollbar: it would take the width "Reorder
+     Recommendations" needs. The wheel, touch and keyboard still scroll. */
+  scrollbar-width: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-bottom {
+  flex-shrink: 0;
+}
+
+/* Shorter screens: the same menu, a little tighter, so it usually fits
+   without scrolling. */
+@media (max-height: 820px) {
+  .sidebar {
+    padding: 0.75rem 0;
+  }
+  .sidebar-profile-top {
+    margin-bottom: 0.75rem;
+  }
+  .sidebar-logo {
+    width: 148px;
+  }
+  .nav-item {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+  .sidebar-nav-section {
+    margin-bottom: 4px;
+    padding-top: 7px;
+  }
+  .sidebar-modules-header {
+    margin-bottom: 2px;
+  }
+  .sidebar-bottom {
+    padding-top: 0.75rem;
+  }
+  .sidebar-profile-bottom {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Very short screens, where the menu has to scroll: a soft fade at its
+   foot says there is more below. */
+@media (max-height: 740px) {
+  .sidebar-nav::after {
+    content: '';
+    position: sticky;
+    bottom: 0;
+    flex-shrink: 0;
+    height: 28px;
+    margin-top: -28px;
+    background: linear-gradient(to bottom, rgba(17, 29, 50, 0), var(--color-nav-bg));
+    pointer-events: none;
+  }
 }
 
 /* Every item is the same rounded row, inset 12px, so hover and active
@@ -225,12 +298,13 @@
   align-items: center;
   justify-content: space-between;
   margin: 1px 12px;
-  padding: 10px 15px;
+  padding: 9px 12px;
   border-radius: 8px;
   color: var(--color-nav-item);
   text-decoration: none;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
+  line-height: 1.4;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
@@ -253,25 +327,30 @@
 .nav-item.active {
   background-color: var(--color-nav-item-active-bg);
   color: var(--color-nav-item-active-text);
+  font-weight: 600;
   box-shadow: inset 2px 0 0 var(--color-nav-item-active-rail);
 }
 
 .nav-item-left {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 12px;
+  min-width: 0;
 }
 
 .nav-item-text {
-  /* One line: the label is revealed as the sidebar stretches, and would
-     wrap mid-animation otherwise. */
-  white-space: nowrap;
-  line-height: 1.25;
+  /* One line at the normal text size; a label too long for the pane (a
+     larger browser font) wraps onto a second line instead of being cut
+     off. The stretching icon rail that needed nowrap is gone (2026-10-11). */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  line-height: 1.3;
   display: inline-block;
 }
 
 .nav-badge {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   opacity: 0.85;
 }
 
@@ -337,7 +416,7 @@
   background: none;
   color: var(--color-nav-item);
   font-family: inherit;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   text-align: left;
   cursor: pointer;
 }
@@ -356,7 +435,7 @@
    Off: an amber pill with a warning triangle, "Action required"; the
    amber is light enough to read on the navy (about 9:1) where the brand
    red would not be. On: a green check and "Protected", quiet, no pill.
-   Both wrap onto a second line in the 250px sidebar rather than clip. */
+   Both wrap onto a second line in the 264px sidebar rather than clip. */
 .profile-security.is-pending,
 .profile-security.is-protected {
   max-width: 100%;
@@ -413,7 +492,7 @@
   margin-bottom: 1rem;
   /* Puts the 6px dot on the rail's 36px centre line. */
   padding-left: 13px;
-  font-size: 0.75rem;
+  font-size: 0.86rem;
 }
 
 .status-indicator {
@@ -454,7 +533,7 @@
   border: none;
   border-radius: 6px;
   padding: 0.6rem;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -477,7 +556,7 @@
   background: none;
   border: none;
   color: var(--color-nav-item);
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   font-weight: 500;
   padding: 0.5rem 0 0.5rem 8px;
   cursor: pointer;
@@ -580,7 +659,7 @@
 
 .logout-modal-body p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.98rem;
   color: var(--color-text-body);
   line-height: 1.5;
 }
@@ -600,7 +679,7 @@
   background-color: var(--color-surface);
   color: var(--color-text-body);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -617,7 +696,7 @@
   background-color: var(--color-brand-primary);
   color: var(--color-surface);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;

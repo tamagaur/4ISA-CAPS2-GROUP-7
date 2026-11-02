@@ -5,14 +5,15 @@
 // GapNote.jsx, so the words are written once, in the backend.
 export const GAP_LABEL = {
   no_sale: 'No sale this month',
+  returns_exceeded_sales: 'Returns matched or exceeded sales',
   blank_capture: 'Quantity not recorded',
   outside_product_lifespan: 'Not on sale then',
   not_collected: 'Not collected',
   category_absent: 'Category not reported',
   no_data_recorded_before_2023: 'No data recorded before 2023',
-  interpolated: 'Generated between real months',
-  taxonomy_change_bridge: 'Generated across the category change',
-  no_observation_before_series_start: 'Generated before the first real month',
+  interpolated: 'Sample data between real months',
+  taxonomy_change_bridge: 'Sample data across the category change',
+  no_observation_before_series_start: 'Sample data before the first real month',
 };
 
 export const gapLabel = (code) => (code ? GAP_LABEL[code] || code.replace(/_/g, ' ') : null);

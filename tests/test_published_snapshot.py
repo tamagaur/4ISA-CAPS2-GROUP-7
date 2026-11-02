@@ -1,8 +1,6 @@
-"""The pinned accuracy figures reproduce from their frozen rows (2026-10-24). Skipped where the git-ignored
-per-product rows (local/published_snapshot_*/) are absent, e.g. a fresh clone."""
+"""The pinned accuracy figures reproduce from their frozen rows (2026-10-24). The rows are tracked in
+docs/published_snapshot_2026-10-24/ (trimmed columns), so this runs on a fresh clone and never skips."""
 import json
-
-import pytest
 
 from scripts import snapshot_published_figures as sp
 
@@ -17,6 +15,5 @@ def test_snapshot_json_names_its_actuals_version_and_inputs():
     assert f["error_decomposition"]["A"]["exceeds_safety_stock_months"] == 749
 
 
-@pytest.mark.skipif(not (sp.SNAP_DIR / "mase_rows.csv").exists(), reason="frozen per-product rows are local only")
 def test_figures_reproduce_from_the_frozen_rows(capsys):
     assert sp.cmd_verify() in (0,)  # the live actuals line may not print without a database; the figures must match

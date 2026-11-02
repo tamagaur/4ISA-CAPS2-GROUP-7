@@ -397,6 +397,7 @@ from analytics.params import abc_method_sql
 from backend.abc_basis import dashboard_basis
 from analytics.params import (
     ALLOCATION_DEFAULT_PCT,
+    CALENDAR_FACTOR_SIGNED_OFF,
     COVER_KPI_HISTORY_MONTHS,
     DEAD_SKU_MONTHS,
     MASE_GATE,
@@ -1083,7 +1084,10 @@ def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
     fc_src, fc_params = forecast_source(mode)
     return f"""
                 SELECT fr.product_key, fr.forecast_date, fr.forecast_value,
-                       fr.confidence_lower, fr.confidence_upper, pd.principal
+                       fr.confidence_lower, fr.confidence_upper, pd.principal,
+                       (fr.model_params->>'calendar_factor')::float AS calendar_factor,
+                       (fr.model_params->>'calendar_years')::int AS calendar_years,
+                       (fr.model_params->>'value_before_calendar')::float AS value_before_calendar
                 FROM {fc_src} fr
                 JOIN Product_Dimension pd ON pd.product_key = fr.product_key
                 WHERE fr.forecast_date = :forecast_date
@@ -1091,6 +1095,40 @@ def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
                   AND fr.mase < :mase_gate
                   {_principal_filter(scope)}
             """, {"forecast_date": forecast_date, "mase_gate": MASE_GATE, **fc_params}
+
+
+def calendar_adjustment(gated_rows: list) -> dict:
+    """The company calendar factor in the forecast the card sums (2026-10-19, Kelvin's
+    analytics/forecasting/calendar.py; run_baseline_forecast.py --calendar-factor): from each
+    gated row's own model_params, never recomputed here. `forecast_pieces` is the card's
+    forecast total, `before_pieces` the same rows before the factor (a row without one counts
+    at its value); `factor` when every adjusted row shares one factor, else the range.
+    `signed_off` is analytics.params.CALENDAR_FACTOR_SIGNED_OFF: the factor is a methodology
+    change awaiting the technical adviser's sign-off, and the card says so."""
+    adjusted = [r for r in gated_rows if r.get("calendar_factor") is not None and r.get("value_before_calendar") is not None]
+    base = {"applied": bool(adjusted), "signed_off": CALENDAR_FACTOR_SIGNED_OFF,
+            "products": len({r["product_key"] for r in adjusted}),
+            "of_products": len({r["product_key"] for r in gated_rows})}
+    if not adjusted:
+        return base
+    factors = sorted({round(float(r["calendar_factor"]), 4) for r in adjusted})
+    years = sorted({int(r["calendar_years"]) for r in adjusted if r.get("calendar_years") is not None})
+    forecast = sum(float(r["forecast_value"] or 0) for r in gated_rows)
+    before = sum(float(r["value_before_calendar"]) if r in adjusted else float(r["forecast_value"] or 0)
+                 for r in gated_rows)
+    d = adjusted[0]["forecast_date"]
+    return {
+        **base,
+        "forecast_period": f"{d.year:04d}-{d.month:02d}" if hasattr(d, "year") else str(d)[:7],
+        "factor": factors[0] if len(factors) == 1 else None,
+        "factor_min": factors[0], "factor_max": factors[-1],
+        "years": years[0] if len(years) == 1 else None, "years_min": years[0] if years else None,
+        "years_max": years[-1] if years else None,
+        "forecast_pieces": round(forecast, 2), "before_pieces": round(before, 2),
+        "method": ("Each forecast is multiplied by how that calendar month has sold against the 3 months "
+                   "before it in earlier years (company total, halfway toward no change); a month with no "
+                   "earlier year on record is left as it is."),
+    }
 
 
 def _scoped_forecast_count_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
@@ -1626,6 +1664,11 @@ def get_dashboard(
     safety_stock_rate_blocked_reason = f"ABC_Classification has no rows for {_scope_label(scope)} yet."
     ss_rows: list = []
     comparable: list = []
+    # Why the Class A rows outside `comparable` can't be checked (2026-10-18,
+    # for the Below safety stock card): no safety stock in the plan, no stock
+    # count, or neither. Null when nothing could be compared at all.
+    uncheckable = None
+    uncheckable_items: list = []
     if abc_period is not None:
         # current_stock is PIECES (mart.inventory_mart, the same cases x pack
         # size + loose rule as backend/stock_units.py), the unit of ss_i. ss_i,
@@ -1645,6 +1688,26 @@ def get_dashboard(
             r for r in ss_rows
             if r["current_stock"] is not None and r["ss_i"] is not None
         ]
+        if not count_before_plan:
+            def _why(r):
+                if r["ss_i"] is None and r["current_stock"] is None:
+                    return "missing_both"
+                return "no_safety_stock" if r["ss_i"] is None else "no_stock_count" if r["current_stock"] is None else None
+            unchecked_rows = [(r, _why(r)) for r in ss_rows if _why(r)]
+            uncheckable = {
+                "no_safety_stock": sum(1 for _, w in unchecked_rows if w == "no_safety_stock"),
+                "no_stock_count": sum(1 for _, w in unchecked_rows if w == "no_stock_count"),
+                "missing_both": sum(1 for _, w in unchecked_rows if w == "missing_both"),
+            }
+            # The rows themselves, for the list behind the counts: by reason, then the
+            # most revenue first.
+            reason_order = {"no_safety_stock": 0, "no_stock_count": 1, "missing_both": 2}
+            uncheckable_items = [
+                {"sku_id": r.get("sku_id"), "product_name": r.get("product_name"), "reason": w,
+                 "current_stock": round(float(r["current_stock"]), 2) if r["current_stock"] is not None else None,
+                 "revenue_share": float(r["revenue_share"]) if r.get("revenue_share") is not None else None}
+                for r, w in sorted(unchecked_rows, key=lambda rw: (reason_order[rw[1]], -float(rw[0].get("revenue_share") or 0)))
+            ]
         if comparable:
             at_or_above = sum(1 for r in comparable if float(r["current_stock"]) >= float(r["ss_i"]))
             safety_stock_rate = round(at_or_above / len(comparable), 4)
@@ -1660,15 +1723,15 @@ def get_dashboard(
             # table names. The LP has never planned Del Monte (no SKU-level
             # sales to forecast), which is the usual reason under that filter.
             safety_stock_rate_blocked_reason = (
-                "The LP does not plan Del Monte, so it has no safety stock to compare against."
+                "The order plan does not cover Del Monte, so it has no safety stock to compare against."
                 if scope == "delmonte"
-                else "No Category A SKU has both a stock record and a safety stock in the LP's current cycle."
+                else "No top seller (Class A) has both a stock record and a safety stock in the current order plan."
             )
     if mode == PREVIEW and period is not None and abc_period is None:
         window = placeholder_window(db)
         if window and period >= window["start"]:
             safety_stock_rate_blocked_reason = (
-                f"{period} is a placeholder month. Safety stock belongs to the LP's current planning "
+                f"{period} is a placeholder month. Safety stock belongs to the current order plan's "
                 f"cycle, not to a past month — pick an end month from {window['first_real_month']} on."
             )
 
@@ -1731,6 +1794,8 @@ def get_dashboard(
     # True when the range ends before the plan's count: the figures are the
     # current plan's, not the range's (the card says it does not follow it).
     safety_stock_exposure["pinned_to_plan"] = bool(ss_pinned_to_plan)
+    safety_stock_exposure["uncheckable"] = uncheckable if safety_stock_exposure["below_count"] is not None else None
+    safety_stock_exposure["uncheckable_items"] = uncheckable_items if safety_stock_exposure["below_count"] is not None else []
 
     # ---- kpis.weeks_of_cover ---------------------------------------------
     # current stock on hand / average weekly demand — see the docstring
@@ -1835,6 +1900,17 @@ def get_dashboard(
     # weeks_of_cover_range_end is the same object, under the name it had first.
     weeks_of_cover = cover_at(inventory_period)
     weeks_of_cover_range_end = weeks_of_cover
+    # The pesos held beyond SSM's 3-week rule, product by product (2026-10-19): the sum the
+    # card shows and GET /dashboard/stock-detail lists, from the one function both call.
+    # Imported here: backend.routers.dashboard_range imports this module.
+    from backend.routers.dashboard_range import stock_detail_for
+    _detail = stock_detail_for(db, scope, range_end, with_items=False)
+    above_policy = (
+        {"pesos": _detail["totals"]["above_rule_pesos"], "products": _detail["totals"]["above_rule_products"],
+         "no_sale_products": _detail["totals"]["no_sale_products"], "policy_weeks": _detail["policy_weeks"],
+         "count_period": _detail["count_period"], "sales_window": _detail["sales_window"]}
+        if _detail.get("totals") and _detail["totals"]["above_rule_pesos"] is not None else None
+    )
 
     # ---- sales_vs_stock series -------------------------------------------
 
@@ -2075,12 +2151,12 @@ def get_dashboard(
         if scope == "all" and len(covered) == 1:
             only = names.get(covered[0], covered[0])
             scope_label = (
-                f"All principals — only {only} has SKU-level forecasts that beat a naive "
-                f"baseline (MASE < 1, the LP's own gate), so this matches the {only} view."
+                f"All principals — only {only} has product forecasts that beat a simple "
+                f"last-month guess (the order plan's own check), so this matches the {only} view."
             )
         else:
             who = "All principals" if scope == "all" else names.get(scope, scope)
-            scope_label = f"{who} (SKU-level forecasts that beat a naive baseline — MASE < 1, the LP's own gate)."
+            scope_label = f"{who} (product forecasts that beat a simple last-month guess, the order plan's own check)."
     elif scoped_forecast_count == 0:
         scope_label = (
             "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "
@@ -2159,6 +2235,9 @@ def get_dashboard(
         # One sentence comparing the forecast bucket with the last actual
         # month — the card renders it verbatim (backend/chart_insights.py).
         "insight": portfolio_forecast_insight(portfolio_series),
+        # The calendar factor inside that forecast, and the total before it (2026-10-19).
+        # The LP plans exactly these gated SKUs, so it describes the order plan's forecast too.
+        "calendar_adjustment": calendar_adjustment(gated_rows),
     }
 
     # ---- reorder_preview -------------------------------------------------
@@ -2324,6 +2403,10 @@ def get_dashboard(
     # Which actuals the figures were computed on (analytics/actuals_version.py): a published figure moves when a
     # month loads or is corrected, so it names the data behind it.
     forecast_accuracy["actuals_version"] = None if scope == "delmonte" else marts.actuals_version(db)
+    # The same backtest without the calendar factor, when the figures above are the
+    # adjusted run's: the card shows both, so the adjustment's effect on THIS range is
+    # on screen (better on 2025-03..2026-02, worse before 2025: Kelvin, 2026-10-19).
+    forecast_accuracy["compare_run"] = marts.accuracy_comparison(db, forecast_accuracy)
 
     # ---- idle_stock ---------------------------------------------------------
     # Unilever only: Del Monte has no product-level real sales to show a product
@@ -2409,6 +2492,9 @@ def get_dashboard(
             # card's own count, the range's end (DEC-36, 2026-10-04).
             "weeks_of_cover": weeks_of_cover,
             "weeks_of_cover_range_end": weeks_of_cover_range_end,
+            # {pesos, products, no_sale_products, policy_weeks, count_period,
+            # sales_window}: stock beyond each product's own 3 weeks of sales.
+            "above_policy": above_policy,
         },
         # Non-null only under 'all': the combined pesos mix Unilever's
         # VAT-inclusive amounts with Del Monte's VAT-exclusive ones, and

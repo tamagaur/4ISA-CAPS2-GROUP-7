@@ -13,7 +13,10 @@
   height: 100dvh;
   width: 100%;
   overflow: hidden;
-  background-color: var(--color-surface-raised);
+  background-color: #FFF6EF;
+  /* The sign-in page's cream (ui.css --app-canvas). It sits on this shell,
+     which never scrolls, so the glow stays put while a page scrolls over it. */
+  background-image: var(--app-canvas);
 }
 
 /* min-width: 0 — a flex child defaults to min-width:auto, which lets an
@@ -90,7 +93,7 @@
 
 .period-nav-body p {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.96rem;
   color: var(--color-text-body);
   line-height: 1.5;
 }
@@ -108,7 +111,7 @@
   border: 1.5px solid var(--color-brand-primary);
   border-radius: 8px;
   color: var(--color-brand-primary);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
   line-height: 1.45;
 }
@@ -133,7 +136,7 @@
   background-color: var(--color-surface);
   color: var(--color-text-body);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -150,7 +153,7 @@
   background-color: var(--color-brand-primary);
   color: var(--color-surface);
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -182,7 +185,7 @@
   border-radius: 8px;
   background: var(--color-surface);
   color: var(--color-text-heading);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.45;
 }
 
@@ -205,7 +208,7 @@
   border-radius: 16px;
   background: var(--color-surface);
   color: var(--color-text-heading);
-  font-size: 0.75rem;
+  font-size: 0.86rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -225,7 +228,7 @@
   .preview-banner {
     flex-wrap: wrap;
     margin: 0.5rem 1rem 0;
-    font-size: 0.76rem;
+    font-size: 0.86rem;
   }
   .preview-banner-btn {
     margin-left: 1.6rem;

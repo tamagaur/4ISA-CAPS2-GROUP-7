@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import SectionLede from './ui/SectionLede';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import AbcRangeView from './AbcRangeView';
 import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
 import {
@@ -26,7 +26,7 @@ import DateFilter from './DateFilter';
 import { formatDate, formatMonth } from '../utils/formatDate';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { labelForPrincipal } from '../principals';
-import { monthToSelect, latestRunFor } from '../utils/abcMonth';
+import { latestRunFor, requestedAbcPeriod, shownAbcPeriod, DEL_MONTE_REGROUP_PERIOD } from '../utils/abcMonth';
 import { parsePeriod } from '../dataCoverage';
 import { isPlaceholderPeriod } from '../dataMode';
 import Pagination from './Pagination';
@@ -34,6 +34,8 @@ import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import RefreshingNote from './RefreshingNote';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
+import LoadError, { describeLoadError } from './ui/LoadError';
+import SlowLoadNotice from './ui/SlowLoadNotice';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
@@ -56,8 +58,9 @@ const tierRuleText = (rules) =>
 // Del Monte regrouped its product categories in Jan 2025 (about 63
 // sub-categories became 4-5). In a run from then on, a Del Monte row last
 // classified before this month is one of the old sub-categories carried
-// forward — not a category that stopped selling.
-const DEL_MONTE_REGROUP_PERIOD = '2025-01';
+// forward — not a category that stopped selling. DEL_MONTE_REGROUP_PERIOD
+// lives in utils/abcMonth.js since 2026-10-22, so SKU Management applies the
+// same cut to its Class A count.
 
 const MONTH_TO_NUM = {
   Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
@@ -140,7 +143,7 @@ const classDrilldownNote = (cat, breakdown) => {
 const NO_TARGET_LABELS = {
   not_class_a: 'Not Class A in the latest ranking (the plan covers Class A only)',
   not_ranked: 'No sales in the latest ranking month',
-  accuracy: 'Forecast accuracy check not passed',
+  accuracy: 'Forecast did not beat a simple last-month guess (check pending adviser confirmation)',
   short_history: 'Too little sales history to forecast',
   no_recent_sales: 'No recent sales to forecast from',
   forecast_failed: 'Forecast could not be produced',
@@ -150,8 +153,12 @@ const NO_TARGET_LABELS = {
   not_in_plan: 'Passes both checks but is not in the current plan',
 };
 // What the accuracy check is, in the page's plain words (the same test the
-// reorder page calls beating "a simple last-month guess").
-const ACCURACY_CHECK_NOTE = 'The plan only uses forecasts that beat simply repeating last month\u2019s sales (MASE below 1).';
+// reorder page calls beating "a simple last-month guess"). The MASE name
+// stays in brackets for the reader who knows it; the cutoff itself is still
+// pending adviser confirmation, said beside it (Technical Adviser, 2 Oct
+// 2026: plain language; 2026-10-22).
+const ACCURACY_CHECK_NOTE = 'The plan only uses forecasts that, tested on past months, beat a simple last-month guess '
+  + '(MASE below 1). This reliability check is pending adviser confirmation.';
 
 // GET /abc's stock_status values are a COVER-vs-TARGET-STOCK test (rop_i, the LP's target stock since the 2026-09-30 run)
 // (backend/routers/abc.py's _stock_status): current stock in pieces against
@@ -179,6 +186,12 @@ const STATUS_LABELS = {
   'ON HAND': 'Stock on hand',
 };
 const statusLabel = (status) => STATUS_LABELS[status] || status;
+
+// The Reorder page's ?urgency= value for each stock status it shares
+// (backend/stock_status.py's URGENCY: below safety stock = critical, below
+// target = urgent, at or above target = planned). The drill-down's counts
+// link there (2026-10-22).
+const REORDER_URGENCY = { CRITICAL: 'critical', LOW: 'urgent', 'IN STOCK': 'planned' };
 
 // Colours follow the app-wide SEMANTIC rule (theme/colors.js): green =
 // healthy (above target stock), amber = watch (below it), red = act now (below
@@ -285,6 +298,8 @@ const ABCClassification = () => {
   // (ON HAND instead), so the chart, legend and drill-down show those.
   const { hasPermission } = usePermissions();
   const lpHidden = !hasPermission(P.LP_VIEW);
+  // The drill-down's status counts open the Reorder page, which needs lp.view too.
+  const canOpenReorder = !lpHidden;
   // A product's name opens its sales history and forecast (SKU Forecast), so
   // the table leads somewhere. Unilever SKUs only: a Del Monte row is a
   // category, which has no product series to open.
@@ -296,17 +311,20 @@ const ABCClassification = () => {
   // Shared principal scope (Topbar's segmented control). Refetches on
   // change via this page's load effect deps.
   const { principal } = dashboardRange;
-  const [selectedMonth, setSelectedMonth] = useState(() => ({
-    month: dashboardRange.endMonth,
-    year: dashboardRange.endYear,
-  }));
-  const requestedPeriod = toClassificationPeriod(selectedMonth.month, selectedMonth.year);
-  const isCustomMonth =
-    selectedMonth.month !== dashboardRange.endMonth || selectedMonth.year !== dashboardRange.endYear;
+  // The month the person picked ('YYYY-MM'), or null: then the page follows
+  // the dashboard range's last month, whatever the principal (FE-6). Only
+  // the picker and its Clear change this (utils/abcMonth.js says why).
+  const [pickedPeriod, setPickedPeriod] = useState(null);
+  const requestedPeriod = requestedAbcPeriod(
+    pickedPeriod, toClassificationPeriod(dashboardRange.endMonth, dashboardRange.endYear),
+  );
+  const isCustomMonth = pickedPeriod != null;
 
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Try again on a failed load re-runs the request below.
+  const [attempt, setAttempt] = useState(0);
   const [classificationPeriod, setClassificationPeriod] = useState(null);
   // This principal's latest classification run, from its own response: the picker's ceiling.
   const [latestRun, setLatestRun] = useState({ principal: null, period: null });
@@ -338,6 +356,11 @@ const ABCClassification = () => {
   // a skeleton) from "showing the previous answer while a new one loads"
   // (refetch, keep it), which `loading` alone cannot: it is true for both.
   const [loadedKey, setLoadedKey] = useState(null);
+  // What the picker shows: the run on screen once its answer is this
+  // request's, else the month asked for ({ month: 'Feb', year: 2026 }).
+  const shownMonth = parsePeriod(shownAbcPeriod(
+    requestedPeriod, classificationPeriod, loadedKey === `${requestedPeriod ?? ''}|${principal ?? ''}`,
+  )) || { month: dashboardRange.endMonth, year: dashboardRange.endYear };
 
   // Arriving from the Dashboard's ABC card (/abc?class=B): the page opens
   // on that class — the table filtered to it and narrowed to this run's
@@ -433,15 +456,11 @@ const ABCClassification = () => {
         setStockCountDates(res.stock_count_dates || {});
         setPlanCycle(res.planning_cycle_date ?? null);
         setLoadedKey(`${requestedPeriod ?? ''}|${principal ?? ''}`);
-        // FE-6: the picker carried the old principal's month over. If this principal has no
-        // run for it, select the run the response was built from (see utils/abcMonth.js).
-        const moveTo = parsePeriod(monthToSelect(requestedPeriod, res.classification_period));
-        if (moveTo) setSelectedMonth(moveTo);
         setLatestRun({ principal, period: latestRunFor(res.tier_a_periods, principal === 'all' ? null : labelForPrincipal(principal)) });
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err.message || 'Failed to load ABC classification data');
+        setError(describeLoadError(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -449,7 +468,7 @@ const ABCClassification = () => {
     return () => {
       cancelled = true;
     };
-  }, [requestedPeriod, principal]);
+  }, [requestedPeriod, principal, attempt]);
 
   // GET /abc has no brand field; this was hardcoded 'Unilever' (the
   // principal) on every row. Real brand comes from the product master.
@@ -596,6 +615,13 @@ const ABCClassification = () => {
 
   // The run's month, as every share on the page names it ("Feb 2026").
   const periodLabel = classificationPeriod ? formatMonth(classificationPeriod) : null;
+  // The run(s) the month view's counts come from: "Feb 2026", or each
+  // principal's own run under All principals ("Unilever Feb 2026 and Del
+  // Monte Dec 2025").
+  const runEntries = Object.entries(tierAPeriods || {});
+  const runText = runEntries.length > 1
+    ? runEntries.map(([name, p]) => `${name} ${formatMonth(p)}`).join(' and ')
+    : periodLabel;
   // The stock count the statuses compare. Unilever's only: Del Monte's rows
   // here are categories, which have no stock record (the chart says so), so
   // its count date would label figures that aren't there.
@@ -603,8 +629,12 @@ const ABCClassification = () => {
   // "Stock counted Apr 6, 2026 · target stock from the Mar 2026 plan" — the
   // period line of the cover chart, drill-down and table column. The plan
   // half needs lp.view (GET /abc sends no cycle without it).
+  // The stock is always the LATEST count, whichever month is picked here or
+  // range on the Dashboard (GET /abc reads no other), so it says that in
+  // plain words (Technical Adviser, 2 Oct 2026: a page follows the filter or
+  // says plainly what period it shows; 2026-10-22).
   const stockBasisText = [
-    stockCountDate && `Stock counted ${formatDate(stockCountDate)}`,
+    stockCountDate && `Stock: latest count (${formatDate(stockCountDate)}), not the month or range you selected`,
     !lpHidden && !isDelMonte && planCycle && `target stock from the ${formatMonth(planCycle)} plan`,
   ].filter(Boolean).join(' · ');
   // The Dashboard and Reorder pages judge the plan on the count that opens
@@ -613,12 +643,11 @@ const ABCClassification = () => {
   // (43 against 10 for the Mar 2026 plan, checked 2026-10-12). Said beside
   // the count date rather than left for a reader to trip over.
   const otherCountNote = !lpHidden && !isDelMonte && planCycle && stockCountDate
-    ? 'This is the latest stock count. The Dashboard and Reorder pages judge the plan on the count that opens it, '
-      + 'so their numbers can differ.'
+    ? 'The Dashboard and Reorder pages judge the plan on the count that opens it, so their numbers can differ.'
     : null;
   // The same, short enough for the table's column header.
   const coverHeaderText = [
-    stockCountDate && `counted ${formatDate(stockCountDate)}`,
+    stockCountDate && `latest count, ${formatDate(stockCountDate)}`,
     !lpHidden && !isDelMonte && planCycle && `${formatMonth(planCycle)} plan`,
   ].filter(Boolean).join(' · ');
 
@@ -911,13 +940,11 @@ const ABCClassification = () => {
             singleMonth
             ceiling={latestRun.principal === principal ? parsePeriod(latestRun.period) : null}
             localValue={{
-              startMonth: selectedMonth.month, startYear: selectedMonth.year,
-              endMonth: selectedMonth.month, endYear: selectedMonth.year,
+              startMonth: shownMonth.month, startYear: shownMonth.year,
+              endMonth: shownMonth.month, endYear: shownMonth.year,
             }}
-            onLocalChange={(v) => setSelectedMonth({ month: v.endMonth, year: v.endYear })}
-            onReset={isCustomMonth
-              ? () => setSelectedMonth({ month: dashboardRange.endMonth, year: dashboardRange.endYear })
-              : undefined}
+            onLocalChange={(v) => setPickedPeriod(toClassificationPeriod(v.endMonth, v.endYear))}
+            onReset={isCustomMonth ? () => setPickedPeriod(null) : undefined}
           />
           </div>
         )}
@@ -978,6 +1005,7 @@ const ABCClassification = () => {
         <div className="abc-content">
           {header}
           <LoadingStatus>Loading ABC classification data…</LoadingStatus>
+          <SlowLoadNotice />
           <ABCSkeleton />
         </div>
       </div>
@@ -993,7 +1021,7 @@ const ABCClassification = () => {
       <div className="abc-page">
         <div className="abc-content">
           {header}
-          <p className="abc-page-subtitle" role="alert">Failed to load ABC classification data: {error}</p>
+          <LoadError what="the ABC classification" message={error} onRetry={() => setAttempt((n) => n + 1)} />
         </div>
       </div>
     );
@@ -1014,7 +1042,8 @@ const ABCClassification = () => {
 
         {error && (
           <p className="abc-page-subtitle" role="alert">
-            Could not update: {error}. Showing the last classification that loaded.
+            Could not update: {error} Showing the last classification that loaded.{' '}
+            <button type="button" className="link-button" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
           </p>
         )}
 
@@ -1066,6 +1095,30 @@ const ABCClassification = () => {
               accent="var(--color-nav-bg)"
             />
           </div>
+
+          {/* Why this Class A count differs from the Dashboard's ring (the
+              same thing should give the same number across pages, or say
+              why not: Technical Adviser, 2 Oct 2026; 2026-10-22). This view
+              counts one month's run on the basis above; the ring and the
+              Selected range view rank sales over the dashboard's range. */}
+          {classificationPeriod && (
+            <p className="ui-note is-info abc-month-vs-range">
+              <Info size={14} aria-hidden="true" />
+              <span>
+                Class A here ({catACount.toLocaleString()} {rowNoun.unit}) comes from the {runText} run{runEntries.length > 1 ? 's' : ''}.
+                The Dashboard&apos;s ABC ring{canRank ? ' and the Selected range view rank' : ' ranks'} sales over {rangeLabel} instead,
+                so their Class A count can differ.
+                {canRank && (
+                  <>
+                    {' '}
+                    <button type="button" className="link-button" onClick={() => setBasis('range')}>
+                      Show the range ranking
+                    </button>
+                  </>
+                )}
+              </span>
+            </p>
+          )}
 
           {/* The manuscript's validation of the classification (§3.4.4.2.2),
               computed by the backend for this run: the revenue earned by the
@@ -1149,9 +1202,9 @@ const ABCClassification = () => {
                         </>
                       ) : (
                         <>
-                          Each SKU&apos;s stock, in pieces, against its own target stock from the LP&apos;s current plan.
+                          Each SKU&apos;s stock, in pieces, against its own target stock from the current order plan.
                           <InfoTip label="What this measures">
-                            The plan covers only Class A SKUs whose forecast passed the accuracy check; every other SKU
+                            The plan covers only top sellers (Class A) whose forecast passed the accuracy check; every other SKU
                             shows No target stock, and the ? beside it says why. Not the warehouse&apos;s Active/Inactive
                             flag, which is what the Dashboard&apos;s warehouse-status chart shows.
                           </InfoTip>
@@ -1357,7 +1410,23 @@ const ABCClassification = () => {
                             </InfoTip>
                           )}
                         </td>
-                        <td className="table-num">{row.count}</td>
+                        <td className="table-num">
+                          {/* A status the Reorder page also filters by opens
+                              it on that urgency (Technical Adviser, 2 Oct
+                              2026: cards connected; 2026-10-22). That page
+                              lists every planned product of the urgency, on
+                              the count that opens the plan, so its number
+                              can differ from this class's here. */}
+                          {REORDER_URGENCY[row.status] && row.count > 0 && !isDelMonte && canOpenReorder ? (
+                            <Link
+                              to={`/reorder?urgency=${REORDER_URGENCY[row.status]}`}
+                              className="abc-drilldown-link"
+                              title={`Open the ${REORDER_URGENCY[row.status]} products on the Reorder page. It judges stock on the count that opens the plan, so its count can differ.`}
+                            >
+                              {row.count.toLocaleString()}
+                            </Link>
+                          ) : row.count.toLocaleString()}
+                        </td>
                         <td className="table-num">{row.pct.toFixed(0)}%</td>
                       </tr>
                     ))}
@@ -1371,6 +1440,22 @@ const ABCClassification = () => {
                     {classDrilldownNote(selectedClass, panel.selectedClassStockBreakdown)}
                   </p>
                 )}
+                {/* Why the Dashboard's "Below safety stock" can be lower than
+                    this table's (2026-10-26): different products, different
+                    count. Only figures GET /abc sent are named here; the
+                    Dashboard's own counts are not restated. */}
+                {!lpHidden && !isDelMonte && stockCountDate && (() => {
+                  const classSize = panel.classAggregates.find((c) => c.cat === selectedClass)?.skuCount;
+                  return (
+                    <p className="abc-page-grain-note">
+                      These counts cover {classSize != null ? `all ${classSize.toLocaleString()}` : 'every'} Class {selectedClass}{' '}
+                      {rowNoun.many} on the latest stock count ({formatDate(stockCountDate)}). The Dashboard&apos;s
+                      Below safety stock card checks only the products in the order
+                      plan{planCycle ? ` (${formatMonth(planCycle)} plan)` : ''}, on the stock count that opens that
+                      plan, so its count can be lower.
+                    </p>
+                  );
+                })()}
               </div>
             </div>
           ))}
@@ -1640,7 +1725,7 @@ const ABCClassification = () => {
                     Revenue share (%)
                     {periodLabel && <span className="abc-th-sub">of {periodLabel} revenue</span>}
                   </th>
-                  <th className="col-fit" title="Stock, in pieces, against the LP's target stock for the SKU">
+                  <th className="col-fit" title="Stock, in pieces, against the SKU's target stock in the order plan">
                     {lpHidden ? 'Stock status' : 'Cover vs target'}
                     {coverHeaderText && <span className="abc-th-sub">{coverHeaderText}</span>}
                   </th>
