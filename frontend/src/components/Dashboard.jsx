@@ -409,7 +409,9 @@ const DASHBOARD_SKELETON_ROWS = [
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
     <div className="hero-kpis">
-      <SkeletonStatCards count={5} cardClassName="hero-card" />
+      <SkeletonStatCards count={1} cardClassName="hero-card hero-card-wide" />
+      <SkeletonStatCards count={1} cardClassName="hero-card hero-card-inventory" />
+      <SkeletonStatCards count={3} cardClassName="hero-card" />
     </div>
     {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards], i) => (
       <div className={`dash-row ${rowClass}`} key={i}>
@@ -1126,10 +1128,8 @@ const Dashboard = () => {
   const lp = data.lp || {};
   const lpCycleLabel = periodLabel(lp.cycle_date ? String(lp.cycle_date).slice(0, 7) : null);
   const exposure = data.safety_stock_exposure || {};
-  // The plan's own Class A list, named apart from the ABC ring's (2026-10-22):
-  // the ring ranks the selected range ("Top sellers, Mar 2025 – Feb 2026:
-  // 175"), the plan keeps the Tier A list of its ABC run ("Tier A as of Feb
-  // 2026: 189", the t12m_new basis, DEC-38). One page, two counts, two names.
+  // The ring ranks the selected range; plan and safety-stock figures use the
+  // Tier A list from their ABC run (t12m_new, DEC-38), so labels name its period.
   // Under All principals safety_stock_exposure.tier_a_count is BOTH
   // principals' Tier A (2026-10-24: 190 = Unilever's products as of Feb 2026
   // + Del Monte's categories as of Dec 2025, tier_a_periods), while the plan
@@ -1470,6 +1470,10 @@ const Dashboard = () => {
       + `${calendarSignoffText(calendarAdj.signed_off) ? `, ${calendarSignoffText(calendarAdj.signed_off)}` : ''}`
       + `${olderPlanRows > 0 ? ` (${olderPlanRows.toLocaleString()} of the ${planRows.toLocaleString()} plan rows predate it)` : ''}.`
     : null;
+  const planCalendarSummary = calendarAdj && !lpHidden && lp.cycle_date && planRows > olderPlanRows
+    ? `${calendarFactorText(calendarAdj)} · ${periodLabel(calendarAdj.forecast_period)}`
+      + `${calendarSignoffText(calendarAdj.signed_off) ? ' · review pending' : ''}`
+    : null;
   const planLabel = lpCycleLabel ? `${lpCycleLabel} plan${planRun ? ` · run ${planRun}` : ''}` : null;
   // Below safety stock: the count, the SKUs it was checked on, and the two
   // dates that meet in it (the plan's safety stock, the stock count).
@@ -1800,9 +1804,8 @@ const Dashboard = () => {
               <span>{syntheticNote}</span>
             </p>
           )}
-          {/* The top row (HeroKpis.jsx): the annual sales and allocation card
-              on the left; on the right, inventory value and stock cover over
-              the two operational cards, tinted, with the way to act on them. */}
+          {/* Lead with sales and allocation beside inventory value, then
+              move through stock cover, below-safety risk and pending orders. */}
           <div className="hero-kpis dash-section-anchor" id="dash-summary">
             <AnnualSalesCard {...annualCard} pct={allocPct} onPctChange={setAllocPct} onOpenYearly={() => jumpTo('dash-sales')} />
             <InventoryCard
@@ -1911,20 +1914,6 @@ const Dashboard = () => {
                 atRisk={canListAtRisk && !ssPinned
                   ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk, tierLabel: planTierLabel }
                   : null}
-                // The order plan's own Tier A count beside the ring's (2026-10-22),
-                // so the two numbers on one page are named apart and the card
-                // says why they differ. Unilever's basis only: Del Monte has no plan.
-                // Under All the count is both principals' lists, named as such.
-                planTier={!lpHidden && exposure.tier_a_count != null && exposure.tier_a_periods?.Unilever
-                  ? mixedTier
-                    ? {
-                      count: exposure.tier_a_count,
-                      label: `Tier A on each principal's own list (${tierPeriodsText})`,
-                      inPlan: false,
-                      note: bothTierRuns ? 'The order plan holds Unilever\'s products only, not Del Monte\'s categories.' : null,
-                    }
-                    : { count: exposure.tier_a_count, label: planTierLabel }
-                  : null}
                 onOpenClass={setListedClass}
               />
             </Slot>
@@ -1993,6 +1982,7 @@ const Dashboard = () => {
                     runLabel={planRun ? `run ${planRun}` : null}
                     countLabel={countLabel}
                     calendarNote={planCalendarNote}
+                    calendarSummary={planCalendarSummary}
                     inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
                   />
                   {demoPlan?.order_plan && (

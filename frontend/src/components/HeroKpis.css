@@ -1,25 +1,25 @@
-/* The dashboard's top row (HeroKpis.jsx, 2026-10-18 redesign after Thea's
-   mock-up): the annual card across the full width in three columns, then
-   the four KPI cards in one row of equal columns and equal height; white
-   cards with a light border, large radius and a thin accent on top; the two
-   operational cards tinted so they read as things to act on. */
+/* The dashboard's top row: one annual card across the width, then four
+   compact KPI cards. Keep emphasis on figures, bars and status labels. */
 
 .hero-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
   margin-bottom: 28px;
 }
 
-.hero-kpis > :first-child {
-  grid-column: 1 / -1;
+.hero-kpis > .hero-card-wide {
+  grid-column: span 4;
+}
+
+.hero-kpis > .hero-card-inventory,
+.hero-kpis > .hero-card:not(.hero-card-wide):not(.hero-card-inventory) {
+  grid-column: span 2;
 }
 
 /* ── Card frame ──────────────────────────────────────────────────────── */
 .hero-card {
-  --hero-accent: #16A34A;
-  --hero-dot: #16A34A;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -28,8 +28,6 @@
   border: var(--card-border);
   border-radius: 16px;
   background: #FFFFFF;
-  /* Raised off the page (2026-10-21; more since 2026-10-28, ui.css
-     --shadow-card), lifted a little more on hover. */
   box-shadow: var(--shadow-card);
   overflow: hidden;
   transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
@@ -53,26 +51,7 @@
   }
 }
 
-.hero-card::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 4px;
-  background: var(--hero-accent);
-}
-
-/* The accent says what kind of figure a card holds (HeroKpis.jsx KpiCard):
-   blue demand, coral inventory value, teal stock health, amber a risk to act
-   on, purple the order plan. The top bar, the dot and its soft ring only;
-   the figures stay in ink, so a colour is never read as good or bad. */
-.hero-card.is-blue { --hero-accent: #3B82F6; --hero-dot: #3B82F6; --hero-ring: rgba(59, 130, 246, 0.16); }
-.hero-card.is-coral { --hero-accent: #E85D4A; --hero-dot: #E85D4A; --hero-ring: rgba(232, 93, 74, 0.16); }
-.hero-card.is-teal { --hero-accent: #0D9488; --hero-dot: #0D9488; --hero-ring: rgba(13, 148, 136, 0.16); }
-.hero-card.is-amber { --hero-accent: #D97706; --hero-dot: #D97706; --hero-ring: rgba(217, 119, 6, 0.18); }
-.hero-card.is-purple { --hero-accent: #7C3AED; --hero-dot: #7C3AED; --hero-ring: rgba(124, 58, 237, 0.15); }
-
-/* Below safety stock: white like the others since 2026-10-18; the orange
-   top bar marks it. */
+/* Below safety stock keeps a quiet tint so the action card reads apart. */
 .hero-card.is-action.is-purple { background: #FAF8FF; border-color: #E9E2FB; }
 
 .hero-card-head {
@@ -86,22 +65,7 @@
 .hero-card-name {
   display: flex;
   align-items: baseline;
-  gap: 8px;
   min-width: 0;
-}
-
-.hero-card-name .hero-dot {
-  position: relative;
-  top: -1px;
-}
-
-.hero-dot {
-  flex: none;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--hero-dot);
-  box-shadow: 0 0 0 4px var(--hero-ring, transparent);
 }
 
 .hero-card-title {
@@ -458,10 +422,18 @@
   color: #667085;
 }
 
-/* The latest month with sales: the Progress column's last line, under
-   "Need about ₱X per month". No divider above it. */
+/* Keep the one-month figure distinct from the year-to-date progress above. */
 .hero-latest-line {
-  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: auto;
+  padding: 10px 12px;
+  border: 1px solid #E6EAF3;
+  border-radius: 12px;
+  background: #F8FAFC;
 }
 
 /* Progress so far, shorter (2026-10-18): the year's sales with "16% of the
@@ -496,6 +468,34 @@
   margin: 0;
 }
 
+.hero-monthly-summary {
+  flex: 1 1 18rem;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.hero-monthly-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hero-monthly-summary span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.hero-monthly-summary strong {
+  color: #182230;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The wide card has no footer; a smaller bottom padding leaves no empty
    band under its columns. */
 .hero-card.hero-card-wide {
@@ -503,13 +503,26 @@
 }
 
 .hero-latest-line > p:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
   margin: 0;
   font-size: 13px;
   color: #475467;
 }
 
+.hero-latest-line > p:first-child > span:first-child {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .hero-latest-line strong {
   color: #182230;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -898,6 +911,13 @@
   .hero-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .hero-kpis > .hero-card-wide {
+    grid-column: span 2;
+  }
+  .hero-kpis > .hero-card-inventory,
+  .hero-kpis > .hero-card:not(.hero-card-wide):not(.hero-card-inventory) {
+    grid-column: span 1;
+  }
 }
 
 /* Row 1's three columns stack, each under a rule. */
@@ -920,6 +940,11 @@
 @media (max-width: 640px) {
   .hero-kpis {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-kpis > .hero-card-wide,
+  .hero-kpis > .hero-card-inventory,
+  .hero-kpis > .hero-card:not(.hero-card-wide):not(.hero-card-inventory) {
+    grid-column: span 1;
   }
   .hero-value {
     font-size: 26px;
@@ -951,6 +976,7 @@
 }
 
 .hero-excess strong {
+  margin-left: 4px;
   font-variant-numeric: tabular-nums;
 }
 

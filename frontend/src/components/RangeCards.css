@@ -672,41 +672,20 @@
   color: var(--color-text-subtle);
 }
 
-/* ── Forecast accuracy card, mockup pass (2026-10-21) ─────────────────── */
-/* How to read this: one plain sentence, then which forecasts are scored,
-   its switch and the pending-confirmation notice; the method one click
-   down (<details>). */
+/* ── Forecast accuracy card ──────────────────────────────────────────── */
 .fc-read {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
-  border: 1px solid #E4DCFB;
-  border-radius: 12px;
-  background: #F7F4FE;
-}
-
-.fc-read-title {
-  margin: 0;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.fc-read-text {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--color-text-body);
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
 }
 
 .fc-read-method {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid #E4DCFB;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
 .fc-read-method-row {
@@ -717,10 +696,9 @@
 }
 
 .fc-read-status {
-  flex: 1 1 220px;
   margin: 0;
   font-size: 12.5px;
-  line-height: 1.5;
+  line-height: 1.4;
   color: var(--color-text-muted);
 }
 
@@ -953,7 +931,7 @@
 
 @media (max-width: 640px) {
   .fc-read {
-    padding: 12px 14px;
+    padding-top: 8px;
   }
 
   .fc-miss-card .fc-miss-value {
@@ -976,13 +954,10 @@
 
 .fc-read {
   gap: 4px;
-  padding: 12px 14px;
 }
 
 .fc-read-method {
   gap: 4px;
-  margin-top: 2px;
-  padding-top: 8px;
 }
 
 .fc-chart-block {

@@ -91,16 +91,9 @@ const SectionHead = ({ children }) => <p className="hero-section-head">{children
 // dialog (2026-10-19).
 const tipLines = (lines) => lines.filter(Boolean).map((line) => <span key={line} className="hero-tip-line">{line}</span>);
 
-// Each card's accent says what kind of figure it is, never whether it is
-// good or bad (2026-10-21): sales and the allocation blue (demand), inventory
-// value coral (the money held in stock), stock cover teal (stock health),
-// below safety stock amber (a risk to act on), pending reorders purple (the
-// order plan, the model's output, as the forecast is violet). Green left the
-// sales card: it read as "on track" whatever the figure said.
-// The card frame: top accent, coloured dot, title; on the right the period
-// basis tag (when given, as a plain label: its explanation joins the card's
-// "?") and the card's one "?". `action` cards get a tinted surface. The
-// footer sits at the bottom of the card whatever its height.
+// The card header keeps only the title and supporting controls; the metric's
+// value and status carry the visual emphasis. `action` cards get a tinted
+// surface, and the footer sits at the card's bottom.
 export const KpiCard = ({
   tone, title, tooltip = null, basis = null, action = false, className = '', children, footer = null,
 }) => {
@@ -109,7 +102,6 @@ export const KpiCard = ({
     <section className={`hero-card is-${tone}${action ? ' is-action' : ''} ${className}`} aria-label={title}>
       <header className="hero-card-head">
         <span className="hero-card-name">
-          <span className="hero-dot" aria-hidden="true" />
           <h3 className="hero-card-title">{title}</h3>
         </span>
         <span className="hero-card-side">
@@ -150,7 +142,7 @@ export const AnnualSalesCard = ({
   // (Del Monte's 2025 has 6 of its 12): never "Jan–Dec" for a part year.
   const lastIndex = a.latest_month ? Number(a.latest_month.slice(5, 7)) : 0;
   const monthsLeft = 12 - lastIndex;
-  const onRecord = a.ytd_months < lastIndex ? ` · ${a.ytd_months} of ${lastIndex} months on record` : '';
+  const onRecord = a.ytd_months < lastIndex ? ` · ${a.ytd_months}/${lastIndex} months` : '';
   const priorLabel = year && lastName ? `${span} ${year - 1}` : null;
 
   const target = level?.annual ?? null;
@@ -198,7 +190,7 @@ export const AnnualSalesCard = ({
   ) : null;
   const levelsBox = levelButtons ? (
     <div className="hero-alloc-levels-box">
-      <p className="hero-label">SSM target</p>
+      <p className="hero-label">Target level</p>
       {levelButtons}
     </div>
   ) : null;
@@ -210,12 +202,11 @@ export const AnnualSalesCard = ({
   ];
 
   return (
-    <KpiCard tone="blue" title="Annual sales and allocation" tooltip={tips} basis={basis} className="hero-card-wide">
+    <KpiCard tone="blue" title={year ? `FY ${year} sales vs allocation` : 'Sales vs allocation'} tooltip={tips} basis={basis} className="hero-card-wide">
       <div className="hero-annual-cols">
         {/* ── Allocation ── */}
         <div className="hero-annual-col">
-          <SectionHead>Allocation</SectionHead>
-          <p className="hero-label">Estimated{year ? `, FY ${year}` : ''}</p>
+          <p className="hero-label">Allocation · estimated</p>
           {level ? (
             <>
               <p className="hero-value hero-value-xl">
@@ -248,10 +239,9 @@ export const AnnualSalesCard = ({
 
         {/* ── Progress so far ── */}
         <div className="hero-annual-col">
-          <SectionHead>Progress so far</SectionHead>
           {hasYtd ? (
             <>
-              <p className="hero-label">FY {year} sales, {span}{onRecord}</p>
+              <p className="hero-label">Sales to date · {span}{onRecord}</p>
               <div className="hero-figure-row">
                 <p className="hero-value">{fp(a.ytd_sales)}</p>
                 {shareText && (
@@ -340,38 +330,36 @@ export const AnnualSalesCard = ({
                 </div>
 
                 {pace?.reached ? (
-                  <p className="hero-sentence">The {level.pct}% allocation is already reached.</p>
+                  <p className="hero-sentence">Allocation reached</p>
                 ) : pace?.perMonthNeeded != null && (
-                  <p className="hero-sentence">
-                    Need about{' '}
-                    <HoverValue
-                      label="How the amount per month is worked out"
-                      what={`(Allocation − sales so far) ÷ the months left in ${year}.`}
-                      sums={[`(${fp(target)} − ${fp(a.ytd_sales)}) ÷ ${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} = ${fp(pace.perMonthNeeded)}`]}
-                    >
-                      <strong>{fp(pace.perMonthNeeded)} per month</strong>
-                    </HoverValue>
-                    {' '}for the rest of the year to reach the allocation.
-                    {/* A yardstick for that figure (2026-10-19): last year's
-                        average month, from the allocation's own base year. */}
-                    {a.basis_sales > 0 && a.basis_months === 12 && (() => {
-                      const avg = a.basis_sales / 12;
-                      const diff = ((pace.perMonthNeeded - avg) / avg) * 100;
-                      return (
-                        <>
-                          {' '}That is{' '}
+                  <div className="hero-monthly-summary">
+                    <div>
+                      <span>Needed / month</span>
+                      <strong>
+                        <HoverValue
+                          label="Monthly sales needed to reach the allocation"
+                          what={`Allocation left ÷ ${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} remaining.`}
+                          sums={[`(${fp(target)} − ${fp(a.ytd_sales)}) ÷ ${monthsLeft} = ${fp(pace.perMonthNeeded)}`]}
+                        >
+                          {fp(pace.perMonthNeeded)}
+                        </HoverValue>
+                      </strong>
+                    </div>
+                    {a.basis_sales > 0 && a.basis_months === 12 && (
+                      <div>
+                        <span>FY {a.basis_year} avg / month</span>
+                        <strong>
                           <HoverValue
-                            label="Against last year's average month"
-                            what={`Last year's sales ÷ 12 months, against the amount needed per month.`}
-                            sums={[`${fp(a.basis_sales)} ÷ 12 = ${fp(avg)} per month; ${fp(pace.perMonthNeeded)} is ${Math.abs(diff).toFixed(0)}% ${diff >= 0 ? 'above' : 'below'} it`]}
+                            label="Previous fiscal year's average monthly sales"
+                            what={`FY ${a.basis_year} sales ÷ 12 months.`}
+                            sums={[`${fp(a.basis_sales)} ÷ 12 = ${fp(a.basis_sales / 12)}`]}
                           >
-                            <strong>{Math.abs(diff).toFixed(0)}% {diff >= 0 ? 'above' : 'below'}</strong>
+                            {fp(a.basis_sales / 12)}
                           </HoverValue>
-                          {' '}last year&apos;s average month ({fp(avg)}).
-                        </>
-                      );
-                    })()}
-                  </p>
+                        </strong>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               {yoy?.note && <p className="hero-note">{yoy.note}</p>}
@@ -386,20 +374,19 @@ export const AnnualSalesCard = ({
               {year && <p className="hero-note">No FY {year} sales are on record yet.</p>}
             </>
           )}
-          {/* The latest month with sales, the Progress column's last line,
-              under "Need about ₱X per month". Without a figure it is left out:
-              its reason (the allocation's blocked_reason) already shows in
-              the Allocation column. */}
+          {/* Separate the latest month from the year-to-date figure: it is
+              useful context, but belongs to one month rather than the year. */}
           {latest?.value && latest.value !== '—' && (
             <div className="hero-latest-line">
               <p>
-                Latest month{latest.month ? ` (${latest.month})` : ''}:{' '}
+                <span>Latest month</span>
+                {latest.month && <span>{latest.month}</span>}
                 <HoverValue
                   label="About the latest month"
                   plain
                   what="Sales for the latest month with data. This updates when a new month's sales are uploaded."
                 >
-                  <Pill text={latest.value} tone="info" />
+                  <strong>{latest.value}</strong>
                 </HoverValue>
                 {SHOW_LATEST_YEAR_AGO && latestYearAgo && <span className="hero-latest-compare"> · vs {latestYearAgo}: —</span>}
               </p>
@@ -462,6 +449,7 @@ export const InventoryCard = ({
     <KpiCard
       tone="coral"
       title="Inventory value"
+      className="hero-card-inventory"
       tooltip={tooltip}
       footer={asOf || idleList ? (
         <>
@@ -474,7 +462,6 @@ export const InventoryCard = ({
         </>
       ) : null}
     >
-      <SectionHead>Stock value</SectionHead>
       <div className="hero-value-tagged">
         <p className="hero-value">
           {hasStock ? <NumLink onClick={onOpenChart} title="See the inventory value chart">{value}</NumLink> : value}
@@ -489,17 +476,15 @@ export const InventoryCard = ({
 
       {hasStock && (
         <div className="hero-block">
-          <SectionHead>Compared with</SectionHead>
           <div className="hero-compare">
             <CompareCell label="vs last count" cell={lastCount} na />
-            <CompareCell label="vs a year ago" cell={yearAgo} />
+            <CompareCell label="vs last year" cell={yearAgo} />
           </div>
         </div>
       )}
 
       {hasStock && idle && (
         <div className="hero-block">
-          <SectionHead>Slow stock</SectionHead>
           <p className="hero-idle-head">
             <span>{idle.label}</span>
             <strong>
@@ -578,7 +563,7 @@ export const StockCoverCard = ({
   // real weekly sales). The figure's unit is said instead.
   const inPieces = cover?.basis === 'pieces';
   const unitLine = !cover ? null
-    : inPieces ? 'In pieces' : cover.basis === 'pesos' ? 'In pesos (stock at last purchase price, sales at selling price)' : null;
+    : inPieces ? 'Pieces' : cover.basis === 'pesos' ? 'Pesos' : null;
   // Money in stock past the policy's weeks. The backend's figure when it
   // sends one: product by product, each product's stock beyond the rule's
   // weeks of its own sales, added up — the sum its stock-detail list is
@@ -594,16 +579,11 @@ export const StockCoverCard = ({
   const low = runningLow > 0 ? (
     <>
       <NumLink onClick={onOpenLow} title="See the products below safety stock">
-        <strong className="is-danger">{runningLow} top {runningLow === 1 ? 'product is' : 'products are'} running low</strong>
+        <strong className="is-danger">{runningLow} below safety stock</strong>
       </NumLink>.
     </>
   ) : null;
-  const above = ratio != null && ratio > 1.1;
-  const below = ratio != null && ratio < 0.9;
-  const summary = ratio == null ? null
-    : above ? (low ? <>Too much stock overall, but {low}</> : 'More stock than the target overall.')
-      : below ? (low ? <>Less stock than the target overall, and {low}</> : 'Less stock than the target overall.')
-        : (low ? <>On target overall, but {low}</> : 'On target overall.');
+  const summary = low;
 
   return (
     <KpiCard
@@ -619,7 +599,6 @@ export const StockCoverCard = ({
         </span>
       ) : null}
     >
-      <SectionHead>Weeks of stock</SectionHead>
       <div className="hero-value-tagged">
         <p className="hero-value">
           {cover ? (
@@ -639,7 +618,7 @@ export const StockCoverCard = ({
                   + `${split.short > 0 ? `, grey = short (${fmtWeeks(split.short)})` : ''}; the tick is the ${policyWeeks}-week target.` : null,
               ]}
             >
-              {cover.weeks.toFixed(1)} weeks
+              {fmtWeeks(cover.weeks)}
             </HoverValue>
           ) : '—'}
         </p>
@@ -705,7 +684,7 @@ export const StockCoverCard = ({
             ]}
           >
             <span className="hero-excess">
-              Above SSM&apos;s {policyWeeks}-week rule: <strong>{fp(perProduct.pesos)}</strong> in {n(perProduct.products)} products
+                    Above {policyWeeks}-week target <strong>{fp(perProduct.pesos)}</strong> · {n(perProduct.products)} products
             </span>
           </HoverValue>
           {/* The list behind the figure, one click away (2026-10-22). */}
@@ -729,7 +708,7 @@ export const StockCoverCard = ({
             ]}
           >
             <span className="hero-excess">
-              Above SSM&apos;s {policyWeeks}-week rule: <strong>≈ {fp(excess)}</strong> tied up
+              Above {policyWeeks}-week target <strong>≈ {fp(excess)}</strong>
             </span>
           </HoverValue>
         </div>
@@ -798,7 +777,6 @@ export const BelowSafetyCard = ({
         </>
       )}
     >
-      <SectionHead>Running low</SectionHead>
       <p className="hero-value">
         <HoverValue
           label="How the count is worked out"
@@ -812,9 +790,9 @@ export const BelowSafetyCard = ({
 
       {parts && (
         <div className="hero-block">
-          <SectionHead>{inPlan ? `In the order plan${tierLabel ? ` — ${tierLabel}` : ''}` : tierLabel || 'Tier A'}</SectionHead>
+          {tierLabel && <p className="hero-note">{tierLabel}</p>}
           <p className="hero-idle-head">
-            <span>{totalLabel}</span>
+            <span>Tier A total</span>
             <strong><NumLink to={abcTo} title="See the ABC classification">{n(total)}</NumLink></strong>
           </p>
           <div
@@ -826,7 +804,7 @@ export const BelowSafetyCard = ({
             {parts.ok > 0 && <span className="hero-checks-seg is-ok" style={{ width: at(parts.ok) }} />}
           </div>
           <ul className="hero-legend">
-            <li><span className="hero-swatch is-low" aria-hidden="true" />Running low {n(parts.below)}</li>
+            <li><span className="hero-swatch is-low" aria-hidden="true" />Low {n(parts.below)}</li>
             <li>
               <span className="hero-swatch is-ok" aria-hidden="true" />
               <HoverValue label="How OK is worked out" subtle what="Checked − running low." sums={[`${n(checked)} − ${n(parts.below)} = ${n(parts.ok)}`]}>
@@ -848,15 +826,35 @@ export const BelowSafetyCard = ({
                       'The dashboard does not send the counts by reason yet.',
                     ]}
                 >
-                  Can&apos;t check {n(parts.unchecked)}
+                  Not checked {n(parts.unchecked)}
                 </HoverValue>
               </li>
             )}
           </ul>
-          {scopeNote && <p className="hero-note">{scopeNote}</p>}
+          {scopeNote && (
+            <p className="hero-note">
+              <InfoTip
+                label="Plan coverage"
+                trigger={<>Del Monte categories are not in the SKU plan</>}
+                triggerClassName="hero-note-trigger"
+              >
+                {scopeNote}
+              </InfoTip>
+            </p>
+          )}
         </div>
       )}
-      {methodNote && <p className="hero-note">{methodNote}</p>}
+      {methodNote && (
+        <p className="hero-note">
+          <InfoTip
+            label="Safety-stock method"
+            trigger={<>Method pending review</>}
+            triggerClassName="hero-note-trigger"
+          >
+            {methodNote}
+          </InfoTip>
+        </p>
+      )}
     </KpiCard>
   );
 };
@@ -869,12 +867,12 @@ export const BelowSafetyCard = ({
 // (`valueReason`, in its pop-up). `criticalTo` opens the Reorder page
 // filtered to critical rows.
 const URGENCY_ROWS = {
-  critical: { name: 'critical', what: 'below safety stock', act: 'Act first' },
-  urgent: { name: 'urgent', what: 'below target stock', act: 'Next' },
+  critical: { name: 'Critical', what: 'below safety stock', act: 'Act now' },
+  urgent: { name: 'Urgent', what: 'below target stock', act: 'Next' },
   // "planned", the Reorder page's word (URGENCY_LABEL) and the Suggested
   // orders badge's, for the same bucket (2026-10-22; it read "routine").
-  planned: { name: 'planned', what: 'at or above target stock', act: 'Can wait' },
-  nodata: { name: 'no stock data', what: 'stock can\'t be read', act: 'Check the count' },
+  planned: { name: 'Planned', what: 'at or above target stock', act: 'Can wait' },
+  nodata: { name: 'No stock data', what: 'stock can\'t be read', act: 'Check count' },
 };
 
 export const PendingReordersCard = ({
@@ -913,7 +911,6 @@ export const PendingReordersCard = ({
         </>
       )}
     >
-      <SectionHead>Waiting for decision</SectionHead>
       <p className="hero-value">
         {orderQty > 0 ? (
           <HoverValue
@@ -937,21 +934,20 @@ export const PendingReordersCard = ({
 
       {parts ? (
         <div className="hero-block">
-          <SectionHead>By urgency</SectionHead>
+          <SectionHead>Priority</SectionHead>
           <ul className="hero-urgency">
             {parts.map((p) => {
               const row = URGENCY_ROWS[p.key];
               const label = <strong>{n(p.value)} {row.name}</strong>;
               return (
                 <li key={p.key} className={`is-${p.key}`}>
-                  <span>
+                  <span aria-label={`${n(p.value)} ${row.name}: ${row.what}; ${row.act}`}>
                     {p.key === 'critical' && p.value > 0 ? <NumLink to={criticalTo} title="See the critical orders">{label}</NumLink>
                       : p.key === 'planned' ? (
                         <HoverValue label="How planned is worked out" subtle what="Pending orders that are not critical, urgent or without stock data." sums={[routineSum]}>
                           {label}
                         </HoverValue>
                       ) : label}
-                    {' · '}{row.what}
                   </span>
                   <span className="hero-urgency-act">{row.act}</span>
                 </li>
@@ -962,7 +958,7 @@ export const PendingReordersCard = ({
               (2026-10-21, less text on the card), the sentence behind it. */}
           {criticalNote && (
             <p className="hero-note">
-              <InfoTip label="How critical is counted" trigger={<>How critical is counted</>} triggerClassName="hero-note-trigger">
+              <InfoTip label="How critical is counted" trigger={<>Why counts differ</>} triggerClassName="hero-note-trigger">
                 {criticalNote}
               </InfoTip>
             </p>
@@ -981,9 +977,8 @@ export const PendingReordersCard = ({
               + `had too little history. The ${n(scope.total - scope.passed)} not planned stay on SSM's own rule. `
               + 'The reliability check is pending adviser confirmation.'}
           >
-            Plans {n(scope.passed)} of the {n(scope.total)} {scope.tierLabel ? `products in ${scope.tierLabel}` : 'top sellers'}
+            {n(scope.passed)} of {n(scope.total)} planned · reliability check pending review
           </HoverValue>
-          {' · '}{n(scope.failed)} failed the reliability check (pending adviser confirmation), {n(scope.total - scope.evaluated)} too new to test
         </p>
       )}
     </KpiCard>

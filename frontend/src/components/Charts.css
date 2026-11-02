@@ -2635,6 +2635,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.reorder-plan-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: -6px 0 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
 /* A product missing from the stock count: an amber note in the stock cell,
    not a number, so it never reads as a counted zero. */
 .reorder-mini-nocount {
