@@ -125,7 +125,7 @@ _CHANGE_COLUMNS = """
     JOIN lp_recommendation lr ON lr.recommendation_key = c.recommendation_key
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     -- The requester's name for the Staff Requests table (2026-10-28): the row keeps only the email.
-    LEFT JOIN users pu ON lower(pu.email) = lower(c.proposed_by)
+    LEFT JOIN app.users pu ON lower(pu.email) = lower(c.proposed_by)
     -- An approved change whose decision an admin later reversed (audit 2026-10-23 finding 10): the state stays
     -- 'approved' as the record, and these two columns say the decision it made was undone.
     LEFT JOIN LATERAL (SELECT r.reversed_by, r.reversed_at FROM lp_decision_reversal r
@@ -595,7 +595,7 @@ def list_direct_apply_grants(
     _require_approval(rec._present(db))
     rows = db.execute(text("""
         SELECT g.user_id, u.email, u.full_name, g.granted_by, g.granted_at
-        FROM lp_direct_apply_grant g LEFT JOIN users u ON u.user_id = g.user_id
+        FROM lp_direct_apply_grant g LEFT JOIN app.users u ON u.user_id = g.user_id
         ORDER BY g.granted_at DESC, g.user_id
     """)).mappings().all()
     return [DirectApplyGrant(**dict(r)) for r in rows]
@@ -611,7 +611,7 @@ def set_direct_apply_grant(
     """Allow (granted true) or stop allowing (false) one user to apply reorder quantity changes with no approval.
     Audited. An open proposal of a user whose grant is removed stays open for an admin to settle."""
     _require_approval(rec._present(db))
-    target = db.execute(text("SELECT user_id, email, role FROM users WHERE user_id = :uid"), {"uid": user_id}).mappings().first()
+    target = db.execute(text("SELECT user_id, email, role FROM app.users WHERE user_id = :uid"), {"uid": user_id}).mappings().first()
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
     # Audited only when something changed: a replayed grant, or a revoke for someone who never had one, writes nothing

@@ -104,7 +104,7 @@ _REQUEST_COLUMNS = """
     JOIN lp_recommendation lr ON lr.recommendation_key = d.recommendation_key
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     -- The requester's name for the Staff Requests table (2026-10-28): the row keeps only the email.
-    LEFT JOIN users ru ON lower(ru.email) = lower(d.requested_by)
+    LEFT JOIN app.users ru ON lower(ru.email) = lower(d.requested_by)
     LEFT JOIN LATERAL (SELECT r.reversed_by, r.reversed_at FROM lp_decision_reversal r
                        WHERE r.recommendation_key = d.recommendation_key AND d.state = 'approved'
                          AND r.reversed_at >= d.resolved_at

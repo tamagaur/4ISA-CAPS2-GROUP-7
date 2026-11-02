@@ -31,7 +31,7 @@ _TO_ADMINS_SQL = """
     INSERT INTO user_notification (recipient_user_id, kind, quantity_change_key, dismissal_request_key,
                                    actor_email, summary)
     SELECT u.user_id, :kind, :change_key, :request_key, :actor, :summary
-    FROM users u
+    FROM app.users u
     WHERE u.role = 'admin' AND lower(u.email) <> lower(:actor)
     ON CONFLICT DO NOTHING
 """
@@ -41,7 +41,7 @@ _TO_REQUESTER_SQL = """
     INSERT INTO user_notification (recipient_user_id, kind, quantity_change_key, dismissal_request_key,
                                    actor_email, summary)
     SELECT u.user_id, :kind, :change_key, :request_key, :actor, :summary
-    FROM users u
+    FROM app.users u
     WHERE lower(u.email) = lower(:requester) AND lower(u.email) <> lower(:actor)
     ON CONFLICT DO NOTHING
 """

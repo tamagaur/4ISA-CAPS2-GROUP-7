@@ -120,7 +120,7 @@ class _DB:
                                 "planning_cycle_date": CYCLE, "current_cycle": self.row["current_cycle"]}])
         if "FOR UPDATE OF lr" in sql:
             return FakeResult([self.prior] if self.prior else [])
-        if "SELECT user_id, email, role FROM users" in sql:
+        if "SELECT user_id, email, role FROM app.users" in sql:
             user = self.users.get(params["uid"])
             return FakeResult([user] if user else [])
         if "MAX(classification_period) AS p FROM ABC_Classification" in sql:

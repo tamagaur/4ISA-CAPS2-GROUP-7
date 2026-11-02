@@ -41,7 +41,7 @@ _LIST_SQL = """
     LEFT JOIN lp_dismissal_request d ON d.request_key = n.dismissal_request_key
     LEFT JOIN lp_recommendation lr ON lr.recommendation_key = COALESCE(c.recommendation_key, d.recommendation_key)
     LEFT JOIN product_dimension pd ON pd.product_key = lr.product_key
-    LEFT JOIN users au ON lower(au.email) = lower(n.actor_email)
+    LEFT JOIN app.users au ON lower(au.email) = lower(n.actor_email)
     WHERE n.recipient_user_id = :me
     ORDER BY n.created_at DESC, n.notification_key DESC
     LIMIT :limit
