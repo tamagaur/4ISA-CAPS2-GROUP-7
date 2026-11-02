@@ -258,12 +258,12 @@ CLAUDE.md         Working rules for the codebase
   smoke test.
 - Unilever Top sellers (Class A as of Feb 2026): 189 products, forecast on
   2026-10-05. The March 2026 plan has 97 pending recommendations.
-- The order plan's cost and capacity inputs are placeholders until SSM
-  confirms procurement cost, storage cost, warehouse capacity and supplier
-  ceilings.
+- The order plan's cost and capacity inputs (procurement cost, storage cost,
+  warehouse capacity, supplier ceilings) are stated assumptions the team
+  adopted on 2026-11-02 (DEC-44). SSM has not confirmed them.
 - The Top-seller basis (Class A over the last 12 months, plus new products
-  that are Class A over the last 3) awaits the technical adviser's
-  confirmation (DEC-38).
+  that are Class A over the last 3) was adopted by the team on 2026-11-02
+  (DEC-42, rule in DEC-38). The technical adviser has not confirmed it.
 - The labelled synthetic demonstration (migrations 0052–0057) is in the
   database behind `DM_DEMO_ENABLED`. Its newest cards (demo stock, demo order
   plans) are served by the API but not yet drawn on the dashboard.

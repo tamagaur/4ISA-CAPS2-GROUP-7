@@ -110,7 +110,8 @@ FSN_MIN_FAST_SALES_MONTHS = 3
 # --------------------------------------------------------------------------- #
 # Tier A basis (analytics/classification/orchestrate_abc.py)
 # --------------------------------------------------------------------------- #
-# TEAM, PENDING TA CONFIRMATION (decided 2026-10-05 for this refresh): which
+# DEC-42 (team decision, adopted 2026-11-02, in use since 2026-10-05; the
+# Technical Adviser has not confirmed it): which
 # ABC run is "Tier A" for Unilever, read by the forecast runner, segmentation,
 # the LP's pool and every backend tier read. 't12m_new' = Class A on the last
 # 12 months' revenue, plus products first sold within those 12 months that are
@@ -153,12 +154,13 @@ XGB_NTHREAD = 1
 # --------------------------------------------------------------------------- #
 # Calendar factor (analytics/forecasting/calendar.py)
 # --------------------------------------------------------------------------- #
-# TEAM: approved by Kelvin 2026-10-19 for build + dry run, pending Sir Catubag's
-# sign-off (a methodology change); the runner applies it only with --calendar-factor.
+# DEC-41 (team decision, adopted 2026-11-02; approved by Kelvin 2026-10-19 for build + dry run).
+# Sir Catubag has not signed it off (a methodology change); the runner applies it only with --calendar-factor.
 # LIVE STATUS (corrected 2026-10-20, calc audit): the factor IS applied to the stored forecast. All 175
 # 'ok' Forecast_Result rows written 2026-10-19 10:37 UTC carry calendar_factor 1.0762 (March 2026, 2 earlier
 # years) and value_before_calendar, so lp_run 3 (2026-10-19) plans on adjusted forecasts. Sir Catubag's
-# sign-off is STILL PENDING. The runner's default stays OFF (opt-in --calendar-factor); the live write used it.
+# sign-off has not been given: DEC-41 records the team's adoption, not his approval. The runner's default
+# stays OFF (opt-in --calendar-factor); the live write used it.
 # Measured sensitivity (closed form on the 107 stored LP rows, stored safety stock and 2026-02 stock held
 # fixed): 424,127 pieces with the factor, 354,975 without, a 16.3% difference across 70 changed rows. Total
 # forecast 2,036,469 with vs 1,892,199 without (+7.62%). reports/diagnostics/calc_audit_2026-10-20/.
@@ -169,11 +171,11 @@ XGB_NTHREAD = 1
 # window, the trailing level the factor corrects.
 CALENDAR_FACTOR_SHRINK = 0.5
 CALENDAR_FACTOR_PRIOR_MONTHS = 3
-# TEAM: whether Sir Catubag has signed the factor off (Kelvin's note above).
-# The live 2026-03 forecast was nonetheless written with --calendar-factor on
-# 2026-10-19 (Forecast_Result.model_params.calendar_factor on every 'ok' row),
-# so the dashboard says the forecast is adjusted AND that the adjustment awaits
-# his sign-off, from this flag. Set True when he approves it.
+# DEC-41: whether Sir Catubag has signed the factor off (he has not; the team
+# adopted it without him). The live 2026-03 forecast was written with
+# --calendar-factor on 2026-10-19 (Forecast_Result.model_params.calendar_factor
+# on every 'ok' row), so the dashboard says the forecast is adjusted AND that
+# his sign-off is missing, from this flag. Set True only when he approves it.
 CALENDAR_FACTOR_SIGNED_OFF = False
 
 # --------------------------------------------------------------------------- #
@@ -242,9 +244,9 @@ SKU_COVER_HISTORY_MONTHS = 3
 # sales — x103% minimum, x105% mid, x108% maximum (Sir Abe, client meeting
 # Sep 2026). analytics/allocation.py applies it.
 ALLOCATION_LEVELS_PCT = (103, 105, 108)
-# PLACEHOLDER: which level applies is SSM's to say. Until then the
-# guaranteed minimum (Yuan, 2026-09-30): the LP's --allocation-pct default
-# and the level the dashboard card reports as the default.
+# DEC-44 (stated assumption, adopted 2026-11-02; SSM has not said which level
+# applies): the guaranteed minimum (Yuan, 2026-09-30): the LP's --allocation-pct
+# default and the level the dashboard card reports as the default.
 ALLOCATION_DEFAULT_PCT = 103
 # What the sales basis is counted in; the caller says which. The LP needs
 # pieces; the dashboard card uses pesos (Del Monte's sell-out has no pieces).
@@ -259,6 +261,9 @@ ALLOCATION_UNITS = ("pieces", "pesos")
 # Sir Abe hasn't said which he means yet.
 COVER_RULES = ("aggregate", "per-sku")
 
+# DEC-44 (2026-11-02): the four optimisation inputs below (procurement cost,
+# storage cost, warehouse capacity, supplier ceiling = the allocation %) are
+# adopted by the team as stated assumptions. SSM has not confirmed any of them.
 # PLACEHOLDER: THESE ARE NOT SSM'S FIGURES. Each is a realistic value picked
 # from our own data or from what Sir Abe said in the 2026-09-29 meeting,
 # agreed as a placeholder with Yuan the same day. Keys are scripts/run_lp.py's
@@ -291,7 +296,8 @@ PLACEHOLDERS = {
     "default_procurement_cost_per_unit": 33.48,
     # ₱ per piece per month: 2% of ₱25 (about 24% a year). The ₱25 is the old
     # procurement default; the rate is kept, not re-derived, because this value
-    # enters the objective for every product (a placeholder pending SSM).
+    # enters the objective for every product (a stated assumption, DEC-44; not
+# confirmed by SSM).
     "storage_cost_per_unit": 0.50,
 }
 

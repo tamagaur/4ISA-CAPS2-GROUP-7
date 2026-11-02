@@ -95,7 +95,7 @@ is still refused, never projected over. --require-count restores the old refusal
                   per principal); its revenue share is the product's priority
                   when the allocation is short.
 
-PLACEHOLDERS (agreed with Yuan, 2026-09-29): the allocation %, review and
+PLACEHOLDERS (agreed with Yuan, 2026-09-29; the four cost and capacity inputs are DEC-44, 2026-11-02): the allocation %, review and
 lead days, target weeks, cover rule, warehouse capacity and the two costs
 have no source in SSM's data yet. Their defaults are
 analytics/params.PLACEHOLDERS, the same dict

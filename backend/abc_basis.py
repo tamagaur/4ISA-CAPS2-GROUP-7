@@ -5,7 +5,7 @@ Two bases are live and both are defensible; before this, neither said which it w
 
   * the ABC page, the SKU list and the order plan (LP) use analytics.params.TIER_A_BASIS ('t12m_new' for Unilever:
     Class A on the last 12 months, plus products first sold within those 12 months that are Class A on the last 3;
-    DEC-38, pending the Technical Adviser) and 'single' for Del Monte;
+    DEC-38, adopted by the team as DEC-42; not confirmed by the Technical Adviser) and 'single' for Del Monte;
   * the Dashboard's tier cards (abc_mix, tier_stock) rank the date range the picker applies with a plain Pareto
     (backend/marts.pareto; the Technical Adviser's request of 2026-10-04).
 

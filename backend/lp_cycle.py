@@ -157,7 +157,7 @@ def lp_model_info(run: dict | None = None) -> dict:
     inputs_source 'run'. Without one, `inputs` is analytics/params.
     PLACEHOLDERS, the dict scripts/run_lp.py takes its defaults from, and
     inputs_source says 'defaults' so no screen presents them as a run's.
-    Either way the inputs are placeholders until SSM confirms them, and the
+    Either way the inputs are stated assumptions (DEC-44), not confirmed by SSM, and the
     safety stock's daily-independence assumption is stated with them."""
     if run is None:
         return {

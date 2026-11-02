@@ -30,9 +30,16 @@ Manuscript figures (2026-10-31): python -m scripts.manuscript_figures (read-only
 Tracked reports (2026-10-30): scripts that write a committed reports/ or docs/ file go through scripts/report_target.report_path; a run against the local Postgres writes local/nonlive_reports/ instead (git-ignored).
 Forecast run (2026-10-30): writes its own cycle only; it no longer deletes other cycles' rows (own-cycle strays are flagged in model_params.retired). Tasks 2-5 of the rollover-hardening prompt are NOT done: stopped at a gate, see the session report.
 
+Decided by the team, 2026-11-02 (the proponents; no external confirmation; entries in ARCHITECTURE.md):
+  DEC-41 calendar factor (shrink 0.5, 3 prior months; live on all 175 ok rows; Sir Catubag has not signed it off, so the flag stays False)
+  DEC-42 Tier A basis t12m_new (rule in DEC-38; 189 products as of 2026-02)
+  DEC-43 Del Monte taxonomy: pre-2025 and post-2025 kept separate, no mapping
+  DEC-44 the four optimisation inputs adopted as stated assumptions (NOT confirmed by SSM, see below)
+  DEC-45 scripts/clean_dead_skus.py stays gated, not run before the defence
+
 Blocked (nothing below is ours to decide):
-  Technical Adviser (Sir Catubag): DEC-38 Tier A basis t12m_new + DEC-40 Dashboard basis; calendar factor (live on all 175
-    ok rows); safety stock from monthly sigma; Del Monte DEC-03 category vocabulary.
-  SSM: cost params (procurement, storage, warehouse capacity, supplier ceilings are placeholders); meaning of PO Qty;
+  Technical Adviser (Sir Catubag): DEC-40 Dashboard basis; safety stock from monthly sigma.
+  SSM: the four cost inputs are still UNCONFIRMED by SSM (procurement, storage, warehouse capacity, supplier ceilings; DEC-44
+    adopts them as assumptions, it does not confirm them); meaning of PO Qty;
     the 2 Mar count (about twice its neighbours); Ilocos Sur stock vs La Union sales; whether zero-sale months are omitted.
-  Yuan: lifting the hold on prescriptive claims; approving any dead-SKU disable (837 would go; nobody approved).
+  Yuan: lifting the hold on prescriptive claims.
