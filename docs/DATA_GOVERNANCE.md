@@ -22,10 +22,12 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 | User accounts: name, email, password hash, MFA secret, recovery-code hashes, avatar path | Restricted | `app.users`, `app.user_mfa`, Supabase Storage | **Yes** |
 | Sessions, sign-in tokens, invite and reset tokens | Restricted | `app.user_session`, `app.auth_token` | Indirectly |
 | Audit trail | Restricted, integrity-critical | `app.audit_log` | Yes (actor email) |
-| SSM sales, stock, prices, costs, supplier ceilings | Confidential | `public`, `mart` | Not by design; outlet fields **UNVERIFIED** |
+| SSM sales, stock, prices, costs, supplier ceilings | Confidential | `public`, `mart` | No |
+| Customer and outlet names: `customer_dimension.customer_name` (2,841 distinct), `salesreturn_fact.customer_name` (180), and the raw sheets' Customer Name, Outlet Name and Account Name columns | Confidential, **personal data in part** | `public`, `data/raw/`, `backups/` | **Yes, in part.** Free-text store names; many are a person's name (a sole proprietor's store named for them). A script cannot say how many |
+| Salesman names: `salesman_dimension.salesman_name` (33 distinct), the raw Salesman column | Restricted | `public`, `data/raw/`, `backups/` | **Yes: full names of individual employees or agents** |
 | Forecasts, ABC classes, LP plan and decisions | Confidential | `public`, `mart`, `lp_*` | No |
 | Demonstration data (`is_demo = true`, `demo` schema) | Internal, labelled synthetic | `demo` | No |
-| Live-database backups | Same as the data they copy | `backups/` (git-ignored), 91 folders | Yes |
+| Live-database backups | Same as the data they copy | `backups/` (git-ignored), 74 folders | Yes |
 | Per-product sales extracts | Confidential | `local/` (git-ignored; hard rule 9) | No |
 
 ## 3. Controls: what the repo shows
@@ -61,109 +63,173 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 | G1 | The sign-in token is kept in `localStorage` (`frontend/src/auth.js:89`) | Any script injected into the page can read it | **Accepted for now.** The Vercel CSP already limits scripts to the app's own origin. A cookie would be cross-site between `*.vercel.app` and `*.onrender.com`, and browsers restrict those. The proper fix is a Vercel rewrite that proxies `/api/*` to Render, then an httpOnly cookie. Only if SSM or the panel needs it | Maika / Audrey |
 | G2 | ~~The API set no security headers of its own~~ | — | **Done 2026-11-02** (`backend/security_headers.py`, 7 tests). Takes effect when this branch is deployed to Render | Backend |
 | G3 | Audit rows are append-only by convention and by revoked grants | A superuser or a bad script could still alter them | **Done and applied 2026-11-02:** migration 0072. A retention purge must disable the trigger deliberately (see the migration header) | Yuan |
-| G4 | **Open.** Local backup folders hold real data on a laptop (74 folders on 2026-11-02; this file said 91, see the list below); disk encryption **UNVERIFIED** | Laptop loss exposes SSM data and user hashes | Turn on BitLocker; list who holds copies; delete the backups the list below marks "yes" (70 folders, 699.07 MB). **The list is evidence only: nothing has been deleted; the deletion is Kelvin's to run after reading it** | Custodian |
+| G4 | **Open.** Local backup folders hold real data on a laptop (74 folders on 2026-11-02; this file said 91); disk encryption **UNVERIFIED** | Laptop loss exposes SSM data and user hashes | Turn on BitLocker; list who holds copies; delete the folders the table below marks DELETE (58 folders, 653.81 MB). **The table is evidence only: nothing has been deleted; the deletion is Kelvin's to run after reading it** | Custodian |
 | G5 | ~~No retention or disposal schedule exists~~ | — | **Done 2026-11-02:** section 5 filled and adopted by the team. SSM has not confirmed it, and the data owner has not acknowledged the role | Team |
 | G6 | ~~No privacy notice, breach procedure or named privacy contact~~ | — | **Done 2026-11-02:** notice wording written, Kelvin Yuan Guillermo named as privacy contact, no placeholder left in section 6. The 72-hour rule still needs confirming with the adviser or SSM's counsel | Team |
-| G7 | ~~No access-review cadence~~ | — | **Done 2026-11-02 (as a policy; no review has been run yet).** Reviewed quarterly and on three events: a member leaving, any role change, and before handover to SSM. Method: list users, roles, permission boxes and direct-apply grants; remove what is not needed; keep the evidence from the audit log | Data steward |
+| G7 | ~~No access-review cadence~~ | — | **Done 2026-11-02: the policy, and the first review run the same day (evidence below; 2 accounts flagged to confirm, none removed).** Reviewed quarterly and on three events: a member leaving, any role change, and before handover to SSM. Method: list users, roles, permission boxes and direct-apply grants; remove what is not needed; keep the evidence from the audit log | Data steward |
 | G8 | ~~`JWT_SECRET_KEY` and `MFA_ENCRYPTION_KEY` have no recorded rotation or minimum length~~ | — | **Done 2026-11-02:** startup checks in `backend/startup_checks.py` (4 tests in `tests/backend/test_startup_checks.py`) and the rotation policy in section 6 point 5. Takes effect when this branch is deployed to Render; the local `.env` still starts (checked) | Backend |
 | G9 | Row-level security not confirmed on every table that holds user or audit data | Direct database access could bypass the API | Run a read-only check of `pg_class.relrowsecurity` per table | Yuan |
 | G10 | Branch protection is not enforced on GitHub (private repo, free plan) | A direct push to an integration branch | Keep the pull-request convention; revisit if the plan changes | Team |
 | G11 | Agreements with Supabase, Render, Vercel and the email provider, and their data regions, not recorded | Unknown transfer of personal data abroad | Record the plan, region and DPA status of each in section 7 | Custodian |
-| G12 | Whether SSM's sales listing or outlet fields identify individuals is unknown | Personal data may be in the business tables | Check the raw outlet and invoice fields; if so, classify and minimise | Yuan |
+| G12 | **Answered 2026-11-02: yes, personal data is present; kept open for minimisation.** Customer and outlet names (2,841 in `customer_dimension`, 180 in `salesreturn_fact`) are free-text store names, many a person's name; 33 salesman names are individuals' full names. **No phone, address, contact, email or TIN field exists**: not in any `public`, `mart` or `lp_*` table (a column-name scan), and not in the header rows of any of the 567 `.xlsx` files in `data/raw/` (the first 8 rows of every sheet; headers seen: Salesman, Customer Name, Outlet Name, Account Name, plus province, city and municipality names, which are places, not street addresses). Only headers were scanned; a person's details typed into a free-text cell further down a sheet were not looked for. Masked examples: `*SUSAN E***** & B********`, `JEM'S C******`, `R***** M********`, `J*** J*** M*****` (a salesman) | Names of private people and of SSM's staff sit in the database, in the raw files and in every backup. **No backend route and no frontend file reads these columns** (searched `backend/` and `frontend/src/`), so the dashboard does not display them | Classify as in section 2 (done). Keep the columns out of any export, extract or report. Remove them at handover and delete the backup copies (section 10). Consider replacing salesman names with codes if a name is ever needed in a screen | Data steward |
 | G13 | **Open.** No handover procedure to SSM | Student accounts, keys and backup copies stay with the team after the project | Section 10 lists what transfers, what is rotated, what is removed and what is deleted | Team, then SSM |
 
-### G4 evidence: backup folders against the section 5 rule (2026-11-02)
+### G7 evidence: first access review (2026-11-02)
 
-Listed from `backups/`, read-only. **Nothing has been deleted.** The deletion is Kelvin's to run after reading this.
-Rule applied (section 5): keep the 3 most recent, plus the latest folder of each of the 6 calendar months 2026-06 to
-2026-11. Months with no folder (2026-06, -07, -08) keep nothing. Where a folder name has no timestamp
-(`lp_rerun_2026-09-30`, `session5_wip_untracked`, `session5_wip2_untracked`) its file date is used. Sizes are the bytes
-on disk, not compressed. Totals: 74 folders, 718.48 MB; 4 inside the rule (19.4 MB), **70 outside, 699.07 MB that would
-be freed**.
+Run read-only against the live database (transaction-scoped READ ONLY) on 2026-11-02. Queries were run by Claude Code at
+Kelvin Yuan Guillermo's request; **reviewer of record: Kelvin Yuan Guillermo (data steward)**, who decides every removal.
+**Nothing was removed.** Emails are masked here. Sources: `app.users`, `app.user_permission_override`, `app.user_session`,
+`app.audit_log`.
 
-Things to read before deleting:
-- The count is **74 folders, not the 91** this file said earlier. `backups/` also holds 18 loose files (SQL, CSV, patches, JSON), which this list does not cover and the rule does not name. Where the 91 came from is unresolved.
-- The September keeper (`lp_rerun_2026-09-30`) is an LP-rerun scratch folder, not a database backup, because the rule picks by date. The latest September database backup is `pm_cleanup_20260928T174927Z`.
-- Five folders are empty or near-empty (0 bytes): `full_backup_20261007T170842Z`, `tables_20261020T174555Z` and three `real_recovery_rehearsal_` folders from 2026-09-23.
-- Several are the only copy of a restore point cited in migrations or in `STATE.md` (for example `pre_0045_20261007`, the `real_recovery_` and `synth_v2_cutover_` folders). Whether any of them is still needed for a rollback is for Kelvin to decide, not this list.
-- Copies on other laptops or drives are not counted.
+Method (G7): list users, roles, permission boxes and direct-apply grants; remove what is not needed; evidence from the audit log.
+Result: **5 accounts, all `admin`. 0 permission-box overrides and 0 direct-apply grants exist** (an admin always has every
+permission and overrides do not apply to one, `backend/permissions.py:14`).
 
-| # | Date | Folder | Size (MB) | Against the rule | Delete? |
-|---|---|---|---|---|---|
-| 1 | 2026-11-02 | `full_backup_20261102T114428Z` | 19.09 | inside: 3 most recent; latest of 2026-11 | no |
-| 2 | 2026-10-24 | `tables_20261024T110607Z` | 0.14 | inside: 3 most recent; latest of 2026-10 | no |
-| 3 | 2026-10-24 | `tables_20261024T082629Z` | 0.13 | inside: 3 most recent | no |
-| 4 | 2026-10-24 | `tables_20261024T075057Z` | 0.07 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 5 | 2026-10-23 | `tables_20261023T133928Z` | 0.06 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 6 | 2026-10-22 | `tables_20261022T142441Z` | 0.05 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 7 | 2026-10-22 | `tables_20261022T120255Z` | 0.11 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 8 | 2026-10-21 | `tables_20261021T175535Z` | 0.01 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 9 | 2026-10-21 | `tables_20261021T171309Z` | 0.01 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 10 | 2026-10-21 | `tables_20261021T171239Z` | 1.37 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 11 | 2026-10-20 | `tables_20261020T174604Z` | 0.03 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 12 | 2026-10-20 | `tables_20261020T174555Z` | 0.00 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 13 | 2026-10-20 | `tables_20261020T171149Z` | 17.65 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 14 | 2026-10-20 | `tables_20261020T163159Z` | 0.13 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 15 | 2026-10-20 | `tables_20261020T163154Z` | 0.46 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 16 | 2026-10-20 | `tables_20261020T135337Z` | 1.15 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 17 | 2026-10-20 | `tables_20261020T135322Z` | 17.57 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 18 | 2026-10-20 | `tables_20261020T135315Z` | 0.95 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 19 | 2026-10-20 | `tables_20261020T132130Z` | 0.03 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 20 | 2026-10-20 | `tables_20261020T112333Z` | 0.01 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 21 | 2026-10-19 | `tables_20261019T131316Z` | 0.48 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 22 | 2026-10-19 | `tables_20261019T100004Z` | 0.47 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 23 | 2026-10-19 | `tables_20261019T095959Z` | 0.39 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 24 | 2026-10-19 | `tables_20261019T090053Z` | 0.01 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 25 | 2026-10-19 | `tables_20261019T090050Z` | 0.01 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 26 | 2026-10-19 | `tables_20261019T073443Z` | 0.02 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 27 | 2026-10-19 | `tables_20261019T073423Z` | 44.98 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 28 | 2026-10-16 | `full_backup_20261016T070624Z` | 11.99 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 29 | 2026-10-16 | `full_backup_20261016T054130Z` | 11.88 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 30 | 2026-10-07 | `full_backup_20261007T171126Z` | 1.14 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 31 | 2026-10-07 | `full_backup_20261007T170842Z` | 0.00 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 32 | 2026-10-07 | `INCOMPLETE_full_backup_20261007T151146Z_ssl_drop` | 1.14 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 33 | 2026-10-07 | `pre_0045_20261007` | 0.11 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 34 | 2026-10-05 | `mart_backup_before_0046_20261005T080301Z` | 3.06 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 35 | 2026-10-05 | `full_backup_20261005T061733Z` | 10.63 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 36 | 2026-10-04 | `full_backup_20261004T143933Z` | 10.57 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 37 | 2026-10-04 | `full_backup_20261004T134329Z` | 13.55 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 38 | 2026-10-04 | `live_backup_20261004T134035Z` | 7.50 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 39 | 2026-10-04 | `full_backup_20261004T133536Z` | 10.56 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 40 | 2026-10-03 | `full_backup_20261003T095403Z` | 7.44 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 41 | 2026-10-03 | `full_backup_20261003T080251Z` | 7.41 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 42 | 2026-10-03 | `segmentation_2026-02_pre_recompute_20261003T063026Z` | 0.16 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 43 | 2026-10-02 | `full_backup_20261002T160122Z` | 13.62 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 44 | 2026-09-30 | `lp_rerun_2026-09-30` | 0.05 | inside: latest of 2026-09 | no |
-| 45 | 2026-09-30 | `session5_wip2_untracked` | 0.39 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 46 | 2026-09-30 | `session5_wip_untracked` | 0.39 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 47 | 2026-09-28 | `pm_cleanup_20260928T174927Z` | 1.20 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 48 | 2026-09-28 | `pm_cleanup_rehearsal_20260928T174501Z` | 1.21 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 49 | 2026-09-28 | `synth_v2_cutover_20260928T151525Z` | 32.74 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 50 | 2026-09-28 | `synth_v2_cutover_rehearsal_20260928T144105Z` | 32.77 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 51 | 2026-09-28 | `dm_fixes_20260928T114435Z` | 58.10 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 52 | 2026-09-28 | `dm_fixes_rehearsal_20260928T114328Z` | 58.12 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 53 | 2026-09-23 | `real_recovery_20260923T022354Z` | 25.06 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 54 | 2026-09-23 | `real_recovery_rehearsal_20260923T022020Z` | 25.06 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 55 | 2026-09-23 | `real_recovery_rehearsal_20260923T021638Z` | 24.67 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 56 | 2026-09-23 | `real_recovery_rehearsal_20260923T020250Z` | 24.96 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 57 | 2026-09-23 | `real_recovery_rehearsal_20260923T015811Z` | 24.96 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 58 | 2026-09-23 | `real_recovery_rehearsal_20260923T011419Z` | 24.65 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 59 | 2026-09-23 | `real_recovery_rehearsal_20260923T011046Z` | 24.65 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 60 | 2026-09-23 | `real_recovery_rehearsal_20260923T010538Z` | 0.00 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 61 | 2026-09-23 | `real_recovery_rehearsal_20260923T005531Z` | 0.00 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 62 | 2026-09-22 | `real_recovery_rehearsal_20260922T150147Z` | 24.96 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 63 | 2026-09-22 | `real_recovery_rehearsal_20260922T144257Z` | 24.96 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 64 | 2026-09-22 | `real_recovery_rehearsal_20260922T132429Z` | 24.95 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 65 | 2026-09-21 | `staging_v2_sales_return_superseded_20260921T152509Z` | 0.41 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 66 | 2026-09-21 | `staging_real_region_fix_20260921T152230Z` | 0.03 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 67 | 2026-09-21 | `staging_v2a_superseded_20260921T142457Z` | 9.68 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 68 | 2026-09-21 | `staging_v1_20260921T140003Z` | 17.40 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 69 | 2026-09-17 | `live_backup_20260917T093732Z` | 6.37 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 70 | 2026-09-17 | `live_backup_20260917T093208Z` | 6.37 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 71 | 2026-09-16 | `live_backup_20260916T190021Z` | 6.37 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 72 | 2026-09-16 | `live_backup_20260916T185950Z` | 6.37 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 73 | 2026-09-16 | `live_backup_20260916T185626Z` | 6.37 | outside: older than the 3 most recent and not the latest of its month | yes |
-| 74 | 2026-09-14 | `live_backup_20260914T151217Z` | 9.12 | outside: older than the 3 most recent and not the latest of its month | yes |
+| id | Name | Email | Role | Created | Boxes / direct-apply | Sign-ins (last) | Audit entries | Still needed? | Flag |
+|---|---|---|---|---|---|---|---|---|---|
+| 3 | Mikhaella Audrey Bugayong | mi\*\*\*\*@gmail.com | admin | 2026-08-19 | none | 134 (2026-11-02) | 101 | Yes: the most active account, a team member | None |
+| 11 | Kelvin Yuan Guillermo | ky\*\*\*\*@gmail.com | admin | 2026-10-16 | none | none recorded | 0 | Yes: data steward and privacy contact | No sign-in is recorded for this account in `app.user_session` |
+| 12 | Jamaica Valdez | va\*\*\*\*@gmail.com | admin | 2026-10-16 | none | 21 (2026-11-02) | 2 | **Unconfirmed**: the name is not in the team list in `CLAUDE.md`, but the account signs in today | **Confirm who this is before the next review** |
+| 14 | Mikhaella Audrey Bugayong | ta\*\*\*\*@gmail.com | admin | 2026-10-16 | none | none recorded | 4 (as staff, then admin) | **Unconfirmed**: same full name as account 3, different email | **Candidate for removal if it duplicates account 3** |
+| 15 | Thea Faith Cabrera | tf\*\*\*\*@gmail.com | admin | 2026-10-18 | none | 17 (2026-11-02) | 1 | Yes: a team member | None |
+
+Findings:
+- **All five accounts are `admin`.** Role is the only access control in use. Where a person does not need user management, audit-log access or `lp.decide`, a `staff` role would do. Whether each person needs admin is for Kelvin to say.
+- Two accounts share a full name (ids 3 and 14).
+- Sign-in history exists for accounts 4 and 5 (3 sessions from 2026-08-24, and 2 on 2026-09-28) but those accounts no longer exist, so nothing needs removing for them.
+- The audit log also holds entries for `guillermo@gmail.com` (staff, 3 entries, 2026-08/09), `nobody_probe@example.com` (a probe, 2026-09-30) and `system:etl_loader`: none has an account today.
+- Not checked: whether two-step sign-in is on for each account.
+
+### G4 evidence: the backup folders against the section 5 rule (corrected 2026-11-02)
+
+Listed from `backups/`, read-only. **Nothing has been deleted. The deletion is Kelvin's to run after reading this table.**
+
+The rule (section 5): keep the 3 most recent **database backups**, plus the latest database backup of each of the 6 calendar
+months 2026-06 to 2026-11, plus any folder an applied migration cites as a rollback point (kept regardless, hard rule 8).
+A **database backup** is a non-empty folder written before a change that holds table dumps of the live database; its name
+starts with `full_backup_`, `live_backup_`, `tables_`, `mart_backup_`, `dm_fixes_`, `synth_v2_cutover_`, `pm_cleanup_` or
+`real_recovery_` (the `real_recovery_rehearsal_` folders dump the same tables). An empty folder or an `INCOMPLETE_` one is
+not a backup. Anything else is a table export, a staging copy or a code patch: it is outside the rule and marked NOT GOVERNED.
+The date is the timestamp in the name; three folders have none and use their file date. Months with no database backup
+(2026-06, -07, -08) keep nothing.
+
+| | Folders | Size (MB) |
+|---|---|---|
+| In `backups/` | 74 | 718.48 |
+| **KEEP** | 7 | 36.06 |
+| **DELETE** | 58 | **653.81 (reclaimable)** |
+| NOT GOVERNED (not counted) | 9 | 28.62 |
+
+What the correction changed: the earlier list picked `lp_rerun_2026-09-30` as September's keeper because it was the latest
+folder by date. It is not a database backup: it holds a CSV and a parquet export of one table, `lp_recommendation`. The
+September keeper is now `pm_cleanup_20260928T174927Z`.
+
+**Read before deleting:** `full_backup_` folders hold the whole database; the `tables_` folders and the pre-apply folders hold only the tables they were about to change. After the DELETE rows go, **one complete full backup remains** (`full_backup_20261102T114428Z`). The rule asks for that; whether it is enough is Kelvin's call, and the rule is unchanged.
+
+**Folder count.** `backups/` holds 74 folders and 18 loose files. This file earlier said 91 folders; that
+figure does not match the directory and its source is unresolved. **Empty folders: 4, not 5**: `tables_20261020T174555Z`, `full_backup_20261007T170842Z`, `real_recovery_rehearsal_20260923T010538Z`, `real_recovery_rehearsal_20260923T005531Z`.
+
+| # | Date | Folder | Size (MB) | What it is | Action | Why |
+|---|---|---|---|---|---|---|
+| 1 | 2026-11-02 | `full_backup_20261102T114428Z` | 19.09 | database backup | **KEEP** | 3 most recent; latest database backup of 2026-11 |
+| 2 | 2026-10-24 | `tables_20261024T110607Z` | 0.14 | database backup | **KEEP** | 3 most recent; latest database backup of 2026-10 |
+| 3 | 2026-10-24 | `tables_20261024T082629Z` | 0.13 | database backup | **KEEP** | 3 most recent |
+| 4 | 2026-10-24 | `tables_20261024T075057Z` | 0.07 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 5 | 2026-10-23 | `tables_20261023T133928Z` | 0.06 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 6 | 2026-10-22 | `tables_20261022T142441Z` | 0.05 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 7 | 2026-10-22 | `tables_20261022T120255Z` | 0.11 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 8 | 2026-10-21 | `tables_20261021T175535Z` | 0.01 | database backup | **KEEP** | cited by applied migration 0064 (rule 8, kept regardless) |
+| 9 | 2026-10-21 | `tables_20261021T171309Z` | 0.01 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 10 | 2026-10-21 | `tables_20261021T171239Z` | 1.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 11 | 2026-10-20 | `tables_20261020T174604Z` | 0.03 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 12 | 2026-10-20 | `tables_20261020T174555Z` | 0.00 | empty folder (no files) | **DELETE** | contains no files |
+| 13 | 2026-10-20 | `tables_20261020T171149Z` | 17.65 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 14 | 2026-10-20 | `tables_20261020T163159Z` | 0.13 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 15 | 2026-10-20 | `tables_20261020T163154Z` | 0.46 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 16 | 2026-10-20 | `tables_20261020T135337Z` | 1.15 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 17 | 2026-10-20 | `tables_20261020T135322Z` | 17.57 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 18 | 2026-10-20 | `tables_20261020T135315Z` | 0.95 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 19 | 2026-10-20 | `tables_20261020T132130Z` | 0.03 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 20 | 2026-10-20 | `tables_20261020T112333Z` | 0.01 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 21 | 2026-10-19 | `tables_20261019T131316Z` | 0.48 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 22 | 2026-10-19 | `tables_20261019T100004Z` | 0.47 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 23 | 2026-10-19 | `tables_20261019T095959Z` | 0.39 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 24 | 2026-10-19 | `tables_20261019T090053Z` | 0.01 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 25 | 2026-10-19 | `tables_20261019T090050Z` | 0.01 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 26 | 2026-10-19 | `tables_20261019T073443Z` | 0.02 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 27 | 2026-10-19 | `tables_20261019T073423Z` | 44.98 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 28 | 2026-10-16 | `full_backup_20261016T070624Z` | 11.99 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 29 | 2026-10-16 | `full_backup_20261016T054130Z` | 11.88 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 30 | 2026-10-07 | `full_backup_20261007T171126Z` | 1.14 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 31 | 2026-10-07 | `full_backup_20261007T170842Z` | 0.00 | empty folder (no files) | **DELETE** | contains no files |
+| 32 | 2026-10-07 | `INCOMPLETE_full_backup_20261007T151146Z_ssl_drop` | 1.14 | incomplete backup (SSL dropped mid-run) | **DELETE** | an incomplete backup is not a restore point |
+| 33 | 2026-10-07 | `pre_0045_20261007` | 0.11 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 34 | 2026-10-05 | `mart_backup_before_0046_20261005T080301Z` | 3.06 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 35 | 2026-10-05 | `full_backup_20261005T061733Z` | 10.63 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 36 | 2026-10-04 | `full_backup_20261004T143933Z` | 10.57 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 37 | 2026-10-04 | `full_backup_20261004T134329Z` | 13.55 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 38 | 2026-10-04 | `live_backup_20261004T134035Z` | 7.50 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 39 | 2026-10-04 | `full_backup_20261004T133536Z` | 10.56 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 40 | 2026-10-03 | `full_backup_20261003T095403Z` | 7.44 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 41 | 2026-10-03 | `full_backup_20261003T080251Z` | 7.41 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 42 | 2026-10-03 | `segmentation_2026-02_pre_recompute_20261003T063026Z` | 0.16 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 43 | 2026-10-02 | `full_backup_20261002T160122Z` | 13.62 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 44 | 2026-09-30 | `lp_rerun_2026-09-30` | 0.05 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 45 | 2026-09-30 | `session5_wip2_untracked` | 0.39 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 46 | 2026-09-30 | `session5_wip_untracked` | 0.39 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 47 | 2026-09-28 | `pm_cleanup_20260928T174927Z` | 1.20 | database backup | **KEEP** | latest database backup of 2026-09 |
+| 48 | 2026-09-28 | `pm_cleanup_rehearsal_20260928T174501Z` | 1.21 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 49 | 2026-09-28 | `synth_v2_cutover_20260928T151525Z` | 32.74 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 50 | 2026-09-28 | `synth_v2_cutover_rehearsal_20260928T144105Z` | 32.77 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 51 | 2026-09-28 | `dm_fixes_20260928T114435Z` | 58.10 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 52 | 2026-09-28 | `dm_fixes_rehearsal_20260928T114328Z` | 58.12 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 53 | 2026-09-23 | `real_recovery_20260923T022354Z` | 25.06 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 54 | 2026-09-23 | `real_recovery_rehearsal_20260923T022020Z` | 25.06 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 55 | 2026-09-23 | `real_recovery_rehearsal_20260923T021638Z` | 24.67 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 56 | 2026-09-23 | `real_recovery_rehearsal_20260923T020250Z` | 24.96 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 57 | 2026-09-23 | `real_recovery_rehearsal_20260923T015811Z` | 24.96 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 58 | 2026-09-23 | `real_recovery_rehearsal_20260923T011419Z` | 24.65 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 59 | 2026-09-23 | `real_recovery_rehearsal_20260923T011046Z` | 24.65 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 60 | 2026-09-23 | `real_recovery_rehearsal_20260923T010538Z` | 0.00 | empty folder (no files) | **DELETE** | contains no files |
+| 61 | 2026-09-23 | `real_recovery_rehearsal_20260923T005531Z` | 0.00 | empty folder (no files) | **DELETE** | contains no files |
+| 62 | 2026-09-22 | `real_recovery_rehearsal_20260922T150147Z` | 24.96 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 63 | 2026-09-22 | `real_recovery_rehearsal_20260922T144257Z` | 24.96 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 64 | 2026-09-22 | `real_recovery_rehearsal_20260922T132429Z` | 24.95 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 65 | 2026-09-21 | `staging_v2_sales_return_superseded_20260921T152509Z` | 0.41 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 66 | 2026-09-21 | `staging_real_region_fix_20260921T152230Z` | 0.03 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 67 | 2026-09-21 | `staging_v2a_superseded_20260921T142457Z` | 9.68 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 68 | 2026-09-21 | `staging_v1_20260921T140003Z` | 17.40 | not a database backup (table export, staging copy or code patch) | **NOT GOVERNED** | outside the section 5 rule (it is not a database backup); not counted in the total; leave until the person who made it says |
+| 69 | 2026-09-17 | `live_backup_20260917T093732Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 70 | 2026-09-17 | `live_backup_20260917T093208Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 71 | 2026-09-16 | `live_backup_20260916T190021Z` | 6.37 | database backup | **KEEP** | cited by applied migration 0016 (rule 8, kept regardless) |
+| 72 | 2026-09-16 | `live_backup_20260916T185950Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 73 | 2026-09-16 | `live_backup_20260916T185626Z` | 6.37 | database backup | **DELETE** | older than the 3 most recent, not the latest of its month, not cited by a migration |
+| 74 | 2026-09-14 | `live_backup_20260914T151217Z` | 9.12 | database backup | **KEEP** | cited by applied migration 0014 (rule 8, kept regardless) |
+
+**The 18 loose files** in `backups/` (not folders; the rule does not govern them; none is cited by a migration unless the last column says so):
+
+| File | Size (KB) | What it is | Holds SSM data? | Cited by a migration |
+|---|---|---|---|---|
+| `RESTORE_freeze_2026-10-20.sql` | 2.3 | restore script for the 2026-10-20 freeze | no | no |
+| `claude_md_local_before_root_20261004.md` | 9.0 | copy of the old local CLAUDE.md before it moved to the repo root | no | no |
+| `delmonte_abc_held.patch` | 8.4 | held Del Monte ABC code patch | no | no |
+| `forecast_result_pre_router_20260921T100759Z.csv` | 161.1 | Forecast_Result rows before the 2026-09-21 router change (data) | yes | no |
+| `pm_cleanup_baseline_public_20260928T174908Z.json` | 25.6 | baseline counts for the 2026-09-28 product-master cleanup | counts only | no |
+| `pre_0047_viewdef_20261007T172944Z.sql` | 2.9 | view definitions saved before migration 0047 | no | no |
+| `pre_0061_viewdef_20261020T1355Z.sql` | 2.6 | view definitions saved before migration 0061 | no | no |
+| `product_dimension_backup_20260918.csv` | 1485.0 | product_dimension rows, 2026-09-18 (data) | yes | no |
+| `rollback_forecast_result_20260921T100759Z.py` | 2.5 | rollback script for the forecast-result CSV above | no | no |
+| `session5_build_preview_outputs_3way.py` | 14.6 | scratch script from session 5 | no | no |
+| `session5_wip.patch` | 175.2 | session 5 work-in-progress patch | no | no |
+| `session5_wip2.patch` | 182.3 | session 5 work-in-progress patch, second | no | no |
+| `session5_wip2_filelist.txt` | 1.8 | file list for the second session 5 patch | no | no |
+| `session5_wip2_untracked.sha256` | 2.2 | checksums for the second session 5 untracked copy | no | no |
+| `session5_wip_filelist.txt` | 1.8 | file list for the first session 5 patch | no | no |
+| `session5_wip_untracked.sha256` | 2.2 | checksums for the first session 5 untracked copy | no | no |
+| `sku_traits_pre_0022_20260920T151450Z.csv` | 20.7 | SKU traits before migration 0022 (data) | yes | no |
+| `synth_v2_cutover_baseline_public_20260928T151324Z.json` | 22.1 | baseline counts for the 2026-09-28 synthetic-v2 cutover | counts only | no |
+
+Copies on other laptops or drives are not counted here. Disk encryption (BitLocker) is **UNVERIFIED**.
 
 ## 5. Retention and disposal (adopted by the team 2026-11-02; SSM has not confirmed it)
 
@@ -217,11 +283,11 @@ Any group member who has access to that dashboard can do these; it does not have
 ## 9. Review
 
 Revisit this file each quarter, and whenever a new data source, a new role, or a new third party is added.
-Last reviewed: 2026-11-02 by Kelvin Yuan Guillermo. Next review due by 2027-02-02 (three months), or sooner on any of the
+Last reviewed: 2026-11-02, reviewer of record Kelvin Yuan Guillermo. Next review due by 2027-02-02 (three months), or sooner on any of the
 three events in G7.
 
 Gap state on 2026-11-02: **done** G2, G3, G5, G6, G7, G8 (G5, G6 and G7 are the team's own adoption, not confirmed by
-SSM). **Open:** G1 (accepted for now), G4 (the backup list is attached, nothing deleted), G9, G10, G11, G12, G13.
+SSM). **Open:** G1 (accepted for now), G4 (the corrected table is attached, nothing deleted), G9, G10, G11, G12 (answered: personal data is present; minimisation left), G13. G7's first review was run 2026-11-02.
 This file records the team's decisions; it does not show that anyone outside the team has agreed to them.
 
 ## 10. Handover to SSM (gap G13, open)

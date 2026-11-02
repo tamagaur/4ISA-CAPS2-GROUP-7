@@ -130,8 +130,7 @@ class RecommendationItem(BaseModel):
     # these, and none of them changes a recommended value. The one reader is the displayed plan total.
     recommended_q_i: float | None = None
     decided_q_i: float | None = None
-    # What this row contributes to the displayed plan total and count (2026-10-24, the narrow lift of the
-    # capture-only rule): decided_q_i where the planner accepted a different quantity, else q_i. Equal to
+    # What this row contributes to the displayed plan total and count (2026-10-24): decided_q_i where the planner accepted a different quantity, else q_i. Equal to
     # q_i for every undecided row, so with nothing decided the plan total is unchanged.
     plan_q_i: float | None = None
     decision_reason: str | None = None

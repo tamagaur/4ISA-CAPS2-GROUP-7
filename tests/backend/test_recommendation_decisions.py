@@ -248,8 +248,9 @@ def test_the_row_query_reads_the_capture_columns_only_where_they_exist():
 
 
 # ---- the decided quantity feeds the displayed plan total, and nothing else -------------------------------
-# 2026-10-24: the capture-only rule is lifted narrowly. decided_q_i may feed the plan total and count
-# (plan_q_i); it must not reach the forecast, the safety stock or the LP.
+# What is true (2026-11-02): reasons enter no computation; a decision changes neither the forecast nor the safety stock;
+# an accepted order becomes an expected receipt and so part of the next cycle's opening stock, which the optimisation
+# reads. decided_q_i also feeds the displayed plan total and count (plan_q_i).
 
 def test_plan_quantity_is_the_accepted_quantity_else_q_i():
     assert rec.plan_quantity(50.0, "accepted", 40.0) == 40.0
@@ -267,38 +268,52 @@ def test_the_item_carries_plan_q_i_and_still_the_lp_q_i():
     assert (item.q_i, item.recommended_q_i, item.plan_q_i) == (50.0, 50.0, 40.0)
 
 
-# File-name prefixes that may mention plan_q_i. Each reads the API's or the database's displayed plan figure and feeds
-# nothing back into forecasting, safety stock or the LP. Bounded on purpose: the list may not grow past three.
-PLAN_Q_I_EXEMPT = (
-    "local_api_qa",          # the QA harness reads the API response (added 2026-10-30)
-    "manuscript_figures",    # scripts/manuscript_figures.py renders the plan figures read-only (added 2026-11-02)
+# The claim worth protecting: the forecast and the safety-stock calculation never read a decision. (The optimisation does,
+# one step removed: backend/expected_receipts.py turns an accepted order into stock on the way, and run_lp reads
+# stock_opening_v. That path is deliberate and is not what this test is about.)
+DECISION_NAMES = ("decided_q_i", "decision_reason", "decided_quantity", "plan_q_i")
+FORECAST_AND_SAFETY_STOCK = (
+    "analytics/forecasting/*.py",         # every forecaster, the router, the calendar factor, the review flag
+    "analytics/optimization/lp.py",       # compute_safety_stock
+    "analytics/params.py",                # the safety-stock constants
+    "scripts/run_baseline_forecast.py",   # the runner that writes Forecast_Result
+    "scripts/run_lp.py",                  # safety_stock_for
+    "backend/stock_status.py", "backend/stock_observation.py", "backend/data_mode.py",
+    "backend/demo_data.py", "backend/marts.py", "backend/planning_mart.py",
+    "backend/routers/sku.py",             # the forecast served per SKU
+    "backend/routers/inventory.py",       # the safety-stock card
+    "backend/routers/policy_comparison.py",
 )
-PLAN_Q_I_EXEMPT_MAX = 3
 
 
-def test_only_the_displayed_plan_total_reads_the_decided_quantity():
-    assert len(PLAN_Q_I_EXEMPT) <= PLAN_Q_I_EXEMPT_MAX, "the plan_q_i exemption list is bounded: justify a change in review"
+def _reads_a_decision(text: str) -> list[str]:
+    return [n for n in DECISION_NAMES if n in text]
+
+
+def test_the_forecast_and_the_safety_stock_never_read_a_decision():
+    # the check itself catches a read (a planted one), so a green result means something
+    assert _reads_a_decision("df['x'] = row['decided_q_i'] * 1.1") == ["decided_q_i"]
+    assert _reads_a_decision("sigma = demand.std()") == []
+    files = [p for pattern in FORECAST_AND_SAFETY_STOCK for p in sorted(REPO.glob(pattern))]
+    assert len(files) >= 20, "the guard must actually cover the forecasting package, the runner and the backend modules"
+    offenders = {p.relative_to(REPO).as_posix(): _reads_a_decision(p.read_text(encoding="utf-8", errors="ignore"))
+                 for p in files}
+    assert {k: v for k, v in offenders.items() if v} == {}
+    # the dashboard reads the derived plan field only
     dashboard = (REPO / "backend/routers/dashboard.py").read_text(encoding="utf-8")
-    assert "decided_q_i" not in dashboard and "plan_q_i" in dashboard  # it reads the derived field only
-    for root in ("analytics", "scripts", "transform", "tools"):
-        for path in (REPO / root).rglob("*.py"):
-            if any(p in path.parts for p in (".venv", "__pycache__")):
-                continue
-            if path.name.startswith(PLAN_Q_I_EXEMPT):
-                continue
-            assert "plan_q_i" not in path.read_text(encoding="utf-8", errors="ignore"), path
+    assert "decided_q_i" not in dashboard and "plan_q_i" in dashboard
 
 
 # ---- nothing upstream reads the capture ------------------------------------------------------------------
 
-CAPTURE_NAMES = ("decided_q_i", "decision_reason", "decided_quantity")
+CAPTURE_NAMES = ("decided_q_i", "decision_reason", "decided_quantity")  # the allow-list below: who may name them at all
 # The only files allowed to mention the capture columns: the endpoint, its schema, the migration, these tests.
 ALLOWED = {
     "backend/routers/recommendations.py", "backend/schemas/recommendations.py",
     "analytics/db/migrations/0062_lp_recommendation_decision_capture.sql",
     "tests/backend/test_recommendation_decisions.py",
     # 2026-10-23: the reversal and approval flow is part of the decision endpoint (it writes, copies and reads the
-    # same columns to keep or restore a decision). Still nothing in forecasting, safety stock or the LP.
+    # same columns to keep or restore a decision). Nothing in forecasting or safety stock reads them.
     "backend/routers/reorder_approval.py", "tests/backend/test_reorder_approval.py",
     "analytics/db/migrations/0067_lp_decision_reversal.sql",
     "analytics/db/migrations/0068_lp_quantity_change_approval.sql",

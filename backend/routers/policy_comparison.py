@@ -61,10 +61,10 @@ router = APIRouter(prefix="/policy-comparison", tags=["policy-comparison"])
 
 VALUATION_BLOCKED_REASON = (
     "No working-capital or capital-freed figure is claimed. The pesos block values both policies at "
-    "each product's last purchase price (the stock file's unit cost per case ÷ pack size), pending SSM "
-    "confirmation; at peak the per-product targets hold more than the 3-week rule, not less. "
+    "each product's last purchase price (the stock file's unit cost per case ÷ pack size), a team decision "
+    "(DEC-44); not confirmed by SSM; at peak the per-product targets hold more than the 3-week rule, not less. "
     "Stockout exposure is left out until the safety stock's "
-    "window (review + lead days, placeholders until SSM confirms them) and its daily-independence "
+    "window (review + lead days, stated assumptions, DEC-44, not confirmed by SSM) and its daily-independence "
     "assumption are settled — see analytics/params.py."
 )
 

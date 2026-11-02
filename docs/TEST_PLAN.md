@@ -184,7 +184,7 @@ T83. Each Pass and Fail is something a tester can observe.
 | T42 | Both runners refuse a stale ABC period | C42 | ABC older than the latest real sales month exits 2 unless `--allow-stale-abc` | rc 0 |
 | T43 | `close_cycle` refuses an incomplete plan | C43 | LP rows ≠ ok forecasts with MASE < 1 exits 2 and names both counts | The close writes |
 | T44 | The plan reproduces from its inputs | C44 | One product's SS_i, T_i, need_i and plan_q_i, and the 435,988 total, are recomputed from raw rows equal to the stored values | Any value differs beyond 2-decimal storage |
-| T83 | A decided quantity is capture only: nothing in `analytics`, `scripts`, `transform` reads the plan quantity | C83 | The guard test finds `plan_q_i` in no file outside the dashboard router and its listed exemptions | It names a file that reads it |
+| T83 | The forecast and the safety-stock calculation never read a decided quantity or a decision reason | C83 | The guard test finds no decision column and no `plan_q_i` in the forecasting package, the forecast runner, the LP's safety-stock functions or the backend modules that compute them; a planted read is caught | It names a file that reads one |
 
 ### Audit Log
 

@@ -1162,7 +1162,7 @@ def _write_forecast_result(cur, df, calendar: bool = False):
                 "written_at": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
     if calendar:
         logger.warning("--calendar-factor: served values and their holdout are calendar-adjusted "
-                       "(analytics/forecasting/calendar.py; pending Sir Catubag's sign-off).")
+                       "(analytics/forecasting/calendar.py; team decision, DEC-41; not confirmed by SSM or the adviser).")
     served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals)
 
     target_keys = [int(k) for k in df["product_key"]]
