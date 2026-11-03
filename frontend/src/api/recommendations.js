@@ -11,7 +11,7 @@ import { appendPrincipal } from '../principals';
 // 'all' (every stored cycle, newest first; with from/to, only those months).
 // The Reorder page's "Changes since the previous plan" reads an earlier
 // cycle this way (backend/routers/recommendations.py get_recommendations).
-export function getRecommendations({ status, from, to, principal, cycle } = {}) {
+export function getRecommendations({ status, from, to, principal, cycle, includeNotPlanned } = {}) {
   const query = new URLSearchParams();
   if (status) query.append('status', status);
   if (cycle === 'current' || cycle === 'all') query.append('cycle', cycle);
@@ -20,6 +20,7 @@ export function getRecommendations({ status, from, to, principal, cycle } = {}) 
     query.append('from', from);
     query.append('to', to);
   }
+  if (includeNotPlanned) query.append('include_not_planned', 'true');
   const path = `/recommendations?${query.toString()}`;
 
   return cachedRequest(path, async () => {

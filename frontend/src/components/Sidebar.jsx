@@ -171,9 +171,9 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
       {/* Desktop: a docked column that pushes the page; the topbar's menu
-          button slides it away and back. Below 900px the shell takes no
-          space and the sidebar is a slide-over. (The shell is left from the
-          floating icon rail, taken out 2026-10-11 — see Sidebar.css.) */}
+          button folds it to an icon rail, and hovering the rail opens the
+          whole menu over the page (Sidebar.css). Below 900px the shell takes
+          no space and the sidebar is a slide-over. */}
       <div className={`sidebar-shell ${isOpen ? 'is-open' : 'is-closed'}`}>
         <aside className={`sidebar ${isOpen ? 'is-open' : 'is-closed'}`} aria-label="Main navigation">
           {/* App identity — the real SAN2 logo (cropped to its own content
@@ -251,16 +251,16 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
                 {securityState === 'pending' && (
                   <>
                     <AlertTriangle size={12} aria-hidden="true" />
-                    Account security: Action required
+                    <span className="profile-security-text">Account security: Action required</span>
                   </>
                 )}
                 {securityState === 'protected' && (
                   <>
                     <CheckCircle2 size={12} aria-hidden="true" />
-                    Account security: <strong>Protected</strong>
+                    <span className="profile-security-text">Account security: <strong>Protected</strong></span>
                   </>
                 )}
-                {!securityState && 'Account security'}
+                {!securityState && <span className="profile-security-text">Account security</span>}
               </button>
             </div>
             

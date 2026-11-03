@@ -62,7 +62,10 @@ export function validateProposedQuantity({ amount, unit, packSize, recommended }
   if (sameQuantity(pieces, recommended)) {
     return {
       code: 'quantity_unchanged',
-      message: 'That is the recommended quantity. Accept the recommendation as it is instead.',
+      // A row that orders nothing has no Accept (reorderView.js rowActions).
+      message: Number(recommended) > 0
+        ? 'That is the recommended quantity. Accept the recommendation as it is instead.'
+        : 'The plan already orders nothing for this product. Enter the quantity you want ordered.',
     };
   }
   if (unit !== 'cases' && casesAvailable(packSize)) {

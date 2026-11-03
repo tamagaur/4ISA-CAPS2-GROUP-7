@@ -20,7 +20,8 @@ import { GRID_PROPS } from './ChartZoom';
 import { pesoTicks } from '../utils/pesoTicks';
 import { categoryLabel } from '../utils/categoryLabel';
 import { MISS_STATUS_LABEL, missStatus } from '../utils/forecastHighlights';
-import { BAR_FADE_FLOOR, Fade, endDot } from './ui/ChartParts';
+import { BAR_FADE_FLOOR, Fade } from './ui/ChartParts';
+import { FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, endDot, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import { getForecastAccuracy } from '../api/dashboard';
 import { CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarSignoffText } from '../utils/calendarAdjustment';
 import { CHART_COLORS, COLORS } from '../theme/colors';
@@ -396,6 +397,7 @@ export const ForecastErrorSummaryCard = ({
   // calendar_adjustment (signed_off, method), for the card's note.
   principal = null, calendar = null,
 }) => {
+  const shadeId = useLineShadeId();
   const [view, setView] = useState('lines');
   const [basis, setBasis] = useState('adjusted');
   const [twin, setTwin] = useState(null); // { key, data } — the unadjusted run, same months
@@ -628,6 +630,9 @@ export const ForecastErrorSummaryCard = ({
             >
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={months} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
+                  <defs>
+                    <LineShade id={shadeId} color={FC_ACTUAL} />
+                  </defs>
                   {/* Horizontal gridlines only, as every chart on the page. */}
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis
@@ -651,6 +656,8 @@ export const ForecastErrorSummaryCard = ({
                     label={{ value: 'Pesos (₱)', angle: -90, position: 'insideLeft', textAnchor: 'middle', ...FC_AXIS_TITLE }}
                   />
                   <Tooltip content={<ForecastVsActualTooltip />} cursor={{ stroke: CHART_COLORS.gridline }} />
+                  {/* The shade under actual sales, first so the miss bands read on top of it. */}
+                  <Area {...SHADE_ONLY} dataKey="actual" fill={`url(#${shadeId})`} />
                   {/* The miss, shaded between the lines: coral where the
                       forecast was too high, teal where too low. Recharts
                       draws an Area under every Line (its layer order). Neither
@@ -664,14 +671,12 @@ export const ForecastErrorSummaryCard = ({
                     stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
                   />
                   <Line
-                    type="monotone" dataKey="actual" name="Actual sales" stroke={FC_ACTUAL} strokeWidth={3}
-                    strokeLinecap="round" dot={endDot(FC_ACTUAL, lastIndex)}
-                    activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }} isAnimationActive={false}
+                    {...SOLID_LINE} dataKey="actual" name="Actual sales" stroke={FC_ACTUAL}
+                    dot={endDot(FC_ACTUAL, lastIndex)} activeDot={lineHoverDot} isAnimationActive={false}
                   />
                   <Line
-                    type="monotone" dataKey="forecast" name="Forecast" stroke={FC_FORECAST} strokeWidth={2.5}
-                    strokeLinecap="round" strokeDasharray="6 4" dot={endDot(FC_FORECAST, lastIndex)}
-                    activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }} isAnimationActive={false}
+                    {...FORECAST_LINE} dataKey="forecast" name="Forecast" stroke={FC_FORECAST}
+                    dot={endDot(FC_FORECAST, lastIndex)} activeDot={lineHoverDot} isAnimationActive={false}
                   />
                 </ComposedChart>
               </ResponsiveContainer>

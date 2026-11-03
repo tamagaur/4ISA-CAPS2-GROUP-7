@@ -982,7 +982,7 @@ PAGE_ENDPOINTS = {
     "sku.view": [("GET", "/sku")],
     "abc.view": [("GET", "/abc"), ("GET", "/fsn"), ("GET", "/pareto"), ("GET", "/sku")],  # + AbcBreakdowns, useBrandLookup
     "lp.view": [("GET", "/recommendations"), ("GET", "/segment?sku=12345678"),
-                ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],  # + ReorderModal's panel, useBrandLookup
+                ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],  # + the review drawer's panel, useBrandLookup
     "audit_log.view": [("GET", "/audit-log"), ("GET", "/audit-log/users")],
     "upload.run": [],  # Data Management is a mock page: no endpoint yet
     "users.manage": [("GET", "/users"), ("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/3/permissions")],

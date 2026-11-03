@@ -19,6 +19,7 @@ import {
 } from 'recharts';
 import { CHART_COLORS } from '../theme/colors';
 import { useChartZoom, seriesDot, pointLabels, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
+import { COMPARISON_LINE, FORECAST_LINE, LineShade, SOLID_LINE, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import RangePicker from './RangePicker';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
@@ -558,6 +559,7 @@ const SKUForecast = () => {
   // lists open a product here. The code is read once and the parameter
   // dropped, so it selects that product when the list loads and never
   // overrides a pick made after.
+  const shadeId = useLineShadeId();
   const [searchParams, setSearchParams] = useSearchParams();
   const linkedSkuRef = useRef(searchParams.get('sku'));
   useEffect(() => {
@@ -2611,8 +2613,7 @@ const SKUForecast = () => {
                     {chartData.some((pt) => pt.actual != null) && (
                       <div className="legend-item">
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={SKU_ACTUAL} strokeWidth="2.5" strokeLinecap="round" />
-                          <circle cx="14" cy="6" r="3.5" fill={SKU_ACTUAL} stroke="#FFFFFF" strokeWidth="1.5" />
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={SKU_ACTUAL} strokeWidth={SOLID_LINE.strokeWidth} strokeLinecap="round" />
                         </svg>
                         <span className="legend-label">Actual Sales</span>
                       </div>
@@ -2620,7 +2621,7 @@ const SKUForecast = () => {
                     {chartData.some((pt) => pt.lastYear != null) && (
                       <div className="legend-item">
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={SKU_LAST_YEAR} strokeWidth="1.8" strokeLinecap="round" strokeDasharray="4 3" />
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={SKU_LAST_YEAR} strokeWidth={COMPARISON_LINE.strokeWidth} strokeLinecap="round" strokeDasharray={COMPARISON_LINE.strokeDasharray} />
                         </svg>
                         <span className="legend-label">Same month last year</span>
                       </div>
@@ -2632,7 +2633,7 @@ const SKUForecast = () => {
                     {chartData.some((pt) => pt.forecast != null) && (
                       <div className="legend-item">
                         <svg className="legend-swatch" viewBox="0 0 28 12" aria-hidden="true">
-                          <line x1="1" y1="6" x2="27" y2="6" stroke={forecastColor} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={isDemoForecast ? '2 4' : '6 4'} />
+                          <line x1="1" y1="6" x2="27" y2="6" stroke={forecastColor} strokeWidth={FORECAST_LINE.strokeWidth} strokeLinecap="round" strokeDasharray={isDemoForecast ? '2 5' : FORECAST_LINE.strokeDasharray} />
                         </svg>
                         <span className="legend-label">{labels.legend}</span>
                       </div>
@@ -2684,14 +2685,9 @@ const SKUForecast = () => {
                         bottom:0 the month labels were once clipped). */}
                     <ResponsiveContainer width="100%" height={420}>
                       <ComposedChart data={zoom.view} margin={{ top: ANNOTATION_BAND, right: EDGE_LABEL_MARGIN, left: 8, bottom: 12 }}>
-                        {/* The wash under actual sales: the Dashboard's
-                            forecast card's own gradient (Charts.jsx
-                            pf-fill-actual), in this chart's teal. */}
+                        {/* The shade under actual sales (ui/lineDesign.jsx). */}
                         <defs>
-                          <linearGradient id="skuf-fill-actual" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={SKU_ACTUAL} stopOpacity={0.26} />
-                            <stop offset="100%" stopColor={SKU_ACTUAL} stopOpacity={0.02} />
-                          </linearGradient>
+                          <LineShade id={shadeId} color={SKU_ACTUAL} />
                         </defs>
                         <CartesianGrid {...GRID_PROPS} stroke={CHART_COLORS.gridline} />
                         {renderPlaceholderBand(placeholderSpan(zoom.view.map((pt) => ({ period: pt.label })), placeholder))}
@@ -2806,10 +2802,7 @@ const SKUForecast = () => {
                           connectNulls={false}
                         />
 
-                        {/* No washes under these lines (design pass
-                            2026-09-26): the CI cone above is the one fill
-                            that carries information, and the gradients
-                            muddied it where the series overlapped. */}
+                        {/* The dashed lines wear no shade (ui/lineDesign.jsx). */}
 
                         {/* Teal, not the old indigo: indigo sat too close to
                             the forecast's violet to tell apart in a small
@@ -2821,40 +2814,33 @@ const SKUForecast = () => {
                             dotted and faded (the dashboard hero chart's rule:
                             colour = metric, line style = year). */}
                         <Line
-                          type="monotone"
+                          {...COMPARISON_LINE}
                           dataKey="lastYear"
                           stroke={SKU_LAST_YEAR}
-                          strokeWidth={1.8}
-                          strokeLinecap="round"
-                          strokeDasharray="5 4"
                           dot={false}
-                          activeDot={{ r: 4 }}
+                          activeDot={lineHoverDot}
                           name="Same month last year"
                           {...zoom.zoomAnim(1)}
                         />
                         <Area
-                          type="monotone"
+                          {...SOLID_LINE}
                           dataKey="actual"
                           stroke={SKU_ACTUAL}
-                          strokeWidth={3}
-                          strokeLinecap="round"
-                          fill="url(#skuf-fill-actual)"
+                          fill={`url(#${shadeId})`}
                           dot={latestActualDot}
-                          activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
+                          activeDot={lineHoverDot}
                           name="Actual Sales"
                           {...zoom.zoomAnim(1)}
                           connectNulls
                         />
 
                         <Line
-                          type="monotone"
+                          {...FORECAST_LINE}
                           dataKey="forecast"
                           stroke={forecastColor}
-                          strokeWidth={2.5}
-                          strokeLinecap="round"
-                          strokeDasharray={isDemoForecast ? '2 5' : '5 3'}
-                          dot={seriesDot({ color: forecastColor, r: 4, skip: (p) => p?.actual != null })}
-                          activeDot={{ r: 5, strokeWidth: 2, stroke: 'var(--color-surface, #fff)' }}
+                          strokeDasharray={isDemoForecast ? '2 5' : FORECAST_LINE.strokeDasharray}
+                          dot={seriesDot({ color: forecastColor, r: 4.5, skip: (p) => p?.actual != null })}
+                          activeDot={lineHoverDot}
                           name={forecastName}
                           label={forecastEndLabels}
                           {...zoom.zoomAnim(2)}

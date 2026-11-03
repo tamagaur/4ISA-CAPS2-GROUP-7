@@ -12,6 +12,7 @@ import { getCurrentUser } from '../auth';
 import { labelForPrincipal } from '../principals';
 import { formatDateTime, formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
+import { ordersNothing } from '../utils/reorderView';
 import { REVIEW_REASON_TEXT } from '../utils/reviewReasons';
 import {
   approveDismissalRequest, approveQuantityChange, getRecommendationHistory, rejectDismissalRequest, rejectQuantityChange,
@@ -366,7 +367,8 @@ export function QuantityChangeModal({ isOpen, item, directApply, planHasCuts, co
             )}
             {directApply && (
               <p className="rq-help">
-                Your change applies at once as the accepted order. A stock count can be recorded with a dismissal instead.
+                Your change applies at once as the accepted order.
+                {!ordersNothing(item) && ' A stock count can be recorded with a dismissal instead.'}
               </p>
             )}
             {saveError && <span className="override-hint-error" role="alert">{saveError}</span>}
@@ -970,12 +972,12 @@ function RequestTable({ items, canReview, staleFor, onOpen }) {
         <caption className="visually-hidden">Staff requests</caption>
         <thead>
           <tr>
-            <th scope="col">Request ID</th>
-            <th scope="col">Staff member</th>
-            <th scope="col">Request type</th>
+            <th scope="col" className="table-center">Request ID</th>
+            <th scope="col" className="table-center">Staff member</th>
+            <th scope="col" className="table-center">Request type</th>
             <th scope="col" className="cell-product">Product</th>
-            <th scope="col">Date submitted</th>
-            <th scope="col">Status</th>
+            <th scope="col" className="table-center">Date submitted</th>
+            <th scope="col" className="table-center">Status</th>
             <th scope="col" className="table-center">Action</th>
           </tr>
         </thead>
@@ -984,14 +986,14 @@ function RequestTable({ items, canReview, staleFor, onOpen }) {
             const review = canReview(item);
             return (
               <tr key={item.key}>
-                <td data-label="Request ID"><span className="rq-id">{requestId(item)}</span></td>
-                <td data-label="Staff member"><Person item={item} /></td>
-                <td data-label="Request type">{TYPE_LABEL[item.kind] || item.kind}</td>
+                <td data-label="Request ID" className="table-center"><span className="rq-id">{requestId(item)}</span></td>
+                <td data-label="Staff member" className="table-center"><Person item={item} /></td>
+                <td data-label="Request type" className="table-center">{TYPE_LABEL[item.kind] || item.kind}</td>
                 <td data-label="Product" className="cell-product rq-cell-product">
                   <ProductName name={item.product_name || 'Unknown Product'} code={item.sku_code || '—'} />
                 </td>
-                <td data-label="Date submitted" className="rq-cell-date">{when(item.at)}</td>
-                <td data-label="Status"><StatusBadges item={item} stale={staleFor(item)} /></td>
+                <td data-label="Date submitted" className="table-center rq-cell-date">{when(item.at)}</td>
+                <td data-label="Status" className="table-center"><StatusBadges item={item} stale={staleFor(item)} /></td>
                 <td data-label="Action" className="table-center rq-cell-action">
                   <button
                     type="button"

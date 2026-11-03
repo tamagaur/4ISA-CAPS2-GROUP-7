@@ -411,8 +411,11 @@ class CyclePlan:
             s.procurement_cost_per_unit * (s.stock_on_hand + orders.get(s.sku_id, 0.0) - s.demand)
             for s in self.skus
         )
+        # What the LP solved, before case-pack rounding: rounding down can leave a ceiling that is cutting orders
+        # a few pieces short of itself, which must still read as binding.
+        solved = self.orders_before_pack_rounding or orders
         by_principal = {
-            p: sum(orders.get(s.sku_id, 0.0) for s in self.skus if s.principal == p) for p in self.allocation
+            p: sum(solved.get(s.sku_id, 0.0) for s in self.skus if s.principal == p) for p in self.allocation
         }
         return {
             "need": need,

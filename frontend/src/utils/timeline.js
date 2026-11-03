@@ -28,6 +28,11 @@ export function yearEarlier(period) {
   return period ? `${Number(period.slice(0, 4)) - 1}${period.slice(4)}` : null;
 }
 
+// `n` months before a month: ('2026-02', 6) -> '2025-08'.
+export function monthsEarlier(period, n) {
+  return period ? fromOrd(ord(period) - n) : null;
+}
+
 // The months whose tick gets a label: every month up to `every` months
 // long; past that, every third month from the first, plus every January
 // (and the first month, so the start is dated).

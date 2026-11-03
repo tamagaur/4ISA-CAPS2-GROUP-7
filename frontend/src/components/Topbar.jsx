@@ -58,13 +58,11 @@ const Topbar = ({
   return (
     <header className="topbar" ref={barRef}>
       <div className="topbar-left">
-        {/* Three lines while the sidebar is open; once it is closed on a
-            desktop the SAN2 logo takes their place, so the brand stays on
-            screen and clicking it brings the sidebar back. Phones and
-            tablets keep the three lines (Topbar.css), where the sidebar
-            starts closed and a logo alone would not read as a menu. */}
+        {/* Three lines at every width. The SAN2 logo stood in for them while
+            the sidebar was gone altogether (until 2026-11-03); now that it
+            folds to a rail, the rail keeps the brand on screen. */}
         <button
-          className={`sidebar-toggle-btn${isSidebarOpen ? '' : ' is-sidebar-closed'}`}
+          className="sidebar-toggle-btn"
           onClick={toggleSidebar}
           aria-label={isSidebarOpen ? 'Hide the menu' : 'Show the menu'}
           aria-expanded={isSidebarOpen}
@@ -74,7 +72,6 @@ const Topbar = ({
             <line x1="3" y1="6" x2="21" y2="6"></line>
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
-          <img src="/logo-topbar.png" alt="" className="sidebar-toggle-logo" />
         </button>
 
         {/* Date Filter removed and placed in page headers */}

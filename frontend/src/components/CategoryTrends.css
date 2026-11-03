@@ -168,7 +168,7 @@
   border-top: 2px solid;
 }
 
-.ct-swatch-actual { border-color: var(--color-dispatched); }
+.ct-swatch-actual { border-color: var(--color-dispatched); border-top-width: 3px; }
 .ct-swatch-fitted { border-color: #475569; border-top-style: dashed; }
 .ct-swatch-projection { border-color: var(--color-forecast); border-top-style: dashed; }
 /* Projection band swatch — same tint as the chart's likely-range Area. */

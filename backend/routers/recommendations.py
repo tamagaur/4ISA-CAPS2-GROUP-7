@@ -167,6 +167,17 @@ in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
 backend/stock_units.py converts stock with) lets the page show the case
 count beside each quantity. Only 6 of the 73 live orders are whole cases;
 the LP doesn't round to cases, and nothing here does either.
+
+NOT PLANNED (2026-11-03). The plan covers Class A products whose forecast
+passed the accuracy check, so the rest of Class A had no row and no signal on
+this page: 80 of the 189 as of 2026-02 (66 failed the check, 9 too little
+history, 5 dead), 33.16% of 12-month revenue, 12 of them with under a week of
+cover on the opening count (all queried read-only, 2026-11-03).
+?include_not_planned=true adds them as `not_planned`, lowest cover first:
+reason, stock and recent sales, read as a plan row's are, and no order quantity.
+It is a list beside the plan, not part of it: count, order_count and the plan
+total don't include it, and nothing in forecasting, safety stock or the LP
+reads it. Opt-in so that the other callers of this route don't pay for the read.
 """
 from __future__ import annotations
 
@@ -195,11 +206,15 @@ from backend.principals import (
     tier_a_periods,
     principal_clause,
 )
-from backend.schemas.recommendations import RecommendationItem, RecommendationDecision, RecommendationsResponse
+from backend.schemas.recommendations import (
+    NotPlannedItem, RecommendationItem, RecommendationDecision, RecommendationsResponse,
+)
 from backend.data_mode import (
     PREVIEW, REAL, demo_data_enabled, forecast_source, get_data_mode, lp_source, predictive_preview, preview_block,
 )
-from backend.lp_cycle import CURRENT_CYCLE_CLAUSE, current_cycle, freshness_from, lp_model_info, stored_run
+from backend.lp_cycle import (
+    CURRENT_CYCLE_CLAUSE, PLAN_STATUS_SQL_BARE, current_cycle, freshness_from, lp_model_info, stored_run,
+)
 from backend.lp_cycle import freshness as lp_freshness
 from analytics.params import DAYS_PER_MONTH, SKU_COVER_HISTORY_MONTHS
 from backend.case_pack import PACK_SQL, check_whole_cases
@@ -218,6 +233,8 @@ from backend.stock_units import (
     with_opening_basis,
 )
 from backend import planning_mart, response_cache, stock_observation
+# The one account of why a product isn't planned, so this list and GET /abc can't give two.
+from backend.routers.abc import _no_target_reason
 from backend.response_cache import cached
 
 # Order quantities are counted in whole units rounded UP, the rule the Reorder
@@ -690,6 +707,13 @@ def get_recommendations(
     from_date: datetime.date | None = Query(None, alias="from", description="'YYYY-MM-DD'. The shared date-range picker's applied start. Must be given with 'to' or not at all — filters on lr.planning_cycle_date."),
     to_date: datetime.date | None = Query(None, alias="to", description="'YYYY-MM-DD'. The shared date-range picker's applied end. Must be given with 'from' or not at all."),
     principal: str | None = PrincipalQuery,
+    include_not_planned: bool = Query(
+        False,
+        description=(
+            "Also list the Class A products the current plan has no row for (`not_planned`): why, stock and recent "
+            "sales, no order quantity. The current plan's whole view only: no status or date filter, real data."
+        ),
+    ),
     mode: str = Depends(get_data_mode),
     db: Session = Depends(get_db),
     current_user: TokenPayload = Depends(require_permission("lp.view")),
@@ -700,6 +724,9 @@ def get_recommendations(
         raise HTTPException(status_code=422, detail="from and to go together: send both or neither.")
     from_date = from_date.isoformat() if from_date else None
     to_date = to_date.isoformat() if to_date else None
+    # Del Monte has no product-level plan to leave a product out of, and a preview's what-if rows aren't the plan.
+    list_not_planned = (include_not_planned and mode == REAL and cycle == "current" and not status and not from_date
+                        and normalize_principal(principal) != "delmonte")
     # Both principals again (2026-09-17) — see backend/principals.py.
     # lp_recommendation currently holds 430 Unilever rows and ZERO Del
     # Monte rows (confirmed live 2026-09-17), so ?principal=delmonte
@@ -724,6 +751,8 @@ def get_recommendations(
             newest = max((c["cycle"] for c in served.stock_counts if c.get("cycle")), default=None)
             labels = label_context(db, opening_period(newest) if newest else None,
                                    latest_abc_period(db, principal), principal)
+            if list_not_planned and served.planning_cycle_date:
+                labels["not_planned"] = _not_planned(db, served.planning_cycle_date, principal)
             return _attach_demo_unilever(served.model_copy(update=labels), db, principal, mode)
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
     present = _present(db)
@@ -825,6 +854,7 @@ def get_recommendations(
         stock_counts=counts,
         **labels,
         tier_a_periods=tier_a_periods(abc_periods_shown),
+        not_planned=_not_planned(db, freshness["cycle_date"], principal) if list_not_planned and freshness["cycle_date"] else None,
     ), db, mode), db, principal, mode)
 
 
@@ -898,6 +928,89 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
 def _order_count(items) -> int:
     """Items whose planned order is above zero (plan_q_i, which is q_i until a quantity is decided)."""
     return sum(1 for i in items if (i.plan_q_i if i.plan_q_i is not None else i.q_i or 0) > 0)
+
+
+# Class A of the run the plan's rows are labelled with, less the plan's own rows. Unilever only: Del Monte has no
+# product-level plan. Stock is the cycle's opening count and in_stock_count means what it means on a plan row; the
+# forecast is the product's latest, as GET /abc reads it for the same reason.
+_NOT_PLANNED_SQL = f"""
+    SELECT
+        COALESCE(pd.sku_code, pd.category_path) AS sku_id,
+        pd.product_name,
+        ac.principal,
+        ac.revenue_share,
+        ac.tier AS pool_tier,
+        ac.classification_period AS pool_period,
+        inv.stock_pieces AS current_stock,
+        CASE WHEN inv.product_key IS NOT NULL THEN TRUE
+             WHEN counted.principal IS NOT NULL THEN FALSE
+        END AS in_stock_count,
+        fc.status AS fc_status,
+        fc.mase AS fc_mase
+    FROM abc_classification ac
+    JOIN product_dimension pd ON pd.product_key = ac.product_key
+    LEFT JOIN (
+        {STOCK_AT_PERIOD_SQL}
+    ) inv ON inv.product_key = ac.product_key
+    LEFT JOIN (
+        SELECT DISTINCT principal FROM inventory_fact_real WHERE _period = :inv_period
+    ) counted ON counted.principal = ac.principal
+    LEFT JOIN (
+        SELECT DISTINCT ON (f.product_key) f.product_key, f.status, f.mase
+        FROM forecast_result f
+        ORDER BY f.product_key, f.forecast_date DESC, f.generated_at DESC
+    ) fc ON fc.product_key = ac.product_key
+    WHERE ac.tier = 'A' AND ac.principal = 'unilever'
+      AND {abc_method_sql("ac")} AND {abc_period_pred("=", "ac")}
+      AND NOT EXISTS (
+          SELECT 1 FROM lp_recommendation planned
+          WHERE planned.product_key = ac.product_key
+            AND planned.planning_cycle_date = CAST(:not_planned_cycle AS DATE)
+            AND {PLAN_STATUS_SQL_BARE}
+      )
+"""
+
+
+def _not_planned_item(r: dict) -> NotPlannedItem:
+    """One row of the list. Stock and cover by _to_item's rules, so a row here compares with a row of the plan."""
+    stock_not_in_count = r["in_stock_count"] is False and r["principal"] in COUNT_OMITS_ZERO_STOCK
+    stock = 0.0 if stock_not_in_count else _opt_float(r, "current_stock")
+    avg_pieces = _opt_float(r, "avg_monthly_pieces")
+    days_of_cover, cover_reason = _cover(stock, avg_pieces)
+    reason, code = _no_target_reason(r, r["pool_tier"], r["pool_period"], has_cycle=True)
+    reason = reason.removeprefix("Not planned: ")
+    return NotPlannedItem(
+        sku_id=r["sku_id"] or "",
+        product_name=r["product_name"],
+        principal=r["principal"],
+        reason=reason[0].upper() + reason[1:],
+        reason_code=code,
+        revenue_share=_opt_float(r, "revenue_share"),
+        current_stock=stock,
+        stock_not_in_count=stock_not_in_count,
+        avg_monthly_pieces=avg_pieces,
+        days_of_cover=days_of_cover,
+        cover_blocked_reason=cover_reason,
+    )
+
+
+def _not_planned(db: Session, plan_cycle, principal: str | None) -> list[NotPlannedItem]:
+    """The Class A products plan_cycle has no row for, lowest cover first; a product with no cover figure goes last,
+    since its risk is unknown rather than high. Same ABC anchor as the plan's rows: the run at or before its month."""
+    rows = [dict(r) for r in db.execute(text(_NOT_PLANNED_SQL), {
+        **abc_period_params(latest_abc_periods(db, principal, str(plan_cycle)[:7])),
+        "inv_period": opening_period(plan_cycle),
+        "not_planned_cycle": plan_cycle,
+    }).mappings().all()]
+    if not rows:
+        return []
+    for r in rows:
+        r["planning_cycle_date"] = plan_cycle
+    _attach_avg_pieces(db, rows)
+    return sorted(
+        (_not_planned_item(r) for r in rows),
+        key=lambda i: (i.days_of_cover is None, i.days_of_cover or 0.0, -(i.revenue_share or 0.0), i.sku_id),
+    )
 
 
 _DECISION_COLS_SEEN = {"value": False}

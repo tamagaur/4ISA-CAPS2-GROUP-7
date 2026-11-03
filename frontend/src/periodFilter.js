@@ -67,6 +67,20 @@ export function comparisonRange(range, compare, floor = { month: 'Jan', year: St
   };
 }
 
+// The months of a comparison at or after `floor` (the first month any data
+// exists), for a chart that can show part of one: { startPeriod, endPeriod },
+// or null when all of it is before the data. The summary cards don't use this:
+// they compare whole periods, so a part of one would mislead them.
+export function comparisonAvailable(versus, floor = { month: 'Jan', year: String(FIRST_DATA_YEAR) }) {
+  if (!versus) return null;
+  const first = ordinal(floor.month, floor.year);
+  if (ordinal(versus.endMonth, versus.endYear) < first) return null;
+  if (ordinal(versus.startMonth, versus.startYear) >= first) {
+    return { startPeriod: versus.startPeriod, endPeriod: versus.endPeriod };
+  }
+  return { startPeriod: periodToParam(floor.month, floor.year), endPeriod: versus.endPeriod };
+}
+
 // The last `n` months ending at `latest` ({ month, year }): the quick ranges
 // that move with the data. The default view is lastNRange(12, latest).
 export const RELATIVE_RANGES = { last6: 6, last12: 12, last24: 24 };

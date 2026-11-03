@@ -30,6 +30,13 @@ test('the recommended quantity, a negative and a fractional case are refused', (
   assert.equal(validateProposedQuantity({ amount: '1.5', unit: 'cases', packSize: 24, recommended: 96 }).code, 'not_whole_cases');
 });
 
+test('the recommended quantity on a row that orders nothing does not point at an Accept it hasn\'t got', () => {
+  const zero = validateProposedQuantity({ amount: '0', unit: 'pieces', packSize: null, recommended: 0 });
+  assert.equal(zero.code, 'quantity_unchanged');
+  assert.ok(!zero.message.includes('Accept'));
+  assert.ok(validateProposedQuantity({ amount: '4', unit: 'cases', packSize: 24, recommended: 96 }).message.includes('Accept'));
+});
+
 test('with no pack size any whole number of pieces is fine, and 0 is allowed', () => {
   assert.equal(validateProposedQuantity({ amount: '7', unit: 'pieces', packSize: null, recommended: 5 }), null);
   assert.equal(validateProposedQuantity({ amount: '0', unit: 'pieces', packSize: 24, recommended: 96 }), null);

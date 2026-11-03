@@ -5,9 +5,12 @@
 import React from 'react';
 
 // `className` lets one page restyle its own header (the dashboard's,
-// Dashboard.css .dash-page-header) without touching the others.
-const PageHeader = ({ title, accent, subtitle, actions, children, className = '' }) => (
+// Dashboard.css .dash-page-header) without touching the others. `icon` is an
+// optional tile before the title (the Reorder page's); without it nothing
+// renders, so every other page's header is unchanged.
+const PageHeader = ({ title, accent, subtitle, actions, children, className = '', icon }) => (
   <header className={`page-header${className ? ` ${className}` : ''}`}>
+    {icon && <span className="page-header-icon" aria-hidden="true">{icon}</span>}
     <div className="page-header-text">
       <h2 className="page-header-title">
         {title}

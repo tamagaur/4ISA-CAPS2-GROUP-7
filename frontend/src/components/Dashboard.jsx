@@ -27,7 +27,7 @@ import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
 import { PLACEHOLDER_START, isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { FIRST_DATA_YEAR } from '../dataCoverage';
-import { COMPARE_MODES, comparisonRange } from '../periodFilter';
+import { COMPARE_MODES, comparisonAvailable, comparisonRange, periodToParam } from '../periodFilter';
 import BasisTag, { FOLLOWS_RANGE } from './BasisTag';
 import { useEntranceReplay } from '../theme/useEntranceReplay';
 import { prefersReducedMotion } from '../theme/motion';
@@ -327,6 +327,9 @@ const chartPoints = (payload, { synthetic = false } = {}) => {
     returnsEstimated: pt.returns_estimated ?? null,
     returnsEstimatedKind: pt.returns_estimated_kind ?? null,
     stockUnusual: flags.get(pt.period) || null,
+    // Flagged even when no reason came with it: the chart then says "Reason
+    // not recorded" rather than losing the flag.
+    stockFlagged: flags.has(pt.period),
     // The month's sales are not SSM's own figure: a filled or generated row
     // counted so the month isn't a gap (backend/marts.py, COMPLETE MONTHS).
     salesSynthetic: pt.provenance?.sales === 'synthetic',
@@ -620,6 +623,16 @@ const Dashboard = () => {
   );
   const versusKey = versus && !versus.beforeData ? `${versus.endPeriod}|${versus.startPeriod}|${principal ?? ''}` : null;
   const [versusLoaded, setVersusLoaded] = useState({ key: null, data: null, failed: false });
+  // A comparison that starts before the data isn't fetched above, because the
+  // cards compare whole periods. The hero chart can still show the part that
+  // exists, month by month, so it fetches that part for itself. Not when the
+  // range's own months already hold it (Jan 2023 onward against a year earlier).
+  const dataFloor = preview ? PLACEHOLDER_START : { month: 'Jan', year: String(FIRST_DATA_YEAR) };
+  const chartPart = versus?.beforeData ? comparisonAvailable(versus, dataFloor) : null;
+  const chartPartKey = chartPart && chartPart.startPeriod < startPeriod
+    ? `${chartPart.endPeriod}|${chartPart.startPeriod}|${principal ?? ''}`
+    : null;
+  const [chartPartLoaded, setChartPartLoaded] = useState({ key: null, data: null, failed: false });
 
   // `loaded` remembers WHICH range its data belongs to. When the range
   // changes, the previous range's view stays on screen (dimmed, labeled
@@ -684,6 +697,18 @@ const Dashboard = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [versusKey, loadedKey, requestKey, principal]);
   const prior = versusKey && versusLoaded.key === versusKey ? versusLoaded : null;
+
+  useEffect(() => {
+    if (!chartPartKey || loadedKey !== requestKey) return undefined;
+    let cancelled = false;
+    getDashboardData({ period: chartPart.endPeriod, startPeriod: chartPart.startPeriod, principal })
+      .then((res) => { if (!cancelled) setChartPartLoaded({ key: chartPartKey, data: res, failed: false }); })
+      .catch(() => { if (!cancelled) setChartPartLoaded({ key: chartPartKey, data: null, failed: true }); });
+    return () => { cancelled = true; };
+    // chartPart's periods are read through chartPartKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartPartKey, loadedKey, requestKey, principal]);
+  const priorPart = chartPartKey && chartPartLoaded.key === chartPartKey ? chartPartLoaded : null;
 
 
   useEffect(() => {
@@ -1014,16 +1039,25 @@ const Dashboard = () => {
     : sohPieces != null ? `${Math.round(sohPieces).toLocaleString()} pieces (cases × pack size + loose pieces)`
       : piecesNote || undefined;
 
-  // The hero chart's rows (chartPoints), and the comparison period's when one
-  // is chosen, with the reason when it can't be drawn.
+  // The hero chart's rows (chartPoints), and what it compares them with: the
+  // "Compare with" setting and that period's rows once they land. Its months
+  // are the ones this answer is about (loadedKey), so during a range change the
+  // chart on screen stays one consistent picture.
   const salesVsStock = chartPoints(data, { synthetic: preview });
-  const chartCompare = versus && !versus.beforeData && prior?.data
-    ? { points: chartPoints(prior.data, { synthetic: preview }), label: versus.label, shift: versus.shift }
+  const [shownEnd, shownStart] = (loadedKey || '').split('|');
+  const chartRange = { start: shownStart || null, end: shownEnd || null };
+  const chartCompareAnswer = versus?.beforeData ? priorPart : prior;
+  const chartCompare = versus
+    ? {
+        mode: compare,
+        shift: versus.shift,
+        label: versus.label,
+        floor: periodToParam(dataFloor.month, dataFloor.year),
+        points: chartCompareAnswer?.data ? chartPoints(chartCompareAnswer.data, { synthetic: preview }) : [],
+        pending: versus.beforeData ? Boolean(chartPartKey) && !priorPart : !prior,
+        failed: Boolean(chartCompareAnswer?.failed),
+      }
     : null;
-  const chartCompareNote = !versus ? null
-    : versus.beforeData ? `No comparison line: the data starts Jan ${preview ? PLACEHOLDER_START.year : FIRST_DATA_YEAR}.`
-      : prior?.failed ? `Could not load ${versus.label} to compare.`
-        : !prior ? `Loading ${versus.label} to compare…` : null;
 
   const abcMix = (data.abc_mix || []).map((d) => ({
     tier: d.tier,
@@ -1300,8 +1334,8 @@ const Dashboard = () => {
     plan: planBasis,
     chart: {
       ...rangeBasis,
-      detail: `${FOLLOWS_RANGE} Jan to Dec across, one line per calendar year: the range's months, and the `
-        + '"Compare with" period\'s months on their own years\' lines.',
+      detail: `${FOLLOWS_RANGE} The chart shows the selected months and, in a lighter shade, the months they are `
+        + 'compared with, from the "Compare with" setting. The panel under it shows each month\'s change.',
     },
     abc: {
       ...rangeBasis,
@@ -1895,7 +1929,7 @@ const Dashboard = () => {
               <div className="dash-split-host">
                 <div className="dash-split">
                   <AnnualViewChart annual={preview ? withDemoYears(data.annual_sales, data.demonstration, pagePrincipal) : data.annual_sales} allocation={allocation} note={vatNote} selectedPct={allocPct} />
-                  <SalesVsStockWidget data={salesVsStock} gapNote={data.gap_note ?? null} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} compareNote={chartCompareNote} policyWeeks={policyWeeks} />
+                  <SalesVsStockWidget data={salesVsStock} gapNote={data.gap_note ?? null} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} range={chartRange} policyWeeks={policyWeeks} />
                 </div>
               </div>
             </Slot>
@@ -2027,8 +2061,8 @@ const Dashboard = () => {
           )}
           {!lpHidden && (
             <p className="dash-footnote">
-              The Reorder page lists every suggested order and puts the 20 with the most sales at risk first,
-              under &ldquo;Act now&rdquo;.{' '}
+              The Reorder page lists every suggested order and puts those below their target stock first,
+              under &ldquo;Act now&rdquo;, with the most sales at risk at the top.{' '}
               <Link to="/reorder" className="band-link">Open the Reorder page <ArrowRight size={12} /></Link>
             </p>
           )}

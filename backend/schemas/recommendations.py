@@ -144,6 +144,24 @@ class RecommendationItem(BaseModel):
     decided_by: str | None = None
 
 
+class NotPlannedItem(BaseModel):
+    """A Class A product the current plan has no row for (2026-11-03, GET /recommendations?include_not_planned=true).
+    Read-only and never a recommendation: it has no order quantity, and nothing upstream reads it. Stock and cover are
+    read as a plan row's are, so the two lists compare: current_stock is 0 with stock_not_in_count where the count omits
+    the product, None where there is no figure in pieces, and days_of_cover None with cover_blocked_reason saying why."""
+    sku_id: str
+    product_name: str | None = None
+    principal: str
+    reason: str                     # why it isn't planned, in the words of GET /abc's no_target_reason
+    reason_code: str                # backend/routers/abc._no_target_reason's code
+    revenue_share: float | None = None
+    current_stock: float | None = None
+    stock_not_in_count: bool = False
+    avg_monthly_pieces: float | None = None
+    days_of_cover: float | None = None
+    cover_blocked_reason: str | None = None
+
+
 class RecommendationsResponse(BaseModel):
     items: list[RecommendationItem]
     count: int
@@ -186,6 +204,9 @@ class RecommendationsResponse(BaseModel):
     stock_counts: list[dict] = []
     # {principal display name: 'YYYY-MM'} — each principal's ABC run at or before the cycle month.
     tier_a_periods: dict[str, str] = {}
+    # Only with ?include_not_planned=true, lowest cover first (NotPlannedItem). None = not asked for, or it doesn't
+    # apply (not the current plan's whole view, preview, Del Monte); [] = the plan leaves nothing out.
+    not_planned: list[NotPlannedItem] | None = None
 
 
 DISMISS_REASON_MIN = 8      # Q15 (2026-10-31); measured after trimming, so spaces do not count

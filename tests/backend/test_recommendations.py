@@ -58,6 +58,9 @@ class FakeResult:
     def scalar(self):
         return self._rows[0] if self._rows else None
 
+    def __iter__(self):
+        return iter(self._rows)
+
 
 class FakeSession:
     def __init__(self, rows, stock_by_period, inventory_period_by_scope, abc_period_by_scope,
@@ -91,12 +94,19 @@ class FakeSession:
         # (recommendations._present). Off by default: the tests written
         # before them see the database they were written against.
         self.present = {"review_flag": False, "on_order": False}
+        # ?include_not_planned=true: Class A with no plan row, and the sales behind its cover.
+        self.not_planned: list[dict] = []
+        self.avg_pieces: list[dict] = []
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         params = params or {}
         self.calls.append((sql, dict(params)))
         scope = params.get("principal")
+        if "lp_recommendation planned" in sql:
+            return FakeResult(self.not_planned)
+        if "pd.sku_code = ANY(:skus)" in sql:
+            return FakeResult(self.avg_pieces)
         if "to_regclass('review_flag')" in sql:
             return FakeResult([self.present])
         # backend/lp_cycle.stored_run (migration 0037). Before every
@@ -473,12 +483,52 @@ def test_lp_model_serves_what_the_stored_run_used(session, client):
     assert lp_model["run"]["run_key"] == 7 and lp_model["allocation"]["basis_year"] == 2025
 
 
-def test_response_carries_the_lp_model_and_each_rows_tier(client):
+def test_response_carries_the_lp_model_and_each_rows_tier(client, session):
     body = client.get("/recommendations?principal=unilever").json()
     assert body["lp_model"]["weights"] == {"cost": 0.45, "service_level": 0.35, "storage": 0.2}
     assert body["lp_model"]["service_level_pct"] == 90
     assert body["lp_model"]["inputs_are_placeholders"] is True
     assert body["items"] and all("tier" in item for item in body["items"])
+
+    # What the plan leaves out is opt-in (2026-11-03): not asked for, no list and no extra read.
+    assert body["not_planned"] is None
+    assert not any("lp_recommendation planned" in sql for sql, _ in session.calls)
+
+    # Asked for: lowest cover first, no cover figure last, a missing count read as the plan reads it, GET /abc's
+    # reasons, and no quantity on any row. The plan itself reads the same with or without it.
+    def row(sku, **over):
+        return {"sku_id": sku, "product_name": f"Uni {sku}", "principal": "unilever", "revenue_share": 0.02,
+                "pool_tier": "A", "pool_period": "2026-02", "current_stock": 500.0, "in_stock_count": True,
+                "fc_status": "ok", "fc_mase": 1.25, **over}
+    session.not_planned = [
+        row("U-2"),
+        row("U-3", current_stock=None, in_stock_count=False, fc_status="insufficient_data", fc_mase=None),
+        row("U-4", current_stock=40.0, fc_status="dead_sku", fc_mase=None),
+        row("U-5", current_stock=500.0, revenue_share=0.05),
+    ]
+    session.avg_pieces = [{"sku_id": "U-2", "avg_monthly_pieces": 1000.0}, {"sku_id": "U-3", "avg_monthly_pieces": 300.0},
+                          {"sku_id": "U-5", "avg_monthly_pieces": 1000.0}]
+    asked = client.get("/recommendations?principal=unilever&include_not_planned=true").json()
+    listed = asked["not_planned"]
+    assert [r["sku_id"] for r in listed] == ["U-3", "U-5", "U-2", "U-4"]
+    by_sku = {r["sku_id"]: r for r in listed}
+    assert by_sku["U-2"]["reason"] == "Forecast accuracy check not passed (MASE 1.25)"
+    assert by_sku["U-2"]["reason_code"] == "accuracy"
+    assert by_sku["U-2"]["days_of_cover"] == pytest.approx(15.2, abs=0.05)
+    assert by_sku["U-3"]["reason"] == "Too little sales history to forecast"
+    assert by_sku["U-3"]["current_stock"] == 0.0 and by_sku["U-3"]["stock_not_in_count"] is True
+    assert by_sku["U-3"]["days_of_cover"] == 0.0
+    assert by_sku["U-4"]["days_of_cover"] is None and by_sku["U-4"]["cover_blocked_reason"]
+    assert not any(key in r for r in listed for key in ("q_i", "plan_q_i", "rop_i", "ss_i"))
+    assert (asked["count"], asked["order_count"], asked["items"]) == (body["count"], body["order_count"], body["items"])
+    sql, params = next((s, p) for s, p in session.calls if "lp_recommendation planned" in s)
+    assert (params["abc_p_unilever"], params["inv_period"], params["not_planned_cycle"]) == ("2026-02", "2026-02", "2026-03-01")
+    assert "ac.tier = 'A'" in sql and abc_method_sql("ac") in sql
+
+    # Only beside the current plan's whole view, and never for Del Monte, which has no product-level plan.
+    for other in ("status=pending", "cycle=all", "from=2026-01-01&to=2026-03-31"):
+        assert client.get(f"/recommendations?principal=unilever&{other}&include_not_planned=true").json()["not_planned"] is None
+    assert client.get("/recommendations?principal=delmonte&include_not_planned=true").json()["not_planned"] is None
 
 
 def test_whole_units_round_up_but_ignore_float_noise():
