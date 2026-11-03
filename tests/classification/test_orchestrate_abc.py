@@ -5,7 +5,7 @@ analytics.classification.orchestrate_abc, the ABC orchestration script.
 Uses an in-memory SQLite engine with a minimal schema standing in for
 the real Unilever_SKU_Demand_Fact / SellOut_Fact / ABC_Classification
 tables — this is NOT a substitute for running against real Supabase
-data (see AGAINST_REAL_DATA note in RUNNING.md), it only proves the
+data, it only proves the
 Python-level fetch/aggregate/exclude/upsert logic is correct.
 
   test_null_revenue_excluded_not_zeroed

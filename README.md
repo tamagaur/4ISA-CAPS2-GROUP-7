@@ -73,7 +73,7 @@ One check sits outside `check.sh`: `python -m scripts.practice_artefacts` runs a
 | [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) | Test items, pass/fail criteria, results by round, and integration coverage |
 | [`docs/DEMO_DATA.md`](docs/DEMO_DATA.md) | The labelled demonstration data in schema `demo`: how each kind is generated and served |
 
-Other Markdown files at the repo root (`RUNNING.md`, `BACKEND_GUIDE.md`, `ROADMAP.md` and others) and everything under `reports/` are dated records, not maintained guides. `RUNNING.md` in particular still names a retired branch. If one of them disagrees with the code or with the files above, trust the code and those files.
+Other Markdown files at the repo root (`BACKEND_GUIDE.md`, `ROADMAP.md` and others) and everything under `reports/` are dated records, not maintained guides. If one of them disagrees with the code or with the files above, trust the code and those files.
 
 ## What is deliberately not finished
 
@@ -81,7 +81,7 @@ Open defects and limitations are in [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md), and wh
 
 ## What the data is, and is not
 
-The system is built on one distributor's real records. Generated data also exists, always labelled. It sits in three places, and they are not the same thing:
+The system is built on one distributor's real records. Generated data also exists, always labelled. It sits in three places, and they are not the same thing (hard rule 2 in `CLAUDE.md` has the condition each relies on):
 
 | Where | What it is | What keeps it apart |
 |---|---|---|
@@ -91,4 +91,4 @@ The system is built on one distributor's real records. Generated data also exist
 
 No figure computed on generated data is presented as a result. A plan from the practice month is never a result, and the system withholds forecast error whenever generated rows are in what it would score. The practice month shows that the steps run; it does not show that a real new monthly file runs, because none has ever existed.
 
-The conditions behind each of these are hard rule 2 in `CLAUDE.md`. A gap in a chart means different things for each principal, so read "Why data is missing" in the same file before you investigate one.
+A gap in a chart means different things for each principal, so read "Why data is missing" in the same file before you investigate one.

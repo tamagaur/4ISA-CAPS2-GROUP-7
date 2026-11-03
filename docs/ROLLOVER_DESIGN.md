@@ -65,7 +65,7 @@ Rows flagged `is_demo = true` never pass the `_Real` views, so they cannot exerc
 
 Proof sequence: accept orders on the March plan, check the ledger rows and that a reversal voids one; project the April opening and check the formula by hand on three products; load the real 6 Apr count and check receipts ≤ `D` settle and later ones stay; run `close_cycle` twice (second run changes nothing); check decided rows survive as `closed`.
 
-Isolation, all checked by the test, not by habit: schema name must start `ssm_` and the script refuses `--target-public`; row counts of ten public tables before and after must be equal; no `rollover_test` string may exist in public or `mart`; the scratch schema is dropped afterwards (rule 16). Known hazard: a scratch build applies pending migrations, and one naming `app.users` runs on live (RUNNING.md); none is pending now, and the test checks that first. **This reads rule 2 as allowing test data in a disposable schema, outside every result; Yuan to confirm.**
+Isolation, all checked by the test, not by habit: schema name must start `ssm_` and the script refuses `--target-public`; row counts of ten public tables before and after must be equal; no `rollover_test` string may exist in public or `mart`; the scratch schema is dropped afterwards (rule 16). Known hazard: a scratch build applies pending migrations, and one naming `app.users` runs on live (RUNNING.md, deleted 2026-11-03; `git show 468c6d8:RUNNING.md`); none is pending now, and the test checks that first. **This reads rule 2 as allowing test data in a disposable schema, outside every result; Yuan to confirm.**
 
 ## f. Schema, and po_qty_pieces
 

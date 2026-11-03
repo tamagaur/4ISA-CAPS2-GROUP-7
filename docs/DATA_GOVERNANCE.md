@@ -30,7 +30,7 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 | Forecasts, ABC classes, LP plan and decisions | Confidential | `public`, `mart`, `lp_*` | No |
 | Demonstration data (`is_demo = true`, `demo` schema) | Internal, labelled synthetic | `demo` | No |
 | Live-database backups | Same as the data they copy | `backups/` (git-ignored), 74 folders | Yes |
-| Per-product sales extracts | Confidential | `local/` (git-ignored; hard rule 9) | No |
+| Per-product sales extracts | Confidential | `local/` (git-ignored; hard rule 9), and also tracked in the repository and its history (section 7, G14) | No |
 
 ## 3. Controls: what the repo shows
 
@@ -75,6 +75,7 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 | G11 | Agreements with Supabase, Render, Vercel and the email provider, and their data regions, not recorded | Unknown transfer of personal data abroad | Record the plan, region and DPA status of each in section 7 | Custodian |
 | G12 | **Answered 2026-11-02: yes, personal data is present; kept open for minimisation.** Customer and outlet names (2,841 in `customer_dimension`, 180 in `salesreturn_fact`) are free-text store names, many a person's name; 30 of the 33 salesman values are individuals' names (the other 3 are labels). `etl_quarantine.raw_values` holds the same names again, as the files had them (about 5,900 of its 8,224 rows). Invoice numbers are document numbers (prefixes `GEN`, `INV`, `DMP`, `BILL`), not people. **No phone, address, contact, email or TIN field exists**: not in any `public`, `mart` or `lp_*` table (a column-name scan), and not in the header rows of any of the 567 `.xlsx` files in `data/raw/` (the first 8 rows of every sheet; headers seen: Salesman, Customer Name, Outlet Name, Account Name, plus province, city and municipality names, which are places, not street addresses). The cells were then read too (2026-11-02): the customer, outlet, account, invoice and salesman columns of all 567 `.xlsx` files, about 2.3 million cells, hold **0 phone-shaped and 0 email-shaped values**; so do the same columns in `public` and `etl_quarantine`. 2,436 raw cells contain a street-style word (`st.`, `brgy`, `purok` and the like): the ones sampled are store names beginning `ST.`, but they were not read one by one, so a street address among them is not ruled out. The one `.xls` (the Unilever La Union file) has no customer column; its header names a person in its Current User field (`JOL***** G*****`), and it has 0 phone or email shapes. Masked examples: `*SUSAN E***** & B********`, `JEM'S C******`, `R***** M********`, `J*** J*** M*****` (a salesman) | Names of private people and of SSM's staff sit in the database, in the raw files and in every backup. **No backend route and no frontend file reads these columns** (searched `backend/` and `frontend/src/`), so the dashboard does not display them | Classify as in section 2 (done). Keep the columns out of any export, extract or report. Remove them at handover and delete the backup copies (section 10). Consider replacing salesman names with codes if a name is ever needed in a screen | Data steward |
 | G13 | **Open.** No handover procedure to SSM | Student accounts, keys and backup copies stay with the team after the project | Section 10 lists what transfers, what is rotated, what is removed and what is deleted | Team, then SSM |
+| G14 | **Open.** The repository holds SSM data that rule 9 says it should not: purchase cost per SKU in its history and on Main-Final, and price and per-product values in its current files (section 7) | Everyone with read access to the repository, now or after handover, can read SSM's purchase costs per product. Removing a file from the current tree does not remove it from history | **The history cannot be cleaned without a rewrite, which the standing rules forbid** (no force push, no history rewrite). Decided by Kelvin 2026-11-03: history stays as it is and this record says what it holds. The repository's disposition is a handover decision (section 10) | Team, then SSM |
 
 ### G7 evidence: first access review (2026-11-02)
 
@@ -254,7 +255,7 @@ Copies on other laptops or drives are not counted here. Disk encryption (BitLock
 | Render (backend) | In-memory data, logs, environment secrets | **UNVERIFIED** | **UNVERIFIED** |
 | Vercel (frontend) | Static app, no stored data | **UNVERIFIED** | **UNVERIFIED** |
 | Email provider (invites, resets) | Recipient address, message body | **UNVERIFIED** | **UNVERIFIED** |
-| GitHub (private repo) | Code, no data by rule 9 | Private | — |
+| GitHub (private repo) | Code **and SSM data; rule 9 states the intent, not the contents** (G14). **In history, on Main-BE, Main-Final and Main-FE:** eight CSV versions, 73 rows each, carry `cost_per_piece` per SKU (`reports/lp_dry_run_2026-09-29/plan_per-sku_{103,105,108}.csv`, `reports/evidence/ch08_cli_plan_{103,105,108}.csv`, `reports/diagnostics/lp_rerun_2026-10-03/comparison_per_product.csv` and `plan_2026-03_103pct.csv`). Commit 97e564d removed them from Main-BE and Main-FE, where they stay retrievable from history; Main-Final's current files still include all eight. **In the current files on Main-BE:** `profiling/sheet_profiles` holds 375 real price values in 67 files, not tied to a product; a header scan on 2026-11-03 found 26 CSV files with a product identifier beside a sales, stock, price or quantity column (2 of them synthetic by name), including the frozen rows behind the pinned figures (`docs/published_snapshot_2026-10-24/`) and `reports/experiment_artifacts/`; `docs/MANUSCRIPT_WORKED_CALCULATIONS.md` holds two products under rule 9's exception. The scan read headers only and is not an audit of every file. **Also in history:** versions of `.env.example` from 2026-08-22 to 2026-09-28 hold a password-shaped database value. It is not a current password; whether it was ever real is **UNVERIFIED** | Private | — |
 
 ## 8. Platform checklist (tick in the dashboards; none of these could be checked from the repo)
 
@@ -283,7 +284,7 @@ Last reviewed: 2026-11-02, reviewer of record Kelvin Yuan Guillermo. Next review
 three events in G7.
 
 Gap state on 2026-11-02: **done** G2, G3, G5, G6, G7, G8 (G5, G6 and G7 are the team's own adoption, not confirmed by
-SSM). **Open:** G1 (accepted for now), G4 (the corrected table is attached, nothing deleted), G9, G10, G11, G12 (answered: personal data is present; minimisation left), G13. G7's first review was run 2026-11-02.
+SSM). **Open:** G1 (accepted for now), G4 (the corrected table is attached, nothing deleted), G9, G10, G11, G12 (answered: personal data is present; minimisation left), G13, G14 (added 2026-11-03). G7's first review was run 2026-11-02.
 This file records the team's decisions; it does not show that anyone outside the team has agreed to them.
 
 ## 10. Handover to SSM (gap G13, open)
@@ -296,5 +297,6 @@ Every role in section 1 ends at handover. Nothing below has been done; it is the
 | Rotated | Both secret keys: `JWT_SECRET_KEY` (everyone signs in again) and `MFA_ENCRYPTION_KEY` (every stored authenticator secret is re-encrypted, or all users re-enrol; section 6 point 5). Handover is a deliberate rotation, unlike the usual "only on exposure" rule for the MFA key | Custodian |
 | Removed | Every student account on the live system, and the team's access to Supabase, Render, Vercel and GitHub | Data steward, from the audit log |
 | Deleted, confirmed person by person | The `backups/` folders, `local/`, and any other copy of SSM data on a laptop, drive or cloud folder. Each member states in writing that theirs is deleted | Each member, collected by the privacy contact |
+| Decided: repository disposition | What happens to the GitHub repository: it transfers to SSM, is archived with access removed, or is deleted. Any transfer or copy carries the history, including the purchase costs per SKU (G14), so SSM decides knowing that. Choose one | Custodian and SSM |
 | SSM fills | SSM's own data owner, data custodian and privacy contact, replacing the names in section 1; the access review (G7) is run once before handover | SSM |
 
