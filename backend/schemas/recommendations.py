@@ -160,6 +160,11 @@ class NotPlannedItem(BaseModel):
     stock_blocked_reason: str | None = None
     # Mean pieces a month over the 3 sales months up to the cycle's opening count (SKU_COVER_HISTORY_MONTHS; a month with no row = 0).
     recent_monthly_pieces: float
+    # The cycle's review_flag row, as on RecommendationItem. needs_review None = not assessed. No order follows from it.
+    needs_review: bool | None = None
+    review_reasons: list[str] = []
+    review_over_run_months: int | None = None
+    review_collapse_ratio: float | None = None
 
 
 class RecommendationsResponse(BaseModel):

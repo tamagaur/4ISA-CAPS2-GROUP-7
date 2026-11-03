@@ -155,7 +155,10 @@ nothing for them. Reasons come from the cycle's Forecast_Result row: mase_gate
 (status ok, MASE at or above the gate, DEC-46), insufficient_data, dead (no sale
 in 6 months); 'other' keeps any product those do not explain visible rather than
 forced into one. Only principals with a plan in the cycle are listed: Del Monte
-has no product-level plan. Read in real mode only, on both paths below.
+has no product-level plan. Read in real mode only, on both paths below. Each row
+carries the same needs_review / review_reasons / review_over_run_months /
+review_collapse_ratio as a plan row, read from the cycle's review_flag row, so a
+product excluded from the plan can still be seen as flagged; null = not assessed.
 
 PLANNING MART (2026-10-05, migration 0046). In real mode GET reads
 mart.planning_mart: one row per product x cycle that already carries every
@@ -615,10 +618,13 @@ _NOT_PLANNED_SQL = f"""
            CASE WHEN inv.product_key IS NOT NULL THEN TRUE
                 WHEN counted.principal IS NOT NULL THEN FALSE
            END AS in_stock_count,
-           COALESCE(sales.pieces, 0) / NULLIF(sales_window.months, 0) AS recent_monthly_pieces
+           COALESCE(sales.pieces, 0) / NULLIF(sales_window.months, 0) AS recent_monthly_pieces,
+           rf.needs_review AS needs_review, rf.reasons AS review_reasons,
+           rf.over_run_months AS review_over_run_months, rf.collapse_ratio AS review_collapse_ratio
     FROM abc_classification ac
     JOIN product_dimension pd ON pd.product_key = ac.product_key
     LEFT JOIN Forecast_Result fr ON fr.product_key = ac.product_key AND fr.forecast_date = CAST(:nop_cycle AS date)
+    LEFT JOIN ({{review}}) rf ON rf.product_key = ac.product_key AND rf.planning_cycle_date = CAST(:nop_cycle AS date)
     LEFT JOIN (
         {STOCK_AT_PERIOD_SQL}
     ) inv ON inv.product_key = ac.product_key
@@ -663,12 +669,19 @@ def _not_planned_reason(forecast_status, mase) -> str:
     return {"insufficient_data": "insufficient_data", "dead_sku": "dead"}.get(forecast_status, "other")
 
 
-def not_planned(db: Session, cycle, principal: str | None, abc_periods: dict | None = None) -> list[NotPlannedItem]:
+def _not_planned_sql(scope_sql: str = "", review_flag_present: bool = True) -> str:
+    return _NOT_PLANNED_SQL.format(abc_method=abc_method_sql("ac"), abc_period=abc_period_pred("=", "ac"), scope=scope_sql,
+                                   review=_REVIEW_SQL if review_flag_present else _REVIEW_ABSENT_SQL)
+
+
+def not_planned(db: Session, cycle, principal: str | None, abc_periods: dict | None = None,
+                review_flag_present: bool = True) -> list[NotPlannedItem]:
     """Tier A products with no plan row in `cycle` (the module docstring's NOT PLANNED). Stock reads as a plan row's does
     (_to_item): absent from a count that omits zero-stock items is 0, a count row with no usable pack size has no figure.
-    `abc_periods`: latest_abc_periods at the cycle's month, when the caller already has it."""
+    `abc_periods`: latest_abc_periods at the cycle's month, when the caller already has it.
+    `review_flag_present`: _present(db)["review_flag"]; the mart path reads 0042's table, as _MART_PRESENT does."""
     scope_sql, scope_params = principal_clause(principal, "pd.principal")
-    sql = _NOT_PLANNED_SQL.format(abc_method=abc_method_sql("ac"), abc_period=abc_period_pred("=", "ac"), scope=scope_sql)
+    sql = _not_planned_sql(scope_sql, review_flag_present)
     rows = db.execute(text(sql), {
         **scope_params, **abc_period_params(abc_periods or latest_abc_periods(db, principal, str(cycle)[:7])),
         "nop_cycle": cycle, "inv_period": opening_period(cycle),
@@ -683,6 +696,8 @@ def not_planned(db: Session, cycle, principal: str | None, abc_periods: dict | N
             current_stock=0.0 if absent else stock, stock_not_in_count=absent,
             stock_blocked_reason=NO_PACK_SIZE_REASON if stock is None and r["current_stock_cases"] is not None else None,
             recent_monthly_pieces=float(r["recent_monthly_pieces"] or 0),
+            needs_review=r.get("needs_review"), review_reasons=list(r.get("review_reasons") or []),
+            review_over_run_months=r.get("review_over_run_months"), review_collapse_ratio=_opt_float(r, "review_collapse_ratio"),
         ))
     return out
 
@@ -918,7 +933,8 @@ def get_recommendations(
         stock_counts=counts,
         **labels,
         tier_a_periods=tier_a_periods(abc_periods_shown),
-        not_planned=not_planned(db, freshness["cycle_date"], principal) if mode == REAL and freshness["cycle_date"] else None,
+        not_planned=(not_planned(db, freshness["cycle_date"], principal, review_flag_present=present["review_flag"])
+                     if mode == REAL and freshness["cycle_date"] else None),
     ), db, mode), db, principal, mode)
 
 

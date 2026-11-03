@@ -885,6 +885,33 @@ def test_not_planned_lists_each_reason_with_stock_and_sales_and_no_quantity(sess
         assert not {"q_i", "plan_q_i", "recommended_q_i", "decided_q_i", "order_pieces"} & set(item)
 
 
+def test_not_planned_carries_the_review_flag_as_a_plan_row_does(session):
+    session.not_planned_rows = [
+        _not_planned_row(sku_id="FLAG", needs_review=True, review_reasons=["collapse", "over_forecast_run"],
+                         review_over_run_months=4, review_collapse_ratio=0.31),
+        _not_planned_row(sku_id="CLEAR", needs_review=False, review_reasons=[], review_over_run_months=0, review_collapse_ratio=0.9),
+        _not_planned_row(sku_id="NOROW", needs_review=None, review_reasons=None, review_over_run_months=None, review_collapse_ratio=None),
+    ]
+    got = {i["sku_id"]: i for i in _get(session, "/recommendations?principal=unilever")["not_planned"]}
+    assert got["FLAG"]["needs_review"] is True
+    assert got["FLAG"]["review_reasons"] == ["collapse", "over_forecast_run"]
+    assert got["FLAG"]["review_over_run_months"] == 4 and got["FLAG"]["review_collapse_ratio"] == 0.31
+    assert got["CLEAR"]["needs_review"] is False and got["CLEAR"]["review_reasons"] == []
+    # No review_flag row: not assessed, never read as "not flagged".
+    assert got["NOROW"]["needs_review"] is None and got["NOROW"]["review_reasons"] == []
+
+
+def test_not_planned_reads_the_flag_of_the_same_cycle_and_survives_a_missing_table(session):
+    session.present = {"review_flag": True, "on_order": False}
+    _get(session, "/recommendations?principal=unilever&cycle=all")
+    sql = next(s for s, _ in session.calls if "forecast_status" in s)
+    assert "FROM review_flag" in sql and "rf.planning_cycle_date = CAST(:nop_cycle AS date)" in sql
+
+    from backend.routers import recommendations as rec
+    sql_absent = rec._not_planned_sql(review_flag_present=False)
+    assert "FROM review_flag" not in sql_absent and "rf.needs_review" in sql_absent
+
+
 def test_not_planned_query_reads_the_cycles_tier_a_and_excludes_only_plan_rows(session):
     _get(session, "/recommendations?principal=unilever&cycle=all")
     sql, params = next((s, p) for s, p in session.calls if "forecast_status" in s)
