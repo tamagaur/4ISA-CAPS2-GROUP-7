@@ -19,7 +19,7 @@ Terminal 1. This one stays open and keeps printing.
 |---|---|
 | `up on 127.0.0.1:55432` | The throwaway database server is running |
 | `restored 62 tables, 547,433 rows` | The backup loaded (about 30 s) |
-| `applied ...0073_decision_column_comments.sql`, then `applied ...0074_product_demand_view_real_rows.sql` | The two migrations newer than the backup |
+| `applied ...0073_decision_column_comments.sql`, then `applied ...0074_views_real_rows_only.sql` | The two migrations newer than the backup |
 | `ssm_practice is a fresh copy of ssm_local` | The copy the panel works on is ready |
 | `LOCAL APP on the throwaway database, signed in as ...  Not live.` then a long `localStorage.setItem(...)` line | **Copy that long line** |
 | `Uvicorn running on http://127.0.0.1:8000` | Ready, about 45 s after the first command |

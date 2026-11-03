@@ -664,12 +664,13 @@ CREATE OR REPLACE VIEW BO_Monitoring_View AS
 WITH purchases AS (
     SELECT principal, region, _period, SUM(net_amount) AS purchase_net_amount
     FROM Purchase_Fact
+    WHERE is_demo = false   -- migration 0074
     GROUP BY principal, region, _period
 ),
 bo_returns AS (
     SELECT principal, region, _period, SUM(net_amount) AS bo_net_amount
     FROM SalesReturn_Fact
-    WHERE return_type = 'BO'
+    WHERE return_type = 'BO' AND is_demo = false   -- migration 0074
     GROUP BY principal, region, _period
 )
 SELECT

@@ -258,3 +258,20 @@ def test_each_statement_gets_only_the_parameters_it_names():
     params = {"m": "2025-12", "owned": ["a"], "site": "ilocos", "mx": 1}
     assert ls._bind("x = :m AND y = ANY(CAST(:owned AS text[]))", params) == {"m": "2025-12", "owned": ["a"]}
     assert ls._bind("q = :qpairs", {"qpairs": [], "qords": None}) == {"qpairs": []}
+
+
+def test_known_duplicate_is_found_below_the_top_of_data_raw(tmp_path, monkeypatch):
+    """Every delmonte:salesreturn_fact slice was refused from 67d3443 (2026-10-02): the month of this file was asked for
+    at data/raw/<name>, and the file is in a month's folder."""
+    name = next(iter(ls.KNOWN_DUPLICATES))
+    copy = tmp_path / "Del Monte" / "MONTHLY REPORT - APRIL 2023" / name
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes(b"")
+    monkeypatch.setattr(ls, "RAW_DIR", tmp_path)
+    monkeypatch.setattr(ls, "file_month", lambda path: "2023-04" if path == copy else pytest.fail(f"looked at {path}"))
+    assert ls.known_duplicate_months() == {"2023-04"}
+
+
+def test_no_known_duplicate_file_means_no_month(tmp_path, monkeypatch):
+    monkeypatch.setattr(ls, "RAW_DIR", tmp_path)
+    assert ls.known_duplicate_months() == set()
