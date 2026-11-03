@@ -2,7 +2,8 @@
 
 Clones the connected database's public (about 140 MB) into ssm_rollover_test and drops it again, so it is NOT part of the normal
 suite. It runs through scripts/check.sh --optin, on a disposable copy restored from a backup, and is refused anywhere else
-(scripts/optin_guard.py), live above all. It asserts 61 checks, among them the isolation checks of docs/ROLLOVER_DESIGN.md (e)."""
+(scripts/optin_guard.py), live above all. It asserts 61 checks (60 with the script's --keep, which leaves out the check that the schema is
+dropped), among them the isolation checks of docs/ROLLOVER_DESIGN.md (e)."""
 import os
 
 import pytest

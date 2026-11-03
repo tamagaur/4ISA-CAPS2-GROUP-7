@@ -32,7 +32,7 @@ export const tierTechnical = (tier) => (tier ? `Class ${tier}` : '');
 // ── Forecast ────────────────────────────────────────────────────────────
 // The ~90% band (forecast ± 1.645 × holdout RMSE).
 export const mostLikely = (low, high) => `Most likely between ${low} and ${high}`;
-// MASE below 1 (beats repeating last month's sales) or not.
+// MASE below 1 (test error below the average month-to-month change in the product's sales) or not.
 export const RELIABLE = 'Reliable enough to use for ordering';
 export const NOT_RELIABLE = 'Not reliable enough yet';
 export const NOT_CHECKED = 'Not checked yet';

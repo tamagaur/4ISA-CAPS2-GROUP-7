@@ -1,7 +1,11 @@
 """scripts/check.sh --optin must not be able to reach anything but the throwaway server (2026-11-03).
 
 These tests touch no database: they prove the refusals, so the run that uses them is not the only evidence."""
+import os
 import socket
+import subprocess
+import sys
+from pathlib import Path
 
 import psycopg2
 import pytest
@@ -127,3 +131,55 @@ def test_every_listed_test_must_have_passed(tmp_path):
 ])
 def test_anything_short_of_every_listed_test_passing_fails(tmp_path, cases):
     assert run.read_outcomes(_junit(tmp_path, cases), ["t.mod::a", "t.mod::b"])[1] is False
+
+
+def _fake_server(monkeypatch, tmp_path, restore, dropped=True):
+    """run() against a fake server; returns the seed and the list of databases it dropped. Nothing connects to anything."""
+    from scripts import local_pg
+    drops = []
+
+    def drop(db):
+        drops.append(db)
+        return dropped
+
+    monkeypatch.setenv(g.LOG_VAR, str(tmp_path / "refused.log"))     # run() sets this in os.environ; monkeypatch puts it back
+    monkeypatch.setattr(run.optin_guard, "install", lambda: None)
+    monkeypatch.setattr(run, "child_env", lambda url: {"SUPABASE_DB_URL": url})
+    for name, value in {"is_up": lambda: True, "start": lambda: None, "stop": lambda: None, "restore": restore, "drop_database": drop}.items():
+        monkeypatch.setattr(local_pg, name, value)
+    (tmp_path / "structure").mkdir()
+    return tmp_path, drops
+
+
+def test_the_database_is_dropped_when_the_run_fails(monkeypatch, tmp_path):
+    seed, drops = _fake_server(monkeypatch, tmp_path, lambda seed, db: ["a table did not load"])
+    assert run.run(seed, keep=False) == 1
+    assert drops == [run.OPTIN_DB]
+
+
+def test_the_database_is_dropped_when_a_step_raises(monkeypatch, tmp_path):
+    def boom(seed, db):
+        raise RuntimeError("the restore fell over")
+    seed, drops = _fake_server(monkeypatch, tmp_path, boom)
+    with pytest.raises(RuntimeError):
+        run.run(seed, keep=False)
+    assert drops == [run.OPTIN_DB]
+
+
+def test_a_database_that_could_not_be_dropped_fails_the_run(monkeypatch, tmp_path):
+    seed, drops = _fake_server(monkeypatch, tmp_path, lambda seed, db: [], dropped=False)
+    monkeypatch.setattr(run, "_guarded", lambda *a: 0)
+    monkeypatch.setattr(run, "_server_says", lambda env: ((55432, run.OPTIN_DB), run.SEED_PLAN))
+    monkeypatch.setattr(run, "read_outcomes", lambda *a: ({}, True))
+    with pytest.raises(SystemExit, match="could not drop"):
+        run.run(seed, keep=False)
+    assert drops == [run.OPTIN_DB]
+
+
+def test_the_rollover_script_run_directly_refuses_anything_but_the_throwaway_server():
+    """In a child process: main() loads the repo's .env into its environment before the refusal."""
+    done = subprocess.run([sys.executable, "-m", "scripts.rollover_scratch_test"], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env={**os.environ, "SUPABASE_DB_URL": "postgresql://u:p@db.example.com:6543/postgres"})
+    assert done.returncode != 0
+    assert "REFUSED by scripts/optin_guard.py" in done.stderr and "db.example.com:6543" in done.stderr
+    assert "rollover scratch test, schema" not in done.stdout       # it stopped before the first check

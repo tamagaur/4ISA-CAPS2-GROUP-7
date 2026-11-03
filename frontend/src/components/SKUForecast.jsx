@@ -2957,8 +2957,9 @@ const SKUForecast = () => {
                         )}
                         {/* Reliability on the same basis as the dashboard's
                             count and the LP's gate: MASE < 1 means the
-                            served model beat a naive last-month forecast
-                            on its own rolling holdout. */}
+                            served model's error on its own rolling holdout
+                            is below the average month-to-month change in
+                            the product's sales before those months. */}
                         {storedForecast?.mase != null && (
                           <div className="forecast-howmade-item">
                             <dt>

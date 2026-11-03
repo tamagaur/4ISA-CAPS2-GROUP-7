@@ -104,8 +104,9 @@ def is_up() -> bool:
     return _run(PGBIN / "pg_isready.exe", "-h", "127.0.0.1", "-p", PORT, check=False, stdout=subprocess.DEVNULL).returncode == 0
 
 
-def drop_database(db: str) -> None:
-    _psql("postgres", f"DROP DATABASE IF EXISTS {db} WITH (FORCE)")
+def drop_database(db: str) -> bool:
+    """True when the database is gone, including when it was never there. False when the server refused or could not be reached."""
+    return _psql("postgres", f"DROP DATABASE IF EXISTS {db} WITH (FORCE)").returncode == 0
 
 
 def _psql(db, sql=None, file=None):

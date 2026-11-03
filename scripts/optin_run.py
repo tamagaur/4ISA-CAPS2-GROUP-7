@@ -151,13 +151,16 @@ def run(seed: Path, keep: bool) -> int:
             if keep:
                 print(f"--keep: {OPTIN_DB} left on 127.0.0.1:{local_pg.PORT}")
             else:
-                local_pg.drop_database(OPTIN_DB)
-                print(f"teardown: {OPTIN_DB} dropped", end="")
+                # In the finally, so a failed test, a failed step or an exception all drop it. A database still there fails the run.
+                dropped = local_pg.drop_database(OPTIN_DB)
+                print(f"teardown: {OPTIN_DB} {'dropped' if dropped else 'NOT dropped'}", end="")
                 if was_up:
                     print("; the server was already up, so it stays up")
                 else:
                     local_pg.stop()
                     print("; server stopped")
+                if not dropped:
+                    sys.exit(f"FAIL: could not drop {OPTIN_DB} on 127.0.0.1:{local_pg.PORT}. Drop it by hand.")
 
 
 def main() -> int:

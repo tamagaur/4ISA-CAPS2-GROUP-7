@@ -254,8 +254,9 @@ A round-1 cell says Pass or Fail only when one of these sources records that beh
 | R2-b | `python scripts/smoke_api.py` (read-only, live) | 14 routes, all 200 PASS; rc 0 |
 | R2-c | `python -m scripts.snapshot_published_figures --verify` (read-only, live) | "OK: 51 figures reproduced from the frozen rows"; rc 0 |
 | R2-d | `trace.py 39`, `trace.py 853`, `portfolio.py` (read-only, live; see `docs/MANUSCRIPT_WORKED_CALCULATIONS.md`) | every recomputed value equals the stored one |
+| R2-e | `scripts/check.sh --optin`, executed 2026-11-03 on a disposable database (`ssm_optin` on 127.0.0.1:55432, seeded from `backups/full_backup_20261102T170343Z`, never live) | **18 of 18 passed**, rc 0; connections refused by the guard: 0; the database dropped afterwards |
 
-A round-2 cell reads **Pass** only if every mapped test ran and passed in R2-a (parametrised instances included; the count
+A round-2 cell reads **Pass** only if every mapped test ran and passed in R2-a, or in R2-e for the 18 opt-in tests of §4.3 (parametrised instances included; the count
 is in brackets). A mapped test that did not run would read **not executed**, never pass. The mapping is in the last column.
 
 ### 4.2 Results
@@ -330,30 +331,29 @@ is in brackets). A mapped test that did not run would read **not executed**, nev
 
 ### 4.3 The 18 opt-in tests (`scripts/known_opt_in_skips.txt`)
 
-Round 2: **not executed** for all 18. Each needs something this session must not create. `FILLS_SCRATCH_SCHEMA` means a
-filled rehearsal schema, built by writing to the database. `ROLLOVER_SCRATCH=1` clones the live database into a scratch schema.
-Neither is in scope, and a write would cross the DATABASE rule. In R2-a they skipped with their listed reasons (18 skipped, each with the exact reason listed in `scripts/known_opt_in_skips.txt`).
+Round 2: **Pass** for all 18, by `scripts/check.sh --optin` on 2026-11-03 (R2-e). They did not run in R2-a on 2026-10-31, where they skipped with the reasons listed in `scripts/known_opt_in_skips.txt`: each needs a filled rehearsal schema (`FILLS_SCRATCH_SCHEMA`) or a scratch clone (`ROLLOVER_SCRATCH=1`), and neither could be built on live.
+R2-e builds both inside a disposable database restored from a local backup and refuses any other destination (`scripts/optin_guard.py`). A pass there shows the tests pass on a copy of the backup's date. It says nothing about live, where they must never run, and these 18 are not in the R2-a coverage figures of §5.
 
 | TC | T | C | Test (`tests/etl/…`) | Round 1 | Round 2 |
 |---|---|---|---|---|---|
-| TC65 | T65 | C65 | `test_fills_db::test_a_second_run_changes_nothing` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC66 | T65 | C65 | `test_fills_db::test_real_rows_replace_the_fill_and_the_missing_branch_gets_its_adjacent_month` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC67 | T65 | C65 | `test_fills_db::test_the_sweep_removes_fills_the_loader_missed` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC68 | T65 | C65 | `test_fills_db::test_a_cell_that_once_held_real_rows_stays_empty` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC69 | T65 | C65 | `test_fills_db::test_a_new_stock_and_sales_month_produces_new_derived_receipts` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC70 | T65 | C65 | `test_fills_db::test_del_monte_split_totals_equal_real_sell_out_totals` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC71 | T65 | C65 | `test_fills_db::test_real_views_hold_only_real_rows_and_pass_the_forecast_guard` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC72 | T65 | C65 | `test_fills_db::test_the_estimated_received_series_reads_only_the_derived_table` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC73 | T65 | C65 | `test_fills_db::test_a_reviewed_category_map_switches_the_split_to_category_level` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC74 | T65 | C65 | `test_fills_db::test_a_missing_branch_beside_a_real_branch_copies_its_previous_month` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC75 | T65 | C65 | `test_fills_db::test_a_branch_copy_follows_its_adjacent_month` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC76 | T65 | C65 | `test_fills_db::test_real_rows_for_the_missing_branch_replace_its_fill` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC77 | T65 | C65 | `test_fills_db::test_a_branch_that_once_held_real_rows_is_not_refilled` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC78 | T65 | C65 | `test_fills_db::test_a_product_missing_from_the_previous_count_gets_receipts_from_opening_0` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC79 | T65 | C65 | `test_fills_db::test_a_product_missing_from_this_months_count_gets_receipts_from_closing_0` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC80 | T65 | C65 | `test_fills_db::test_every_assumed_zero_keeps_the_negative_balance_rule` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC81 | T65 | C65 | `test_fills_db::test_an_assumed_zero_opening_from_a_possibly_partial_count_is_flagged` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **not executed**: skipped in R2-a, "needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)" |
-| TC82 | T66 | C66 | `test_rollover_scratch::test_rollover_on_a_scratch_schema_with_a_synthetic_march` | Pass after three harness fixes (QAP Task 1: failed three times for reasons that were not the pipeline code, then 60 of 60 checks) | **not executed**: skipped in R2-a, "opt in with ROLLOVER_SCRATCH=1" |
+| TC65 | T65 | C65 | `test_fills_db::test_a_second_run_changes_nothing` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC66 | T65 | C65 | `test_fills_db::test_real_rows_replace_the_fill_and_the_missing_branch_gets_its_adjacent_month` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC67 | T65 | C65 | `test_fills_db::test_the_sweep_removes_fills_the_loader_missed` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC68 | T65 | C65 | `test_fills_db::test_a_cell_that_once_held_real_rows_stays_empty` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC69 | T65 | C65 | `test_fills_db::test_a_new_stock_and_sales_month_produces_new_derived_receipts` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC70 | T65 | C65 | `test_fills_db::test_del_monte_split_totals_equal_real_sell_out_totals` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC71 | T65 | C65 | `test_fills_db::test_real_views_hold_only_real_rows_and_pass_the_forecast_guard` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC72 | T65 | C65 | `test_fills_db::test_the_estimated_received_series_reads_only_the_derived_table` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC73 | T65 | C65 | `test_fills_db::test_a_reviewed_category_map_switches_the_split_to_category_level` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC74 | T65 | C65 | `test_fills_db::test_a_missing_branch_beside_a_real_branch_copies_its_previous_month` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC75 | T65 | C65 | `test_fills_db::test_a_branch_copy_follows_its_adjacent_month` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC76 | T65 | C65 | `test_fills_db::test_real_rows_for_the_missing_branch_replace_its_fill` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC77 | T65 | C65 | `test_fills_db::test_a_branch_that_once_held_real_rows_is_not_refilled` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC78 | T65 | C65 | `test_fills_db::test_a_product_missing_from_the_previous_count_gets_receipts_from_opening_0` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC79 | T65 | C65 | `test_fills_db::test_a_product_missing_from_this_months_count_gets_receipts_from_closing_0` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC80 | T65 | C65 | `test_fills_db::test_every_assumed_zero_keeps_the_negative_balance_rule` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC81 | T65 | C65 | `test_fills_db::test_an_assumed_zero_opening_from_a_possibly_partial_count_is_flagged` | Pass (QAP Task 1: 17 of 17 passed on `ssm_fills`, 73 s) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03) |
+| TC82 | T66 | C66 | `test_rollover_scratch::test_rollover_on_a_scratch_schema_with_a_synthetic_march` | Pass after three harness fixes (QAP Task 1: failed three times for reasons that were not the pipeline code, then 60 of 60 checks) | **Pass** (R2-e, `scripts/check.sh --optin`, 2026-11-03; 61 of 61 checks) |
 
 ---
 
@@ -363,7 +363,7 @@ Neither is in scope, and a write would cross the DATABASE rule. In R2-a they ski
 guards, dependencies and validation, with the database session replaced by a fake (`NoQuerySession` and per-file fakes). That
 exercises routing → dependency → handler → schema without Postgres. Three groups do reach a real database: `tests/invariants/`
 (live, read-only), `tests/test_scratch_migration_guard.py` and `tests/backend/test_migrations.py` (static, over the migration
-files), and the 18 opt-in tests (a rehearsal or scratch schema; not run in round 2). R2-b and R2-c are live, read-only
+files), and the 18 opt-in tests (a rehearsal or scratch schema on a disposable database; run by R2-e, not by the coverage run R2-a). R2-b and R2-c are live, read-only
 integration runs outside pytest.
 
 **Coverage run.** R2-a under `coverage.py` 7.16.2 with `--branch`, source `backend, analytics, scripts, transform`.

@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2386,
+   "value": 2390,
    "command": "python -m pytest --collect-only -q tests | tail -1  (on a clone with no data/raw)"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2392,
+   "value": 2396,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,13 +83,13 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2365,
+   "value": 2369,
    "command": "scripts/check.sh --full on a clone with no data/raw and no local/"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2374,
+   "value": 2378,
    "command": "scripts/check.sh --full there"
   },
   {
