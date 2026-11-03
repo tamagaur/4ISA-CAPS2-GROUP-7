@@ -219,29 +219,33 @@ FROM abc_classification ac
 LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02'
 WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')
 """
-SEASONALITY_ALPHA = 0.05   # analytics.params.YEARLY_ACF_Z = 1.96, two-sided
-SEASONALITY_NOTE = ("Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, "
-                    "no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the "
-                    "'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). "
+SEASONALITY_KEYS = ("products", "testable", "significant", "negative_hits", "expected_by_chance_one_sided", "expected_by_chance_two_sided")
+SEASONALITY_ONE_TAIL = 0.025   # analytics.params.YEARLY_ACF_Z = 1.96: the label fires only above +1.96 / sqrt(n)
+SEASONALITY_NOTE = ("Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison "
+                    "correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test "
+                    "(analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, "
+                    "is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), "
+                    "so both counts are the same products, and the pin fails if a negative hit appears. "
                     "The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'.")
 
 
 def seasonality_counts(patterns) -> dict:
-    """Counts over yearly_pattern() results. A series that never varies has no ACF: it was tested and is not significant."""
+    """Counts over yearly_pattern() results. A series that never varies has no ACF: it was tested and is not significant.
+    'significant' is the label itself, so the count and its one-sided rate cannot come apart."""
     tested = [p for p in patterns if p["acf_bound"] is not None]
-    hits = [p for p in tested if p["acf_lag12"] is not None and abs(p["acf_lag12"]) > p["acf_bound"]]
-    return {"products": len(patterns), "testable": len(tested), "significant": len(hits),
-            "significant_above": sum(1 for p in hits if p["acf_lag12"] > 0),
-            "expected_by_chance": round(len(tested) * SEASONALITY_ALPHA, 2)}
+    return {"products": len(patterns), "testable": len(tested),
+            "significant": sum(1 for p in tested if p["repeats_yearly"]),
+            "negative_hits": sum(1 for p in tested if p["acf_lag12"] is not None and p["acf_lag12"] < -p["acf_bound"]),
+            "expected_by_chance_one_sided": round(len(tested) * SEASONALITY_ONE_TAIL, 3),
+            "expected_by_chance_two_sided": round(len(tested) * SEASONALITY_ONE_TAIL * 2, 3)}
 
 
 def seasonality_figures(cohort_132: dict, current_189: dict) -> dict:
     out = {}
     for name, c in (("132", cohort_132), ("189", current_189)):
-        if c["significant"] != c["significant_above"]:
-            raise SystemExit(f"a seasonality hit in the {name} cohort is negative, so SEASONALITY_NOTE no longer holds: {c}")
-        out.update({f"seasonality_{name}_products": c["products"], f"seasonality_{name}_testable": c["testable"],
-                    f"seasonality_{name}_significant": c["significant"], f"seasonality_{name}_expected_by_chance": c["expected_by_chance"]})
+        if c["negative_hits"]:
+            raise SystemExit(f"a seasonality hit in the {name} cohort is negative, so the one-sided and two-sided counts now differ: {c}")
+        out.update({f"seasonality_{name}_{k}": c[k] for k in SEASONALITY_KEYS})
     return out
 
 
@@ -352,12 +356,16 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
     ("single_delivery_requirement_before_case_rounding_pieces", "The same before case-pack rounding, against the live plan's 431,443 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_before_case_rounding_pieces"),
     ("seasonality_132_products", "Seasonality: the 132-product cohort (Tier A as of 2026-02, method single)", "python -m scripts.chapter_figures --measure seasonality_132_products"),
     ("seasonality_132_testable", "...with 24 or more months, so testable", "python -m scripts.chapter_figures --measure seasonality_132_testable"),
-    ("seasonality_132_significant", "...significant at lag 12", "python -m scripts.chapter_figures --measure seasonality_132_significant"),
-    ("seasonality_132_expected_by_chance", "...expected by chance at 5%", "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance"),
+    ("seasonality_132_significant", "...above the bound at lag 12, what the 'Repeats yearly' label counts", "python -m scripts.chapter_figures --measure seasonality_132_significant"),
+    ("seasonality_132_negative_hits", "...below the negative bound (the pin fails if this is not 0)", "python -m scripts.chapter_figures --measure seasonality_132_negative_hits"),
+    ("seasonality_132_expected_by_chance_one_sided", "...expected by chance on the label's own test, one-sided, 2.5%", "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance_one_sided"),
+    ("seasonality_132_expected_by_chance_two_sided", "...expected by chance on a two-sided 5% test, which is NOT the label's", "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance_two_sided"),
     ("seasonality_189_products", "Seasonality: the current cohort (Tier A as of 2026-02, method t12m_new)", "python -m scripts.chapter_figures --measure seasonality_189_products"),
     ("seasonality_189_testable", "...with 24 or more months, so testable", "python -m scripts.chapter_figures --measure seasonality_189_testable"),
-    ("seasonality_189_significant", "...significant at lag 12", "python -m scripts.chapter_figures --measure seasonality_189_significant"),
-    ("seasonality_189_expected_by_chance", "...expected by chance at 5%", "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance"),
+    ("seasonality_189_significant", "...above the bound at lag 12, what the 'Repeats yearly' label counts", "python -m scripts.chapter_figures --measure seasonality_189_significant"),
+    ("seasonality_189_negative_hits", "...below the negative bound (the pin fails if this is not 0)", "python -m scripts.chapter_figures --measure seasonality_189_negative_hits"),
+    ("seasonality_189_expected_by_chance_one_sided", "...expected by chance on the label's own test, one-sided, 2.5%", "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance_one_sided"),
+    ("seasonality_189_expected_by_chance_two_sided", "...expected by chance on a two-sided 5% test, which is NOT the label's", "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance_two_sided"),
     ("critical_counted_products", "Critical (lp_run 6, count of 2 March 2026): products in the count below safety stock", "python -m scripts.chapter_figures --measure critical_counted_products"),
     ("critical_counted_stock_pieces", "...the stock they hold, pieces", "python -m scripts.chapter_figures --measure critical_counted_stock_pieces"),
     ("critical_counted_order_pieces", "...the order they carry, pieces", "python -m scripts.chapter_figures --measure critical_counted_order_pieces"),
@@ -372,7 +380,7 @@ DEPENDENCE_IDS = ("count_2mar_over_3feb", "count_2mar_over_6apr", "requirement_a
 QUERY_OF = {
     **{i: DEPENDENCE_SQL for i in DEPENDENCE_IDS},
     **{i: SINGLE_DELIVERY_SQL for i in ("single_delivery_requirement_pieces", "single_delivery_requirement_before_case_rounding_pieces")},
-    **{f"seasonality_{c}_{k}": SEASONALITY_SQL for c in ("132", "189") for k in ("products", "testable", "significant", "expected_by_chance")},
+    **{f"seasonality_{c}_{k}": SEASONALITY_SQL for c in ("132", "189") for k in SEASONALITY_KEYS},
     **{f"critical_{k}": CRITICAL_SQL for k in ("counted_products", "counted_stock_pieces", "counted_order_pieces",
                                                "absent_products", "absent_order_pieces", "total_order_pieces")},
     **{i: CATEGORY_GAP_SQL for i in ("category_sum_pesos", "category_net_total_pesos", "category_gap_pesos")},
@@ -380,7 +388,7 @@ QUERY_OF = {
 EXTRA_OF = {  # written into the pin beside the value
     "single_delivery_requirement_pieces": {"formula": SINGLE_DELIVERY_FORMULA, "note": SINGLE_DELIVERY_NOTE},
     "single_delivery_requirement_before_case_rounding_pieces": {"formula": SINGLE_DELIVERY_FORMULA, "note": SINGLE_DELIVERY_NOTE},
-    **{f"seasonality_{c}_{k}": {"note": SEASONALITY_NOTE} for c in ("132", "189") for k in ("testable", "significant", "expected_by_chance")},
+    **{f"seasonality_{c}_{k}": {"note": SEASONALITY_NOTE} for c in ("132", "189") for k in SEASONALITY_KEYS if k != "products"},
 }
 
 

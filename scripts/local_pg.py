@@ -66,12 +66,13 @@ PRACTICE_ROW_LABEL_SQL = f"""
 """
 
 
-def local_url(practice: bool = False) -> str:
+def local_url(practice: bool = False, db: str | None = None) -> str:
     url = os.environ.get("LOCAL_PG_URL", DEFAULT_URL)
     u = urlparse(url)
     if u.hostname not in ("127.0.0.1", "localhost") or u.port != PORT:
         sys.exit(f"REFUSED: LOCAL_PG_URL must be 127.0.0.1:{PORT}, got {u.hostname}:{u.port}")
-    return u._replace(path=f"/{PRACTICE_DB}").geturl() if practice else url
+    name = PRACTICE_DB if practice else db
+    return u._replace(path=f"/{name}").geturl() if name else url
 
 
 def _run(*cmd, **kw):
@@ -97,6 +98,14 @@ def start() -> None:
 
 def stop() -> None:
     _run(PGBIN / "pg_ctl.exe", "-D", DATA, "-m", "fast", "stop", check=False)
+
+
+def is_up() -> bool:
+    return _run(PGBIN / "pg_isready.exe", "-h", "127.0.0.1", "-p", PORT, check=False, stdout=subprocess.DEVNULL).returncode == 0
+
+
+def drop_database(db: str) -> None:
+    _psql("postgres", f"DROP DATABASE IF EXISTS {db} WITH (FORCE)")
 
 
 def _psql(db, sql=None, file=None):
@@ -129,29 +138,32 @@ def _pg_array(v):
     return "{" + ",".join('"' + str(x).replace("\\", "\\\\").replace('"', '\\"') + '"' for x in v) + "}"
 
 
-def restore(backup: Path) -> None:
+def restore(backup: Path, db: str = DB) -> list[str]:
+    """Load a backup into `db`, replacing it. Returns the tables whose row count differs from the backup's manifest."""
     import pandas as pd
     import psycopg2
     t0 = time.time()
-    _psql("postgres", f"DROP DATABASE IF EXISTS {PRACTICE_DB} WITH (FORCE)")   # a copy of what is being replaced
-    _psql("postgres", f"DROP DATABASE IF EXISTS {DB} WITH (FORCE)")
-    _psql("postgres", f"CREATE DATABASE {DB}")
+    if db == DB:
+        _psql("postgres", f"DROP DATABASE IF EXISTS {PRACTICE_DB} WITH (FORCE)")   # a copy of what is being replaced
+    _psql("postgres", f"DROP DATABASE IF EXISTS {db} WITH (FORCE)")
+    _psql("postgres", f"CREATE DATABASE {db}")
     pre = ("DO $$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role','supabase_admin'] LOOP "
            "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=r) THEN EXECUTE format('CREATE ROLE %I', r); END IF; END LOOP; END $$;")
-    _psql(DB, pre)
-    _psql(DB, "CREATE SCHEMA IF NOT EXISTS extensions; CREATE SCHEMA IF NOT EXISTS vault; "
+    _psql(db, pre)
+    _psql(db, "CREATE SCHEMA IF NOT EXISTS extensions; CREATE SCHEMA IF NOT EXISTS vault; "
               "CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA extensions;")
     errors = []
     for pass_no in (1, 2):   # pass 2 creates what pass 1 could not (views over a schema loaded later); only its errors count
         for name in ("app", "public", "demo", "mart"):
-            r = _psql(DB, file=str(backup / "structure" / f"{name}.sql"))
+            r = _psql(db, file=str(backup / "structure" / f"{name}.sql"))
             if pass_no == 2:
                 errors += [f"{name}: {l}" for l in r.stderr.splitlines() if "ERROR" in l and "already exists" not in l and "multiple primary keys" not in l]
     print(f"structure loaded, {len(errors)} errors")
     for e in errors[:15]:
         print("  ", e)
 
-    conn = psycopg2.connect(local_url())
+    mismatches = []
+    conn = psycopg2.connect(local_url(db=db))
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute("SET session_replication_role = replica")   # local superuser only: skip FK/trigger checks while loading
@@ -189,7 +201,10 @@ def restore(backup: Path) -> None:
             exp = info["row_count"]
             if counts[f"{schema}.{table}"] != exp:
                 print(f"  MISMATCH {schema}.{table}: loaded {counts[f'{schema}.{table}']} expected {exp}")
+                mismatches.append(f"{schema}.{table}")
+    conn.close()
     print(f"restored {len(counts)} tables, {sum(counts.values()):,} rows in {time.time() - t0:.1f}s")
+    return mismatches
 
 
 def run(cmd: list[str], practice: bool = False) -> int:

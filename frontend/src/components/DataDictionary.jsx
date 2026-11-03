@@ -83,7 +83,7 @@ const entries = {
       term: 'Forecast',
       caveat: 'Unilever top sellers only',
       definition: 'The number of pieces a top seller is expected to sell in the planning month.',
-      plain: 'Each top seller’s own sales history is used to estimate next month. Products with a longer history use a more detailed method, and every forecast is checked against simply repeating last month’s sales.',
+      plain: 'Each top seller’s own sales history is used to estimate next month. Products with a longer history use a more detailed method, and every forecast’s error in testing is checked against the average month-to-month change in the product’s sales before the test months.',
       technical: 'Made for Unilever’s top sellers (Class A) only; Del Monte’s sales have no product column, so it has no product forecasts. The model depends on how many months of sales the product has: under 3 months, a provisional trailing average; 3 to 11 months, a 3-month moving average (MA3); 12 to 23 months, TSB, a method for products that do not sell every month; 24 months or more, the average of a machine-learning model (XGBoost) and MA3. MA3 is the benchmark every model is scored against and the fallback when another cannot be used. On SSM’s data the other models tie with MA3; they are used because they draw on the product’s full history, not because they proved more accurate.',
     },
     {
@@ -104,7 +104,7 @@ const entries = {
       term: 'Suitable / Not yet suitable for ordering',
       caveat: 'Order-plan cut-off adopted by the team; not confirmed by SSM or the adviser',
       definition: 'Whether a product’s forecast is reliable enough for the order plan to use.',
-      plain: 'Suitable means the forecast has been closer to actual sales than simply repeating last month’s sales. Only suitable products are put in the order plan.',
+      plain: 'Suitable means the forecast’s error in testing was below the average month-to-month change in the product’s sales before the test months. Only suitable products are put in the order plan.',
       technical: 'MASE (forecast error score): the average absolute error on the held-back months, divided by the average month-to-month change in the product’s real sales history. Below 1 means the forecast beats that simple guess (Suitable); 1 or more, Not yet suitable. Only products scoring below 1 go into the order plan; using this cut-off for that is a team decision, not confirmed by SSM or the adviser. It is computed on real months only, never on sample data.',
     },
     {
@@ -171,7 +171,7 @@ const entries = {
     {
       // analytics/optimization/lp.py (need_i, the three layers, stage 1).
       term: 'Suggested order',
-      definition: 'How many pieces to order for the month, which SSM splits into weekly purchase orders.',
+      definition: 'How many pieces to order for the month: one quantity per product. Nothing in the system divides it into weekly purchase orders.',
       plain: 'Enough to cover next month’s expected sales and bring stock back up to the target, minus what is already on hand. If the supplier’s allocation is short, the extra buffer is cut first and this month’s expected sales last.',
       technical: 'The need is the month’s forecast plus the target stock, minus the stock on hand, and never below zero, so an overstocked product orders nothing. The plan orders the whole need when the supplier allocation allows. When it does not, it cuts in this order: the rest of the target first, then the safety stock, and this month’s expected sales last.',
     },
@@ -182,7 +182,7 @@ const entries = {
       caveat: 'Product cut-off adopted by the team; not confirmed by SSM or the adviser',
       definition: 'The calculation that turns forecasts, stock on hand and the supplier allocation into the suggested orders.',
       plain: 'It works out how much of each top seller to order so stock gets back to its target, without going over what the supplier will allow.',
-      technical: 'A linear program (LP), a standard method for choosing quantities within limits. It orders each product up to its target stock, net of the stock on hand. If the supplier allocation cannot cover every order, SSM’s 3-week stock rule and then the order weights decide which products are cut. Only Class A products whose forecast beats a simple last-month guess are planned (that cut-off is a team decision, not confirmed by SSM or the adviser). Quantities are in pieces.',
+      technical: 'A linear program (LP), a standard method for choosing quantities within limits. It orders each product up to its target stock, net of the stock on hand. If the supplier allocation cannot cover every order, SSM’s 3-week stock rule and then the order weights decide which products are cut. Only Class A products whose forecast test error is below the average month-to-month change in their sales before the test months are planned (that cut-off is a team decision, not confirmed by SSM or the adviser). Quantities are in pieces.',
     },
     {
       // analytics/params.LP_WEIGHTS ("TEAM (asserted)", in no scribe note,

@@ -49,6 +49,13 @@ def test_the_committed_list_is_exactly_the_twenty_one():
         "tests.backend.test_policy_comparison::test_pesos_reproduce_the_lp_logic_check_totals"}
 
 
+def test_a_third_column_does_not_change_the_exact_skip_reason(tmp_path):
+    p = tmp_path / "list.txt"
+    p.write_text("# comment\nt.mod::a\tneeds X\tcheck.sh --optin\nt.mod::b\tneeds Y\n", encoding="utf-8")
+    assert ch.load_allowed(p) == {"t.mod::a": "needs X", "t.mod::b": "needs Y"}
+    assert ch.covered_by_optin(p) == ["t.mod::a"]
+
+
 def test_no_allow_list_means_no_skip_is_allowed(tmp_path):
     """Every run except the whole suite (e.g. the invariants) calls cmd_junit with no list: any skip fails."""
     assert ch.cmd_junit(_xml(tmp_path, [("t.mod", "test_known", REASON)])) == 1

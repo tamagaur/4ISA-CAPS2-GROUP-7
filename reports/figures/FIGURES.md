@@ -234,9 +234,9 @@ Gate: 9 of 9 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_o_plan_vs_rule.png`
 
-Caption: Figure 4.2.34 Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026). Source: GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are the last purchase price per piece from the stock file). Period: planning cycle March 2026. Not shown: the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list item 13); capital freed (none is claimed); the rule is held flat at 3 weeks, so its average equals its peak. If 3 weeks is the rule's own peak, its average is lower (marked) and the plan's average is 7.1% less, not 22.6%; SSM has not confirmed the prices or which reading applies.
+Caption: Figure 4.2.34 Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026). Source: GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are the last purchase price per piece from the stock file). Period: planning cycle March 2026. Not shown: the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list item 13); capital freed (none is claimed). The peso panel's bars are one row of GET /policy-comparison, the rule read as a peak: 3 weeks is the stock right after a delivery, and its average is half a weekly order lower. On the other reading, the rule read as an average, the plan's average is -22.6% and its peak -2.2%. Weekly ordering is assumed, not implemented; SSM has not confirmed the prices, its weekly ordering or which reading applies.
 
 Chart note: Two panels: target stock is in pieces and average and peak stock are in pesos.
 
-Gate: 10 of 10 checks agree with the manuscript or the edit list.
+Gate: 12 of 12 checks agree with the manuscript or the edit list.
 

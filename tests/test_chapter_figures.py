@@ -61,25 +61,45 @@ def test_a_single_delivery_read_whose_control_misses_the_plan_is_refused():
         cf.single_delivery_figures([(108, 435988, 435988, 289068, 292268)])
 
 
-def test_the_seasonality_counts_are_two_sided_at_five_percent():
-    patterns = [{"months": 30, "acf_lag12": 0.5, "acf_bound": 0.358}, {"months": 30, "acf_lag12": -0.5, "acf_bound": 0.358},
-                {"months": 30, "acf_lag12": 0.1, "acf_bound": 0.358}, {"months": 12, "acf_lag12": None, "acf_bound": None}]
-    assert cf.seasonality_counts(patterns) == {"products": 4, "testable": 3, "significant": 2, "significant_above": 1, "expected_by_chance": 0.15}
+def _pattern(r, months=30, bound=0.358):
+    """A yearly_pattern() result: repeats_yearly is the label, which fires only above the bound (decomposition.py)."""
+    return {"months": months, "acf_lag12": r, "acf_bound": bound, "repeats_yearly": None if bound is None else bool(r is not None and r > bound)}
+
+
+def test_the_label_is_one_sided_so_the_rate_beside_its_count_is_too():
+    patterns = [_pattern(0.5), _pattern(-0.5), _pattern(0.1), _pattern(None, months=12, bound=None)]
+    assert cf.seasonality_counts(patterns) == {
+        "products": 4, "testable": 3, "significant": 1, "negative_hits": 1,
+        "expected_by_chance_one_sided": 0.075, "expected_by_chance_two_sided": 0.15}
 
 
 def test_a_constant_series_counts_as_tested_and_not_significant():
-    counts = cf.seasonality_counts([{"months": 30, "acf_lag12": None, "acf_bound": 0.358}])
-    assert (counts["testable"], counts["significant"]) == (1, 0)
+    counts = cf.seasonality_counts([_pattern(None)])
+    assert (counts["testable"], counts["significant"], counts["negative_hits"]) == (1, 0, 0)
 
 
-def test_the_seasonality_note_holds_only_while_every_hit_is_positive():
-    keep = {"products": 132, "testable": 72, "significant": 3, "significant_above": 3, "expected_by_chance": 3.6}
-    current = {"products": 189, "testable": 110, "significant": 5, "significant_above": 5, "expected_by_chance": 5.5}
-    assert cf.seasonality_figures(keep, current) == {
-        "seasonality_132_products": 132, "seasonality_132_testable": 72, "seasonality_132_significant": 3, "seasonality_132_expected_by_chance": 3.6,
-        "seasonality_189_products": 189, "seasonality_189_testable": 110, "seasonality_189_significant": 5, "seasonality_189_expected_by_chance": 5.5}
+KEEP = {"products": 132, "testable": 72, "significant": 3, "negative_hits": 0, "expected_by_chance_one_sided": 1.8, "expected_by_chance_two_sided": 3.6}
+CURRENT = {"products": 189, "testable": 110, "significant": 5, "negative_hits": 0, "expected_by_chance_one_sided": 2.75, "expected_by_chance_two_sided": 5.5}
+
+
+def test_the_pin_records_both_tails_and_the_observed_counts():
+    out = cf.seasonality_figures(KEEP, CURRENT)
+    assert (out["seasonality_132_significant"], out["seasonality_132_expected_by_chance_one_sided"], out["seasonality_132_expected_by_chance_two_sided"]) == (3, 1.8, 3.6)
+    assert (out["seasonality_189_significant"], out["seasonality_189_expected_by_chance_one_sided"], out["seasonality_189_expected_by_chance_two_sided"]) == (5, 2.75, 5.5)
+    assert out["seasonality_132_negative_hits"] == out["seasonality_189_negative_hits"] == 0
+
+
+def test_a_negative_seasonality_hit_fails_the_pin():
     with pytest.raises(SystemExit):
-        cf.seasonality_figures({**keep, "significant_above": 2}, current)
+        cf.seasonality_figures({**KEEP, "negative_hits": 1}, CURRENT)
+    with pytest.raises(SystemExit):
+        cf.seasonality_figures(KEEP, {**CURRENT, "negative_hits": 1})
+
+
+def test_the_pinned_seasonality_rates_are_the_one_sided_count_beside_both_tails():
+    pin = {f["id"]: f for f in json.loads(cf.PIN.read_text(encoding="utf-8"))["figures"]}
+    assert not {i for i in pin if i.endswith("_expected_by_chance")}, "a bare expected-by-chance figure loses which tail it is"
+    assert "one-sided" in pin["seasonality_132_significant"]["note"] and "two-sided" in pin["seasonality_132_significant"]["note"]
 
 
 def test_the_critical_split_separates_counted_from_absent():

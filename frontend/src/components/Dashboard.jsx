@@ -470,7 +470,7 @@ const STORY = {
   forecast: {
     name: 'the forecast',
     text: 'Expected demand for the top sellers, in pieces.',
-    more: 'Only the top sellers whose forecast beat a simple last-month guess (a reliability check the team adopted, '
+    more: 'Only the top sellers whose forecast test error was below the average month-to-month change in their sales before the test months (a reliability check the team adopted, '
       + 'not confirmed by SSM or the adviser). The shaded band is meant to cover about 9 in 10 months.',
   },
   accuracy: {

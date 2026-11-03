@@ -143,7 +143,7 @@ const classDrilldownNote = (cat, breakdown) => {
 const NO_TARGET_LABELS = {
   not_class_a: 'Not Class A in the latest ranking (the plan covers Class A only)',
   not_ranked: 'No sales in the latest ranking month',
-  accuracy: 'Forecast did not beat a simple last-month guess (a check the team adopted, not confirmed by SSM or the adviser)',
+  accuracy: 'Forecast error in testing was not below the average month-to-month change in its sales before the test months (a check the team adopted, not confirmed by SSM or the adviser)',
   short_history: 'Too little sales history to forecast',
   no_recent_sales: 'No recent sales to forecast from',
   forecast_failed: 'Forecast could not be produced',
@@ -153,11 +153,11 @@ const NO_TARGET_LABELS = {
   not_in_plan: 'Passes both checks but is not in the current plan',
 };
 // What the accuracy check is, in the page's plain words (the same test the
-// reorder page calls beating "a simple last-month guess"). The MASE name
+// reorder page states as a test error below the average month-to-month change in sales before the test months). The MASE name
 // stays in brackets for the reader who knows it; the cutoff itself is a team
 // decision (DEC-46), not confirmed by SSM or the adviser, said beside it (Technical Adviser, 2 Oct
 // 2026: plain language; 2026-10-22).
-const ACCURACY_CHECK_NOTE = 'The plan only uses forecasts that, tested on past months, beat a simple last-month guess '
+const ACCURACY_CHECK_NOTE = 'The plan only uses forecasts whose error, tested on past months, was below the average month-to-month change in sales before those months '
   + '(MASE below 1). The team adopted this reliability check; it is not confirmed by SSM or the adviser.';
 
 // GET /abc's stock_status values are a COVER-vs-TARGET-STOCK test (rop_i, the LP's target stock since the 2026-09-30 run)

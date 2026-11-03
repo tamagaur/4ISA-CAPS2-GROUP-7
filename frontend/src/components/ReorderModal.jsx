@@ -259,7 +259,7 @@ const ReorderModal = ({ isOpen, onClose, data, principal, lpModel, periods = {},
               safety-stock scaling (lp_model.safety_stock_assumption) and the
               weights (analytics/params.py LP_WEIGHTS, team-asserted). */}
           <p className="reorder-why-note">
-            A product enters the plan only if it is Class A and its forecast beats a simple last-month guess (a
+            A product enters the plan only if it is Class A and its forecast&apos;s test error is below the average month-to-month change in its sales before the test months (a
             reliability check the team adopted, not confirmed by SSM or the adviser).
             {lpModel?.safety_stock_assumption && (
               <>

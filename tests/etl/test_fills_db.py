@@ -1,8 +1,9 @@
 """DEC-31 fill step guardrails against a rehearsal schema (a filled copy of public: scripts/rehearse_fills.py --build,
 then scripts/fill_missing.py). Skipped unless FILLS_SCRATCH_SCHEMA names that schema. Every test runs in one
-transaction that is rolled back - the rehearsal schema is left as it was. Never pointed at public.
+transaction that is rolled back - the rehearsal schema is left as it was. Never pointed at public, and refused on anything
+but the throwaway server (scripts/optin_guard.py).
 
-  FILLS_SCRATCH_SCHEMA=ssm_fills pytest tests/etl/test_fills_db.py
+  scripts/check.sh --optin      builds everything on a disposable database, runs these, tears it down
 """
 from __future__ import annotations
 
@@ -20,6 +21,8 @@ pytestmark = pytest.mark.skipif(not SCHEMA or SCHEMA == "public", reason="needs 
 @pytest.fixture(scope="module")
 def engine():
     from analytics.config import get_settings
+    from scripts.optin_guard import require_throwaway
+    require_throwaway(get_settings().supabase_db_url)   # never live: scripts/check.sh --optin is how these run
     return create_engine(get_settings().supabase_db_url)
 
 

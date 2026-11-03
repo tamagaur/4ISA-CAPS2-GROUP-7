@@ -1423,7 +1423,7 @@ const ReorderRecommendations = () => {
               scales monthly variation to days (lp_model
               .safety_stock_assumption, CLAUDE.md "needs adviser ruling"). */}
           <p className="reorder-table-note">
-            Only Class A products whose forecast beats a simple last-month guess are planned here (a reliability check
+            Only Class A products whose forecast test error is below the average month-to-month change in their sales before the test months are planned here (a reliability check
             the team adopted, not confirmed by SSM or the adviser).
             {meta?.lpModel?.safety_stock_assumption && (
               <>
@@ -1675,7 +1675,7 @@ const ReorderRecommendations = () => {
         <PageHeader
           title="Reorder"
           accent="recommendations"
-          subtitle="Order quantities in pieces from the order plan, for the top sellers (Class A) whose forecasts beat a simple last-month guess. One run per planning cycle, for the month after the latest sales data."
+          subtitle="Order quantities in pieces from the order plan, for the top sellers (Class A) whose forecast test error is below the average month-to-month change in their sales before the test months. One run per planning cycle, for the month after the latest sales data."
           actions={cycles.length > 0 && (
               <div className="dashboard-date-controls">
                 <span className="date-single-label">Planning cycle</span>

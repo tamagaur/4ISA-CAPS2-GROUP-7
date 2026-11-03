@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2361,
+   "value": 2386,
    "command": "python -m pytest --collect-only -q tests | tail -1  (on a clone with no data/raw)"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2367,
+   "value": 2392,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,13 +83,13 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2340,
+   "value": 2365,
    "command": "scripts/check.sh --full on a clone with no data/raw and no local/"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2349,
+   "value": 2374,
    "command": "scripts/check.sh --full there"
   },
   {
@@ -151,23 +151,39 @@
    "value": 72,
    "command": "python -m scripts.chapter_figures --measure seasonality_132_testable",
    "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
-   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
   },
   {
    "id": "seasonality_132_significant",
-   "what": "...significant at lag 12",
+   "what": "...above the bound at lag 12, what the 'Repeats yearly' label counts",
    "value": 3,
    "command": "python -m scripts.chapter_figures --measure seasonality_132_significant",
    "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
-   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
   },
   {
-   "id": "seasonality_132_expected_by_chance",
-   "what": "...expected by chance at 5%",
-   "value": 3.6,
-   "command": "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance",
+   "id": "seasonality_132_negative_hits",
+   "what": "...below the negative bound (the pin fails if this is not 0)",
+   "value": 0,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_negative_hits",
    "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
-   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_132_expected_by_chance_one_sided",
+   "what": "...expected by chance on the label's own test, one-sided, 2.5%",
+   "value": 1.8,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance_one_sided",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_132_expected_by_chance_two_sided",
+   "what": "...expected by chance on a two-sided 5% test, which is NOT the label's",
+   "value": 3.6,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance_two_sided",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
   },
   {
    "id": "seasonality_189_products",
@@ -182,23 +198,39 @@
    "value": 110,
    "command": "python -m scripts.chapter_figures --measure seasonality_189_testable",
    "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
-   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
   },
   {
    "id": "seasonality_189_significant",
-   "what": "...significant at lag 12",
+   "what": "...above the bound at lag 12, what the 'Repeats yearly' label counts",
    "value": 5,
    "command": "python -m scripts.chapter_figures --measure seasonality_189_significant",
    "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
-   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
   },
   {
-   "id": "seasonality_189_expected_by_chance",
-   "what": "...expected by chance at 5%",
-   "value": 5.5,
-   "command": "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance",
+   "id": "seasonality_189_negative_hits",
+   "what": "...below the negative bound (the pin fails if this is not 0)",
+   "value": 0,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_negative_hits",
    "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
-   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_189_expected_by_chance_one_sided",
+   "what": "...expected by chance on the label's own test, one-sided, 2.5%",
+   "value": 2.75,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance_one_sided",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_189_expected_by_chance_two_sided",
+   "what": "...expected by chance on a two-sided 5% test, which is NOT the label's",
+   "value": 5.5,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance_two_sided",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, no multiple-comparison correction. 'Significant' is what the 'Repeats yearly' label counts: above the bound only, a one-sided test (analytics/forecasting/decomposition.yearly_pattern), so its chance rate is the ONE-SIDED one, testable x 0.025. The two-sided rate, testable x 0.05, is recorded so the two cannot be confused; it would apply only to a count of hits in either direction. Every hit is positive (negative_hits, pinned at 0), so both counts are the same products, and the pin fails if a negative hit appears. The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
   },
   {
    "id": "critical_counted_products",

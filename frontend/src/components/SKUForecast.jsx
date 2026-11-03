@@ -1459,9 +1459,9 @@ const SKUForecast = () => {
   // "ordering review", so none is claimed. The plan's own gate is unchanged
   // (scripts/run_lp.py).
   const verdictText = reliabilityState === 'reliable'
-    ? 'Forecast performs better than a simple last-month estimate.'
+    ? 'Forecast error in testing is below the average month-to-month change in sales before the test months.'
     : reliabilityState === 'unreliable'
-      ? 'Forecast does not perform better than a simple last-month estimate.'
+      ? 'Forecast error in testing is not below the average month-to-month change in sales before the test months.'
       : RELIABILITY_SHORT[reliabilityState];
   // The months scored for the usual miss, for its line in "Show details".
   const missWindow = productAccuracy?.error?.window_start && productAccuracy.error.window_end
@@ -2044,7 +2044,7 @@ const SKUForecast = () => {
                   <p style={{ margin: 0, maxWidth: '22rem', textAlign: 'right', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
                     {isDelMonte
                       ? 'Not in the order plan: the plan does not cover Del Monte, which has no product-level sales to forecast.'
-                      : 'Not in the order plan: only Class A products whose forecast beats a simple last-month guess (a check the team adopted, not confirmed by SSM or the adviser) get an order.'}
+                      : 'Not in the order plan: only Class A products whose forecast test error is below the average month-to-month change in their sales before the test months (a check the team adopted, not confirmed by SSM or the adviser) get an order.'}
                   </p>
                 )}
               </div>
@@ -2964,11 +2964,11 @@ const SKUForecast = () => {
                             <dt>
                               Reliability
                               <InfoTip label="About reliability">
-                                MASE compares this model&apos;s errors with simply repeating last month&apos;s sales.
+                                MASE compares this model&apos;s test errors with the average month-to-month change in this product&apos;s sales before the test months.
                                 Below 1 means the model does better than that; 1 or more means it doesn&apos;t.
                                 {/* Three decimals near 1, where two would round
-                                    0.996 up to "1.00" beside "beats a simple
-                                    last-month guess" (the verdict uses the
+                                    0.996 up to "1.00" beside the verdict in plain
+                                    words (the verdict uses the
                                     stored value). */}
                                 {' '}This product: MASE {storedForecast.mase.toFixed(Math.abs(storedForecast.mase - 1) < 0.01 ? 3 : 2)}.
                                 {/* MASE_GATE is a team decision, DEC-46, not confirmed by SSM or the adviser. */}
@@ -2979,9 +2979,9 @@ const SKUForecast = () => {
                               {/* The verdict in plain words; the score is
                                   behind the "?" for the adviser. */}
                               {storedForecast.mase < 1
-                                ? 'Performs better than a simple last-month estimate'
-                                : 'Does not perform better than a simple last-month estimate'}:
-                              {' '}MASE {maseText} (below 1 beats simply repeating last month&apos;s sales)
+                                ? 'Test error below the average month-to-month change in sales before the test months'
+                                : 'Test error not below the average month-to-month change in sales before the test months'}:
+                              {' '}MASE {maseText} (below 1 means the test error is below that change)
                               {holdoutWindow ? `, tested on ${holdoutWindow}` : ''}
                               {calendarAdjusted ? '. Worked out on the adjusted forecast; there is no separate check without the adjustment.' : ''}
                             </dd>

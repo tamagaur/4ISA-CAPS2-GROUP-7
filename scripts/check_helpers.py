@@ -48,13 +48,23 @@ ALLOWED_SKIPS = REPO / "scripts" / "known_opt_in_skips.txt"
 
 
 def load_allowed(path: Path = ALLOWED_SKIPS) -> dict[str, str]:
-    """{test id: exact skip reason} from the allow-list file (comments and blank lines ignored)."""
+    """{test id: exact skip reason} from the allow-list file (comments and blank lines ignored). A third column, if any, says what
+    runs the test: it is no part of the reason."""
     allowed: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip() and not line.startswith("#"):
-            name, _, reason = line.partition("	")
-            allowed[name.strip()] = reason.strip()
+            cols = line.split("	")
+            allowed[cols[0].strip()] = cols[1].strip() if len(cols) > 1 else ""
     return allowed
+
+
+OPTIN_COMMAND = "check.sh --optin"
+
+
+def covered_by_optin(path: Path = ALLOWED_SKIPS) -> list[str]:
+    """The tests the list says scripts/check.sh --optin runs (third column), in the list's order."""
+    return [line.split("	")[0].strip() for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("#") and line.count("	") >= 2 and line.split("	")[2].strip() == OPTIN_COMMAND]
 
 
 def cmd_junit(path: str, allowed: dict[str, str] | None = None) -> int:

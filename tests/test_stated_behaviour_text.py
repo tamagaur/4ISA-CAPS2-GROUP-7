@@ -11,6 +11,7 @@ REPO = Path(__file__).resolve().parents[1]
 SOURCES = [p for top in ("analytics", "backend", "scripts") for p in (REPO / top).rglob("*.py")
            if "archive" not in p.parts and "__pycache__" not in p.parts]
 BACKEND = [p for p in SOURCES if p.relative_to(REPO).parts[0] == "backend"]
+FRONTEND = [p for p in (REPO / "frontend" / "src").rglob("*") if p.suffix in (".js", ".jsx")]
 
 
 def _hits(pattern: str, sources) -> list[str]:
@@ -32,6 +33,19 @@ def test_the_review_window_says_weekly_ordering_is_an_assumption():
 
 def test_no_api_text_calls_the_mase_check_a_last_month_guess():
     assert _hits(r"last-month guess|simple last[- ]month", BACKEND) == []
+
+
+def test_no_page_calls_the_mase_check_a_last_month_guess():
+    assert _hits(r"last-month (guess|estimate)|simple last[- ]month|simply repeating last", FRONTEND) == []
+
+
+def test_no_page_says_ssm_or_the_app_splits_the_order():
+    assert _hits(r"splits? into weekly|splits? (it )?into weekly purchase", FRONTEND) == []
+
+
+def test_the_policy_card_says_weekly_ordering_is_unverified():
+    text = " ".join((REPO / "frontend/src/components/Charts.jsx").read_text(encoding="utf-8").split())
+    assert "neither implements nor verifies" in text
 
 
 def test_the_not_planned_reason_states_the_denominator():

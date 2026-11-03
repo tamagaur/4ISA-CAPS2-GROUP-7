@@ -2358,7 +2358,7 @@ export const PortfolioForecastWidget = ({
             {gatedSkuCount != null && tierACount ? (
               <InfoTip label="Which SKUs are summed">
                 {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} ${tierAUnits}: `
-                  + 'those whose forecasts beat a simple last-month guess (MASE below 1), the same check the reorder plan uses, '
+                  + 'those whose forecasts had a test error below the average month-to-month change in their sales before the test months (MASE below 1), the same check the reorder plan uses, '
                   + 'a check the team adopted, not confirmed by SSM or the adviser. '
                   + `The other ${(tierACount - gatedSkuCount).toLocaleString()} are left out rather than summed on forecasts that failed `
                   + 'the check, and the plan gives them no order recommendation: their forecast did not pass, or the product '
@@ -2377,7 +2377,7 @@ export const PortfolioForecastWidget = ({
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
-              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} ${tierAUnits} that beat a simple last-month guess (a check the team adopted, not confirmed by SSM or the adviser)`
+              ? ` · ${gatedSkuCount.toLocaleString()} of ${tierACount.toLocaleString()} ${tierAUnits} whose test error was below the average month-to-month change in their sales before the test months (a check the team adopted, not confirmed by SSM or the adviser)`
               : ' · planned Class A SKUs'}
             {piecesShare && ` · ${piecesShare.pct.toFixed(0)}% of all pieces sold in ${piecesShare.period}`}
           </p>
@@ -3087,7 +3087,7 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
           <p className="policy-assumption">
             <strong>Assumption:</strong> the safety stock covers
             {c.window_business_days != null ? ` ${Number(c.window_business_days).toFixed(0)} business days` : ' the review period plus lead time'}{' '}
-            (weekly orders, delivered 2–3 days later), assuming demand is independent from one day to the
+            (SSM’s stated practice of weekly orders, delivered 2–3 days later, an assumption the system neither implements nor verifies), assuming demand is independent from one day to the
             next.{c.inputs_are_placeholders ? ' These are placeholder inputs until SSM confirms them, and the headline is sensitive to them.' : ''}
           </p>
         </div>

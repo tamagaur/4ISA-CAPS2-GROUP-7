@@ -5,6 +5,9 @@
 #       backend lint, frontend lint, the pinned-figure verification, the Chapter 4 code figures
 #       (docs/CHAPTER4_CODE_FIGURES.json: route count and sign-in split, @cached GET routes, opt-in list size), the cross-endpoint invariants
 #   scripts/check.sh --full   everything above + the whole pytest suite + its pinned totals + the frontend production build
+#   scripts/check.sh --optin  ONLY the 18 opt-in database tests (marked in scripts/known_opt_in_skips.txt), on a disposable database
+#       on 127.0.0.1:55432 seeded from a local backup; pass or fail for each; then tears it down. Never touches live, not even
+#       to check it is reachable (scripts/optin_run.py, scripts/optin_guard.py). The other modes do not run it.
 #
 # Skipped is not passed, with ONE exception: the 21 opt-in tests named in scripts/known_opt_in_skips.txt (whole suite only;
 # listed as NOT RUN, never as passed; any other skip, or a listed one skipping for a new reason, fails). If a check cannot run (a live database variable is unset, a test skips itself, node
@@ -17,7 +20,7 @@
 set -u
 
 MODE="${1:-}"
-case "$MODE" in --fast|--full) ;; *) echo "usage: scripts/check.sh --fast | --full"; exit 2 ;; esac
+case "$MODE" in --fast|--full|--optin) ;; *) echo "usage: scripts/check.sh --fast | --full | --optin"; exit 2 ;; esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
@@ -25,6 +28,7 @@ if [ -x "$ROOT/.venv/Scripts/python.exe" ]; then PY="$ROOT/.venv/Scripts/python.
 elif [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python"
 else PY="$(command -v python3 || command -v python)"; fi
 export PYTHONIOENCODING=utf-8 PYTHONDONTWRITEBYTECODE=1
+if [ "$MODE" = "--optin" ]; then "$PY" -m scripts.optin_run; exit $?; fi    # before anything below can read live
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 NAMES=(); RESULTS=(); TIMES=()
@@ -93,4 +97,4 @@ done
 echo "  total ${ELAPSED}s"
 if [ "$MODE" = "--fast" ] && [ "$ELAPSED" -gt 90 ]; then echo "  NOTE: over the 90 s target for --fast"; fi
 if [ "$FAILS" -gt 0 ]; then echo "RED: $FAILS check(s) failed"; exit 1; fi
-echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 21 opt-in tests in scripts/known_opt_in_skips.txt are NOT RUN wherever their inputs are absent)"
+echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 21 opt-in tests in scripts/known_opt_in_skips.txt are NOT RUN wherever their inputs are absent; 18 of them run with --optin)"

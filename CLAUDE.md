@@ -184,6 +184,7 @@ DEC-01 through DEC-10+ live in ARCHITECTURE.md. Check there before assuming beha
 
 ## Checks
 - `scripts/check.sh --fast` (about 30 s: lint, the pinned-figure verification, the five cross-endpoint invariants in `tests/invariants/`) is what runs constantly; `--full` adds the whole pytest suite and the frontend build. It is read-only against the live database. **Skipped is not passed:** a check that cannot run fails the script and names the missing variable.
+- `scripts/check.sh --optin` runs the 18 opt-in database tests (the 17 fill tests and the rollover test, marked in `scripts/known_opt_in_skips.txt`) on a disposable database on 127.0.0.1:55432 restored from a local backup, reports each, and tears it down. It never touches live, and those tests refuse anything else (`scripts/optin_guard.py`). A pass there says nothing about live, where they must never run.
 - The Stop hook that runs `check.sh --fast` when a session ends its turn is **local and not pushed** (`.claude/hooks/stop-check.sh` + `.claude/settings.local.json`, both git-ignored). The shared thing is `scripts/check.sh`; run it by hand if you do not have the hook. The hook blocks the first failing stop and lets the second through with a warning, so a failure it cannot fix does not trap a session.
 
 ## Session report ending (required)
