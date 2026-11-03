@@ -43,10 +43,10 @@ Manuscript figures (2026-10-31): python -m scripts.manuscript_figures (read-only
   17 Chapter 4 figures to reports/figures/, the number map and captions to reports/figures/FIGURES.md, and Tables 4.2.19,
   4.2.20, 4.2.4 to docs/MANUSCRIPT_TABLE_DATA_2026-10-30.md. It exits 2 while a figure is HELD: figure l (block results)
   is held because cells_all.csv gives XGBoost+MA3 (long) 0/2/0 where the manuscript and DEC-26 say 0 wins/4 ties/1 loss.
-Test plan + worked calculations (2026-10-31, NOT committed): docs/TEST_PLAN.md (test items, features, criteria T1-T83, results
+Test plan + worked calculations (2026-10-31): docs/TEST_PLAN.md (test items, features, criteria T1-T83, results
   in two rounds, coverage) and docs/MANUSCRIPT_WORKED_CALCULATIONS.md (SKU 62687212 traced to plan_q_i 9,744; SKU 69668149
-  ordered 0; urgency subtotals 118,644 + 67,276 + 250,068 = 435,988). The worked-calculations file holds per-product sales
-  (hard rule 9): commit it only if the manuscript publishes 62687212. Coverage (coverage.py 7.16.2, local .venv only):
+  ordered 0; urgency subtotals 118,644 + 67,276 + 250,068 = 435,988). The worked-calculations file is committed 2026-11-03 under hard rule 9's
+  exception of 2026-10-23: Tables 4.2.22 to 4.2.24 trace to it (Kelvin). The purchase price per piece and per case was removed first; the chapter does not publish it. Coverage (coverage.py 7.16.2, local .venv only):
   51.9% statements / 44.4% branches over the 216 imported files; backend 93.6% / 87.0%.
 Tracked reports (2026-10-30): scripts that write a committed reports/ or docs/ file go through scripts/report_target.report_path; a run against the local Postgres writes local/nonlive_reports/ instead (git-ignored).
 Monthly batch (2026-11-02, on Main-BE): python -m scripts.run_month (dry run by default; load, ABC, forecast, LP,
@@ -57,6 +57,7 @@ Monthly batch (2026-11-02, on Main-BE): python -m scripts.run_month (dry run by 
   Everything a practice month writes now says so itself: python -m scripts.practice_artefacts runs the month and fails otherwise (list and markers: reports/MONTHLY_BATCH_REHEARSAL_2026-11-02.md; 2026-11-03: 3 files, 14 tables, 51 GET routes, 0 unlabelled).
   Browser walkthrough (2026-11-03, Playwright, twice, the second with the commands of docs/LOCAL_DEMO_RUNBOOK.md typed in PowerShell): generate, calendar factor on, Run, Review, tick, Close all worked from the panel. Review showed 2026-03 at 109 / 73 / 435,988 and 2026-04 at 121 / 110 / 1,213,168, with the 709 generated-rows label on screen; after the close 709 of 709 rows still labelled, ssm_local untouched. Proves the demo path on a practice copy today, not on the deployed service.
   Generated sales are is_demo = true and only in the local ssm_practice copy (only the batch panel reads it). The practice month runs on them there (CLAUDE.md rule 2, path 2): that copy's demand view admits their tag, and analytics/forecasting/practice_switch.py, from the connection alone, lets the forecast accept them on 127.0.0.1:55432/ssm_practice and nowhere else. Closed end to end from backups/full_backup_20261102T114428Z: April plan 121 rows, 110 ordering, 1,213,168 pieces; 709 rows still labelled. Not a result, and not proof a real new file runs: none has ever existed. The forecast error is withheld whenever generated rows are in what it would score.
+  Still unconfirmed: "batch processing" in a teammate's message was read as this month-end run; it could mean approving many reorders at once. Page text left as is: DataUpload.jsx cards say "Daily or monthly transactions" and "Stock-in and stock-out records"; backend/permissions.py calls upload.run "a mock page".
 Forecast run (2026-10-30): writes its own cycle only; it no longer deletes other cycles' rows (own-cycle strays are flagged in model_params.retired). Tasks 2-5 of the rollover-hardening prompt: unresolved; neither the prompt nor that session report can be found (Kelvin, 2026-11-02), so what they covered is unknown.
 
 Decided by the team, 2026-11-02 (the proponents; no external confirmation; entries in ARCHITECTURE.md):
