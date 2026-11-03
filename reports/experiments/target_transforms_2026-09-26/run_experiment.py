@@ -121,9 +121,9 @@ def load_demand(cache: str, keys: list) -> pd.DataFrame:
             last = f"{var}: {type(exc).__name__}"
     else:
         raise SystemExit(f"no database connection ({last})")
-    conn.set_session(readonly=True)
     try:
         cur = conn.cursor()
+        cur.execute("SET TRANSACTION READ ONLY")
         cur.execute("""SELECT product_key, calendar_month, quantity_sold
                        FROM unilever_sku_demand_fact_real
                        WHERE product_key = ANY(%s) ORDER BY 1, 2""", (sorted(int(k) for k in keys),))
