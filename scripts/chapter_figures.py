@@ -22,6 +22,10 @@ The dependence figures (2026-11-03) read the live database, inside a READ ONLY t
 how far the 109 planned products of lp_run 6 lean on the count of 2 March 2026. They are fixed to that run, so a later
 plan does not move them; DEPENDENCE_SQL is written into the pin beside them.
 
+The manuscript figures of 2026-11-03 read the same way, each query pinned beside its value, each fixed to a run, a period or
+a window so that loading a new month does not move them: the single-delivery sensitivity (an alternative, computed read-only,
+never adopted), the seasonality counts, the Critical split, and the gap between the category sum and the net sales total.
+
 The collected total also depends on the machine: tests/etl/test_extract.py parametrizes its six raw-file tests over
 "synthetic" and, only where data/raw exists, "real_corpus". The pin holds both totals (REAL_CORPUS_MARK counts the cases).
 """
@@ -167,8 +171,161 @@ def read_dependence_rows() -> list[tuple]:
         conn.close()
 
 
+# The sensitivity: what the plan's own inputs would require if SSM takes one delivery a month, so the review period R falls
+# inside the month's forecast F and only the lead time L is left to carry past it. Rounded up to whole case packs as the plan
+# is. The live formula in the same query is the control: it must rebuild the plan, or the alternative beside it means nothing.
+SINGLE_DELIVERY_SQL = """
+WITH inp AS (
+  SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f,
+         COALESCE(so.opening_pieces, 0) AS s,
+         fr.forecast_value / (365.25 / 12 / 7) AS w,
+         (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks
+  FROM lp_recommendation lr
+  JOIN lp_run run ON run.run_key = lr.lp_run_key
+  JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
+  LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date
+  WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6
+), need AS (
+  SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp
+)
+SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces,
+       SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded,
+       SUM(one_delivery) AS one_delivery_raw,
+       SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded
+FROM need
+"""
+SINGLE_DELIVERY_FORMULA = ("need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, "
+                           "w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 6: 3 days), SS the stored safety stock, "
+                           "S the opening stock; the figure sums it over the 109 products of lp_run 6, each rounded up to whole case packs")
+SINGLE_DELIVERY_NOTE = ("An alternative, not adopted and not written anywhere: the plan stays 109 rows and 435,988 pieces. SS is kept as stored, sized on "
+                        "the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived "
+                        "monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes "
+                        "weekly deliveries or one a month, which only SSM can answer.")
+
+
+def single_delivery_figures(rows) -> dict:
+    products, plan, live, raw, rounded = rows[0]
+    if products != DEPENDENCE_PRODUCTS or round(float(live)) != round(float(plan)):
+        raise SystemExit(f"the single-delivery query does not rebuild the plan: {products} products, live formula {live}, plan {plan}")
+    return {"single_delivery_requirement_pieces": round(float(rounded)),
+            "single_delivery_requirement_before_case_rounding_pieces": round(float(raw))}
+
+
+# lag-12 autocorrelation (analytics/forecasting/decomposition.yearly_pattern) on each product's zero-filled series to 2026-02.
+# Python only because the test is the code's own (build_series, then yearly_pattern); the rows are one cohort's, nothing is moved.
+SEASONALITY_SQL = """
+SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity
+FROM abc_classification ac
+LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02'
+WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')
+"""
+SEASONALITY_ALPHA = 0.05   # analytics.params.YEARLY_ACF_Z = 1.96, two-sided
+SEASONALITY_NOTE = ("Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, "
+                    "no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the "
+                    "'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). "
+                    "The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'.")
+
+
+def seasonality_counts(patterns) -> dict:
+    """Counts over yearly_pattern() results. A series that never varies has no ACF: it was tested and is not significant."""
+    tested = [p for p in patterns if p["acf_bound"] is not None]
+    hits = [p for p in tested if p["acf_lag12"] is not None and abs(p["acf_lag12"]) > p["acf_bound"]]
+    return {"products": len(patterns), "testable": len(tested), "significant": len(hits),
+            "significant_above": sum(1 for p in hits if p["acf_lag12"] > 0),
+            "expected_by_chance": round(len(tested) * SEASONALITY_ALPHA, 2)}
+
+
+def seasonality_figures(cohort_132: dict, current_189: dict) -> dict:
+    out = {}
+    for name, c in (("132", cohort_132), ("189", current_189)):
+        if c["significant"] != c["significant_above"]:
+            raise SystemExit(f"a seasonality hit in the {name} cohort is negative, so SEASONALITY_NOTE no longer holds: {c}")
+        out.update({f"seasonality_{name}_products": c["products"], f"seasonality_{name}_testable": c["testable"],
+                    f"seasonality_{name}_significant": c["significant"], f"seasonality_{name}_expected_by_chance": c["expected_by_chance"]})
+    return out
+
+
+def read_seasonality(rows) -> dict:
+    import pandas as pd
+    from analytics.forecasting.decomposition import yearly_pattern
+    from scripts.run_baseline_forecast import build_series
+    df = pd.DataFrame(rows, columns=["method", "product_key", "calendar_month", "quantity"])
+    counts = {}
+    for method, cohort in df.groupby("method"):
+        patterns = []
+        for _, g in cohort.groupby("product_key"):
+            sold = g.dropna(subset=["calendar_month"]).assign(is_demo=False)
+            values = build_series(sold, "2026-02").to_numpy() if len(sold) else []
+            patterns.append(yearly_pattern([float(v) for v in values]))
+        counts[method] = seasonality_counts(patterns)
+    return seasonality_figures(counts["single"], counts["t12m_new"])
+
+
+# Critical = stock below safety stock, on the plan's own opening stock from the 2 March 2026 count. A product absent from the
+# count has no row in that count and is read as 0, which is the assumption the split exposes.
+CRITICAL_SQL = """
+SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products,
+       SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces
+FROM lp_recommendation lr
+LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date
+WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6
+  AND COALESCE(so.opening_pieces, 0) < lr.ss_i
+GROUP BY 1 ORDER BY 1 DESC
+"""
+
+
+def critical_figures(rows) -> dict:
+    by = {bool(r[0]): r for r in rows}
+    if set(by) != {True, False} or float(by[False][2]) != 0:
+        raise SystemExit(f"the Critical query did not split into counted products and absent products read as 0: {rows}")
+    counted, absent = by[True], by[False]
+    return {"critical_counted_products": int(counted[1]), "critical_counted_stock_pieces": round(float(counted[2])),
+            "critical_counted_order_pieces": round(float(counted[3])), "critical_absent_products": int(absent[1]),
+            "critical_absent_order_pieces": round(float(absent[3])), "critical_total_order_pieces": round(float(counted[3]) + float(absent[3]))}
+
+
+# March 2025 to February 2026. GET /category-trends floors each product-month row at 0 (a month whose returns exceed its sales
+# counts as 0), so the sum over its categories is above the net total of the same rows by exactly the rows it floored.
+CATEGORY_GAP_SQL = """
+WITH by_category AS (
+  SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS category,
+         SUM(GREATEST(d.net_amount, 0)) AS floored, SUM(d.net_amount) AS net
+  FROM unilever_sku_demand_fact_real d JOIN product_dimension pd ON pd.product_key = d.product_key
+  WHERE d.calendar_month BETWEEN '2025-03' AND '2026-02'
+  GROUP BY 1
+)
+SELECT SUM(floored) AS sum_over_categories, SUM(net) AS net_total FROM by_category
+"""
+
+
+def category_gap_figures(rows) -> dict:
+    floored, net = float(rows[0][0]), float(rows[0][1])
+    return {"category_sum_pesos": round(floored, 2), "category_net_total_pesos": round(net, 2), "category_gap_pesos": round(floored - net, 2)}
+
+
+def read_manuscript_rows() -> dict:
+    from scripts.snapshot_published_figures import connect
+    conn, cur = connect()          # BEGIN; SET TRANSACTION READ ONLY
+    try:
+        out = {}
+        for name, sql in (("single_delivery", SINGLE_DELIVERY_SQL), ("seasonality", SEASONALITY_SQL),
+                          ("critical", CRITICAL_SQL), ("category_gap", CATEGORY_GAP_SQL)):
+            cur.execute(sql)
+            out[name] = cur.fetchall()
+        return out
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def manuscript_figures() -> dict:
+    rows = read_manuscript_rows()
+    return {**single_delivery_figures(rows["single_delivery"]), **read_seasonality(rows["seasonality"]),
+            **critical_figures(rows["critical"]), **category_gap_figures(rows["category_gap"])}
+
+
 def measure_all() -> dict:
-    return {**measure_static(), **dependence_figures(read_dependence_rows())}
+    return {**measure_static(), **dependence_figures(read_dependence_rows()), **manuscript_figures()}
 
 
 FIGURES = [  # id, what the chapter says, equivalent plain command
@@ -191,8 +348,40 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
     ("count_2mar_over_6apr", "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 6 April count, times", "python -m scripts.chapter_figures --measure count_2mar_over_6apr"),
     ("requirement_at_3feb_million_pieces", "Requirement for those products at the 3 February stock level, million pieces", "python -m scripts.chapter_figures --measure requirement_at_3feb_million_pieces"),
     ("requirement_at_6apr_million_pieces", "Requirement for those products at the 6 April stock level, million pieces", "python -m scripts.chapter_figures --measure requirement_at_6apr_million_pieces"),
+    ("single_delivery_requirement_pieces", "Sensitivity: requirement under one delivery a month, whole case packs, against the live plan's 435,988 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_pieces"),
+    ("single_delivery_requirement_before_case_rounding_pieces", "The same before case-pack rounding, against the live plan's 431,443 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_before_case_rounding_pieces"),
+    ("seasonality_132_products", "Seasonality: the 132-product cohort (Tier A as of 2026-02, method single)", "python -m scripts.chapter_figures --measure seasonality_132_products"),
+    ("seasonality_132_testable", "...with 24 or more months, so testable", "python -m scripts.chapter_figures --measure seasonality_132_testable"),
+    ("seasonality_132_significant", "...significant at lag 12", "python -m scripts.chapter_figures --measure seasonality_132_significant"),
+    ("seasonality_132_expected_by_chance", "...expected by chance at 5%", "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance"),
+    ("seasonality_189_products", "Seasonality: the current cohort (Tier A as of 2026-02, method t12m_new)", "python -m scripts.chapter_figures --measure seasonality_189_products"),
+    ("seasonality_189_testable", "...with 24 or more months, so testable", "python -m scripts.chapter_figures --measure seasonality_189_testable"),
+    ("seasonality_189_significant", "...significant at lag 12", "python -m scripts.chapter_figures --measure seasonality_189_significant"),
+    ("seasonality_189_expected_by_chance", "...expected by chance at 5%", "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance"),
+    ("critical_counted_products", "Critical (lp_run 6, count of 2 March 2026): products in the count below safety stock", "python -m scripts.chapter_figures --measure critical_counted_products"),
+    ("critical_counted_stock_pieces", "...the stock they hold, pieces", "python -m scripts.chapter_figures --measure critical_counted_stock_pieces"),
+    ("critical_counted_order_pieces", "...the order they carry, pieces", "python -m scripts.chapter_figures --measure critical_counted_order_pieces"),
+    ("critical_absent_products", "Critical: products absent from the count, read as 0", "python -m scripts.chapter_figures --measure critical_absent_products"),
+    ("critical_absent_order_pieces", "...the order they carry, pieces", "python -m scripts.chapter_figures --measure critical_absent_order_pieces"),
+    ("critical_total_order_pieces", "Critical: total order, pieces", "python -m scripts.chapter_figures --measure critical_total_order_pieces"),
+    ("category_sum_pesos", "Unilever sales March 2025 to February 2026, sum over categories (each row floored at 0, as GET /category-trends), PHP", "python -m scripts.chapter_figures --measure category_sum_pesos"),
+    ("category_net_total_pesos", "The net twelve-month total of the same rows, PHP", "python -m scripts.chapter_figures --measure category_net_total_pesos"),
+    ("category_gap_pesos", "The difference, PHP", "python -m scripts.chapter_figures --measure category_gap_pesos"),
 ]
 DEPENDENCE_IDS = ("count_2mar_over_3feb", "count_2mar_over_6apr", "requirement_at_3feb_million_pieces", "requirement_at_6apr_million_pieces")
+QUERY_OF = {
+    **{i: DEPENDENCE_SQL for i in DEPENDENCE_IDS},
+    **{i: SINGLE_DELIVERY_SQL for i in ("single_delivery_requirement_pieces", "single_delivery_requirement_before_case_rounding_pieces")},
+    **{f"seasonality_{c}_{k}": SEASONALITY_SQL for c in ("132", "189") for k in ("products", "testable", "significant", "expected_by_chance")},
+    **{f"critical_{k}": CRITICAL_SQL for k in ("counted_products", "counted_stock_pieces", "counted_order_pieces",
+                                               "absent_products", "absent_order_pieces", "total_order_pieces")},
+    **{i: CATEGORY_GAP_SQL for i in ("category_sum_pesos", "category_net_total_pesos", "category_gap_pesos")},
+}
+EXTRA_OF = {  # written into the pin beside the value
+    "single_delivery_requirement_pieces": {"formula": SINGLE_DELIVERY_FORMULA, "note": SINGLE_DELIVERY_NOTE},
+    "single_delivery_requirement_before_case_rounding_pieces": {"formula": SINGLE_DELIVERY_FORMULA, "note": SINGLE_DELIVERY_NOTE},
+    **{f"seasonality_{c}_{k}": {"note": SEASONALITY_NOTE} for c in ("132", "189") for k in ("testable", "significant", "expected_by_chance")},
+}
 
 
 def derived(static: dict, collected: int, real_cases: int, failed: int = 0) -> dict:
@@ -218,7 +407,8 @@ def cmd_write(junit) -> int:
     out = {"pinned_on": "2026-11-03",
            "rule": "Chapter 4 prints these from the code or the live system. Re-pin only on purpose, in the commit that changes the code; "
                    "the chapter must take every figure from one commit. scripts/check.sh fails on drift.",
-           "figures": [{"id": i, "what": w, "value": vals[i], "command": c, **({"query": " ".join(DEPENDENCE_SQL.split())} if i in DEPENDENCE_IDS else {})}
+           "figures": [{"id": i, "what": w, "value": vals[i], "command": c,
+                        **({"query": " ".join(QUERY_OF[i].split())} if i in QUERY_OF else {}), **EXTRA_OF.get(i, {})}
                        for i, w, c in FIGURES]}
     PIN.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {PIN.relative_to(REPO)}: " + ", ".join(f"{i}={vals[i]}" for i, _, _ in FIGURES))

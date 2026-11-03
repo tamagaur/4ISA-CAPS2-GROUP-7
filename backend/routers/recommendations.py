@@ -656,7 +656,8 @@ _NOT_PLANNED_SQL = f"""
     ORDER BY pd.principal, recent_monthly_pieces DESC NULLS LAST, sku_id
 """
 NOT_PLANNED_REASONS = {
-    "mase_gate": f"Its forecast did not beat a simple last-month guess (MASE {MASE_GATE:g} or more), so the plan does not use it.",
+    "mase_gate": (f"Its forecast's error in testing was no smaller than the average month-to-month change in its sales "
+                  f"before the test months (MASE {MASE_GATE:g} or more), so the plan does not use it."),
     "insufficient_data": "Too little sales history to test a forecast, so the plan does not use one.",
     "dead": "No sale in the last 6 months, so the forecast is 0 and the plan orders nothing.",
     "other": "No plan row, and its forecast record does not say why.",

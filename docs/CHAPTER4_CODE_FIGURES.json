@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2347,
+   "value": 2361,
    "command": "python -m pytest --collect-only -q tests | tail -1  (on a clone with no data/raw)"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2353,
+   "value": 2367,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,13 +83,13 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2326,
+   "value": 2340,
    "command": "scripts/check.sh --full on a clone with no data/raw and no local/"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2335,
+   "value": 2349,
    "command": "scripts/check.sh --full there"
   },
   {
@@ -119,6 +119,149 @@
    "value": 1.54,
    "command": "python -m scripts.chapter_figures --measure requirement_at_6apr_million_pieces",
    "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+  },
+  {
+   "id": "single_delivery_requirement_pieces",
+   "what": "Sensitivity: requirement under one delivery a month, whole case packs, against the live plan's 435,988 (not adopted)",
+   "value": 292268,
+   "command": "python -m scripts.chapter_figures --measure single_delivery_requirement_pieces",
+   "query": "WITH inp AS ( SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f, COALESCE(so.opening_pieces, 0) AS s, fr.forecast_value / (365.25 / 12 / 7) AS w, (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks FROM lp_recommendation lr JOIN lp_run run ON run.run_key = lr.lp_run_key JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), need AS ( SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp ) SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded, SUM(one_delivery) AS one_delivery_raw, SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded FROM need",
+   "formula": "need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 6: 3 days), SS the stored safety stock, S the opening stock; the figure sums it over the 109 products of lp_run 6, each rounded up to whole case packs",
+   "note": "An alternative, not adopted and not written anywhere: the plan stays 109 rows and 435,988 pieces. SS is kept as stored, sized on the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes weekly deliveries or one a month, which only SSM can answer."
+  },
+  {
+   "id": "single_delivery_requirement_before_case_rounding_pieces",
+   "what": "The same before case-pack rounding, against the live plan's 431,443 (not adopted)",
+   "value": 289068,
+   "command": "python -m scripts.chapter_figures --measure single_delivery_requirement_before_case_rounding_pieces",
+   "query": "WITH inp AS ( SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f, COALESCE(so.opening_pieces, 0) AS s, fr.forecast_value / (365.25 / 12 / 7) AS w, (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks FROM lp_recommendation lr JOIN lp_run run ON run.run_key = lr.lp_run_key JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), need AS ( SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp ) SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded, SUM(one_delivery) AS one_delivery_raw, SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded FROM need",
+   "formula": "need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 6: 3 days), SS the stored safety stock, S the opening stock; the figure sums it over the 109 products of lp_run 6, each rounded up to whole case packs",
+   "note": "An alternative, not adopted and not written anywhere: the plan stays 109 rows and 435,988 pieces. SS is kept as stored, sized on the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes weekly deliveries or one a month, which only SSM can answer."
+  },
+  {
+   "id": "seasonality_132_products",
+   "what": "Seasonality: the 132-product cohort (Tier A as of 2026-02, method single)",
+   "value": 132,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_products",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')"
+  },
+  {
+   "id": "seasonality_132_testable",
+   "what": "...with 24 or more months, so testable",
+   "value": 72,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_testable",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_132_significant",
+   "what": "...significant at lag 12",
+   "value": 3,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_significant",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_132_expected_by_chance",
+   "what": "...expected by chance at 5%",
+   "value": 3.6,
+   "command": "python -m scripts.chapter_figures --measure seasonality_132_expected_by_chance",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_189_products",
+   "what": "Seasonality: the current cohort (Tier A as of 2026-02, method t12m_new)",
+   "value": 189,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_products",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')"
+  },
+  {
+   "id": "seasonality_189_testable",
+   "what": "...with 24 or more months, so testable",
+   "value": 110,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_testable",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_189_significant",
+   "what": "...significant at lag 12",
+   "value": 5,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_significant",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "seasonality_189_expected_by_chance",
+   "what": "...expected by chance at 5%",
+   "value": 5.5,
+   "command": "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance",
+   "query": "SELECT ac.method, ac.product_key, d.calendar_month, d.quantity_sold::float AS quantity FROM abc_classification ac LEFT JOIN unilever_sku_demand_fact_real d ON d.product_key = ac.product_key AND d.calendar_month <= '2026-02' WHERE ac.principal = 'unilever' AND ac.classification_period = '2026-02' AND ac.tier = 'A' AND ac.method IN ('single', 't12m_new')",
+   "note": "Lag-12 autocorrelation of each product's monthly series against 1.96 / sqrt(n), for products with 24 or more months, two-sided at 5%, no multiple-comparison correction; expected by chance = testable x 0.05. Every hit is positive, so the one-sided test the 'Repeats yearly' label uses finds the same products; on that test's own 2.5% rate chance would give 1.8 (of 72) and 2.75 (of 110). The 132 is Tier A as of 2026-02 on method 'single', the 189 Tier A as of 2026-02 on method 't12m_new'."
+  },
+  {
+   "id": "critical_counted_products",
+   "what": "Critical (lp_run 6, count of 2 March 2026): products in the count below safety stock",
+   "value": 10,
+   "command": "python -m scripts.chapter_figures --measure critical_counted_products",
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+  },
+  {
+   "id": "critical_counted_stock_pieces",
+   "what": "...the stock they hold, pieces",
+   "value": 3189,
+   "command": "python -m scripts.chapter_figures --measure critical_counted_stock_pieces",
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+  },
+  {
+   "id": "critical_counted_order_pieces",
+   "what": "...the order they carry, pieces",
+   "value": 45600,
+   "command": "python -m scripts.chapter_figures --measure critical_counted_order_pieces",
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+  },
+  {
+   "id": "critical_absent_products",
+   "what": "Critical: products absent from the count, read as 0",
+   "value": 8,
+   "command": "python -m scripts.chapter_figures --measure critical_absent_products",
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+  },
+  {
+   "id": "critical_absent_order_pieces",
+   "what": "...the order they carry, pieces",
+   "value": 73044,
+   "command": "python -m scripts.chapter_figures --measure critical_absent_order_pieces",
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+  },
+  {
+   "id": "critical_total_order_pieces",
+   "what": "Critical: total order, pieces",
+   "value": 118644,
+   "command": "python -m scripts.chapter_figures --measure critical_total_order_pieces",
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+  },
+  {
+   "id": "category_sum_pesos",
+   "what": "Unilever sales March 2025 to February 2026, sum over categories (each row floored at 0, as GET /category-trends), PHP",
+   "value": 392655664.45,
+   "command": "python -m scripts.chapter_figures --measure category_sum_pesos",
+   "query": "WITH by_category AS ( SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS category, SUM(GREATEST(d.net_amount, 0)) AS floored, SUM(d.net_amount) AS net FROM unilever_sku_demand_fact_real d JOIN product_dimension pd ON pd.product_key = d.product_key WHERE d.calendar_month BETWEEN '2025-03' AND '2026-02' GROUP BY 1 ) SELECT SUM(floored) AS sum_over_categories, SUM(net) AS net_total FROM by_category"
+  },
+  {
+   "id": "category_net_total_pesos",
+   "what": "The net twelve-month total of the same rows, PHP",
+   "value": 391113139.25,
+   "command": "python -m scripts.chapter_figures --measure category_net_total_pesos",
+   "query": "WITH by_category AS ( SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS category, SUM(GREATEST(d.net_amount, 0)) AS floored, SUM(d.net_amount) AS net FROM unilever_sku_demand_fact_real d JOIN product_dimension pd ON pd.product_key = d.product_key WHERE d.calendar_month BETWEEN '2025-03' AND '2026-02' GROUP BY 1 ) SELECT SUM(floored) AS sum_over_categories, SUM(net) AS net_total FROM by_category"
+  },
+  {
+   "id": "category_gap_pesos",
+   "what": "The difference, PHP",
+   "value": 1542525.2,
+   "command": "python -m scripts.chapter_figures --measure category_gap_pesos",
+   "query": "WITH by_category AS ( SELECT COALESCE(pd.category_path, 'UNCLASSIFIED') AS category, SUM(GREATEST(d.net_amount, 0)) AS floored, SUM(d.net_amount) AS net FROM unilever_sku_demand_fact_real d JOIN product_dimension pd ON pd.product_key = d.product_key WHERE d.calendar_month BETWEEN '2025-03' AND '2026-02' GROUP BY 1 ) SELECT SUM(floored) AS sum_over_categories, SUM(net) AS net_total FROM by_category"
   }
  ]
 }

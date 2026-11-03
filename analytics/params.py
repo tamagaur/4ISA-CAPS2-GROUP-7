@@ -276,7 +276,9 @@ PLACEHOLDERS = {
     # 105% (mid) or 108% (maximum). ALLOCATION_DEFAULT_PCT until SSM says
     # which applies.
     "allocation_pct": float(ALLOCATION_DEFAULT_PCT),
-    # Business days. Weekly purchase orders, delivered 2-3 days later (Sir Abe).
+    # Business days. SSM's own stated practice: weekly purchase orders, delivered 2-3 days
+    # later (Sir Abe). An assumption the system neither implements nor verifies: no code
+    # splits the month's order into weekly POs (analytics/optimization/lp.py).
     "review_days": 5.0,
     "lead_days": 3.0,
     "target_weeks": float(POLICY_COVER_WEEKS),

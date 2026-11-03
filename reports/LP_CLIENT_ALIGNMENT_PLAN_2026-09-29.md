@@ -1,5 +1,7 @@
 # Proposal: align the LP / reorder plan with how SSM actually orders
 
+> **Correction, 2026-11-03.** The weekly split this proposal describes was never built. No code splits the month's order into weekly purchase orders: the plan is one monthly quantity per product. The 8-business-day window assumes SSM's own stated practice of ordering weekly, which the system neither implements nor verifies.
+
 - **From:** Audrey
 - **Date:** 2026-09-29 (updated the same night, and again after Yuan's answers)
 - **Branch:** `fix/audit-2026-09-29` (off `UIFixes_Audrey`)
@@ -281,7 +283,7 @@ Yuan asked that Thea (manuscript) and Sir Catubag see this. The LP changes from 
 - `need_i = max(0, F_i + T_i − S_i)`, where `S_i` is stock on hand
   - It splits into three layers: this month's demand `max(0, F_i − S_i)`, then safety stock, then the rest of the target.
 
-**Decision variable:** `0 ≤ Q_i ≤ need_i`, the month's order, released as weekly POs.
+**Decision variable:** `0 ≤ Q_i ≤ need_i`, the month's order (proposed for release as weekly POs; never built, see the correction above).
 
 **Constraints:**
 - warehouse: `Σ_i (S_i + Q_i) ≤ W`
@@ -306,7 +308,7 @@ Yuan asked that Thea (manuscript) and Sir Catubag see this. The LP changes from 
 
 ## 10. Known limits
 
-- **Stock counts are monthly.** So the plan is monthly, split into weekly POs, and the March snapshot is taken as the month's opening stock. Real week-by-week re-planning needs weekly stock or purchase receipts.
+- **Stock counts are monthly.** So the plan is monthly (the weekly split proposed here was never built), and the March snapshot is taken as the month's opening stock. Real week-by-week re-planning needs weekly stock or purchase receipts.
 - **Unilever has no purchase records.** So the allocation is estimated from last year's sales, per Sir Abe's rule.
 - **Del Monte has no SKU-level sales.** It is still not planned.
 - **Only the 73 SKUs with reliable forecasts get an LP row,** as before. The other 59 Category A SKUs don't.

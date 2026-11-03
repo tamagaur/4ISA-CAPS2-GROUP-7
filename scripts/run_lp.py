@@ -8,7 +8,9 @@ target stock, within the supplier allocation (Sir Abe's rule). lp.py's
 module docstring has the model. This script fetches its inputs, solves one LP
 per planning cycle, and writes (or, with --dry-run, reports) one row per
 product:
-  q_i         the month's order, in pieces (the app splits it into weekly POs)
+  q_i         the month's order, in pieces: one figure, not split into weekly POs by
+              any code. The 8-business-day window assumes SSM's own stated practice of
+              ordering weekly, which the system neither implements nor verifies.
   rop_i       the target stock T_i
   ss_i        the safety stock
   lp_run_key  the lp_run row (migration 0037) holding every input the run

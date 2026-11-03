@@ -961,16 +961,19 @@ def fig_o(plt, d) -> Fig:
             "less, not 22.6%; SSM has not confirmed the prices or which reading applies",
             chart_note="Two panels: target stock is in pieces and average and peak stock are in pesos.")
     pf, pe = pol["portfolio"], pol["pesos"]
+    # The published figure sets the plan's average and peak against one flat 3 weeks, which takes the average from one
+    # reading of the rule and the peak from the other (its caption says so). The figure is unchanged until the manuscript is.
+    as_average, as_peak = pe["readings"]["rule_read_as_average"], pe["readings"]["rule_read_as_peak"]
     f.check("target stock, plan (pieces)", round(pf["lp_target_stock_units"]), 1005661, basis="Table 4.2.22")
     f.check("target stock, rule (pieces)", round(pf["rule_stock_units"]), 840092, basis="Table 4.2.22")
     f.check("target vs rule (%)", round(100 * (pf["lp_target_stock_units"] / pf["rule_stock_units"] - 1), 1), 19.7,
             basis="Table 4.2.22")
-    f.check("average stock, plan (PHP)", round(pe["average"]["lp_stock_pesos"]), 7496532, basis="Table 4.2.22")
-    f.check("rule stock (PHP)", round(pe["average"]["rule_stock_pesos"]), 9680196, basis="Table 4.2.22")
-    f.check("peak stock, plan (PHP)", round(pe["peak"]["lp_stock_pesos"]), 11045937, basis="Table 4.2.22")
-    f.check("average vs rule (%)", pe["average"]["pct_vs_rule"], -22.6, basis="Table 4.2.22")
-    f.check("peak vs rule (%)", pe["peak"]["pct_vs_rule"], 14.1, basis="Table 4.2.22")
-    f.check("rule average if 3 weeks is a peak (%)", pe["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"],
+    f.check("average stock, plan (PHP)", round(as_average["average"]["lp_stock_pesos"]), 7496532, basis="Table 4.2.22")
+    f.check("rule stock (PHP)", round(as_average["average"]["rule_stock_pesos"]), 9680196, basis="Table 4.2.22")
+    f.check("peak stock, plan (PHP)", round(as_peak["peak"]["lp_stock_pesos"]), 11045937, basis="Table 4.2.22")
+    f.check("average vs rule (%)", as_average["average"]["pct_vs_rule"], -22.6, basis="Table 4.2.22")
+    f.check("peak vs rule (%)", as_peak["peak"]["pct_vs_rule"], 14.1, basis="Table 4.2.22")
+    f.check("rule average if 3 weeks is a peak (%)", as_peak["average"]["pct_vs_rule"],
             -7.1, basis="edit list item 13")
     f.check("products holding less than the rule", pf["skus_lp_holds_less"], 56, basis="Table 4.2.22")
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(6.5, 3.7), gridspec_kw={"width_ratios": [0.7, 1.3]})
@@ -989,15 +992,15 @@ def fig_o(plt, d) -> Fig:
     a1.set_title("Pieces", fontsize=8)
     ygrid(a1)
     x = np.arange(2)
-    plan = [pe["average"]["lp_stock_pesos"], pe["peak"]["lp_stock_pesos"]]
-    rule = [pe["average"]["rule_stock_pesos"], pe["peak"]["rule_stock_pesos"]]
+    plan = [as_average["average"]["lp_stock_pesos"], as_peak["peak"]["lp_stock_pesos"]]
+    rule = [as_average["average"]["rule_stock_pesos"], as_peak["peak"]["rule_stock_pesos"]]
     a2.bar(x - w / 2, plan, w, color=DARK, label="DSD plan")
     a2.bar(x + w / 2, rule, w, color=LIGHT, hatch="////", edgecolor=INK, linewidth=0.4,
            label="3-week rule (held flat: average = peak)")
-    for i, (p, r, pct) in enumerate(zip(plan, rule, (pe["average"]["pct_vs_rule"], pe["peak"]["pct_vs_rule"]))):
+    for i, (p, r, pct) in enumerate(zip(plan, rule, (as_average["average"]["pct_vs_rule"], as_peak["peak"]["pct_vs_rule"]))):
         a2.text(i - w / 2, p * 1.01, f"₱{p / 1e6:.2f} M\n({pct:+.1f}%)", ha="center", fontsize=6.5)
         a2.text(i + w / 2, r * 1.01, f"₱{r / 1e6:.2f} M", ha="center", fontsize=6.5)
-    alt = pe["rule_average_if_three_weeks_is_a_peak"]["rule_stock_pesos"]
+    alt = as_peak["average"]["rule_stock_pesos"]
     a2.plot([0, w], [alt, alt], color=INK, linewidth=1.4, linestyle="--",
             label=f"Rule average if 3 weeks is its peak: ₱{alt / 1e6:.2f} M (plan −7.1%)")
     a2.set_xticks(x, ["Average stock", "Peak stock (after delivery)"])
