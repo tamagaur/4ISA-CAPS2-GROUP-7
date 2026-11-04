@@ -258,7 +258,7 @@
   min-width: 0;
   padding: 16px 18px;
   border: 1px solid color-mix(in srgb, var(--rq-accent) 26%, white);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background-color: color-mix(in srgb, var(--rq-accent) 5%, white);
   box-shadow: var(--shadow-card);
   font: inherit;
@@ -439,7 +439,7 @@
   gap: 0.5rem;
   padding: 2rem 1rem;
   border: var(--card-border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-card);
   color: var(--color-text-subtle);
@@ -597,7 +597,7 @@
 .rq-other-obs {
   padding: 16px 18px;
   border: var(--card-border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background-color: var(--color-surface);
   box-shadow: var(--shadow-card);
 }

@@ -68,7 +68,7 @@
   flex-wrap: wrap;
   margin: 0;
   border: var(--card-border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
@@ -107,7 +107,7 @@
 }
 
 .reorder-planinfo-cycle {
-  border-radius: 14px 0 0 14px;
+  border-radius: var(--radius-card) 0 0 var(--radius-card);
 }
 .reorder-planinfo-cycle.has-choice {
   cursor: pointer;
@@ -1063,8 +1063,8 @@
   gap: 12px;
   margin-bottom: 12px;
   padding: 16px;
-  border: 1px solid rgba(17, 26, 53, 0.09);
-  border-radius: 16px;
+  border: var(--card-border);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
@@ -1591,7 +1591,7 @@
    the rule and notes as small print at the left, the solver's weights as thin
    bars at the right. */
 .reorder-how {
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background-color: var(--color-surface);
   border: var(--card-border);
   box-shadow: var(--shadow-card);
@@ -1602,7 +1602,7 @@
   align-items: center;
   gap: 14px;
   padding: 14px 20px;
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   cursor: pointer;
   list-style: none;
 }
@@ -1921,7 +1921,7 @@
 .reorder-notplanned {
   min-width: 0;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background-color: var(--color-surface);
   border: var(--card-border);
   box-shadow: var(--shadow-card);

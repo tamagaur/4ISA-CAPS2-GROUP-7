@@ -22,18 +22,26 @@
   --section-gap: 40px;
   --page-padding-x: 32px;
 
-  /* Shape and depth. Since 2026-10-28 (Audrey: "make the KPIs and all the
-     cards pop, like they are elevated") a card is lifted off the warm page:
-     a hairline shadow for its edge and a soft, wide one under it, the same
-     recipe as the sign-in panel (AuthHandoff.css), a little lighter. */
+  /* Shape and depth, one recipe for every page (2026-11-04, from the Data
+     Management redesign; Audrey's "make all the cards pop" of 2026-10-28). Three
+     levels, all in the same navy:
+     - a card on the page: --radius-card, --shadow-card, --card-border
+     - a panel inside a card: --radius-nested, --shadow-nested
+     - a control you press: --shadow-control and its hover and pressed states
+     A page should not set its own card shadow or corner: change it here. */
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-card: 14px;
+  --radius-nested: 12px;
+  --radius-card: 16px;
   --radius-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(17, 26, 53, 0.05), 0 12px 30px -12px rgba(17, 26, 53, 0.18);
-  --shadow-card-hover: 0 2px 4px rgba(17, 26, 53, 0.06), 0 18px 40px -14px rgba(17, 26, 53, 0.24);
+  --shadow-card: 0 1px 2px rgba(17, 26, 53, 0.06), 0 8px 18px -6px rgba(17, 26, 53, 0.10), 0 24px 44px -18px rgba(17, 26, 53, 0.22);
+  --shadow-card-hover: 0 2px 4px rgba(17, 26, 53, 0.07), 0 12px 24px -8px rgba(17, 26, 53, 0.14), 0 30px 52px -18px rgba(17, 26, 53, 0.28);
+  --shadow-nested: 0 1px 2px rgba(17, 26, 53, 0.05), 0 4px 10px -4px rgba(17, 26, 53, 0.10);
+  --shadow-control: 0 1px 2px rgba(17, 26, 53, 0.08), 0 3px 8px -2px rgba(17, 26, 53, 0.10);
+  --shadow-control-hover: 0 2px 4px rgba(17, 26, 53, 0.08), 0 10px 18px -6px rgba(17, 26, 53, 0.20);
+  --shadow-pressed: inset 0 1px 2px rgba(17, 26, 53, 0.18);
   --shadow-raised: 0 6px 16px rgba(16, 24, 40, 0.10);
-  --card-border: 1px solid rgba(17, 26, 53, 0.07);
+  --card-border: 1px solid rgba(17, 26, 53, 0.08);
 
   /* The page behind every screen (2026-10-28, Audrey: match the sign-in
      page): the sign-in screen's golden-hour cream (AuthHandoff.css), a warm
@@ -669,7 +677,9 @@
   margin: 0;
   padding: 10px 14px;
   border-radius: var(--radius-md);
+  border: 1px solid rgba(17, 26, 53, 0.06);
   background-color: var(--color-surface-sunken);
+  box-shadow: var(--shadow-nested);
   font-size: var(--text-meta);
   line-height: 1.5;
   color: var(--color-text-body);
@@ -681,16 +691,19 @@
 }
 
 .ui-note.is-warning {
+  border-color: var(--color-severity-urgent-border);
   background-color: var(--badge-warning-bg);
   color: var(--badge-warning-fg);
 }
 
 .ui-note.is-success {
+  border-color: rgba(39, 133, 82, 0.22);
   background-color: var(--badge-success-bg);
   color: var(--badge-success-fg);
 }
 
 .ui-note.is-info {
+  border-color: rgba(43, 76, 126, 0.18);
   background-color: var(--badge-info-bg);
   color: var(--badge-info-fg);
 }
@@ -808,8 +821,9 @@
 .ui-details {
   margin-top: 1.25rem;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   padding: 0.9rem 2rem;
 }
 

@@ -4,6 +4,35 @@
   flex-direction: column;
 }
 
+/* The page title: a raised tile, the same recipe as the Reorder page's. */
+.du-header {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.du-header .page-header-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(232, 92, 74, 0.28);
+  border-radius: 14px;
+  background: var(--color-surface);
+  color: var(--color-brand-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.du-header .page-header-title { font-size: 30px; }
+.du-header .page-header-subtitle { margin-top: 4px; }
+
+@media (max-width: 760px) {
+  .du-header { flex-direction: row; }
+}
+
 .du-content {
   padding: 0 var(--page-padding-x) 48px;
   display: flex;
@@ -35,11 +64,37 @@
   max-width: 850px;
 }
 
-/* Accepted Formats */
-.du-formats-section {
+/* Where the data comes from: supporting information, one card, quieter than the
+   sections above it and nothing in it to click. */
+.du-support {
   display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
+  flex-wrap: wrap;
+  gap: 18px 36px;
+  padding: 18px 22px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.du-support-sources {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.du-support-title {
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.du-support-title svg {
+  flex-shrink: 0;
+  color: var(--color-brand-strong);
 }
 
 .du-section-label {
@@ -50,40 +105,24 @@
   text-transform: uppercase;
 }
 
-.du-badges-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-}
-
-.du-badge {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-body);
-  padding: 0.4rem 1rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  font-family: monospace;
-}
-
 /* File Cards */
 .du-cards-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 14px;
 }
 
 .du-file-card {
+  min-width: 0;
   background-color: var(--color-surface);
   border: var(--card-border);
-  border-radius: var(--radius-card);
-  padding: var(--card-padding);
-  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-nested);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-nested);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.6rem;
+  gap: 4px;
 }
 
 .du-card-header {
@@ -101,7 +140,7 @@
 }
 
 .du-card-label {
-  font-size: 0.79rem;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--color-text-subtle);
@@ -116,16 +155,18 @@
 }
 
 .du-card-desc {
-  font-size: 0.9rem;
+  font-size: 13px;
   color: var(--color-text-muted);
-  margin: 0;
+  margin: 0 0 4px;
 }
+
+.du-file-card .badge { white-space: normal; }
 
 /* Dropzone */
 .du-dropzone {
   background-color: var(--color-surface);
   border: 2px dashed var(--color-border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   padding: 3.5rem 2rem;
   display: flex;
   flex-direction: column;
@@ -205,14 +246,14 @@
 .du-upload-item {
   background-color: var(--color-surface);
   border: 1px solid var(--color-surface-muted);
-  border-radius: 8px;
+  border-radius: var(--radius-nested);
   padding: 0.8rem 1.2rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
+  box-shadow: var(--shadow-nested);
 }
 
 .du-item-left {
@@ -287,20 +328,6 @@
 @media (max-width: 1300px) {
   .du-content {
     padding: 0 1.5rem 1.5rem 1.5rem;
-  }
-}
-
-/* Tablet step so three cards don't jump straight to a single column. */
-@media (max-width: 1100px) {
-  .du-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 900px) {
-  .du-cards-grid {
-    grid-template-columns: 1fr;
-    gap: 1rem;
   }
 }
 

@@ -1,9 +1,10 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, MinusCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, MinusCircle, XCircle } from 'lucide-react';
 import { CHECK_STATUS, checklistSummary } from '../utils/monthlyBatchSteps';
 
 const ICONS = { passed: CheckCircle2, failed: XCircle, warning: AlertTriangle, not_checked: MinusCircle };
 const TONE_NOTE = { ok: 'is-success', action: 'is-warning', pending: 'is-info', done: 'is-info' };
+const TONE_ICON = { ok: CheckCircle2, action: AlertTriangle, pending: Info, done: Info };
 
 // What the loader found for one file or table. Only what the backend sent:
 // a dry run keeps no row-level detail, so there is none to show.
@@ -50,6 +51,7 @@ const CheckRow = ({ check, onAction, busy }) => {
 // GET /batch/checklist: this only lays it out.
 const MonthlyChecklist = ({ checklist, onAction, busy }) => {
   const summary = checklistSummary(checklist);
+  const SummaryIcon = summary ? TONE_ICON[summary.tone] : null;
   if (!checklist) return <p className="mb-small" role="status">Reading the checks.</p>;
   const rows = (
     <ul className="mb-check-list">
@@ -60,9 +62,14 @@ const MonthlyChecklist = ({ checklist, onAction, busy }) => {
     <section className="mb-check" aria-labelledby="mb-check-title">
       <div>
         <h5 id="mb-check-title" className="mb-check-heading">Monthly Processing Checklist</h5>
-        <p className="mb-small">Review the requirements before running this month&apos;s data.</p>
+        <p className="mb-small">
+          {checklist.validated || summary.tone === 'done'
+            ? 'Review the requirements before running this month\'s data.'
+            : 'What the system can see so far. Validation also carries over the latest decisions and checks any waiting file.'}
+        </p>
       </div>
-      <p className={`ui-note ${TONE_NOTE[summary.tone]}`} role="status">
+      <p className={`ui-note mb-note-raised ${TONE_NOTE[summary.tone]}`} role="status">
+        <SummaryIcon size={16} aria-hidden="true" />
         <span><strong>{summary.title}.</strong> {summary.text}</span>
       </p>
       {summary.tone === 'done' ? (

@@ -32,16 +32,16 @@ export function runHint(checklist, calendarFactor) {
 
 // The eight states of the month, plus the two either side of a finished run.
 export const WORKFLOW = {
-  not_uploaded: { label: 'Not uploaded', badge: 'badge-neutral', step: '1. Upload monthly data' },
-  ready_for_validation: { label: 'Ready for validation', badge: 'badge-info', step: '2. Validate' },
-  validating: { label: 'Validation in progress', badge: 'badge-info', step: '2. Validate' },
-  action_required: { label: 'Action required', badge: 'badge-warning', step: '2. Resolve the checklist' },
-  ready_to_run: { label: 'Ready to run', badge: 'badge-success', step: '3. Run the month' },
-  processing: { label: 'Processing', badge: 'badge-info', step: '3. Run the month' },
-  completed: { label: 'Completed', badge: 'badge-success', step: '4. Review the new plan' },
-  awaiting_review: { label: 'Plan ready for review', badge: 'badge-info', step: '4. Review the new plan' },
-  failed: { label: 'Failed', badge: 'badge-critical', step: '3. Run the month' },
-  closed: { label: 'Closed', badge: 'badge-neutral', step: 'Finished' },
+  not_uploaded: { label: 'Not uploaded', badge: 'badge-neutral' },
+  ready_for_validation: { label: 'Ready for validation', badge: 'badge-info' },
+  validating: { label: 'Validation in progress', badge: 'badge-info' },
+  action_required: { label: 'Action required', badge: 'badge-warning' },
+  ready_to_run: { label: 'Ready to run', badge: 'badge-success' },
+  processing: { label: 'Processing', badge: 'badge-info' },
+  completed: { label: 'Completed', badge: 'badge-success' },
+  awaiting_review: { label: 'Plan ready for review', badge: 'badge-info' },
+  failed: { label: 'Failed', badge: 'badge-critical' },
+  closed: { label: 'Closed', badge: 'badge-neutral' },
 };
 
 // Status is said in words and shown as an icon, never by colour alone.
@@ -64,10 +64,14 @@ export function checklistSummary(checklist) {
   if (['completed', 'awaiting_review', 'closed'].includes(checklist.workflow)) {
     return { tone: 'done', title: 'This month has been run', text: 'These checks applied before the run.' };
   }
+  if (!checklist.validated) {
+    const seen = failed > 0 ? ` ${plural(failed, 'check')} already need${failed === 1 ? 's' : ''} attention.` : '';
+    return { tone: 'pending', title: 'Not validated yet', text: `Run validation to check this month against the latest decisions and files.${seen}` };
+  }
   if (failed > 0) {
     return { tone: 'action', title: `Action required: ${plural(failed, 'check')} failed`, text: 'Resolve the issues below before running the monthly data.' };
   }
-  if (notChecked > 0 || !checklist.validated) {
+  if (notChecked > 0) {
     return { tone: 'pending', title: 'Not validated yet', text: 'Run validation to check this month against the latest decisions and files.' };
   }
   if (warning > 0) {
@@ -88,7 +92,7 @@ export function reorderPath(decisions) {
   return decisions?.unresolved > 0 || !(decisions?.staff_requests > 0) ? '/reorder' : '/reorder?tab=requests';
 }
 
-// The five facts at the top of the section.
+// Where each stage stands, in words: the line under its name in the stage bar.
 export function processingFacts(status, checklist) {
   const job = status.job || {};
   const workflow = checklist?.workflow;
@@ -100,6 +104,9 @@ export function processingFacts(status, checklist) {
   if (checklist) {
     const { failed, warning, not_checked: notChecked } = checklist.summary;
     if (workflow === 'validating') validation = 'In progress';
+    // The route only starts a run once every check has passed. While it runs, "no
+    // other job running" fails because of that very run, which says nothing here.
+    else if (job.status === 'running' && job.kind === 'plan') validation = 'Passed';
     else if (['completed', 'awaiting_review', 'closed'].includes(workflow)) validation = 'Not needed now';
     else if (!checklist.validated) validation = 'Not run';
     else if (failed > 0 || notChecked > 0) validation = 'Action required';
@@ -113,15 +120,107 @@ export function processingFacts(status, checklist) {
   else if (workflow === 'completed') processing = 'Completed';
   else if (workflow === 'failed') processing = 'Failed';
   else if (workflow === 'awaiting_review') processing = 'Plan written';
-  else if (workflow === 'closed') processing = 'Closed';
+  // The month is closed, and the close has its own stage. The run's part was the plan.
+  else if (workflow === 'closed') processing = 'Plan written';
 
   return {
     month: status.month,
     upload,
     validation,
     processing,
-    step: job.status === 'running' && job.kind === 'close' ? '5. Close the month' : (WORKFLOW[workflow]?.step ?? 'Reading'),
   };
+}
+
+// The five stages across the top, one for each section below, each with its own
+// state in words. Where the month stands is the backend's `workflow`; the job only
+// says which section a running job belongs to, because the backend calls every
+// running job other than validation "processing".
+const WORKFLOW_STAGES = ['Upload monthly data', 'Validate', 'Run the month', 'Review the new plan', 'Close the month'];
+const STAGE_AT = {
+  not_uploaded: 0, ready_for_validation: 1, validating: 1, action_required: 1, ready_to_run: 2, processing: 2, failed: 2, completed: 3, awaiting_review: 3, closed: 5,
+};
+
+function reviewWord(workflow) {
+  if (workflow === 'closed') return 'Done';
+  return workflow === 'completed' || workflow === 'awaiting_review' ? 'Plan ready' : 'No plan yet';
+}
+
+export function workflowStages(workflow, job, facts = {}) {
+  const runningKind = job?.status === 'running' ? job.kind : null;
+  const at = { practice: 0, close: 4 }[runningKind] ?? STAGE_AT[workflow];
+  const closing = runningKind === 'close' ? 'Closing' : 'Not closed';
+  const details = [facts.upload, facts.validation, facts.processing, reviewWord(workflow), workflow === 'closed' ? 'Closed' : closing];
+  return WORKFLOW_STAGES.map((label, i) => {
+    const stage = { label, detail: details[i] ?? null };
+    if (at == null || i > at) return { ...stage, state: 'pending' };
+    if (i < at) return { ...stage, state: 'done' };
+    return { ...stage, state: workflow === 'failed' ? 'failed' : 'current', busy: runningKind != null };
+  });
+}
+
+// The run tracker: the pipeline's own flags (GET /batch/checklist's `progress`).
+// Validation is not in it: it is a gate before the run, not something the run does.
+// A node is done only when the backend says so, or when the running job has
+// reported finishing it. Never a percentage: nothing reports one.
+const NODE_STAGE = { sales_loaded: 'load', count_loaded: 'load', abc_run: 'abc', forecast_next: 'forecast', lp_next: 'lp' };
+
+export function runTracker(checklist, job) {
+  if (!checklist?.progress) return [];
+  const plan = job?.kind === 'plan' ? job : null;
+  const running = plan?.status === 'running';
+  const states = Object.fromEntries((plan?.steps || []).map((step) => [step.stage, step.state]));
+  // One load step covers two nodes: it is blamed on the first not yet done.
+  let loadNamed = false;
+  return checklist.progress.map((p) => {
+    const base = { id: p.id, name: p.name };
+    if (p.done) return { ...base, state: 'done' };
+    const stage = NODE_STAGE[p.id];
+    const reported = states[stage];
+    if (stage === 'load' && loadNamed) return { ...base, state: 'pending' };
+    if (plan?.status === 'failed' && (reported === 'stopped' || plan.failed_stage === stage)) {
+      if (stage === 'load') loadNamed = true;
+      return { ...base, state: 'failed', note: STEP_STATE.stopped };
+    }
+    if (running && reported === 'running') {
+      if (stage === 'load') loadNamed = true;
+      return { ...base, state: 'active', note: STEP_STATE.running };
+    }
+    // The load step finishing proves the sales arrived. Whether a stock count did
+    // is the backend's flag alone, read again when the job ends.
+    if (reported === 'done' || reported === 'skipped') return { ...base, state: p.id === 'count_loaded' ? 'pending' : 'done' };
+    return { ...base, state: 'pending' };
+  });
+}
+
+// The stage a running job has reached, by its name. Null when none is running.
+export function runningStage(job) {
+  if (job?.status !== 'running') return null;
+  return (job.steps || []).filter((step) => step.state === 'running').at(-1)?.label ?? null;
+}
+
+// How long a running job has been going, from the backend's start time. No
+// estimate of what is left: nothing reports one.
+export function elapsedText(startedAt, nowMs) {
+  const started = Date.parse(startedAt ?? '');
+  if (Number.isNaN(started) || nowMs < started) return null;
+  const seconds = Math.floor((nowMs - started) / 1000);
+  const minutes = Math.floor(seconds / 60);
+  return minutes > 0 ? `${minutes} min ${String(seconds % 60).padStart(2, '0')} s` : `${seconds} s`;
+}
+
+export function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return null;
+  if (bytes < 1024) return `${bytes} bytes`;
+  const kb = bytes / 1024;
+  return kb < 1024 ? `${kb.toFixed(0)} KB` : `${(kb / 1024).toFixed(1)} MB`;
+}
+
+// What the file check refused for one upload slot, by the slot's table name
+// (backend/batch_checklist.TABLES). A warning is not a refusal.
+export function fileRefusals(checklist, table) {
+  const check = checklist?.checks?.find((c) => c.id === 'files_valid');
+  if (check?.status !== 'failed') return [];
+  return (check.details || []).filter((d) => d.severity === 'failed' && d.table === table);
 }
 
 // A timestamp from the backend, in the reader's own time. Absent stays absent.

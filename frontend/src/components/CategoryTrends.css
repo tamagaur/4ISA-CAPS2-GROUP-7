@@ -62,6 +62,12 @@
   line-height: 1.45;
 }
 
+.ct-card .data-table-card,
+.ui-details .data-table-card {
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+}
+
 .ct-table-card {
   margin: 0;
 }

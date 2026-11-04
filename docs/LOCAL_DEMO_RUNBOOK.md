@@ -65,7 +65,7 @@ Back on **Data Management**.
 
 | Do this | Screen shows | Wait |
 |---|---|---|
-| **Step 1:** click **No file? Generate practice sales** | Step 1 changes to "2026-03 sales are in the database." The blue note gains: **"709 sales rows this month are generated practice data, so nothing here is a real result."** | About 10 s |
+| **Step 1:** click **Generate practice sales** | Step 1 changes to "2026-03 sales are in the database." The blue note gains: **"709 sales rows this month are generated practice data, so nothing here is a real result."** | About 10 s |
 | **Step 2:** click **Run Validation** | The Reorder page's decisions are carried onto the practice copy through `decide_row`. The checklist reads **All required checks passed**, with a warning for the generated sales. If orders are still undecided, the **Pending Reorder Decisions** dialog opens and **Review Recommendations** takes you back to section 4 | A few seconds |
 | **Step 3:** choose **On (as the live forecast)**. **Run the Month** stays disabled until you choose | The button becomes clickable | |
 | Click **Run the Month**, then **Confirm and Run** | **Processing 2026-03** and the stages it has reached. A reload here is safe: it comes back still running | 2 to 3.5 min when last timed, with nothing decided |

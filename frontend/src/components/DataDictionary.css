@@ -21,7 +21,8 @@
   margin-bottom: 16px;
   padding: 24px 28px;
   border: 1px solid #F6E1DA;
-  border-radius: 18px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   background:
     radial-gradient(90% 140% at 100% 0%, rgba(232, 92, 74, 0.14) 0%, rgba(232, 92, 74, 0) 60%),
     linear-gradient(100deg, #FFFFFF 0%, #FFF8F5 55%, #FFEFE8 100%);
@@ -90,7 +91,8 @@
   gap: 12px;
   padding: 14px 16px;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 .dict-notice > svg {
