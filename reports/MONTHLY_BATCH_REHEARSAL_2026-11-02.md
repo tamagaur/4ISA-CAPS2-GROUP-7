@@ -123,9 +123,9 @@ Clicked through in a real browser (Chrome, driven by Playwright) on a clean copy
 
 | Limit | Effect |
 |---|---|
-| A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | The page has no sign-off button: run the `transform_signoff` command the log prints. Not built because there is no real new file to test it with. |
+| A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | The page has no sign-off button: run the `transform_signoff` command the log prints. (On the practice copy only, `scripts/practice_signed_load.py` signs it since 2026-11-04, as `SYSTEM_SIGNER`; that is not a review.) Not built because there is no real new file to test it with. |
 | `LATEST_DATA_PERIOD` in `frontend/src/dataCoverage.js` is hand-set | After a run, the Dashboard's default range stays at Feb 2026 and it shows a banner saying so. The frontend's own file, left alone. |
-| The Dashboard and Reorder pages never show the batch | They read `ssm_local`; every batch step runs on `ssm_practice`. Results appear only in the panel. |
+| ~~The Dashboard and Reorder pages never show the batch~~ (no longer true since 2026-11-04) | Under `scripts.local_app` the pages read `ssm_practice`, labelled; they move at Run, not at Close (STATE.md). On any other server they show nothing of the batch, which never runs there. |
 | A second month can't be practised | `local_pipeline_qa synth` only generates 2026-03. |
 | The job log is held in memory | A backend restart forgets the log, not the work. |
 
