@@ -37,6 +37,7 @@ def started(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(mb.JOB, "start", lambda kind, cmd: calls.append((kind, cmd)))
     monkeypatch.setattr(mb, "read_status", lambda month=None: {"month": "2026-03", "checks": {}})
+    monkeypatch.setattr(mb, "check_file", lambda path, kind, month: {"ok": True})
     return calls
 
 
@@ -169,6 +170,26 @@ def test_practice_sales_exist_only_for_the_month_the_generator_makes(started, cl
 
 
 # ---- uploads ---------------------------------------------------------------------------------------------------------
+
+def test_a_file_the_loader_would_refuse_is_named_and_leaves_the_slot_as_it_was(started, client, monkeypatch, tmp_path):
+    send = lambda name: client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},  # noqa: E731
+                                    files={"file": (name, io.BytesIO(b"x"), "application/octet-stream")})
+    assert send("good.xls").status_code == 201
+    monkeypatch.setattr(mb, "check_file", lambda path, kind, month: {"ok": False, "message": "bad.xls is missing columns the loader needs: GSV."})
+    res = send("bad.xls")
+    assert res.status_code == 422 and "GSV" in res.json()["detail"] and res.json()["code"] == "batch_file_not_usable"
+    assert mb.uploaded_files("2026-03")["sales"]["name"] == "good.xls"
+    assert [p.name for p in (tmp_path / "2026-03").iterdir()] == ["sales"]    # nothing left behind
+
+
+def test_the_check_reads_the_file_under_its_own_name_before_it_is_kept(started, client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(mb, "check_file", lambda path, kind, month: (seen.append((path.name, path.read_bytes(), kind, month)), {"ok": True})[1])
+    res = client.post("/batch/files", data={"month": "2026-03", "kind": "count"},
+                      files={"file": ("SSIS MARCH 2026.xlsx", io.BytesIO(b"y"), "application/octet-stream")})
+    assert res.status_code == 201 and seen == [("SSIS MARCH 2026.xlsx", b"y", "count", "2026-03")]
+
+
 
 def test_an_unsupported_file_type_is_refused(started, client):
     res = client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},

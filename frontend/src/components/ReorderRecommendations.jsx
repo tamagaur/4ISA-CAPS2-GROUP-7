@@ -28,6 +28,7 @@ import { sameQuantity } from '../utils/reorderRequests';
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
 import { ReviewBadge } from './PendingCards';
+import { decisionCounts, decisionLine } from '../decisionCounts';
 import { DemoOrderPlanCard } from './DemoOrderPlan';
 import { formatCoverDays, formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -509,6 +510,29 @@ const ReorderRecommendations = () => {
   const [pendingDismissRequest, setPendingDismissRequest] = useState(null); // the row a dismissal is asked for
   const [historyFor, setHistoryFor] = useState(null); // { id, product, sku, packSize }
 
+  // What is outstanding on the current plan. The table below holds pending rows only, so this reads the plan
+  // itself (the request CycleComparison makes too), and again after any decision lands.
+  const [decisions, setDecisions] = useState(null);
+  const [decisionsVersion, setDecisionsVersion] = useState(0);
+  const decisionLanded = useCallback(() => setDecisionsVersion((v) => v + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getRecommendations({ principal, cycle: 'current' })
+      .then((res) => {
+        if (!cancelled) {
+          setDecisions({
+            status: 'ok',
+            cycle: res.planning_cycle_date || null,
+            whatIf: Boolean(res.data_mode?.outputs),
+            counts: decisionCounts(res.items || []),
+          });
+        }
+      })
+      .catch(() => { if (!cancelled) setDecisions({ status: 'error' }); });
+    return () => { cancelled = true; };
+  }, [principal, attempt, dataMode, decisionsVersion]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -873,6 +897,7 @@ const ReorderRecommendations = () => {
       setLocalData(prev => prev.map(item =>
         item.id === id ? { ...item, loadingAction: null, actionStatus: actionType } : item
       ));
+      decisionLanded();
       // The row itself only changes to a small status pill, which is easy to
       // miss in a long table — the toast is the actual confirmation.
       if (!silent) {
@@ -936,6 +961,7 @@ const ReorderRecommendations = () => {
   // applied or approved quantity change (accepted, planQty = the decided
   // quantity, which the plan total already counts) or an approved dismissal.
   const markDecided = (id, actionType, planQty) => {
+    decisionLanded();
     setLocalData((prev) => prev.map((item) => (item.id === id
       ? { ...item, loadingAction: null, actionStatus: actionType, ...(planQty != null ? { planQty } : {}) }
       : item)));
@@ -1298,6 +1324,18 @@ const ReorderRecommendations = () => {
           now, amber = watch, slate = no data, indigo = model output. */}
       {/* The four figures as the shared KPI card (UI pass): urgency colour on
           the icon tile only, one short line each, the rest behind the "?". */}
+      {decisions?.status === 'ok' && !decisions.whatIf && decisions.cycle && (
+        <p className={`ui-note ${decisions.counts.pending > 0 ? 'is-warning' : 'is-info'}`} role="status" data-testid="reorder-decision-state">
+          <ClipboardList size={16} aria-hidden="true" />
+          <span><strong>{formatMonth(String(decisions.cycle).slice(0, 10))} plan:</strong> {decisionLine(decisions.counts)}.</span>
+        </p>
+      )}
+      {decisions?.status === 'error' && (
+        <p className="ui-note is-warning" role="status" data-testid="reorder-decision-state">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>How many of this plan's rows are decided could not be read.</span>
+        </p>
+      )}
       <SectionLede className="is-standalone">What needs action now</SectionLede>
       <div className="kpi-strip reorder-summary-grid">
         <KPICard

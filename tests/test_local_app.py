@@ -29,6 +29,11 @@ def test_the_child_environment_never_keeps_the_live_url_or_secret():
     assert env["JWT_SECRET_KEY"] == "local-secret" and env["MONTHLY_BATCH_ENABLED"] == "true" and env["PATH"] == "p"
 
 
+def test_the_pages_read_the_practice_copy_on_the_throwaway_server():
+    assert la.practice_url(la.LOCAL_URL) == "postgresql://postgres@127.0.0.1:55432/ssm_practice"
+    la.require_throwaway(la.practice_url(la.LOCAL_URL))
+
+
 def test_a_token_from_this_run_fails_against_any_other_secret(monkeypatch):
     monkeypatch.setenv("JWT_SECRET_KEY", "local-secret-long-enough-for-hs256-signing")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")

@@ -38,6 +38,7 @@ from backend.client_ip import RealClientIPMiddleware
 from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
+from backend.practice_copy import LABEL_HEADER, PRACTICE_NOTE
 from backend.security_headers import SecurityHeadersMiddleware
 from backend.startup_checks import validate_secrets
 from backend.routers import (
@@ -107,6 +108,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[LABEL_HEADER] if monthly_batch.on_practice_copy() else [],   # the page's banner reads it from another origin
 )
 # On Render, request.client becomes the visitor's real IP (Cloudflare's
 # CF-Connecting-IP) instead of a forwarded address the visitor can set; the
@@ -153,9 +155,13 @@ if monthly_batch.enabled():   # local practice database only: the deployed API d
 
 if monthly_batch.on_practice_copy():   # never the deployed API: it is not connected to ssm_practice
     @app.middleware("http")
-    async def refuse_practice_copy(request, call_next):
+    async def practice_copy_gate(request, call_next):
         refusal = monthly_batch.practice_copy_refusal(request.url.path)
-        return JSONResponse(refusal, status_code=409) if refusal else await call_next(request)
+        if refusal:
+            return JSONResponse(refusal, status_code=409)
+        response = await call_next(request)
+        response.headers[LABEL_HEADER] = PRACTICE_NOTE
+        return response
 
 
 @app.get("/health", tags=["health"])

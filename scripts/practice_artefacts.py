@@ -12,8 +12,8 @@ docs say (generated sales, plan, close), fingerprints again, and checks each dif
     file    PRACTICE_MARKER near its start
     row     practice_run filled (scripts/local_pg PRACTICE_ROW_LABEL_SQL), for every row ssm_local does not hold identically.
             A deleted row leaves nothing to mark, so deletions are counted and printed.
-    route   every GET route of the real app, on ssm_practice: 409 practice_copy_not_served, or a /batch answer with practice_note,
-            or /health
+    route   every GET route of the real app, on ssm_practice: an answer carrying the X-Practice-Copy label, a /batch answer with
+            practice_note too, a refusal or error (it holds no figure), or /health
 
 Exit 1 names what fails. Writes to ssm_practice and to the files the run itself writes, and nothing else: never live
 (local_pg.local_url refuses any other server). Not part of scripts/check.sh: it needs the local Postgres and takes minutes.
@@ -29,6 +29,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from backend.practice_copy import LABEL_HEADER  # noqa: E402
 from scripts import local_pg  # noqa: E402
 from scripts.report_target import PRACTICE_MARKER  # noqa: E402
 
@@ -109,17 +110,13 @@ def row_report(table: str) -> dict:
             "deleted": len(started - {h for h, _ in rows})}
 
 
-def route_verdict(path: str, status, body) -> str | None:
+def route_verdict(path: str, status, body, headers=None) -> str | None:
     """None when this answer says what it is, else why not."""
-    if path == "/health":
+    if path == "/health" or status != 200:   # a refusal, or a request this check cannot fill in, holds no figure
         return None
-    if path.startswith("/batch"):
-        if status != 200:   # a request this check cannot fill in holds no figure
-            return None
-        return None if isinstance(body, dict) and body.get("practice_note") else "a /batch answer with no practice_note"
-    if status == 409 and isinstance(body, dict) and body.get("code") == "practice_copy_not_served":
-        return None
-    return f"answered {status} on the practice copy"
+    if path.startswith("/batch") and not (isinstance(body, dict) and body.get("practice_note")):
+        return "a /batch answer with no practice_note"
+    return None if (headers or {}).get(LABEL_HEADER) else f"answered {status} on the practice copy with no {LABEL_HEADER} label"
 
 
 def api_check() -> int:
@@ -147,7 +144,7 @@ def api_check() -> int:
             body = res.json()
         except ValueError:
             body = None
-        why = route_verdict(path, res.status_code, body)
+        why = route_verdict(path, res.status_code, body, res.headers)
         print(f"  {path}: {res.status_code}{'  ' + why if why else ''}")
         if why:
             failures.append(path)

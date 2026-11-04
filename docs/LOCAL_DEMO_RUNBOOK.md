@@ -1,6 +1,6 @@
 # Local demo runbook: close a practice month from the browser
 
-**What this shows:** the real monthly steps running on labelled generated sales, on a copy on this laptop. **What to say about it:** the April plan it produces is practice, not a result. It does not show the deployed service, which has not been redeployed, and it does not show a real new monthly file running, because none has ever existed.
+**What this shows:** the real monthly steps running on labelled generated sales, on a copy on this laptop, and the Dashboard and Reorder pages following them. **What to say about it:** the April plan it produces is practice, not a result. It does not show the deployed service, which has not been redeployed, and it does not show a real new monthly file running, because none has ever existed.
 
 Walked through in a browser on 2026-11-03, from `Main-BE`, with the commands below typed into PowerShell. Takes about 5 minutes from the first command to a closed month.
 
@@ -32,12 +32,12 @@ Terminal 2. The backup was taken before the flags were last written, so it holds
 
 ```powershell
 $py = (Resolve-Path .venv\Scripts\python.exe).Path
-& $py -m scripts.local_pg run -- $py -m scripts.compute_review_flags --calendar-factor --write
+& $py -m scripts.local_pg run --practice -- $py -m scripts.compute_review_flags --calendar-factor --write
 ```
 
 It should end with `"needs_review": 64`, `wrote 189 review_flag rows for 2026-03-01`, `planning mart refreshed`. The plan does not read the flags, so it stays 109 rows and 435,988 pieces. Keep the full `$py` path after `--`: a bare `python` there starts the system Python, which crashes on `Router.__init__() got an unexpected keyword argument 'on_startup'`.
 
-This changes the database behind the pages only. The practice copy keeps 25, and the panel does not show flags.
+This runs on the practice copy, the database behind the pages. The panel does not show flags.
 
 ## 3. Sign in
 
@@ -72,7 +72,8 @@ The 2026-03 row is the only place the panel shows 109 and 435,988, and it appear
 
 ## After the close
 
-- **The Reorder page is unchanged**, on purpose: it still shows March 2026 with 109 pending and 435,988 pieces, because the pages do not read the practice copy.
+- **The pages have moved, and have said so all along.** A yellow **Practice copy** note is on every page. Reorder shows the Apr 2026 plan: 121 products, 1,213,168 pieces, "0 accepted, 0 dismissed, 121 not decided". Dashboard shows Apr 2025 to Mar 2026, latest month Mar 2026 ₱27.5M. They move at **Run**, when the April plan is written, and the Close itself changes neither.
+- **Before the Run** the same pages show March: 109 products, 435,988 pieces, sales ending Feb 2026.
 - **A reload moves the panel on.** It then reads "Monthly batch for 2026-04" with empty steps, and the plan table and the 709 label are gone from the screen. Nothing is lost.
 - **To show that the rows stay labelled** (should print `709 | 709`):
 
@@ -105,3 +106,5 @@ Press Ctrl+C in Terminal 1, or use the command in item 2, then:
 ```
 
 Nothing above writes to live. `scripts.local_app` refuses any database but `127.0.0.1:55432`, and the batch routes do not exist on the deployed service.
+
+**File checks.** A file chosen in step 1 is checked at once, against what the loader needs (`docs/RAW_FILE_REQUIREMENTS.md`), and refused with what is missing. The stock count slot only checks: the run reads that workbook from `data/raw/SSIS/`.

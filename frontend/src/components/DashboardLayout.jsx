@@ -10,6 +10,7 @@ import Topbar from './Topbar';
 import { preloadPages } from '../pageLoaders';
 import { invalidateCache } from '../api/cache';
 import { getDataModeInfo } from '../api/dataMode';
+import PracticeCopyBanner from './PracticeCopyBanner';
 import { startSessionHeartbeat } from '../auth';
 import DataFreshness from './DataFreshness';
 import ErrorBoundary from './ErrorBoundary';
@@ -615,6 +616,7 @@ const DashboardLayout = () => {
             (PageTransition renders the outlet). Keyed on the refresh count
             as the outlet was, so Refresh rebuilds the page and it enters
             again. */}
+        <PracticeCopyBanner />
         <ErrorBoundary resetKey={`${location.pathname}:${refreshKey}`}>
           <PageTransition
             key={refreshKey}

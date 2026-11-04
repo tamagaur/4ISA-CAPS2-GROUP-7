@@ -5,12 +5,13 @@ LOCAL ONLY FOR NOW. backend/main.py mounts these routes only when MONTHLY_BATCH_
 throwaway local one (scripts/local_pg.py), so the deployed API does not have them and the page stays as it was. The routes
 check again per request: GET /batch/status says {"enabled": false} and the rest refuse with 409 batch_local_only. No route passes --target-public, so scripts.run_month could not write to
 live even if this check were wrong. Every step runs on ssm_practice, a copy of the local database (step_env): that is where
-generated sales live, labelled is_demo = true, so the database behind the pages holds none. Turning this on for live is a separate decision: it would also have to solve where
-uploaded files live on the server.
+generated sales live, labelled is_demo = true. scripts/local_app.py runs this process on that copy too, so the pages show what a
+closed month did, each answer labelled (backend/practice_copy.py); no other database holds those rows. Turning this on for live is a
+separate decision: it would also have to solve where uploaded files live on the server.
 
 It runs scripts, it does not reimplement them. A write is one child process of scripts.run_month, whose gates, order and
 refusals all still apply, and the status and feedback are read by scripts.batch_status and scripts.cycle_feedback. This
-keeps the boundary in backend/main.py: this process never imports the analytics package.
+keeps the boundary in backend/main.py: these routes never import the analytics package to run a step.
 
 One job at a time, held in this process's memory. A restart forgets the log but not the work: run_month skips what is
 already in the database.
@@ -29,17 +30,21 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
+import shutil
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
+from backend import practice_copy, response_cache
 from backend.api_errors import ApiError
 from backend.auth_utils import TokenPayload
+from backend.practice_copy import PRACTICE_NOTE
 from backend.permissions import require_permission
 
 REPO = Path(__file__).resolve().parents[2]
 UPLOADS = REPO / "local" / "monthly_batch" / "uploads"   # git-ignored: raw files hold per-product sales (hard rule 9)
 THROWAWAY = ("127.0.0.1", 55432)                         # scripts/local_pg.py
-PRACTICE_DB = "ssm_practice"                             # scripts/local_pg.py practice
+PRACTICE_DB = practice_copy.PRACTICE_DB
 MONTH = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
 ALLOWED_SUFFIXES = {".xlsx", ".xls", ".csv"}             # what the page's dropzone accepts
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024                     # the largest raw file on record is 34.7 MB (SSIS Jan 2021)
@@ -49,8 +54,6 @@ LOG_LINES = 400
 SCRIPT_TIMEOUT_S = 120
 
 LOCAL_ONLY = "The monthly batch only runs on the local practice database for now."
-# On every /batch answer that holds a figure. The job log can lose its first lines to LOG_LINES, so the log's own marker is not enough.
-PRACTICE_NOTE = "Read from the practice copy (ssm_practice), whose sales may be generated. Practice, not a result."
 
 router = APIRouter(prefix="/batch", tags=["monthly-batch"])
 
@@ -68,21 +71,21 @@ def require_local() -> None:
 
 
 def step_env() -> dict:
-    """A step's environment: the practice database, on the throwaway server only. This process stays on the pages' database."""
+    """A step's environment: the practice database, on the throwaway server only."""
     require_local()
     url = urlparse(os.environ["SUPABASE_DB_URL"])._replace(path=f"/{PRACTICE_DB}").geturl()
     return {**os.environ, "SUPABASE_DB_URL": url, "SUPABASE_DIRECT_URL": url, "DATABASE_URL": url, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
 
 
 def on_practice_copy() -> bool:
-    return urlparse(os.environ.get("SUPABASE_DB_URL") or "").path == f"/{PRACTICE_DB}"
+    return practice_copy.names_practice_copy()
 
 
 def practice_copy_refusal(path: str) -> dict | None:
-    """The 409 body for a request an API running on ssm_practice must not answer, else None. The data routes have no way to say their
-    figures rest on generated sales, and no page reads that copy (the pages' process stays on ssm_local, step_env), so they answer
-    nothing there. /batch says what it is (PRACTICE_NOTE); /health holds no figure."""
-    if path == "/health" or path == "/batch" or path.startswith("/batch/"):
+    """The 409 body for a request an API whose URL names ssm_practice must not answer, else None. Confirmed by the connection itself
+    (backend/practice_copy.py), it answers everything, each answer labelled. Not confirmed, only /batch (which says what it is) and
+    /health (no figure) answer."""
+    if practice_copy.confirmed() or path == "/health" or path == "/batch" or path.startswith("/batch/"):
         return None
     return {"detail": f"This API is connected to {PRACTICE_DB}, which holds generated sales. Its figures are not served.", "code": "practice_copy_not_served"}
 
@@ -124,6 +127,7 @@ class Job:
             self.status = "done" if code == 0 else "failed"
             self.exit_code = code
             self.finished_at = datetime.now(timezone.utc).isoformat()
+        response_cache.invalidate()    # the step wrote from another process, and the pages read this copy
 
     def state(self) -> dict:
         with self._lock:
@@ -159,6 +163,11 @@ def uploaded_files(month: str) -> dict:
         if files:
             out[kind] = {"name": files[0].name, "bytes": files[0].stat().st_size}
     return out
+
+
+def check_file(path: Path, kind: str, month: str) -> dict:
+    """Will the loader read this file? scripts/check_upload.py decides, by the loader's own rules, in its own process."""
+    return _script_json("scripts.check_upload", "--kind", kind, "--month", month, "--file", str(path))
 
 
 def _approver(user: TokenPayload) -> str:
@@ -216,20 +225,30 @@ def upload_file(month: str = Form(pattern=MONTH), kind: str = Form(), file: Uplo
         raise ApiError(400, "Only .xlsx, .xls and .csv files are accepted.", code="batch_bad_file_type")
     if read_status(month)["checks"].get("abc_run"):
         raise ApiError(409, "This month has already been run, so a new file would not reach the forecast or the plan.", code="batch_already_ran")
-    folder = _month_folder(month, kind)
-    folder.mkdir(parents=True, exist_ok=True)
-    for old in folder.iterdir():
-        old.unlink()
-    target, written = folder / name, 0
-    with open(target, "wb") as out:
-        while chunk := file.file.read(1024 * 1024):
-            written += len(chunk)
-            if written > MAX_UPLOAD_BYTES:
-                out.close()
-                target.unlink()
-                raise ApiError(413, "That file is larger than the 100 MB limit.", code="batch_file_too_large")
-            out.write(chunk)
-    return {"kind": kind, "name": name, "bytes": written}
+    # Checked before it replaces anything: a file the loader would refuse leaves the slot as it was. Kept beside its final
+    # folder and under its own name, because the loader reads a month from the name and the folders above it.
+    holding = UPLOADS / month / f".checking-{kind}"
+    shutil.rmtree(holding, ignore_errors=True)
+    holding.mkdir(parents=True)
+    try:
+        held, written = holding / name, 0
+        with open(held, "wb") as out:
+            while chunk := file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise ApiError(413, "That file is larger than the 100 MB limit.", code="batch_file_too_large")
+                out.write(chunk)
+        checked = check_file(held, kind, month)
+        if not checked["ok"]:
+            raise ApiError(422, checked["message"], code="batch_file_not_usable")
+        folder = _month_folder(month, kind)
+        folder.mkdir(parents=True, exist_ok=True)
+        for old in folder.iterdir():
+            old.unlink()
+        held.replace(folder / name)
+    finally:
+        shutil.rmtree(holding, ignore_errors=True)
+    return {"kind": kind, "name": name, "bytes": written, "check": checked}
 
 
 @router.post("/practice-month", status_code=202)

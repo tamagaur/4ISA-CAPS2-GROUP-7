@@ -164,7 +164,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
       <p className="ui-note is-info" role="note">
         <AlertTriangle size={16} aria-hidden="true" />
         <span>
-          <strong>Local practice database.</strong> This runs the real monthly steps on its own copy, not on the live system. The Dashboard and Reorder pages do not read that copy, so nothing done here appears on them.
+          <strong>Local practice database.</strong> This runs the real monthly steps on its own copy, not on the live system. The Dashboard and Reorder pages read this copy too and say so, so what a run does appears on them.
           {status.synthetic_rows > 0 && ` ${pieces(status.synthetic_rows)} sales rows this month are generated practice data, so nothing here is a real result.`}
         </span>
       </p>
@@ -179,8 +179,8 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
             <p className="mb-done"><CheckCircle2 size={16} aria-hidden="true" /> {month} sales are in the database.</p>
           ) : (
             <>
-              <FileSlot label="Sales per product" hint="The Unilever sales-per-SKU file" file={status.files.sales} disabled={stage === 'running'} onPick={pick('sales')} />
-              <FileSlot label="Stock count (optional)" hint={status.checks.count_loaded ? 'Already loaded for this month' : 'The month\'s stock count'} file={status.files.count} disabled={stage === 'running'} onPick={pick('count')} />
+              <FileSlot label="Sales per product" hint="The Unilever sales-per-SKU file, with La Union in its name" file={status.files.sales} disabled={stage === 'running'} onPick={pick('sales')} />
+              <FileSlot label="Stock count (optional)" hint={`${status.checks.count_loaded ? 'Already loaded for this month. ' : ''}A file here is only checked: the run reads the stock count from the SSIS workbook in data/raw.`} file={status.files.count} disabled={stage === 'running'} onPick={pick('count')} />
               {practiceAvailable && (
                 <button
                   type="button"

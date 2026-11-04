@@ -65,7 +65,7 @@ def sniff_format(path: Path) -> str:
     # Fallback: plausible CSV/plain text if it decodes and has no
     # binary control characters beyond common whitespace.
     try:
-        sample = head.decode("utf-8")
+        sample = head.removeprefix(b"\xef\xbb\xbf").decode("utf-8")   # Excel's "CSV UTF-8" starts with a byte-order mark
         if all(c.isprintable() or c in "\r\n\t" for c in sample):
             return "csv"
     except UnicodeDecodeError:
@@ -249,9 +249,10 @@ def _read_csv(path: Path) -> WorkbookRead:
     import pandas as pd
 
     last_err = None
-    for encoding in ("utf-8", "utf-8-sig", "latin1"):
+    for encoding in ("utf-8-sig", "latin1"):     # utf-8-sig reads plain UTF-8 too, and keeps Excel's byte-order mark out of the first header
         try:
             df = pd.read_csv(path, header=None, encoding=encoding, dtype=object)
+            df = df.astype(object).where(df.notna(), None)   # a blank cell is None, as in every other reader (detect.is_blank)
             rows = [list(r) for r in df.itertuples(index=False, name=None)]
             return WorkbookRead(real_format="csv", sheets=[SheetGrid(name="sheet1", rows=rows)])
         except Exception as e:  # noqa: BLE001 - trying multiple encodings deliberately
