@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
 import uuid
@@ -33,6 +34,7 @@ sys.path.insert(0, str(REPO))
 LOCAL_URL = "postgresql://postgres@127.0.0.1:55432/ssm_local"     # scripts/local_pg.py
 PRACTICE_DB = "ssm_practice"                                      # scripts/local_pg.py
 SESSION_FILE = REPO / "local" / "local_app_session.json"          # git-ignored
+UPLOADS = REPO / "local" / "monthly_batch" / "uploads"            # git-ignored; backend/routers/monthly_batch.py UPLOADS
 
 ADMIN_SQL = "SELECT user_id, email, full_name, role FROM users WHERE role = 'admin' ORDER BY user_id LIMIT 1"
 START_SESSION_SQL = """
@@ -87,7 +89,13 @@ def start_session(url: str) -> dict:
     return {"user_id": user_id, "email": email, "role": role, "full_name": full_name or "", "session_id": session_id}
 
 
+def clear_uploads() -> None:
+    """A Run reads what is in the slots, so a file left from before a reset would change the next Run without anyone choosing it."""
+    shutil.rmtree(UPLOADS, ignore_errors=True)
+
+
 def reset(backup: str, env: dict) -> None:
+    clear_uploads()
     subprocess.run([sys.executable, "-m", "scripts.local_pg", "restore", backup], cwd=REPO, check=True)
     subprocess.run([sys.executable, "-m", "scripts.run_canonical_load", "--schema", "public", "--target-public", "--schema-only"],
                    cwd=REPO, env=env, check=True)

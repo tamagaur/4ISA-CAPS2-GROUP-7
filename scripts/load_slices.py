@@ -337,14 +337,21 @@ def extract_files(files: list[Path], doc_type: str, staging: Path, done: set[Pat
     return problems
 
 
-def extract_soh(staging: Path, months: set[str] | None) -> list[Problem]:
+def extract_soh(staging: Path, months: set[str] | None, given: list[Path] = ()) -> list[Problem]:
     """SOH is extracted across every SSIS workbook at once (rule R2 keeps the
     first file per snapshot date, ssis_soh.py), then filtered: per month under
     _soh_<month>/ssis_soh, and every snapshot under _soh_all/ssis_soh for the
     dimension rules. months=None (full rebuild) stages everything under
-    ssis_soh directly."""
+    ssis_soh directly.
+
+    given (--file): SSIS workbooks named on the command line. Each takes the
+    place of data/raw's workbooks for its own month, the rule every other
+    family follows. With none, the workbook list is exactly data/raw's."""
     from analytics.etl.extract.ssis_soh import parse_ssis_soh
-    result = parse_ssis_soh(files=[f for f, fl in discover().items() if (fl.family or fl.hint) == SOH_FILE_FAMILY])
+    replaced = {layout_of(f).month or infer_period(f) for f in given}
+    on_disk = [f for f, fl in discover().items()
+               if (fl.family or fl.hint) == SOH_FILE_FAMILY and (fl.month or infer_period(f)) not in replaced]
+    result = parse_ssis_soh(files=[*on_disk, *given])
     for df, rel, sheet_name, _snapshot in result.dfs:
         if months is None:
             write_staging_table(df, "ssis_soh", rel, sheet_name, staging)
@@ -353,7 +360,14 @@ def extract_soh(staging: Path, months: set[str] | None) -> list[Problem]:
         period = str(df["_period"].iloc[0]) if len(df) else None
         if period in months:
             write_staging_table(df, "ssis_soh", rel, sheet_name, staging / f"_soh_{period}")
-    return [Problem(Path(r.src_file).name, "layout_changed", r.reason) for r in result.file_rejects]
+    problems = [Problem(Path(r.src_file).name, "layout_changed", r.reason) for r in result.file_rejects]
+    # A named file that yielded nothing is refused: R1, R2 or R3 can drop a sheet quietly, and no count is not what was asked for.
+    staged = {rel for _, rel, _, _ in result.dfs}
+    rejected = {p.file for p in problems}
+    for f in given:
+        if f.relative_to(REPO_ROOT).as_posix() not in staged and f.name not in rejected:
+            problems.append(Problem(f.name, "layout_changed", "--file: the workbook yielded no stock count (R1 to R3, analytics/etl/extract/ssis_soh.py)"))
+    return problems
 
 
 def read_staged(staging: Path, doc_type: str) -> pd.DataFrame:
@@ -1138,7 +1152,7 @@ def _seed_date_dimension(ctx: RunContext) -> None:
 
 
 def _stage_and_sign(ctx: RunContext, slices: list[Slice], files_by_family: dict[str, list[Path]],
-                    soh_months: set[str] | None, all_slices: bool) -> tuple[str | None, list[Problem], frozenset]:
+                    soh_months: set[str] | None, all_slices: bool, soh_given: list[Path] = ()) -> tuple[str | None, list[Problem], frozenset]:
     """Extract every input file, add references, write the manifest. Returns
     (why unsigned or None, layout problems, reference pairs)."""
     shutil.rmtree(ctx.staging, ignore_errors=True)
@@ -1151,7 +1165,7 @@ def _stage_and_sign(ctx: RunContext, slices: list[Slice], files_by_family: dict[
     if "sales_register" in files_by_family and not all_slices:
         references = stage_sales_reference(ctx.staging, files_by_family["sales_register"])
     if any(s.family.key == "ssis_soh" for s in slices) or (all_slices and soh_months is None):
-        problems += extract_soh(ctx.staging, soh_months)
+        problems += extract_soh(ctx.staging, soh_months, soh_given)
         ctx.soh_dir = ctx.staging if soh_months is None else ctx.staging / "_soh_all"
     if any(s.family.key == "inventory_sign_off" for s in slices) or all_slices:
         price_dir = ctx.staging if all_slices else stage_price_list(ctx.staging)
@@ -1227,6 +1241,7 @@ def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path])
     given = {f: layout_of(f) for f in overrides}
     bad_given = [(f, fl) for f, fl in given.items() if not fl.ok]
     attributed: set[Path] = set()
+    soh_given: list[Path] = []
     for sl in slices:
         fam = sl.family
         if bad_given:
@@ -1238,12 +1253,20 @@ def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path])
             refusals[sl] = Refused("period_not_allowed", f"RMR lines load only for {rmr_allowed_periods()} "
                                                          f"(config/source_of_truth.yaml sales_return.rmr_fallback)")
             continue
-        mine = [f for f, fl in given.items() if fl.family == fam.key]
+        mine = [f for f, fl in given.items() if _file_family(fl) == fam.key]    # an SSIS workbook's family is ssis_summary, its slice's ssis_soh
         bad = [] if mine else bad_files_for(fam, sl.month)
         attributed |= {f for f, _ in bad}
         if bad:
             f, fl = bad[0]
             refusals[sl] = Refused(fl.reason, "; ".join(f"{g.name}: {gl.problem}" for g, gl in bad)[:500])
+            continue
+        if fam.key == "ssis_soh" and mine:
+            named = [f for f in mine if (given[f].month or infer_period(f)) == sl.month]
+            if not named:
+                refusals[sl] = Refused("missing_file", f"no {fam.key} file for {sl.month} among the --file inputs")
+                continue
+            files_by_slice[sl] = named
+            soh_given += [f for f in named if f not in soh_given]
             continue
         if fam.key == "ssis_soh":
             # SOH is extracted across every SSIS workbook at once; these are the
@@ -1264,7 +1287,7 @@ def run_incremental(ctx: RunContext, slices: list[Slice], overrides: list[Path])
             record_file_event(ctx, f, fl)
 
     soh_months = {s.month for s in slices if s.family.key == "ssis_soh"}
-    unsigned, problems, references = _stage_and_sign(ctx, slices, files_by_family, soh_months, False)
+    unsigned, problems, references = _stage_and_sign(ctx, slices, files_by_family, soh_months, False, soh_given)
     _seed_date_dimension(ctx)
 
     for sl in slices:

@@ -38,7 +38,7 @@ from backend.client_ip import RealClientIPMiddleware
 from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
-from backend.practice_copy import LABEL_HEADER, PRACTICE_NOTE
+from backend.practice_copy import LABEL_HEADER, PRACTICE_NOTE, PracticeBodyLabel
 from backend.security_headers import SecurityHeadersMiddleware
 from backend.startup_checks import validate_secrets
 from backend.routers import (
@@ -99,7 +99,10 @@ app = FastAPI(
     openapi_url="/openapi.json" if _SHOW_DOCS else None,
 )
 
-# Registered first, so innermost: CORS and gzip still wrap what it answers. NUL characters and JSON NaN/Infinity
+# Innermost of all, inside gzip, so it reads the answer before compression. Never on the deployed API (backend/practice_copy.py).
+if monthly_batch.on_practice_copy():
+    app.add_middleware(PracticeBodyLabel)
+# Registered first of the rest, so innermost: CORS and gzip still wrap what it answers. NUL characters and JSON NaN/Infinity
 # are refused with a 400 instead of reaching Postgres, bcrypt or the error encoder (backend/input_guard.py).
 app.add_middleware(InputGuardMiddleware)
 app.add_middleware(

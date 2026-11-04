@@ -180,7 +180,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           ) : (
             <>
               <FileSlot label="Sales per product" hint="The Unilever sales-per-SKU file, with La Union in its name" file={status.files.sales} disabled={stage === 'running'} onPick={pick('sales')} />
-              <FileSlot label="Stock count (optional)" hint={`${status.checks.count_loaded ? 'Already loaded for this month. ' : ''}A file here is only checked: the run reads the stock count from the SSIS workbook in data/raw.`} file={status.files.count} disabled={stage === 'running'} onPick={pick('count')} />
+              <FileSlot label="Stock count (optional)" hint={`${status.checks.count_loaded ? 'Already loaded for this month: a file here replaces that count on this copy. ' : ''}The month's SSIS workbook. Loading it makes the run take several minutes longer.`} file={status.files.count} disabled={stage === 'running'} onPick={pick('count')} />
               {practiceAvailable && (
                 <button
                   type="button"

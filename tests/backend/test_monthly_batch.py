@@ -145,8 +145,13 @@ def test_uploaded_files_become_slices_and_files(started, client):
                 files={"file": ("count.xlsx", io.BytesIO(b"y"), "application/octet-stream")})
     client.post("/batch/run", json=_run_body())
     _, cmd = started[0]
-    slices = [cmd[i + 1] for i, a in enumerate(cmd) if a == "--slice"]
-    files = [cmd[i + 1] for i, a in enumerate(cmd) if a == "--file"]
+    assert cmd[1:3] == ["-m", "scripts.practice_signed_load"] and cmd[cmd.index("--approved-by") + 1] == "planner@ssmcapstone.com"
+    cut = cmd.index("--")
+    assert cmd[cut + 1:cut + 3] == ["-m", "scripts.run_month"]
+    month = cmd[cut + 1:]
+    slices = [month[i + 1] for i, a in enumerate(month) if a == "--slice"]
+    files = [month[i + 1] for i, a in enumerate(month) if a == "--file"]
+    assert [a for a in cmd[:cut] if a == "--slice"] == ["--slice", "--slice"] and [a for a in cmd[:cut] if a == "--file"] == ["--file", "--file"]
     assert slices == ["unilever:unilever_sku_demand_fact:2026-03", "unilever:inventory_fact:2026-03"]
     assert [f.rsplit("sales", 1)[-1] if "sales.xls" in f else f.rsplit("count", 1)[-1] for f in files] == [".xls", ".xlsx"]
 

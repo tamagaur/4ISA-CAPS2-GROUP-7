@@ -275,3 +275,55 @@ def test_known_duplicate_is_found_below_the_top_of_data_raw(tmp_path, monkeypatc
 def test_no_known_duplicate_file_means_no_month(tmp_path, monkeypatch):
     monkeypatch.setattr(ls, "RAW_DIR", tmp_path)
     assert ls.known_duplicate_months() == set()
+
+
+
+# ---- a stock count named with --file (2026-11-04). The data/raw path must not move: the 51 pinned figures come through it. --------
+
+class _Layout:
+    def __init__(self, month, family="ssis_summary", ok=True, hint=None):
+        self.month, self.family, self.ok, self.hint, self.unmapped = month, family, ok, hint, []
+
+
+def _soh_world(monkeypatch, tmp_path, given=()):
+    """data/raw holds a February and a March workbook; parse_ssis_soh records what it was asked to read."""
+    from analytics.etl.extract import ssis_soh
+    monkeypatch.setattr(ls, "REPO_ROOT", tmp_path)
+    disk = {tmp_path / "data/raw/SSIS FEB.xlsx": _Layout("2026-02"), tmp_path / "data/raw/SSIS MAR.xlsx": _Layout("2026-03"),
+            tmp_path / "data/raw/sales.xls": _Layout(None, family="unilever_sku")}
+    layouts = {**disk, **{f: _Layout(m) for f, m in given}}
+    monkeypatch.setattr(ls, "discover", lambda: disk)
+    monkeypatch.setattr(ls, "layout_of", lambda f: layouts[f])
+    asked = []
+
+    class Result:
+        dfs, file_rejects = [], []
+
+    def parse(files=None):
+        asked.append(list(files))
+        Result.dfs = [(pd.DataFrame(), f.relative_to(tmp_path).as_posix(), "SOH", None) for f in files if "EMPTY" not in f.name]
+        return Result
+
+    monkeypatch.setattr(ssis_soh, "parse_ssis_soh", parse)
+    monkeypatch.setattr(ls, "write_staging_table", lambda *a, **k: None)
+    return asked, disk
+
+
+def test_with_no_file_named_the_stock_count_reads_exactly_data_raws_workbooks(monkeypatch, tmp_path):
+    asked, disk = _soh_world(monkeypatch, tmp_path)
+    assert ls.extract_soh(tmp_path, {"2026-03"}) == []
+    assert asked == [[f for f in disk if "SSIS" in f.name]]
+
+
+def test_a_named_workbook_replaces_data_raws_for_its_month_only(monkeypatch, tmp_path):
+    upload = tmp_path / "local/uploads/SSIS MARCH 2026.xlsx"
+    asked, _ = _soh_world(monkeypatch, tmp_path, given=[(upload, "2026-03")])
+    assert ls.extract_soh(tmp_path, {"2026-03"}, [upload]) == []
+    assert [f.name for f in asked[0]] == ["SSIS FEB.xlsx", "SSIS MARCH 2026.xlsx"]
+
+
+def test_a_named_workbook_that_yields_nothing_is_refused_not_passed_over(monkeypatch, tmp_path):
+    upload = tmp_path / "local/uploads/EMPTY.xlsx"
+    _soh_world(monkeypatch, tmp_path, given=[(upload, "2026-03")])
+    problems = ls.extract_soh(tmp_path, {"2026-03"}, [upload])
+    assert [(p.file, p.reason) for p in problems] == [("EMPTY.xlsx", "layout_changed")] and "no stock count" in problems[0].detail

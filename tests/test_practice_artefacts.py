@@ -28,12 +28,25 @@ def test_the_file_diff_finds_new_and_changed_files_only():
 
 def test_a_data_route_answering_without_the_label_fails_the_check():
     label = {pa.LABEL_HEADER: "practice"}
-    assert pa.route_verdict("/recommendations", 200, {"items": []}) is not None
-    assert pa.route_verdict("/recommendations", 200, {"items": []}, label) is None
+    body = {"items": [], "practice_copy": {"not_a_result": True, "generated_months": [pa.MONTH]}}
+    assert pa.route_verdict("/recommendations", 200, body) is not None
+    assert pa.route_verdict("/recommendations", 200, {"items": []}, label) is not None    # the header alone is not enough
+    assert pa.route_verdict("/recommendations", 200, body, label) is None
     assert pa.route_verdict("/recommendations", 409, {"code": "practice_copy_not_served"}) is None
-    assert pa.route_verdict("/batch/status", 200, {"enabled": True}, label) is not None
-    assert pa.route_verdict("/batch/status", 200, {"practice_note": "x"}, label) is None
+    assert pa.route_verdict("/batch/status", 200, {"enabled": True, "practice_copy": body["practice_copy"]}, label) is not None
+    assert pa.route_verdict("/batch/status", 200, {"practice_note": "x", "practice_copy": body["practice_copy"]}, label) is None
     assert pa.route_verdict("/health", 200, {"status": "ok"}) is None
+
+
+def test_a_route_this_check_could_not_read_fails_rather_than_passing():
+    assert "could not read" in pa.route_verdict("/dashboard/product-sales", 422, {"detail": []})
+
+
+def test_routes_are_called_with_real_identifiers():
+    assert pa.route_url("/forecast/{sku_id}", "21015692", 3) == "/forecast/21015692?principal=unilever"
+    assert pa.route_url("/decomposition", "21015692", 3) == "/decomposition?sku=21015692"
+    assert pa.route_url("/admin/users/{user_id}/permissions", "21015692", 3) == "/admin/users/3/permissions"
+    assert pa.route_url("/recommendations/{recommendation_key}/history", "21015692", 3) == "/recommendations/1/history"
 
 
 def test_without_the_connection_confirming_only_batch_and_health_answer(monkeypatch):

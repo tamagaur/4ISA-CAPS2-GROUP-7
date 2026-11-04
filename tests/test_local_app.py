@@ -29,6 +29,20 @@ def test_the_child_environment_never_keeps_the_live_url_or_secret():
     assert env["JWT_SECRET_KEY"] == "local-secret" and env["MONTHLY_BATCH_ENABLED"] == "true" and env["PATH"] == "p"
 
 
+def test_a_reset_clears_files_left_in_the_slots(monkeypatch, tmp_path):
+    (tmp_path / "2026-03" / "count").mkdir(parents=True)
+    (tmp_path / "2026-03" / "count" / "SSIS MARCH 2026.xlsx").write_bytes(b"x")
+    monkeypatch.setattr(la, "UPLOADS", tmp_path)
+    monkeypatch.setattr(la.subprocess, "run", lambda *a, **k: None)
+    la.reset("backup", {})
+    assert not tmp_path.exists()
+
+
+def test_the_uploads_folder_is_the_one_the_panel_writes():
+    from backend.routers import monthly_batch as mb
+    assert la.UPLOADS == mb.UPLOADS
+
+
 def test_the_pages_read_the_practice_copy_on_the_throwaway_server():
     assert la.practice_url(la.LOCAL_URL) == "postgresql://postgres@127.0.0.1:55432/ssm_practice"
     la.require_throwaway(la.practice_url(la.LOCAL_URL))

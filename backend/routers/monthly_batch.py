@@ -268,10 +268,13 @@ def run(body: RunBody, user: TokenPayload = Depends(require_permission("upload.r
     cmd = _month_args(body, user)
     # A rerun after the ABC ran resumes the steps after it. run_month refuses to load again at that point, rightly.
     kinds = () if read_status(body.month)["checks"].get("abc_run") else SLICES
+    files = []
     for kind in kinds:
         folder = _month_folder(body.month, kind)
         for path in sorted(folder.iterdir()) if folder.is_dir() else []:
-            cmd += ["--slice", SLICES[kind].format(month=body.month), "--file", str(path)]
+            files += ["--slice", SLICES[kind].format(month=body.month), "--file", str(path)]
+    if files:   # a load needs a signed manifest; on the copy, the person who pressed Run signs it (scripts/practice_signed_load.py)
+        cmd = [sys.executable, "-m", "scripts.practice_signed_load", "--approved-by", _approver(user), *files, "--", *cmd[1:], *files]
     JOB.start("plan", cmd)
     return {"started": "plan"}
 
