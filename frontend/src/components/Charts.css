@@ -2497,24 +2497,16 @@
   opacity: 0.45;
 }
 
-/* Sales vs Inventory Value keeps one height whatever it shows: the two
-   panels of "Both", a single plot, the Purchases bars or the table. Until
-   2026-10-13 only "Both" was this tall; switching to any other view made
-   the card up to 145px shorter (236px on a phone), and the Annual View
-   card beside it and every card below moved with it. The legend, plots
-   and notes share the height (the lower panel keeps 44px more than the
-   upper for its month axis), and the table scrolls inside it. */
+/* Sales vs Inventory Value keeps one height whatever it shows: every chart
+   view and the table (2026-11-03: the table used to be as tall as its rows, so
+   Chart to Table made the card up to 204px shorter, and the Annual View card
+   beside it and every card below moved with it). The legend, plot, year band,
+   change panel and notes share the height, and the table scrolls inside it. */
 .yoy-body {
   display: flex;
   flex-direction: column;
-  height: 500px;
+  height: 560px;
   min-height: 0;
-}
-
-/* A phone's legend wraps onto more lines; a little less height keeps the
-   card from filling the whole screen. */
-@media (max-width: 600px) {
-  .yoy-body { height: 470px; }
 }
 
 .chart-widget .yoy-body .chart-container-yoy {
@@ -2603,13 +2595,6 @@
 
 .chart-widget-svs.is-narrow .chart-header h4 > span:first-child {
   white-space: normal;
-}
-
-/* The table view is as tall as its rows, up to the chart's height (it
-   scrolls past that), so no empty band sits under the last row. */
-.yoy-body.is-table {
-  height: auto;
-  max-height: 500px;
 }
 
 /* Forecast demand (2026-10-19): the calendar adjustment inside the forecast,
@@ -2896,26 +2881,39 @@
   color: #667085;
 }
 
-/* This card holds more than the others' bodies do: the legend, the plot, the year
-   band and the change panel. On a phone they stack up further. */
-.chart-widget-svs .yoy-body:not(.is-table) {
-  height: 560px;
+/* On a phone the legend and the panel stack up further. */
+.chart-widget-svs.is-narrow .yoy-body {
+  height: 650px;
 }
 
-.chart-widget-svs.is-narrow .yoy-body:not(.is-table) {
-  height: 650px;
+/* A table long enough to nearly fill the body stretches its rows to the bottom,
+   so no empty band sits under the last one; a longer one scrolls. A short range
+   keeps normal rows. */
+.yoy-body.is-table.is-filled .chart-table {
+  height: 100%;
+}
+
+/* A view's legend or note kept only for its height. */
+.svs-spacer {
+  visibility: hidden;
 }
 
 /* The legend: a group per metric on one flowing line. Each group after the first
    on a line has a thin rule before it; the overflow hides the rule of a group
-   that wraps to the start of a line. */
+   that wraps to the start of a line. Every view's legend sits in the one grid
+   cell, the others hidden, so the space is the tallest one's at this width and
+   the plot below stays put when a view's legend takes fewer lines. */
 .svs-legend {
   flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   margin-bottom: 6px;
   overflow: hidden;
 }
 
 .svs-legend-flow {
+  grid-area: 1 / 1;
   display: flex;
   flex-wrap: wrap;
   gap: 3px 0;
@@ -3129,6 +3127,17 @@
 .svs-strip-months span.is-active {
   font-weight: 700;
   color: #1F2A3A;
+}
+
+/* The notes that depend on the view, in one cell (see .svs-legend). */
+.svs-note-slot {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.svs-note-slot > .gap-note {
+  grid-area: 1 / 1;
 }
 
 /* A comparison with nothing to draw, in the panel's place. */

@@ -663,9 +663,16 @@ const PlotAreaReporter = ({ onChange }) => {
 // checking.
 const STRIP_HEIGHT = 48;
 const STRIP_REACH = 20;
-const SvsChangeStrip = ({ strip, rows, scale, left, width, activeIndex }) => {
+// A view with one metric: its strip also takes the room of the second row (that
+// row's name line and plot), so the panel, and the plot above it, keep their height
+// in every view.
+const STRIP_SOLO_HEIGHT = 124;
+const STRIP_SOLO_REACH = 58;
+const SvsChangeStrip = ({ strip, rows, scale, left, width, activeIndex, solo = false }) => {
+  const stripHeight = solo ? STRIP_SOLO_HEIGHT : STRIP_HEIGHT;
+  const stripReach = solo ? STRIP_SOLO_REACH : STRIP_REACH;
   const band = width / Math.max(rows.length, 1);
-  const mid = STRIP_HEIGHT / 2;
+  const mid = stripHeight / 2;
   const barWidth = clamp(Math.round(band * 0.26), 5, 12);
   const Icon = strip.icon;
   return (
@@ -676,24 +683,24 @@ const SvsChangeStrip = ({ strip, rows, scale, left, width, activeIndex }) => {
         {scale && <span className="svs-strip-range">±{scale.limit}%</span>}
       </div>
       <div className="svs-strip-row">
-        <div className="svs-strip-ticks" style={{ width: left, height: STRIP_HEIGHT }} aria-hidden="true">
+        <div className="svs-strip-ticks" style={{ width: left, height: stripHeight }} aria-hidden="true">
           {scale && (
             <>
-              <span style={{ top: mid - STRIP_REACH }}>+{scale.limit}%</span>
+              <span style={{ top: mid - stripReach }}>+{scale.limit}%</span>
               <span style={{ top: mid }}>0%</span>
-              <span style={{ top: mid + STRIP_REACH }}>−{scale.limit}%</span>
+              <span style={{ top: mid + stripReach }}>−{scale.limit}%</span>
             </>
           )}
         </div>
         <svg
           className="svs-strip-plot"
           width={width}
-          height={STRIP_HEIGHT}
+          height={stripHeight}
           role="img"
           aria-label={`${strip.label}: percentage change for each month shown, around a zero line. The exact figures are in the table view.`}
         >
-          <line className="svs-strip-grid" x1={0} x2={width} y1={mid - STRIP_REACH} y2={mid - STRIP_REACH} />
-          <line className="svs-strip-grid" x1={0} x2={width} y1={mid + STRIP_REACH} y2={mid + STRIP_REACH} />
+          <line className="svs-strip-grid" x1={0} x2={width} y1={mid - stripReach} y2={mid - stripReach} />
+          <line className="svs-strip-grid" x1={0} x2={width} y1={mid + stripReach} y2={mid + stripReach} />
           {scale && rows.map((row, i) => {
             const pct = row.change?.[strip.key]?.pct;
             if (pct == null) return null;
@@ -703,7 +710,7 @@ const SvsChangeStrip = ({ strip, rows, scale, left, width, activeIndex }) => {
               return <rect key={row.period} className="svs-strip-zero" x={cx - barWidth / 2 - 2} y={mid - 1.5} width={barWidth + 4} height={3} rx={1} fill={strip.color} opacity={opacity} />;
             }
             const over = Math.abs(pct) > scale.limit;
-            const reach = over ? STRIP_REACH : Math.max(1.5, (Math.abs(pct) / scale.limit) * STRIP_REACH);
+            const reach = over ? stripReach : Math.max(1.5, (Math.abs(pct) / scale.limit) * stripReach);
             const up = pct > 0;
             const tip = up ? mid - reach : mid + reach;
             const flagged = (strip.flags || []).some((key) => row[key]);
@@ -977,16 +984,23 @@ export const SalesVsStockWidget = ({
 
   // Is the comparison on the plot in this window? Its pale marks, the third line
   // on the axis and the legend's second column all follow this.
-  const comparedVisible = comparing && (comparePending || visibleRows.some((r) => comparedKeys.some((key) => r[key] != null)));
+  const comparedVisibleIn = (viewKey) => comparing
+    && (comparePending || visibleRows.some((r) => (COMPARED_KEYS[viewKey] || []).some((key) => r[key] != null)));
+  const comparedVisible = comparedVisibleIn(metricView);
 
   // "Previous period" on a range that isn't whole years pairs different months.
   const monthsDiffer = comparedVisible && visibleRows.some((r) => (
     r.comparePeriod && monthName(r.comparePeriod) !== monthName(r.period)
   ));
 
-  // The legend: each metric's group, then its periods by their dates for the
-  // months on show. A window of a long range has its own two periods.
-  const legendGroups = (() => {
+  // A view's legend: each metric's group, then its periods by their dates for the
+  // months on show. A window of a long range has its own two periods. Every view's
+  // is built, because the legend's space is the tallest one's (.svs-legend).
+  const legendFor = (viewKey) => {
+    const weeks = viewKey === 'weeks';
+    const bars = viewKey === 'both' || viewKey === 'sales';
+    const stockLine = viewKey === 'both' || viewKey === 'inventory';
+    const comparedOn = comparedVisibleIn(viewKey);
     const entry = (kind, color, text) => ({ kind, color, text });
     const lastShown = visibleRows[visibleRows.length - 1];
     const shownLabel = lastShown ? periodsLabel(visibleRows[0].period, lastShown.period) : '';
@@ -995,18 +1009,18 @@ export const SalesVsStockWidget = ({
       : '';
     const drawn = (...keys) => visibleRows.some((r) => keys.some((key) => r[key] != null));
     const metrics = [];
-    if (purchasesView) {
+    if (viewKey === 'purchases') {
       metrics.push(
         ['Sold', 'bar', SOLD_COLOR, 'bar', COMPARE_COLOR.sales, drawn('salesC')],
         [boughtLabel, 'bar', BOUGHT_COLOR, 'bar', COMPARE_COLOR.bought, drawn('boughtC')],
       );
-    } else if (!weeksView) {
-      if (salesBars) metrics.push(['Sales', 'bar', SVS_COLOR.sales, 'bar', COMPARE_COLOR.sales, drawn('salesC', 'salesestC')]);
-      if (drawsStock) metrics.push(['Inventory value', 'line', SVS_COLOR.stock, 'dash', COMPARE_COLOR.stock, drawn('stockC', 'stockestC')]);
-      if (returnsView) metrics.push(['Returns', 'line', SVS_COLOR.returns, 'dash', COMPARE_COLOR.returns, drawn('returnsC', 'retestC')]);
+    } else if (!weeks) {
+      if (bars) metrics.push(['Sales', 'bar', SVS_COLOR.sales, 'bar', COMPARE_COLOR.sales, drawn('salesC', 'salesestC')]);
+      if (stockLine) metrics.push(['Inventory value', 'line', SVS_COLOR.stock, 'dash', COMPARE_COLOR.stock, drawn('stockC', 'stockestC')]);
+      if (viewKey === 'returns') metrics.push(['Returns', 'line', SVS_COLOR.returns, 'dash', COMPARE_COLOR.returns, drawn('returnsC', 'retestC')]);
     }
     const out = [];
-    if (weeksView) {
+    if (weeks) {
       out.push({
         label: null,
         items: [
@@ -1014,10 +1028,10 @@ export const SalesVsStockWidget = ({
           entry('bar', WEEKS_NEAR, `Near the rule (${policyWeeks - WEEKS_NEAR_BAND}–${policyWeeks + WEEKS_NEAR_BAND} wks)`),
           entry('bar', WEEKS_OVER, 'Over the rule'),
           entry('dash', '#344054', `SSM's ${policyWeeks}-week rule`),
-          ...(comparedVisible ? [entry('bar', COMPARE_COLOR.weeks, comparedShown)] : []),
+          ...(comparedOn ? [entry('bar', COMPARE_COLOR.weeks, comparedShown)] : []),
         ],
       });
-    } else if (comparedVisible) {
+    } else if (comparedOn) {
       metrics.forEach(([label, kind, color, comparedKind, comparedColor, comparedDrawn]) => {
         out.push({
           label,
@@ -1028,18 +1042,18 @@ export const SalesVsStockWidget = ({
       out.push({ label: null, items: metrics.map(([label, kind, color]) => entry(kind, color, label)) });
     }
     const notes = [];
-    const flaggedOnShow = (drawsStock || weeksView) && visibleRows.some((r) => (
-      (r.flagged && (weeksView ? r.weeks != null : r.stock != null))
-      || (r.flaggedC && (weeksView ? r.weeksC != null : r.stockC != null))
+    const flaggedOnShow = (stockLine || weeks) && visibleRows.some((r) => (
+      (r.flagged && (weeks ? r.weeks != null : r.stock != null))
+      || (r.flaggedC && (weeks ? r.weeksC != null : r.stockC != null))
     ));
-    if (flaggedOnShow) notes.push(entry(weeksView ? 'outline' : 'dot', weeksView ? '#475467' : UNUSUAL_INK, 'Stock count needs checking'));
+    if (flaggedOnShow) notes.push(entry(weeks ? 'outline' : 'dot', weeks ? '#475467' : UNUSUAL_INK, 'Stock count needs checking'));
     if (visibleRows.some((r) => isSyntheticMonth(r.pt) || isSyntheticMonth(r.cpt))) {
-      notes.push(entry('hatch', salesBars ? SVS_COLOR.sales : UNUSUAL_INK, 'Synthetic data'));
+      notes.push(entry('hatch', bars ? SVS_COLOR.sales : UNUSUAL_INK, 'Synthetic data'));
     }
     if (filledEstimate) notes.push(entry('dotted', UNUSUAL_INK, ESTIMATE_KIND_TEXT.filled));
     if (notes.length) out.push({ label: null, items: notes });
     return out;
-  })();
+  };
   const yearGroups = yearGroupsOf(visibleRows.map((r) => r.period));
 
   // ── The month being read: one index for the plot, the strips and the hover,
@@ -1370,7 +1384,7 @@ export const SalesVsStockWidget = ({
       {!hasData || !filledMonths.length ? (
         <p className="dashboard-empty-note">{emptyReason || 'No data available for this range'}</p>
       ) : view === 'table' ? (
-        <div className="yoy-body is-table">
+        <div className={`yoy-body is-table${tableRows.length >= 10 ? ' is-filled' : ''}`}>
           <ChartTable
             columns={tableColumns}
             rows={tableRows}
@@ -1380,19 +1394,21 @@ export const SalesVsStockWidget = ({
       ) : (
         <div className="yoy-body">
           <div className="svs-legend">
-            <div className="svs-legend-flow">
-              {legendGroups.map((group, i) => (
-                <ul key={group.label || i} className="custom-legend svs-legend-group">
-                  {group.label && <li className="svs-legend-label">{group.label}</li>}
-                  {group.items.map((item) => (
-                    <li key={item.text} className="legend-item">
-                      <SvsSwatch kind={item.kind} color={item.color} />
-                      {item.text}
-                    </li>
-                  ))}
-                </ul>
-              ))}
-            </div>
+            {metricViews.map(([key]) => (
+              <div key={key} className={`svs-legend-flow${key === metricView ? '' : ' svs-spacer'}`}>
+                {legendFor(key).map((group, i) => (
+                  <ul key={group.label || i} className="custom-legend svs-legend-group">
+                    {group.label && <li className="svs-legend-label">{group.label}</li>}
+                    {group.items.map((item) => (
+                      <li key={item.text} className="legend-item">
+                        <SvsSwatch kind={item.kind} color={item.color} />
+                        {item.text}
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+              </div>
+            ))}
           </div>
           <div
             className="svs-plot-frame"
@@ -1623,6 +1639,7 @@ export const SalesVsStockWidget = ({
                         left={plot.x}
                         width={plot.width}
                         activeIndex={activeIndex}
+                        solo={strips.length === 1}
                       />
                     ))}
                     <div className="svs-strip-months" style={{ marginLeft: plot.x, width: plot.width }} aria-hidden="true">
@@ -1663,23 +1680,26 @@ export const SalesVsStockWidget = ({
             </div>
           )}
           {/* The notes sit inside the body, whose height is fixed (.yoy-body):
-              the plot gives way to them, so a note one view has and another
-              does not never moves the card. With synthetic data on, they are
-              about SSM's own figures: say what the hatched bars and dotted
-              lines are first. */}
-          {!purchasesView && synthetic && (
-            <p className="gap-note" role="note">
-              <strong>Synthetic.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
-              dotted lines), because synthetic data is on. The solid bars and lines are SSM&apos;s own data, and the notes
-              below are about them.
-            </p>
-          )}
-          {purchasesView && flaggedOutlines.length > 0 && (
-            <p className="gap-note" role="note">
-              {flaggedOutlines.join(' and ')} &ldquo;bought&rdquo; {flaggedOutlines.length === 1 ? 'is' : 'are'} outlined:{' '}
-              {flaggedOutlines.length === 1 ? 'it comes' : 'they come'} from the stock count that needs checking.
-            </p>
-          )}
+              the plot gives way to them. The two that depend on the view share
+              one slot, as tall as the taller, so the plot stays put when a view
+              has the other one or neither. With synthetic data on, the notes are
+              about SSM's own figures: say what the hatched bars and dotted lines
+              are first. */}
+          <div className="svs-note-slot">
+            {synthetic && (
+              <p className={`gap-note${purchasesView ? ' svs-spacer' : ''}`} role="note">
+                <strong>Synthetic.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
+                dotted lines), because synthetic data is on. The solid bars and lines are SSM&apos;s own data, and the notes
+                below are about them.
+              </p>
+            )}
+            {flaggedOutlines.length > 0 && (
+              <p className={`gap-note${purchasesView ? '' : ' svs-spacer'}`} role="note">
+                {flaggedOutlines.join(' and ')} &ldquo;bought&rdquo; {flaggedOutlines.length === 1 ? 'is' : 'are'} outlined:{' '}
+                {flaggedOutlines.length === 1 ? 'it comes' : 'they come'} from the stock count that needs checking.
+              </p>
+            )}
+          </div>
           {/* What the empty months mean (GET /dashboard's gap_note). */}
           <GapNote note={gapNote} />
         </div>
