@@ -108,6 +108,24 @@ export function notPlannedByCover(items) {
   ));
 }
 
+// One row's reason, short enough for a table of 80: the server's full sentence
+// (reason_text) goes in the row's hover text. A reason not named here shows that sentence.
+const NOT_PLANNED_WHY = {
+  mase_gate: 'Forecast accuracy check not passed',
+  insufficient_data: 'Too little sales history to forecast',
+  dead: 'No sale in the last 6 months',
+};
+
+export function notPlannedWhy(item) {
+  const short = NOT_PLANNED_WHY[item.reason];
+  if (!short) return item.reason_text;
+  if (item.reason !== 'mase_gate' || item.mase == null) return short;
+  // Three decimals right at the gate, as GET /abc gives it, so 1.004 doesn't read
+  // "1.00" beside a "below 1" rule.
+  const mase = Number(item.mase);
+  return `${short} (MASE ${mase.toFixed(Math.abs(mase - 1) < 0.01 ? 3 : 2)})`;
+}
+
 export function notPlannedLede(items, month) {
   const named = new Set(NOT_PLANNED_REASONS.map(([code]) => code));
   const parts = NOT_PLANNED_REASONS

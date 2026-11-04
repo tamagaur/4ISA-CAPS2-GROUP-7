@@ -165,8 +165,10 @@ class NotPlannedItem(BaseModel):
     review_reasons: list[str] = []
     review_over_run_months: int | None = None
     review_collapse_ratio: float | None = None
-    # For the Reorder page's Not in This Plan list: the ABC run's revenue share, and days of cover by _cover's rules (pieces
-    # over pieces; None with cover_blocked_reason saying why), so a row here compares with a row of the plan.
+    # For the Reorder page's Not in This Plan list: the forecast's MASE, the ABC run's revenue share, and days of cover by
+    # _cover's rules (pieces over pieces; None with cover_blocked_reason saying why), so a row here compares with a row of
+    # the plan.
+    mase: float | None = None
     revenue_share: float | None = None
     days_of_cover: float | None = None
     cover_blocked_reason: str | None = None

@@ -10,7 +10,7 @@ import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import { formatMonth } from '../utils/formatDate';
 import { formatCoverDays } from '../utils/formatNumber';
-import { matchesSearch, notPlannedByCover, notPlannedLede, revenueShareBasis } from '../utils/reorderView';
+import { matchesSearch, notPlannedByCover, notPlannedLede, notPlannedWhy, revenueShareBasis } from '../utils/reorderView';
 
 // How many rows show before "Show all". A length for the page, not a limit on the
 // list: the first rows are the lowest cover, and the rest are one click away.
@@ -85,7 +85,7 @@ const ReorderNotPlanned = ({
                     openLabel="See this product’s sales history and forecast"
                   />
                 </td>
-                <td className="col-text reorder-notplanned-why" data-label="Why It Isn’t Planned">{item.reason_text}</td>
+                <td className="col-text reorder-notplanned-why" data-label="Why It Isn’t Planned" title={item.reason_text}>{notPlannedWhy(item)}</td>
                 <td className="table-center" data-label="Opening Stock">
                   {item.stock_not_in_count && (
                     <span className="reorder-count-flag" title={notInCountNote}>

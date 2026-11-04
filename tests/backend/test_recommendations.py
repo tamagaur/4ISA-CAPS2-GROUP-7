@@ -937,7 +937,8 @@ def test_not_planned_carries_revenue_share_and_cover_for_the_reorder_page(sessio
     ]
     body = _get(session, "/recommendations?principal=unilever")
     got = {i["sku_id"]: i for i in body["not_planned"]}
-    assert got["COV"]["revenue_share"] == 0.02
+    assert got["COV"]["revenue_share"] == 0.02 and got["COV"]["mase"] == 1.2
+    assert got["DEAD"]["mase"] is None
     assert got["COV"]["days_of_cover"] == pytest.approx(15.2, abs=0.05) and got["COV"]["cover_blocked_reason"] is None
     assert got["ABS"]["days_of_cover"] == 0.0 and got["ABS"]["revenue_share"] is None
     assert got["DEAD"]["days_of_cover"] is None and got["DEAD"]["cover_blocked_reason"]

@@ -706,7 +706,7 @@ def not_planned(db: Session, cycle, principal: str | None, abc_periods: dict | N
         days_of_cover, cover_reason = _cover(0.0 if absent else stock, recent)
         out.append(NotPlannedItem(
             sku_id=r["sku_id"] or "", product_name=r["product_name"], reason=reason, reason_text=NOT_PLANNED_REASONS[reason],
-            revenue_share=_opt_float(r, "revenue_share"),
+            mase=_opt_float(r, "mase"), revenue_share=_opt_float(r, "revenue_share"),
             current_stock=0.0 if absent else stock, stock_not_in_count=absent,
             stock_blocked_reason=NO_PACK_SIZE_REASON if stock is None and r["current_stock_cases"] is not None else None,
             recent_monthly_pieces=recent,

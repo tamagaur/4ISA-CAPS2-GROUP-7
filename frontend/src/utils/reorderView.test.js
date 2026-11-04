@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   COVER_BASIS_NOTE, MONTH_TOTAL_NOTE, awaitsDecision, bulkSummary, casesCell, casesNote, filterRows, formatUpdatedAgo,
-  forecastsNoSales, isBelowTarget, isProjectedOpening, matchesSearch, noOrderReason, notPlannedByCover, notPlannedLede, ordersNothing,
+  forecastsNoSales, isBelowTarget, isProjectedOpening, matchesSearch, noOrderReason, notPlannedByCover, notPlannedLede, notPlannedWhy, ordersNothing,
   paramsWithView, parseView, planOrderCounts, projectedLabel,
   projectedNote, provisionalDetail, revenueShareBasis, rowActions, splitBulkRows, tableTier, viewCounts,
 } from './reorderView.js';
@@ -494,6 +494,15 @@ test('the not-planned lede counts every reason and names the ABC month', () => {
     notPlannedLede([{ reason: 'dead' }], null),
     '1 top seller (Class A) has no suggested order: 1 with no sale in the last 6 months.',
   );
+});
+
+test('a not-planned row gives a short reason, and the sentence for one it does not name', () => {
+  assert.equal(notPlannedWhy({ reason: 'mase_gate', mase: 1.25 }), 'Forecast accuracy check not passed (MASE 1.25)');
+  assert.equal(notPlannedWhy({ reason: 'mase_gate', mase: 1.004 }), 'Forecast accuracy check not passed (MASE 1.004)');
+  assert.equal(notPlannedWhy({ reason: 'mase_gate', mase: null }), 'Forecast accuracy check not passed');
+  assert.equal(notPlannedWhy({ reason: 'insufficient_data' }), 'Too little sales history to forecast');
+  assert.equal(notPlannedWhy({ reason: 'dead' }), 'No sale in the last 6 months');
+  assert.equal(notPlannedWhy({ reason: 'other', reason_text: 'No plan row.' }), 'No plan row.');
 });
 
 test('the not-planned list reads lowest cover first, and no figure last', () => {
