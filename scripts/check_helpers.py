@@ -1,7 +1,9 @@
 """Helpers for scripts/check.sh. Two subcommands, both exit non-zero on failure.
 
-    python scripts/check_helpers.py env
-        The live database must be configured AND reachable (read-only probe). Names the missing variable.
+    python scripts/check_helpers.py env [--full]
+        The live database must be configured AND reachable (read-only probe), and every variable the checks import
+        must be set: SUPABASE_DB_URL and SUPABASE_KEY always (analytics/config.py), plus JWT_SECRET_KEY with --full
+        (two test modules build a signed token at import, KNOWN_ISSUES B1). Names every missing variable.
     python scripts/check_helpers.py junit <junit.xml> [--allow-listed]
         Fails if any test was skipped that is not on scripts/known_opt_in_skips.txt (exact id and reason), or none ran.
         Skipped is not passed: a suite where tests vanish when an environment variable is unset looks healthy
@@ -17,13 +19,14 @@ from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-REQUIRED = ("SUPABASE_DB_URL",)
+REQUIRED = ("SUPABASE_DB_URL", "SUPABASE_KEY")
+REQUIRED_FULL = ("JWT_SECRET_KEY",)   # read at import by tests/backend/test_reorder_approval.py and test_reorder_requests.py
 
 
-def cmd_env() -> int:
+def cmd_env(full: bool = False) -> int:
     from dotenv import load_dotenv
     load_dotenv(REPO / ".env")
-    missing = [n for n in REQUIRED if not os.environ.get(n) or "<" in os.environ[n]]
+    missing = [n for n in (REQUIRED + REQUIRED_FULL if full else REQUIRED) if not os.environ.get(n) or "<" in os.environ[n]]
     if missing:
         print(f"FAIL: live checks cannot run, environment variable(s) not set: {', '.join(missing)}")
         print("      set them in .env or the shell; a check that cannot run is a failure, not a pass")
@@ -103,7 +106,7 @@ def cmd_junit(path: str, allowed: dict[str, str] | None = None) -> int:
 
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "env":
-        sys.exit(cmd_env())
+        sys.exit(cmd_env(full="--full" in sys.argv[2:]))
     if len(sys.argv) in (3, 4) and sys.argv[1] == "junit":
         sys.exit(cmd_junit(sys.argv[2], load_allowed() if sys.argv[3:] == ["--allow-listed"] else None))
     print(__doc__)

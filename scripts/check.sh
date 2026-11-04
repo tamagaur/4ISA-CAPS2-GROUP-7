@@ -75,7 +75,8 @@ frontend_build(){
   (cd frontend && npm run build)
 }
 
-step "live database configured and reachable" "$PY" scripts/check_helpers.py env
+ENV_ARGS=(); [ "$MODE" = "--full" ] && ENV_ARGS=(--full)
+step "live database configured and reachable, required variables set" "$PY" scripts/check_helpers.py env "${ENV_ARGS[@]}"
 step "backend lint (ruff, correctness rules)" lint_backend
 step "frontend lint (oxlint, errors)" lint_frontend
 step "pinned figures reproduce" pinned
