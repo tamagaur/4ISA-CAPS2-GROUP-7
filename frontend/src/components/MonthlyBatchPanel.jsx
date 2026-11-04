@@ -1,10 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, FileText, Loader2, Upload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, CheckCircle2, Circle, FileText, Loader2, Upload, XCircle } from 'lucide-react';
 import SectionLede from './ui/SectionLede';
+import MonthlyChecklist from './MonthlyChecklist';
+import { ApproveFileDialog, PendingDecisionsDialog, RunConfirmDialog } from './MonthlyBatchDialogs';
+import { usePermissions } from '../permissions/context';
+import { P } from '../permissions/keys';
 import {
-  closeBatch, generatePracticeMonth, getBatchFeedback, getBatchJob, getBatchStatus, runBatch, uploadBatchFile,
+  closeBatch, generatePracticeMonth, getBatchChecklist, getBatchFeedback, getBatchJob, getBatchStatus, runBatch, signoffBatch, uploadBatchFile, validateBatch,
 } from '../api/monthlyBatch';
-import { batchStage, canRun, planChange } from '../utils/monthlyBatchSteps';
+import {
+  batchStage, canRun, decisionsBlocked, formatWhen, planChange, processingFacts, reorderPath, runHint, STEP_STATE, WORKFLOW,
+} from '../utils/monthlyBatchSteps';
 import './MonthlyBatchPanel.css';
 
 const POLL_MS = 2000;
@@ -88,33 +95,118 @@ const Feedback = ({ report }) => {
   );
 };
 
+// How the month's run ended, from the backend (batch_checklist.run_result).
+// Complete means the job exited 0 and the plan exists: a started job is not a
+// finished one. Stages are what the run reported, never a percentage.
+const RunStages = ({ steps }) => (
+  <ul className="mb-stages">
+    {steps.map((s) => (
+      <li key={s.stage} className={`is-${s.state}`}>
+        <span>{s.label}</span>
+        <span className="mb-small">{STEP_STATE[s.state] ?? s.state}</span>
+      </li>
+    ))}
+  </ul>
+);
+
+const RunResult = ({ result, job }) => {
+  if (!result) return null;
+  const steps = job?.steps || [];
+  if (result.state === 'processing') {
+    return (
+      <div className="mb-result is-processing" role="status">
+        <h5><Loader2 className="mb-spin" size={16} aria-hidden="true" /> {result.kind === 'close' ? `Closing ${result.month}` : result.kind === 'practice' ? 'Generating practice sales' : `Processing ${result.month}`}</h5>
+        <p className="mb-small">This takes a few minutes. A reload is safe: it comes back still running.</p>
+        {steps.length > 0 && <RunStages steps={steps} />}
+      </div>
+    );
+  }
+  if (result.state === 'completed') {
+    const when = formatWhen(result.finished_at);
+    return (
+      <div className="mb-result is-completed" role="status">
+        <h5><CheckCircle2 size={16} aria-hidden="true" /> Monthly Processing Complete</h5>
+        <p>The selected month&apos;s data has been processed successfully. Review the new plan, then close the month.</p>
+        <dl className="mb-result-facts">
+          <div><dt>Processing month</dt><dd>{result.month}</dd></div>
+          {when && <div><dt>Completed</dt><dd>{when}</dd></div>}
+          {result.run_id != null && <div><dt>Plan run</dt><dd>{result.run_id}</dd></div>}
+        </dl>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-result is-failed" role="alert">
+      <h5><XCircle size={16} aria-hidden="true" /> {result.kind === 'plan' ? 'Monthly Processing Failed' : `${result.failed_stage} failed`}</h5>
+      <p>{result.kind === 'plan' ? "An issue occurred while processing the selected month's data." : result.message}</p>
+      <dl className="mb-result-facts">
+        {result.kind === 'plan' && <div><dt>Stopped at</dt><dd>{result.failed_stage}</dd></div>}
+        {result.kind === 'plan' && <div><dt>What happened</dt><dd>{result.message}</dd></div>}
+        <div><dt>What to do</dt><dd>{result.action}</dd></div>
+      </dl>
+      <details className="mb-check-details">
+        <summary>Review available details</summary>
+        {steps.length > 0 && <RunStages steps={steps} />}
+        <p className="mb-small">Job {result.job_id}. The full technical log is saved under local/monthly_batch/logs.</p>
+      </details>
+    </div>
+  );
+};
+
 // The Data Management page's monthly batch. DataUpload shows this only when the
 // backend says it is enabled, which today means the local practice database.
 const MonthlyBatchPanel = ({ initialStatus }) => {
+  const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
   const [status, setStatus] = useState(initialStatus);
   const [job, setJob] = useState(initialStatus.job);
+  const [checklist, setChecklist] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [calendarFactor, setCalendarFactor] = useState(null);
   const [reviewed, setReviewed] = useState(false);
   const [error, setError] = useState('');
-  const logEnd = useRef(null);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState(null);     // 'decisions' | 'run' | 'approve'
+  const uploadStep = useRef(null);
   const month = status.month;
-  const stage = job?.status === 'running' ? 'running' : batchStage({ ...status, job });
+  const running = job?.status === 'running';
+  const stage = running ? 'running' : batchStage({ ...status, job });
 
+  // Both answers are read fresh, so the page never acts on what it saw earlier.
   const refresh = useCallback(async (forMonth) => {
-    const next = await getBatchStatus(forMonth);
+    const [next, list] = await Promise.all([getBatchStatus(forMonth), getBatchChecklist(forMonth)]);
     setStatus(next);
     setJob(next.job);
-    return next;
+    setChecklist(list);
+    return list;
   }, []);
 
+  useEffect(() => {
+    let current = true;
+    getBatchChecklist(initialStatus.month)
+      .then((list) => { if (current) setChecklist(list); })
+      .catch((e) => { if (current) setError(e.message); });
+    return () => { current = false; };
+  }, [initialStatus.month]);
+
+  // One request at a time. `busy` disables the buttons on the next render, which
+  // is too late for a second click on the same button; this answers at once.
+  const inFlight = useRef(false);
   const act = async (fn) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError('');
+    setNotice('');
+    setBusy(true);
     try {
       await fn();
       setJob(await getBatchJob());
     } catch (e) {
       setError(e.message);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
     }
   };
 
@@ -128,7 +220,8 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
         if (next.status !== 'running') {
           clearInterval(timer);
           setFeedback(null);
-          await refresh(month);
+          const list = await refresh(month);
+          if (next.kind === 'validate' && decisionsBlocked(list)) setDialog('decisions');
         }
       } catch (e) {
         setError(e.message);
@@ -144,23 +237,63 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
     return () => { current = false; };
   }, [stage, month]);
 
-  // The reason a step stopped is at the end of its output.
-  useEffect(() => {
-    if (logEnd.current) logEnd.current.scrollTop = logEnd.current.scrollHeight;
-  }, [job?.log, job?.status]);
-
   const pick = (kind) => (file) => act(async () => {
     await uploadBatchFile(month, kind, file);
     await refresh(month);
   });
 
+  const validate = () => act(async () => {
+    const res = await validateBatch(month);
+    if (!res.started) {
+      const list = await refresh(month);
+      if (decisionsBlocked(list)) setDialog('decisions');
+    }
+  });
+
+  const run = () => {
+    setDialog(null);
+    act(async () => {
+      try {
+        await runBatch(month, calendarFactor);
+      } catch (e) {
+        // Something changed since the last look. The backend's answer stands.
+        if (e.code === 'batch_checks_failed') {
+          const list = await refresh(month);
+          if (decisionsBlocked(list)) setDialog('decisions');
+        }
+        throw e;
+      }
+    });
+  };
+
+  const approve = async () => {
+    await signoffBatch(month);
+    await refresh(month);
+    setDialog(null);
+    setNotice('The file is approved. It can load as long as it does not change.');
+  };
+
+  const onCheckAction = (actionId) => {
+    if (actionId === 'validate') validate();
+    else if (actionId === 'review_recommendations') setDialog('decisions');
+    else if (actionId === 'approve') setDialog('approve');
+    else if (actionId === 'upload') uploadStep.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const expectedTotal = Math.round(status.next_plan.pieces);
   const change = planChange(status.plan.pieces, status.next_plan.pieces);
   const practiceAvailable = month === status.practice_month && !status.checks.sales_loaded;
-  const failed = job?.status === 'failed';
+  const workflow = WORKFLOW[checklist?.workflow];
+  const facts = processingFacts({ ...status, job }, checklist);
+  const result = checklist?.result ?? status.result;
+  const shownResult = running && job.kind !== 'validate' ? { state: 'processing', kind: job.kind, month } : result;
+  const hint = runHint(checklist, calendarFactor);
+  const inputsLocked = running || busy;
+  const finished = stage === 'review' || stage === 'closed';
+  const closeMissing = status.close_missing || [];
 
   return (
-    <section className="mb-panel" aria-label="Monthly batch">
+    <section className="mb-panel" aria-label="Monthly Data Processing">
       <p className="ui-note is-info" role="note">
         <AlertTriangle size={16} aria-hidden="true" />
         <span>
@@ -169,36 +302,71 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
         </span>
       </p>
 
-      <SectionLede className="is-standalone">Monthly batch for {month}</SectionLede>
+      <header className="mb-head">
+        <div>
+          <h3 className="mb-title">Monthly Data Processing</h3>
+          <p className="mb-small">Upload and validate monthly records before updating inventory analytics.</p>
+        </div>
+        {workflow && <span className={`badge ${workflow.badge}`} role="status">{workflow.label}</span>}
+      </header>
+
+      <dl className="mb-status">
+        <div><dt>Processing month</dt><dd>{facts.month}</dd></div>
+        <div><dt>Upload</dt><dd>{facts.upload}</dd></div>
+        <div><dt>Validation</dt><dd>{facts.validation}</dd></div>
+        <div><dt>Processing</dt><dd>{facts.processing}</dd></div>
+        <div><dt>Current step</dt><dd>{facts.step}</dd></div>
+      </dl>
+
       {error && <p className="ui-note is-warning" role="alert"><AlertTriangle size={16} aria-hidden="true" /><span>{error}</span></p>}
+      {notice && <p className="ui-note is-success" role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span></p>}
+      <RunResult result={shownResult} job={job} />
 
       <ol className="mb-steps">
-        <li className="mb-step">
-          <h4>1. Add the month's data</h4>
+        <li className="mb-step mb-step-wide" ref={uploadStep}>
+          <h4>1. Upload monthly data</h4>
           {status.checks.sales_loaded ? (
             <p className="mb-done"><CheckCircle2 size={16} aria-hidden="true" /> {month} sales are in the database.</p>
           ) : (
-            <>
-              <FileSlot label="Sales per product" hint="The Unilever sales-per-SKU file" file={status.files.sales} disabled={stage === 'running'} onPick={pick('sales')} />
-              <FileSlot label="Stock count (optional)" hint={status.checks.count_loaded ? 'Already loaded for this month' : 'The month\'s stock count'} file={status.files.count} disabled={stage === 'running'} onPick={pick('count')} />
+            <div className="mb-files">
+              <FileSlot label="Sales per product" hint="The Unilever sales-per-SKU file" file={status.files.sales} disabled={inputsLocked} onPick={pick('sales')} />
+              <FileSlot label="Stock count (optional)" hint={status.checks.count_loaded ? 'Already loaded for this month' : 'The month\'s stock count'} file={status.files.count} disabled={inputsLocked} onPick={pick('count')} />
               {practiceAvailable && (
                 <button
                   type="button"
                   className="btn btn-tertiary btn-sm"
-                  disabled={stage === 'running'}
+                  disabled={inputsLocked}
                   onClick={() => act(() => generatePracticeMonth(month))}
                 >
                   No file? Generate practice sales
                 </button>
               )}
-            </>
+            </div>
           )}
         </li>
 
+        <li className="mb-step mb-step-wide">
+          <div className="mb-step-head">
+            <div>
+              <h4>2. Validate</h4>
+              <p className="mb-small">Carries over the Reorder page&apos;s decisions and checks any waiting file. It loads nothing.</p>
+            </div>
+            <button
+              type="button"
+              className={`btn ${checklist?.workflow === 'ready_for_validation' ? 'btn-primary' : 'btn-secondary'}`}
+              disabled={inputsLocked || finished}
+              onClick={validate}
+            >
+              {checklist?.validated ? 'Run Validation Again' : 'Run Validation'}
+            </button>
+          </div>
+          <MonthlyChecklist checklist={checklist} onAction={onCheckAction} busy={inputsLocked} />
+        </li>
+
         <li className="mb-step">
-          <h4>2. Run the month</h4>
+          <h4>3. Run the month</h4>
           <p className="mb-small">Loads any files, then updates ABC, the forecast and the order plan for {status.next_month}. It stops before anything is closed.</p>
-          <fieldset className="mb-choice" disabled={stage !== 'ready'}>
+          <fieldset className="mb-choice" disabled={inputsLocked || (finished && checklist?.workflow !== 'failed')}>
             <legend>Calendar factor</legend>
             {['on', 'off'].map((value) => (
               <label key={value}>
@@ -210,16 +378,27 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!canRun(stage, calendarFactor)}
-            onClick={() => act(() => runBatch(month, calendarFactor))}
+            disabled={inputsLocked || !canRun(checklist, calendarFactor)}
+            onClick={() => setDialog('run')}
           >
-            Run {month}
+            Run the Month
           </button>
+          {hint && !finished && <p className="mb-small">{hint}</p>}
+          {checklist?.progress && (
+            <ul className="mb-progress" aria-label="What has run for this month">
+              {checklist.progress.map((p) => (
+                <li key={p.id} className={p.done ? 'is-done' : ''}>
+                  {p.done ? <CheckCircle2 size={14} aria-hidden="true" /> : <Circle size={14} aria-hidden="true" />}
+                  {p.name}<span className="visually-hidden">{p.done ? ': done' : ': not yet'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </li>
 
         <li className="mb-step">
-          <h4>3. Review the new plan</h4>
-          {stage === 'review' || stage === 'closed' ? (
+          <h4>4. Review the new plan</h4>
+          {finished ? (
             <>
               <div className="mb-table-wrap">
                 <table className="mb-table">
@@ -236,12 +415,15 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           ) : <p className="mb-small">The old and new plans appear here after the run.</p>}
         </li>
 
-        <li className="mb-step">
-          <h4>4. Close {month}</h4>
+        <li className="mb-step mb-step-wide">
+          <h4>5. Close {month}</h4>
           {stage === 'closed' ? (
             <p className="mb-done"><CheckCircle2 size={16} aria-hidden="true" /> {month} is closed.</p>
           ) : (
             <>
+              {stage === 'review' && closeMissing.length > 0 && (
+                <p className="mb-small">Closing will be refused until: {closeMissing.join('; ')}.</p>
+              )}
               <label className="mb-confirm">
                 <input type="checkbox" checked={reviewed} disabled={stage !== 'review'} onChange={(e) => setReviewed(e.target.checked)} />
                 {' '}I have read the plan above{stage === 'review' ? ` (${pieces(expectedTotal)} pieces)` : ''}.
@@ -249,7 +431,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={stage !== 'review' || !reviewed || !calendarFactorForClose(calendarFactor)}
+                disabled={stage !== 'review' || !reviewed || !calendarFactorForClose(calendarFactor) || busy}
                 onClick={() => act(() => closeBatch(month, calendarFactorForClose(calendarFactor), expectedTotal))}
               >
                 Close {month}
@@ -259,14 +441,28 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
         </li>
       </ol>
 
-      {(stage === 'running' || failed || job?.log) && (
-        <details className="mb-log" open={stage === 'running' || failed}>
-          <summary>
-            {stage === 'running' && <Loader2 className="mb-spin" size={15} aria-hidden="true" />}
-            {stage === 'running' ? ' Running, this takes a few minutes' : failed ? ` The last step stopped (exit ${job.exit_code}). Fix the cause and run again; finished steps are skipped.` : 'Output of the last step'}
-          </summary>
-          <pre ref={logEnd}>{(job?.log || '').split('\n').slice(-60).join('\n')}</pre>
-        </details>
+      {dialog === 'decisions' && checklist && (
+        <PendingDecisionsDialog
+          month={month}
+          nextMonth={status.next_month}
+          decisions={checklist.decisions}
+          canReview={hasPermission(P.LP_VIEW)}
+          onReview={() => navigate(reorderPath(checklist.decisions))}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'run' && checklist && (
+        <RunConfirmDialog
+          month={month}
+          nextMonth={status.next_month}
+          calendarFactor={calendarFactor}
+          warnings={checklist.summary.warning}
+          onConfirm={run}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'approve' && checklist && (
+        <ApproveFileDialog fileCheck={checklist.file_check} onApprove={approve} onClose={() => setDialog(null)} />
       )}
     </section>
   );

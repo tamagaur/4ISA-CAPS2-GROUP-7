@@ -7,6 +7,8 @@ scripts/run_month.py - the monthly batch: one command over the existing steps (2
         --approved-by NAME --expect-month 2026-03 --target-public                         # load, ABC, forecast, plan; stops for review
     python -m scripts.run_month --month 2026-03 --calendar-factor on --close --expect-plan-pieces N \\
         --approved-by NAME --expect-month 2026-03 --target-public                         # closes the month after a person read the plan
+    python -m scripts.run_month --month 2026-03 --calendar-factor on --check-files \\
+        --slice unilever:unilever_sku_demand_fact:2026-03 --file local/x.xls              # the loader's dry run, nothing loaded
 
 --month is the month whose sales and count just arrived. It produces the plan for the month after, then closes this one.
 
@@ -17,6 +19,12 @@ that exits non-zero stops the batch with that exit code, and running the same co
 THE STOP BEFORE THE CLOSE. The first write run ends by printing the old and new plan side by side, the stock count against
 its earlier ones, and the feedback report. There is no threshold for "too large": nothing on record sets one. The close
 needs --expect-plan-pieces with the total that person saw (the gate pattern of scripts/clean_dead_skus.py).
+
+UNSETTLED REORDER DECISIONS STOP THE RUN (2026-11-04, provisional, for Yuan's review: docs/MONTHLY_BATCH_REVIEW.md). Once the
+next plan is written this month's rows can no longer be decided (backend/routers/recommendations.py, the current-cycle rule), and
+an accepted order counts as stock on the way in that next plan (stock_opening_v). So preflight_refusals refuses while this month's
+plan holds a row someone can still decide, or a staff request an admin has not settled. It does not stop a rerun once the next
+plan exists, or a close: by then those rows cannot be decided, and a refusal could never clear. There is no override.
 
 THE CALENDAR FACTOR has no default here. The forecast runner's default is off, the live forecast used it, and a monthly
 run that silently turned it off would move the plan (team decision DEC-41; adviser sign-off outstanding, still pending, see CLAUDE.md).
@@ -30,7 +38,10 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
+import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -44,7 +55,7 @@ from analytics.params import abc_method  # noqa: E402
 from scripts import close_cycle  # noqa: E402
 from scripts.close_cycle import PRINCIPAL, cycle_params, parse_cycle, transaction  # noqa: E402
 from scripts.cycle_feedback import GENERATED_IN_SCORE_SQL, SYNTHETIC_SQL  # noqa: E402
-from scripts.report_target import PRACTICE_MARKER, is_live_target  # noqa: E402
+from scripts.report_target import PRACTICE_MARKER, is_live_target, is_practice_target  # noqa: E402
 
 LATEST_SALES_SQL = "SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real"
 PLAN_SQL = """
@@ -60,7 +71,35 @@ PRIOR_CLOSED_SQL = """
     SELECT 1 FROM planning_cycle WHERE principal = %(principal)s AND cycle = %(plan_cycle)s AND state = 'closed'
 """
 OPENING_BASIS_SQL = """
-    SELECT inputs ->> 'opening_basis' FROM lp_run WHERE planning_cycle_date = %(plan_cycle)s ORDER BY run_key DESC LIMIT 1
+    SELECT inputs ->> 'opening_basis', run_key FROM lp_run WHERE planning_cycle_date = %(plan_cycle)s ORDER BY run_key DESC LIMIT 1
+"""
+# Every recommendation row of the principal, sorted by whether a person can still act on it. Only the first count stops a run.
+#   actionable_pending     this month's plan, pending, ordering more than 0: the Reorder page offers Accept and Dismiss
+#   zero_quantity_pending  this month's plan, pending, ordering nothing: the page offers neither (36 of the 109 on 2026-11-04)
+#   decided                this month's rows already accepted or dismissed, kept as they are
+#   historical_pending     pending rows of earlier cycles: the backend refuses a decision on them, so they can never clear
+#   later_pending          pending rows of a later plan, which is the next month's to settle
+DECISION_COUNTS_SQL = """
+    SELECT COUNT(*) FILTER (WHERE lr.planning_cycle_date = %(cycle)s AND lr.status = 'pending' AND lr.closed_at IS NULL AND lr.q_i > 0),
+           COUNT(*) FILTER (WHERE lr.planning_cycle_date = %(cycle)s AND lr.status = 'pending' AND lr.closed_at IS NULL
+                            AND COALESCE(lr.q_i, 0) <= 0),
+           COUNT(*) FILTER (WHERE lr.planning_cycle_date = %(cycle)s AND lr.status <> 'pending'),
+           COUNT(*) FILTER (WHERE lr.planning_cycle_date < %(cycle)s AND lr.status = 'pending'),
+           COUNT(*) FILTER (WHERE lr.planning_cycle_date > %(cycle)s AND lr.status = 'pending')
+    FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key
+    WHERE pd.principal = %(principal)s
+"""
+# A staff request is open until an admin settles it (migrations 0068 and 0070). While it is open nobody can decide the row directly.
+OPEN_REQUESTS_SQL = """
+    SELECT COUNT(*) FROM {table} r
+    JOIN lp_recommendation lr ON lr.recommendation_key = r.recommendation_key
+    JOIN product_dimension pd ON pd.product_key = lr.product_key
+    WHERE r.state = 'pending_approval' AND lr.planning_cycle_date = %(cycle)s AND pd.principal = %(principal)s
+"""
+REQUEST_TABLES = {"open_quantity_changes": "lp_quantity_change", "open_dismissal_requests": "lp_dismissal_request"}
+LOAD_EVENTS_SQL = """
+    SELECT slice, status, reason, detail, files, real_rows_before, real_rows_after, real_rows_added, quarantine_rows_added
+    FROM etl_load_event WHERE run_id = %(run_id)s AND dry_run ORDER BY load_event_key
 """
 COUNTS_SQL = """
     SELECT inv._period, MAX(inv.snapshot_date),
@@ -91,6 +130,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--approved-by", metavar="NAME")
     ap.add_argument("--expect-month", type=parse_cycle, metavar="YYYY-MM", help="must equal --month")
     ap.add_argument("--target-public", action="store_true", help="explicit-only: allow a write to the live database")
+    ap.add_argument("--check-files", action="store_true", help="the loader's dry run on these --slice and --file inputs: nothing is loaded")
+    ap.add_argument("--check-files-report", metavar="PATH", help="with --check-files: write what it found to this JSON file")
     return ap
 
 
@@ -112,6 +153,14 @@ def is_write(args) -> bool:
 def gate_errors(args, live: bool) -> list[str]:
     if args.file and not args.slice:
         return ["--file needs --slice: a file says what to load, the slice says where it goes"]
+    if args.check_files:
+        if not args.slice:
+            return ["--check-files needs --slice: nothing to check"]
+        if is_write(args) or args.close:
+            return ["--check-files only checks: it takes no --approved-by, --expect-month or --close"]
+        if live and not args.target_public:
+            return ["this is the live database: the loader's dry run records its events there, so --check-files needs --target-public"]
+        return []
     if not is_write(args):
         return []
     if not (args.approved_by and args.expect_month):
@@ -126,23 +175,48 @@ def gate_errors(args, live: bool) -> list[str]:
     return errors
 
 
-def preflight_refusals(month: datetime.date, facts: dict, checks: dict, slices: list[str], live: bool) -> list[str]:
+def open_decisions(decisions: dict) -> int:
+    """What still needs a person: rows someone can decide, and staff requests an admin must settle. A request's row is pending
+    too, so the two can overlap; this is only ever tested for zero, and the two are shown separately."""
+    return decisions["actionable_pending"] + decisions["open_requests"]
+
+
+def decisions_refusal(period: str, decisions: dict, checks: dict) -> str | None:
+    """Why a run must wait for people, or None. See UNSETTLED REORDER DECISIONS above. Once the next plan exists these rows cannot
+    be decided, so a refusal there could never clear: a rerun and a close go on."""
+    if checks.get("lp_next") or not open_decisions(decisions):
+        return None
+    return (f"{decisions['actionable_pending']} reorder recommendation(s) of the {period} plan still await a decision and "
+            f"{decisions['open_requests']} staff request(s) await an admin: settle them on the Reorder Recommendations page first. "
+            "Once the next plan exists they can no longer be decided, and accepted orders count as stock on the way in that plan")
+
+
+def preflight_items(month: datetime.date, facts: dict, checks: dict, slices: list[str], live: bool) -> list[tuple[str, str]]:
+    """(code, sentence) for each reason not to start. The code lets scripts/batch_status.py report which check it was."""
     period = f"{month:%Y-%m}"
-    refusals = []
+    items = []
     if facts["latest_sales_month"] and facts["latest_sales_month"] > period:
-        refusals.append(f"sales for {facts['latest_sales_month']} are already loaded: {period} is not the latest month")
+        items.append(("not_latest_month", f"sales for {facts['latest_sales_month']} are already loaded: {period} is not the latest month"))
     if live and facts["synthetic_rows"]:
-        refusals.append(f"{facts['synthetic_rows']} synthetic sales rows are in {period} on the live database")
+        items.append(("synthetic_on_live", f"{facts['synthetic_rows']} synthetic sales rows are in {period} on the live database"))
     if not checks["sales_loaded"] and not slices:
         if facts["synthetic_rows"]:
-            refusals.append(f"{period} holds only {facts['synthetic_rows']} generated sales rows, labelled is_demo = true: this database's "
-                            "demand view excludes them. Only the practice copy (python -m scripts.local_pg practice) runs on them")
+            items.append(("only_generated_sales",
+                          f"{period} holds only {facts['synthetic_rows']} generated sales rows, labelled is_demo = true: this database's "
+                          "demand view excludes them. Only the practice copy (python -m scripts.local_pg practice) runs on them"))
         else:
-            refusals.append(f"{period} sales are not loaded and no --slice was given to load them")
+            items.append(("sales_missing", f"{period} sales are not loaded and no --slice was given to load them"))
     if slices and checks["abc_run"]:
-        refusals.append(f"the ABC for {period} has already run: loading again would leave the forecast and plan built on the "
-                        "old sales. Nothing here reruns them; redo those steps by hand and on purpose")
-    return refusals
+        items.append(("already_ran", f"the ABC for {period} has already run: loading again would leave the forecast and plan built on the "
+                                     "old sales. Nothing here reruns them; redo those steps by hand and on purpose"))
+    refusal = decisions_refusal(period, facts["decisions"], checks)
+    if refusal:
+        items.append(("decisions_open", refusal))
+    return items
+
+
+def preflight_refusals(month: datetime.date, facts: dict, checks: dict, slices: list[str], live: bool) -> list[str]:
+    return [sentence for _, sentence in preflight_items(month, facts, checks, slices, live)]
 
 
 def plan_steps(args, py: str = sys.executable) -> list[Step]:
@@ -200,6 +274,38 @@ def count_lines(rows: list[tuple]) -> list[str]:
             "  SSM cannot be asked about a count that looks wrong: it is shown here for the person approving, and is not corrected."]
 
 
+def check_files_cmd(args, py: str = sys.executable) -> list[str]:
+    """The loader's own dry run on the same inputs the load step would get. It is scripts/load_slices.py that checks: layout, missing
+    file, shrink guard, validation bands, sign-off. Only its events are written, and those rows say dry_run."""
+    cmd = [py, "-m", "scripts.run_canonical_load", "--schema", "public", "--target-public", "--dry-run"]
+    for spec in args.slice:
+        cmd += ["--slice", spec]
+    for path in args.file:
+        cmd += ["--file", path]
+    return cmd
+
+
+def parse_loader_output(lines: list[str]) -> dict:
+    """What the loader printed about this run: the id its events carry, and the manifest a sign-off must match."""
+    found = {"run_id": None, "run_key": None, "fingerprint": None}
+    for line in lines:
+        manifest = re.search(r"\[manifest\] run key (\S+?):.*fingerprint (\S+)", line)
+        if manifest:
+            found["run_key"], found["fingerprint"] = manifest.group(1), manifest.group(2)
+        run = re.search(r"\brun_id=(\S+)", line)
+        if run:
+            found["run_id"] = run.group(1)
+    return found
+
+
+def file_digest(path: str) -> dict:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {"name": Path(path).name, "sha256": digest.hexdigest()}
+
+
 def close_refusal(expected: int, actual: float) -> str | None:
     if round(actual) == expected:
         return None
@@ -222,6 +328,22 @@ def _status(params: dict) -> dict:
     return _read(lambda cur: close_cycle.read_status(cur, params))
 
 
+def read_decisions(cur, params: dict) -> dict:
+    """The counts behind the decisions refusal, from the records themselves, in the caller's read-only transaction."""
+    cur.execute(DECISION_COUNTS_SQL, params)
+    actionable, zero_quantity, decided, historical, later = (int(n) for n in cur.fetchone())
+    out = {"cycle": f"{params['cycle']:%Y-%m}", "actionable_pending": actionable, "zero_quantity_pending": zero_quantity,
+           "decided": decided, "historical_pending": historical, "later_pending": later}
+    for name, table in REQUEST_TABLES.items():
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (table,))
+        present = bool(cur.fetchone()[0])       # no table, no request: the migrations behind them may not be applied on an old copy
+        if present:
+            cur.execute(OPEN_REQUESTS_SQL.format(table=table), params)
+        out[name] = int(cur.fetchone()[0]) if present else 0
+    out["open_requests"] = sum(out[name] for name in REQUEST_TABLES)
+    return out
+
+
 def _facts(params: dict) -> dict:
     def read(cur):
         cur.execute(LATEST_SALES_SQL)
@@ -229,7 +351,9 @@ def _facts(params: dict) -> dict:
         cur.execute(SYNTHETIC_SQL, params)
         synthetic = int(cur.fetchone()[0])
         cur.execute(GENERATED_IN_SCORE_SQL, params)
-        return {"latest_sales_month": latest, "synthetic_rows": synthetic, "generated_rows": max(int(cur.fetchone()[0]), synthetic)}
+        generated = max(int(cur.fetchone()[0]), synthetic)
+        return {"latest_sales_month": latest, "synthetic_rows": synthetic, "generated_rows": generated,
+                "decisions": read_decisions(cur, params)}
     return _read(read)
 
 
@@ -240,7 +364,8 @@ def _plan(params: dict, cycle: datetime.date) -> dict:
         rows, ordering, pieces = cur.fetchone()
         cur.execute(OPENING_BASIS_SQL, args)
         basis = cur.fetchone()
-        return {"rows": int(rows), "ordering": int(ordering), "pieces": float(pieces), "opening_basis": basis[0] if basis else None}
+        return {"rows": int(rows), "ordering": int(ordering), "pieces": float(pieces), "opening_basis": basis[0] if basis else None,
+                "run_key": basis[1] if basis else None}
     return _read(read)
 
 
@@ -295,6 +420,40 @@ def run_plan_stage(args, params: dict) -> int:
     return _review(args, params)
 
 
+def run_check_files(args, params: dict) -> int:
+    """Runs the loader's dry run and reports what it found. Refused slices are a finding, not a failure of this command: it exits 0
+    once the report is written, and non-zero only when the loader never got as far as recording anything."""
+    digests = [file_digest(path) for path in args.file]
+    sys.stdout.flush()
+    proc = subprocess.Popen(check_files_cmd(args), cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            encoding="utf-8", errors="replace")
+    lines = []
+    for line in proc.stdout:
+        print(line, end="")
+        lines.append(line.rstrip())
+    code = proc.wait()
+    found = parse_loader_output(lines)
+    events = []
+    if found["run_id"]:
+        def read(cur):
+            cur.execute(LOAD_EVENTS_SQL, {"run_id": found["run_id"]})
+            names = [c[0] for c in cur.description]
+            return [dict(zip(names, row)) for row in cur.fetchall()]
+        events = _read(read)
+    report = {"marker": PRACTICE_MARKER if is_practice_target() else None, "month": f"{args.month:%Y-%m}",
+              "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "exit_code": code, **found,
+              "completed": bool(found["run_id"]), "events": events, "files": digests}
+    if args.check_files_report:
+        target = Path(args.check_files_report)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+    print(f"[check-files] {len(events)} event(s), {sum(1 for e in events if e['status'] == 'refused')} refused")
+    if not found["run_id"]:
+        print("[check-files] the loader recorded nothing: batch stopped")
+        return 1
+    return 0
+
+
 def run_close_stage(args, params: dict) -> int:
     refusal = close_refusal(args.expect_plan_pieces, _plan(params, params["next_cycle"])["pieces"])
     if refusal:
@@ -324,6 +483,11 @@ def main() -> int:
     if facts["generated_rows"]:
         print(f"  {PRACTICE_MARKER}: {facts['generated_rows']} generated sales rows in the history up to this month")
     refusals = preflight_refusals(args.month, facts, status["checks"], args.slice, live)
+    if args.check_files:
+        # Checking a file writes nothing that a refusal is there to protect, and the person wants every problem at once.
+        for refusal in refusals:
+            print("NOTE: a run would be refused: " + refusal)
+        return run_check_files(args, params)
     if refusals:
         print("REFUSED: " + "; ".join(refusals))
         return 2

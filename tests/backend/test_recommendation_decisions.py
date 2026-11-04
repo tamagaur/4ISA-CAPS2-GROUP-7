@@ -337,6 +337,9 @@ ALLOWED = {
     # names are absent from that field. Nothing that computes.
     "analytics/db/migrations/0073_decision_column_comments.sql", "tests/backend/test_migrations.py",
     "tests/backend/test_recommendations.py",
+    # Carries a person's decision from the pages' database to the practice copy, unchanged, through decide_row (2026-11-04, provisional,
+    # docs/MONTHLY_BATCH_REVIEW.md). It computes nothing from them, and tests/test_replay_practice_decisions.py pins that it has no SQL write.
+    "scripts/replay_practice_decisions.py", "tests/test_replay_practice_decisions.py",
 }
 
 

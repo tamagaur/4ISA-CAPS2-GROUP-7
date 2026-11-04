@@ -3,9 +3,17 @@ import { API_URL, apiFetch, authHeaders } from '../auth';
 // The monthly batch (backend/routers/monthly_batch.py). Local practice database
 // only for now: GET /batch/status answers { enabled: false } everywhere else.
 
+// A refusal keeps the backend's code and what it sent with it, so the page can
+// tell a blocked run from any other failure.
 async function readJson(res, fallback) {
   const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.detail && typeof body.detail === 'string' ? body.detail : fallback);
+  if (!res.ok) {
+    const error = new Error(body?.detail && typeof body.detail === 'string' ? body.detail : fallback);
+    error.code = body?.code;
+    error.checks = body?.checks;
+    error.decisions = body?.decisions;
+    throw error;
+  }
   return body;
 }
 
@@ -24,6 +32,12 @@ export async function getBatchAvailable() {
 export async function getBatchStatus(month) {
   const query = month ? `?month=${encodeURIComponent(month)}` : '';
   return readJson(await apiFetch(`/batch/status${query}`), 'Could not read where the batch stands.');
+}
+
+// Where the month stands, check by check. Reads only.
+export async function getBatchChecklist(month) {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return readJson(await apiFetch(`/batch/checklist${query}`), 'Could not read the checklist.');
 }
 
 export async function getBatchJob() {
@@ -51,6 +65,8 @@ const post = async (path, body, fallback) => readJson(
 );
 
 export const generatePracticeMonth = (month) => post('/batch/practice-month', { month }, 'Could not generate practice sales.');
+export const validateBatch = (month) => post('/batch/validate', { month }, 'Could not start the validation.');
+export const signoffBatch = (month) => post('/batch/signoff', { month }, 'The file could not be approved.');
 export const runBatch = (month, calendarFactor) => post('/batch/run', { month, calendar_factor: calendarFactor }, 'Could not start the batch.');
 export const closeBatch = (month, calendarFactor, expectPlanPieces) => post(
   '/batch/close',

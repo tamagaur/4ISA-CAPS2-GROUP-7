@@ -12,13 +12,23 @@ It runs scripts, it does not reimplement them. A write is one child process of s
 refusals all still apply, and the status and feedback are read by scripts.batch_status and scripts.cycle_feedback. This
 keeps the boundary in backend/main.py: this process never imports the analytics package.
 
-One job at a time, held in this process's memory. A restart forgets the log but not the work: run_month skips what is
-already in the database.
+One job at a time, held in this process's memory. A restart forgets the job but not the work: run_month skips what is
+already in the database. Each job's whole output goes to a file under local/monthly_batch/logs (git-ignored); the API gives the
+page the stages reached (backend/batch_checklist.parse_steps), never the raw output, which can carry internals.
+
+THE CHECKS BEFORE A RUN (2026-11-04, provisional, for Yuan's review: docs/MONTHLY_BATCH_REVIEW.md). GET /batch/checklist says where
+the month stands. POST /batch/validate carries the Reorder page's decisions onto the practice copy (scripts.
+replay_practice_decisions, through decide_row) and checks any waiting file with the loader's dry run (run_month --check-files).
+POST /batch/signoff records a person's approval of a checked file (analytics.etl.transform_signoff, the same command as by hand).
+POST /batch/run does the same replay and asks the checklist again, whatever the page believes, and answers 409 if anything blocks.
+scripts.run_month then applies its own refusals when it starts, so nothing here is the only guard.
 """
 from __future__ import annotations
 
 import collections
+import hashlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -26,18 +36,22 @@ import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
+from backend import audit, batch_checklist
 from backend.api_errors import ApiError
 from backend.auth_utils import TokenPayload
+from backend.deps import get_db
 from backend.permissions import require_permission
 
 REPO = Path(__file__).resolve().parents[2]
 UPLOADS = REPO / "local" / "monthly_batch" / "uploads"   # git-ignored: raw files hold per-product sales (hard rule 9)
+VALIDATIONS = REPO / "local" / "monthly_batch" / "validation"   # git-ignored: what the last validation found, per month
+LOGS = REPO / "local" / "monthly_batch" / "logs"         # git-ignored: each job's whole output
 THROWAWAY = ("127.0.0.1", 55432)                         # scripts/local_pg.py
 PRACTICE_DB = "ssm_practice"                             # scripts/local_pg.py practice
 MONTH = r"^[0-9]{4}-(0[1-9]|1[0-2])$"
@@ -47,10 +61,15 @@ SLICES = {"sales": "unilever:unilever_sku_demand_fact:{month}", "count": "unilev
 PRACTICE_MONTH = "2026-03"                               # the only month scripts/local_pipeline_qa.py synth generates
 LOG_LINES = 400
 SCRIPT_TIMEOUT_S = 120
+PAGES_URL_ENV = "BATCH_PAGES_DB_URL"                     # scripts/replay_practice_decisions.py
+RUN_KEY = re.compile(r"^[A-Za-z0-9_-]+$")                # the loader's own run keys
+_CONNECTION = re.compile(r"\b[a-z]+(?:\+[a-z0-9]+)?://\S+", re.I)
+logger = logging.getLogger(__name__)
 
 LOCAL_ONLY = "The monthly batch only runs on the local practice database for now."
 # On every /batch answer that holds a figure. The job log can lose its first lines to LOG_LINES, so the log's own marker is not enough.
 PRACTICE_NOTE = "Read from the practice copy (ssm_practice), whose sales may be generated. Practice, not a result."
+PRACTICE_MARKER = "PRACTICE RUN ON GENERATED SALES, NOT A RESULT"   # scripts/report_target.PRACTICE_MARKER: every file a practice run writes says it
 
 router = APIRouter(prefix="/batch", tags=["monthly-batch"])
 
@@ -71,7 +90,8 @@ def step_env() -> dict:
     """A step's environment: the practice database, on the throwaway server only. This process stays on the pages' database."""
     require_local()
     url = urlparse(os.environ["SUPABASE_DB_URL"])._replace(path=f"/{PRACTICE_DB}").geturl()
-    return {**os.environ, "SUPABASE_DB_URL": url, "SUPABASE_DIRECT_URL": url, "DATABASE_URL": url, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+    return {**os.environ, "SUPABASE_DB_URL": url, "SUPABASE_DIRECT_URL": url, "DATABASE_URL": url, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1",
+            PAGES_URL_ENV: os.environ["SUPABASE_DB_URL"]}
 
 
 def on_practice_copy() -> bool:
@@ -94,41 +114,74 @@ class Job:
         self._lock = threading.Lock()
         self.status = "idle"
         self.kind = None
+        self.id = None
+        self.month = None
         self.exit_code = None
         self.started_at = None
         self.finished_at = None
         self.lines = collections.deque(maxlen=LOG_LINES)
         self.thread = None
 
-    def start(self, kind: str, cmd: list[str]) -> None:
+    def start(self, kind: str, cmd: list[str], month: str | None = None, on_finish: Callable[["Job"], None] | None = None) -> None:
         with self._lock:
             if self.status == "running":
                 raise ApiError(409, "A batch step is already running. Wait for it to finish.", code="batch_busy")
             self.status, self.kind, self.exit_code = "running", kind, None
+            self.id, self.month = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"), month
             self.started_at, self.finished_at = datetime.now(timezone.utc).isoformat(), None
             self.lines.clear()
-        self.thread = threading.Thread(target=self._run, args=(cmd,), daemon=True)
+        self.thread = threading.Thread(target=self._run, args=(cmd, on_finish), daemon=True)
         self.thread.start()
 
-    def _run(self, cmd: list[str]) -> None:
+    def _log_file(self):
+        """The job's whole output, in the git-ignored folder. A log that cannot be written never stops the job."""
+        try:
+            LOGS.mkdir(parents=True, exist_ok=True)
+            log = open(LOGS / f"{self.id}_{self.kind}.log", "w", encoding="utf-8")
+            log.write(f"{PRACTICE_MARKER}\n{PRACTICE_NOTE}\njob {self.id}, {self.kind}, month {self.month}\n\n")
+            return log
+        except OSError as exc:
+            logger.warning("monthly batch: could not open the job log: %s", exc)
+            return None
+
+    def _run(self, cmd: list[str], on_finish) -> None:
         code = 1
+        log = self._log_file()
+
+        def record(line: str) -> None:
+            line = _CONNECTION.sub("[connection hidden]", line)
+            self.lines.append(line)
+            if log:
+                log.write(line + "\n")
+                log.flush()
+
         try:
             proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                     errors="replace", env=step_env())
             for line in proc.stdout:
-                self.lines.append(line.rstrip())
+                record(line.rstrip())
             code = proc.wait()
         except (OSError, ApiError) as exc:
-            self.lines.append(f"could not start the step: {exc}")
+            record(f"could not start the step: {exc}")
+        if log:
+            log.write(f"\nexit code {code}\n")
+            log.close()
         with self._lock:
             self.status = "done" if code == 0 else "failed"
             self.exit_code = code
             self.finished_at = datetime.now(timezone.utc).isoformat()
+        if on_finish:
+            try:
+                on_finish(self)
+            except Exception as exc:  # noqa: BLE001 - the job has ended; a failure to record it must not hide that
+                logger.warning("monthly batch: could not record the end of job %s: %s", self.id, exc)
 
     def state(self) -> dict:
         with self._lock:
-            return {"practice_note": PRACTICE_NOTE, "status": self.status, "kind": self.kind, "exit_code": self.exit_code, "started_at": self.started_at,
-                    "finished_at": self.finished_at, "log": "\n".join(self.lines)}
+            steps, failed_stage = batch_checklist.parse_steps(list(self.lines))
+            return {"practice_note": PRACTICE_NOTE, "id": self.id, "status": self.status, "kind": self.kind, "month": self.month,
+                    "exit_code": self.exit_code, "started_at": self.started_at, "finished_at": self.finished_at,
+                    "steps": steps, "failed_stage": failed_stage}
 
 
 JOB = Job()
@@ -143,8 +196,16 @@ def _script_json(*args: str) -> dict:
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
-def read_status(month: str | None = None) -> dict:
-    return _script_json("scripts.batch_status", *(["--month", month] if month else []))
+def read_status(month: str | None = None, slices: tuple[str, ...] = (), run_key: str | None = None) -> dict:
+    args = ["--month", month] if month else []
+    for spec in slices:
+        args += ["--slice", spec]
+    return _script_json("scripts.batch_status", *args, *(["--run-key", run_key] if run_key else []))
+
+
+def replay_decisions(month: str) -> dict:
+    """Carries the Reorder page's decisions onto the practice copy, through decide_row. Safe to call again: nothing is applied twice."""
+    return _script_json("scripts.replay_practice_decisions", "--cycle", month, "--write", "--json")
 
 
 def _month_folder(month: str, kind: str) -> Path:
@@ -159,6 +220,140 @@ def uploaded_files(month: str) -> dict:
         if files:
             out[kind] = {"name": files[0].name, "bytes": files[0].stat().st_size}
     return out
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def file_hashes(month: str) -> dict:
+    """{kind: {name, sha256}} for the files there now, so a check on record can be told from a check of something else."""
+    out = {}
+    for kind in SLICES:
+        folder = _month_folder(month, kind)
+        files = sorted(folder.iterdir()) if folder.is_dir() else []
+        if files:
+            out[kind] = {"name": files[0].name, "sha256": _sha256(files[0])}
+    return out
+
+
+def _validation_path(month: str) -> Path:
+    return VALIDATIONS / f"{month}.json"
+
+
+def _file_check_path(month: str) -> Path:
+    return VALIDATIONS / f"{month}.files.json"
+
+
+def read_validation(month: str) -> dict | None:
+    """What the last validation of this month recorded, with the loader's report when it has written one."""
+    path = _validation_path(month)
+    if not path.is_file():
+        return None
+    record = json.loads(path.read_text(encoding="utf-8"))
+    report = _file_check_path(month)
+    if record.get("expects_file_check") and report.is_file():
+        record["file_check"] = json.loads(report.read_text(encoding="utf-8"))
+    return record
+
+
+def write_validation(month: str, record: dict) -> None:
+    VALIDATIONS.mkdir(parents=True, exist_ok=True)
+    _file_check_path(month).unlink(missing_ok=True)
+    _validation_path(month).write_text(json.dumps({"marker": PRACTICE_MARKER, **record}, indent=2, default=str), encoding="utf-8")
+
+
+def _load_args(month: str, checks: dict) -> list[str]:
+    """--slice and --file for the waiting files, as a run would pass them. Once the ABC has run, run_month refuses to load again, rightly."""
+    args = []
+    if checks.get("abc_run"):
+        return args
+    for kind in SLICES:
+        folder = _month_folder(month, kind)
+        for path in sorted(folder.iterdir()) if folder.is_dir() else []:
+            args += ["--slice", SLICES[kind].format(month=month), "--file", str(path)]
+    return args
+
+
+def _waiting_slices(month: str) -> tuple[str, ...]:
+    return tuple(SLICES[kind].format(month=month) for kind in SLICES if uploaded_files(month).get(kind))
+
+
+def _run_key(validation: dict | None) -> str | None:
+    key = ((validation or {}).get("file_check") or {}).get("run_key")
+    return key if key and RUN_KEY.match(key) else None
+
+
+def checklist_for(month: str | None = None, replay: dict | None = None) -> tuple[dict, dict]:
+    """(checklist, status), read fresh. The month, when not named, is the one run_month says is in play."""
+    if month is None:
+        month = read_status()["month"]
+    validation = read_validation(month)
+    status = read_status(month, _waiting_slices(month), _run_key(validation))
+    # A replay just run on this request is fresher than its comparison, and it reports what would not carry over.
+    if replay and status.get("replay") and replay.get("refused"):
+        status["replay"]["refused"] = replay["refused"]
+    job = JOB.state()
+    checklist = batch_checklist.build_checklist(status, uploaded_files(month), validation, file_hashes(month), job)
+    return {"practice_note": PRACTICE_NOTE, **checklist, "result": batch_checklist.run_result(status, job), "job": job}, status
+
+
+def audit_event(action: str, details: str, user: TokenPayload) -> None:
+    """One entry on the pages' database, in its own transaction. A failure to write it is logged and never stops the batch."""
+    session = get_db()
+    try:
+        db = next(session)
+        audit.record(db, action, details, actor=user)
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("monthly batch: could not write the audit entry %r: %s", action, exc)
+    finally:
+        session.close()
+
+
+def _failed_names(checklist: dict) -> str:
+    return ", ".join(c["name"] for c in checklist["checks"] if c["blocking"] and c["status"] in ("failed", "not_checked"))
+
+
+def _finish_audit(action_done: str, action_failed: str, month: str, user: TokenPayload) -> Callable[[Job], None]:
+    def finish(job: Job) -> None:
+        if job.status == "done":
+            audit_event(action_done, f"Month {month}, job {job.id}", user)
+        else:
+            _, stage = batch_checklist.parse_steps(list(job.lines))
+            audit_event(action_failed, f"Month {month}, job {job.id}, exit code {job.exit_code}" + (f", stopped at {stage}" if stage else ""), user)
+    return finish
+
+
+def _finish_run_audit(month: str, user: TokenPayload) -> Callable[[Job], None]:
+    """Who, which month, how it ended and the run it wrote. Read after the job, so the run id is the one that exists."""
+    def finish(job: Job) -> None:
+        if job.status != "done":
+            _finish_audit("", "Monthly Batch Run Failed", month, user)(job)
+            return
+        try:
+            plan = read_status(month).get("next_plan") or {}
+        except (ApiError, OSError, ValueError, subprocess.SubprocessError):
+            plan = {}
+        audit_event("Monthly Batch Run Completed",
+                    f"Month {month}, job {job.id}, LP run {plan.get('run_key')}, {plan.get('rows')} rows, {round(plan.get('pieces') or 0):,} pieces", user)
+    return finish
+
+
+def _finish_validation_audit(month: str, user: TokenPayload) -> Callable[[Job], None]:
+    def finish(job: Job) -> None:
+        report = (read_validation(month) or {}).get("file_check") or {}
+        refused = [e for e in report.get("events") or [] if e.get("status") == "refused"]
+        if job.status != "done" or refused or not report.get("completed"):
+            audit_event("Monthly Batch Validation Failed",
+                        f"Month {month}, job {job.id}: {len(refused)} refused file or table check(s)" + ("" if report.get("completed") else ", the check did not finish"), user)
+        else:
+            audit_event("Monthly Batch Validation Passed", f"Month {month}, job {job.id}: the file checks found nothing that stops a load", user)
+    return finish
 
 
 def _approver(user: TokenPayload) -> str:
@@ -183,13 +378,27 @@ def _month_args(body: RunBody, user: TokenPayload) -> list[str]:
             "--approved-by", _approver(user), "--expect-month", body.month]
 
 
+def _refuse_while_running() -> None:
+    if JOB.state()["status"] == "running":
+        raise ApiError(409, "A batch step is already running. Wait for it to finish.", code="batch_busy")
+
+
 @router.get("/status")
 def status(month: str | None = Query(default=None, pattern=MONTH),
            _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     if not enabled():
         return {"enabled": False}
     current = read_status(month)
-    return {"enabled": True, "practice_note": PRACTICE_NOTE, **current, "files": uploaded_files(current["month"]), "practice_month": PRACTICE_MONTH, "job": JOB.state()}
+    job = JOB.state()
+    return {"enabled": True, "practice_note": PRACTICE_NOTE, **current, "files": uploaded_files(current["month"]), "practice_month": PRACTICE_MONTH,
+            "job": job, "result": batch_checklist.run_result(current, job)}
+
+
+@router.get("/checklist")
+def checklist(month: str | None = Query(default=None, pattern=MONTH), _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
+    """Where the month stands, check by check, read fresh. Reads only: the decisions are carried over by POST /batch/validate."""
+    require_local()
+    return checklist_for(month)[0]
 
 
 @router.get("/job")
@@ -208,6 +417,7 @@ def feedback(cycle: str = Query(pattern=MONTH), _user: TokenPayload = Depends(re
 def upload_file(month: str = Form(pattern=MONTH), kind: str = Form(), file: UploadFile = File(...),
                 _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     require_local()
+    _refuse_while_running()
     if kind not in SLICES:
         raise ApiError(400, "A file is either the month's sales or its stock count.", code="batch_bad_kind")
     # A browser may send a whole path, with either separator. Only the last part is kept.
@@ -232,6 +442,62 @@ def upload_file(month: str = Form(pattern=MONTH), kind: str = Form(), file: Uplo
     return {"kind": kind, "name": name, "bytes": written}
 
 
+@router.post("/validate", status_code=202)
+def validate(body: PracticeBody, user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
+    """Carries the decisions over, and checks any waiting file with the loader's dry run. Loads nothing. The checklist then says
+    what it found: started says whether a file check is running first."""
+    require_local()
+    _refuse_while_running()
+    replay = replay_decisions(body.month)
+    status = read_status(body.month)
+    load_args = _load_args(body.month, status["checks"])
+    record = {"month": body.month, "validated_at": datetime.now(timezone.utc).isoformat(), "by": _approver(user),
+              "hashes": file_hashes(body.month), "expects_file_check": bool(load_args), "replay": replay}
+    write_validation(body.month, record)
+    applied = f"{replay.get('applied', 0)} decision(s) carried onto the practice copy, {replay.get('reversed', 0)} reversed"
+    if load_args:
+        # The calendar factor plays no part in a file check; run_month asks for it on every call.
+        cmd = [sys.executable, "-m", "scripts.run_month", "--month", body.month, "--calendar-factor", "on", "--check-files",
+               *load_args, "--check-files-report", str(_file_check_path(body.month))]
+        JOB.start("validate", cmd, body.month, _finish_validation_audit(body.month, user))
+        audit_event("Monthly Batch Validation Started", f"Month {body.month}: {applied}; files {', '.join(e['name'] for e in record['hashes'].values())}", user)
+        return {"practice_note": PRACTICE_NOTE, "started": "validate", "replay": replay}
+    current, _ = checklist_for(body.month, replay)
+    failing = _failed_names(current)
+    audit_event("Monthly Batch Validation Failed" if failing else "Monthly Batch Validation Passed",
+                f"Month {body.month}: {applied}" + (f"; not passed: {failing}" if failing else ""), user)
+    return {"practice_note": PRACTICE_NOTE, "started": None, "replay": replay}
+
+
+@router.post("/signoff")
+def signoff(body: PracticeBody, user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
+    """A named person's approval of a checked file: the loader's own sign-off command, on the manifest the check wrote. Refused for a
+    file that was not checked, changed since, or did not pass. The loader then checks the approval against the file when it loads."""
+    require_local()
+    _refuse_while_running()
+    validation = read_validation(body.month)
+    report = (validation or {}).get("file_check")
+    hashes = file_hashes(body.month)
+    if not hashes or not report or not report.get("completed"):
+        raise ApiError(409, "Run validation first: there is no finished file check to approve.", code="batch_not_validated")
+    if not batch_checklist.validation_is_current(validation, hashes):
+        raise ApiError(409, "A file changed after it was checked. Run validation again.", code="batch_validation_stale")
+    if any(e.get("status") == "refused" for e in report.get("events") or []):
+        raise ApiError(409, "A file with problems cannot be approved. Fix the file and run validation again.", code="batch_files_invalid")
+    run_key = _run_key(validation)
+    if not run_key:
+        raise ApiError(409, "Run validation first: there is no finished file check to approve.", code="batch_not_validated")
+    by = _approver(user)
+    done = subprocess.run([sys.executable, "-m", "analytics.etl.transform_signoff", "--transform-dir", f"transform/slices/{run_key}",
+                           "--decision", "approved", "--by", by, "--notes", f"Approved on the Data Management page for {body.month}"],
+                          cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=SCRIPT_TIMEOUT_S, env=step_env())
+    if done.returncode != 0:
+        logger.warning("monthly batch: the sign-off command exited %s", done.returncode)
+        raise ApiError(502, "The approval could not be recorded. Run validation again and retry.", code="batch_signoff_failed")
+    audit_event("Monthly Batch File Approved", f"Month {body.month}: {', '.join(e['name'] for e in hashes.values())}", user)
+    return {"practice_note": PRACTICE_NOTE, "signed": True, "by": by, "files": [e["name"] for e in hashes.values()]}
+
+
 @router.post("/practice-month", status_code=202)
 def practice_month(body: PracticeBody, _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     require_local()
@@ -239,26 +505,35 @@ def practice_month(body: PracticeBody, _user: TokenPayload = Depends(require_per
         raise ApiError(400, f"Practice sales can only be generated for {PRACTICE_MONTH}.", code="batch_no_practice_month")
     for old in _month_folder(body.month, "sales").glob("*"):
         old.unlink()    # the practice sales replace it: a run would otherwise load the file over them
-    JOB.start("practice", [sys.executable, "scripts/local_pipeline_qa.py", "synth"])
+    JOB.start("practice", [sys.executable, "scripts/local_pipeline_qa.py", "synth"], body.month)
     return {"started": "practice"}
 
 
 @router.post("/run", status_code=202)
 def run(body: RunBody, user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
+    """Asks every check again, whatever the page last saw: a validation on record is not permission. scripts.run_month then applies
+    its own refusals when it starts."""
     require_local()
-    cmd = _month_args(body, user)
+    _refuse_while_running()
+    replay = replay_decisions(body.month)
+    current, status = checklist_for(body.month, replay)
+    if not current["can_run"]:
+        failing = _failed_names(current)
+        audit_event("Monthly Batch Run Refused", f"Month {body.month}: {failing}", user)
+        raise ApiError(409, f"This month cannot run yet: {failing}.", code="batch_checks_failed",
+                       checks=[c for c in current["checks"] if c["blocking"] and c["status"] in ("failed", "not_checked")],
+                       decisions=current["decisions"])
     # A rerun after the ABC ran resumes the steps after it. run_month refuses to load again at that point, rightly.
-    kinds = () if read_status(body.month)["checks"].get("abc_run") else SLICES
-    for kind in kinds:
-        folder = _month_folder(body.month, kind)
-        for path in sorted(folder.iterdir()) if folder.is_dir() else []:
-            cmd += ["--slice", SLICES[kind].format(month=body.month), "--file", str(path)]
-    JOB.start("plan", cmd)
+    cmd = _month_args(body, user) + _load_args(body.month, status["checks"])
+    JOB.start("plan", cmd, body.month, _finish_run_audit(body.month, user))
+    audit_event("Monthly Batch Run Started", f"Month {body.month}, job {JOB.state()['id']}, calendar factor {body.calendar_factor}", user)
     return {"started": "plan"}
 
 
 @router.post("/close", status_code=202)
 def close(body: CloseBody, user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     require_local()
-    JOB.start("close", _month_args(body, user) + ["--close", "--expect-plan-pieces", str(body.expect_plan_pieces)])
+    JOB.start("close", _month_args(body, user) + ["--close", "--expect-plan-pieces", str(body.expect_plan_pieces)], body.month,
+              _finish_audit("Monthly Batch Close Completed", "Monthly Batch Close Failed", body.month, user))
+    audit_event("Monthly Batch Close Started", f"Month {body.month}, job {JOB.state()['id']}", user)
     return {"started": "close"}

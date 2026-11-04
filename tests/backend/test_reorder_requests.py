@@ -326,7 +326,21 @@ def test_nothing_in_the_plan_reads_the_new_tables():
             body = path.read_text(encoding="utf-8", errors="ignore")
             if "lp_stock_observation" in body or "lp_dismissal_request" in body:
                 readers.append(path.relative_to(REPO).as_posix())
-    assert readers == []
+    # scripts/run_month.py counts open requests, so a run waits for an admin (2026-11-04, provisional, docs/MONTHLY_BATCH_REVIEW.md). The
+    # count says whether a run may start. No figure of the plan comes from it: the next test pins that.
+    assert readers == ["scripts/run_month.py"]
+
+
+def test_the_monthly_gate_only_counts_open_requests_and_the_plan_never_sees_them():
+    from scripts import run_month
+
+    code = (REPO / "scripts/run_month.py").read_text(encoding="utf-8")
+    assert "lp_stock_observation" not in code                  # a reported count is not a decision, and does not stop a run
+    assert code.count("lp_dismissal_request") == 1             # named once, in the table list the count reads
+    assert run_month.OPEN_REQUESTS_SQL.strip().startswith("SELECT COUNT(*)") and "state = 'pending_approval'" in run_month.OPEN_REQUESTS_SQL
+    for plan_code in ("scripts/run_lp.py", "analytics/optimization/lp.py"):
+        text = (REPO / plan_code).read_text(encoding="utf-8")
+        assert "lp_dismissal_request" not in text and "lp_stock_observation" not in text
 
 
 # ── 3. the admin settles a dismissal request ───────────────────────────────────────────────────────────────

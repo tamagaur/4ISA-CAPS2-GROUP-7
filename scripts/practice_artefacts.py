@@ -4,10 +4,11 @@ scripts/practice_artefacts.py - list everything a practice month writes, and fai
     python -m scripts.local_pg start
     python -m scripts.local_pg restore backups/<full_backup_...>     # ssm_local, the copy the practice copy is made from
     python -m scripts.practice_artefacts                             # about 5 minutes
+    python -m scripts.practice_artefacts --settle-decisions          # (used by the above, on ssm_practice only)
 
 A practice run's output was found unlabelled in three separate places before this existed, each fixed where it was found. This
 looks for the class instead: it re-makes ssm_practice, fingerprints every file in the repo and every table, runs the month the way
-docs say (generated sales, plan, close), fingerprints again, and checks each difference:
+docs say (generated sales, the plan's decisions, plan, close), fingerprints again, and checks each difference:
 
     file    PRACTICE_MARKER near its start
     row     practice_run filled (scripts/local_pg PRACTICE_ROW_LABEL_SQL), for every row ssm_local does not hold identically.
@@ -30,7 +31,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from scripts import local_pg  # noqa: E402
-from scripts.report_target import PRACTICE_MARKER  # noqa: E402
+from scripts.report_target import PRACTICE_MARKER, is_practice_target  # noqa: E402
 
 SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", "pg_throwaway", "dist", ".pytest_cache", ".ruff_cache", "backups"}
 SKIP_FILES = {"pg_throwaway.log"}   # the server's own log, no output of the run
@@ -155,9 +156,38 @@ def api_check() -> int:
     return 1 if failures else 0
 
 
+def settle_decisions() -> int:
+    """Runs inside the practice connection (local_pg run --practice): accepts this month's ordering rows as recommended, through
+    decide_row, so a practice run meets run_month's refusal the way a real month does and its receipts are real. A check needs no
+    person to review a plan; the runbook's walkthrough makes these decisions on the Reorder page instead. It is not a way round the
+    refusal: it writes real decisions, and it refuses any database but the practice copy."""
+    if not is_practice_target():
+        print("REFUSED: --settle-decisions runs on ssm_practice only")
+        return 2
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from backend.routers import recommendations as rec
+    from scripts.replay_practice_decisions import accept_as_recommended
+    engine = create_engine(os.environ["SUPABASE_DB_URL"])
+    with Session(engine) as db:
+        keys = [row[0] for row in db.execute(text(
+            "SELECT recommendation_key FROM lp_recommendation WHERE planning_cycle_date = :cycle AND status = 'pending' AND q_i > 0 AND closed_at IS NULL"),
+            {"cycle": f"{MONTH}-01"}).all()]
+        present = rec._present(db)
+        db.rollback()
+        for key in keys:
+            accept_as_recommended(db, present, key, "practice_artefacts")
+            db.commit()
+    print(f"decisions: {len(keys)} accepted as recommended, through decide_row")
+    return 0
+
+
 def main() -> int:
     if sys.argv[1:] == ["--api-check"]:
         return api_check()
+    if sys.argv[1:] == ["--settle-decisions"]:
+        return settle_decisions()
     local_pg.make_practice()
     conn = _connect(True)
     before_tables = table_state(conn.cursor())
@@ -166,7 +196,8 @@ def main() -> int:
 
     py = sys.executable
     month = ["--month", MONTH, "--calendar-factor", "on", "--approved-by", "practice_artefacts", "--expect-month", MONTH]
-    for cmd in ([py, "scripts/local_pipeline_qa.py", "synth"], [py, "-m", "scripts.run_month", *month]):
+    for cmd in ([py, "scripts/local_pipeline_qa.py", "synth"], [py, "-m", "scripts.practice_artefacts", "--settle-decisions"],
+                [py, "-m", "scripts.run_month", *month]):
         if local_pg.run(cmd, practice=True):
             sys.exit(f"the practice run stopped at: {' '.join(cmd[1:])}")
     conn = _connect(True)

@@ -2,7 +2,7 @@
 
 **What this shows:** the real monthly steps running on labelled generated sales, on a copy on this laptop. **What to say about it:** the April plan it produces is practice, not a result. It does not show the deployed service, which has not been redeployed, and it does not show a real new monthly file running, because none has ever existed.
 
-Walked through in a browser on 2026-11-03, from `Main-BE`, with the commands below typed into PowerShell. Takes about 5 minutes from the first command to a closed month.
+Walked through in a browser on 2026-11-03, from `Main-BE`, with the commands below typed into PowerShell, and it took about 5 minutes then. **Sections 4 and 5 changed on 2026-11-04 and have not been walked through since**: the plan's decisions now come first, so expect it to take longer.
 
 **Before you start:** PowerShell open in the repo folder (`C:\Users\kyuan\Capstone-Project`), and the folder `backups\full_backup_20261102T170343Z` on this machine. It is git-ignored, so another machine will not have it.
 
@@ -46,17 +46,31 @@ This changes the database behind the pages only. The practice copy keeps 25, and
 
 You land on **Data management**, signed in without a password as the first admin account on the copy (the sidebar shows that person's name). A blue note at the top reads **Local practice database**.
 
-## 4. The four steps
+## 4. Settle the March plan first
 
-Do not reload after step 4 until you have finished talking about the plan (see "After the close").
+**Changed 2026-11-04, and not yet walked through in a browser.** `scripts.run_month` now refuses to run while this month's plan has an order nobody has decided, so the demo goes through the real approval. Details and limits: [MONTHLY_BATCH_REVIEW.md](MONTHLY_BATCH_REVIEW.md).
+
+| Do this | Screen shows |
+|---|---|
+| Open **Reorder Recommendations** in the sidebar | The March 2026 plan |
+| Use **Accept all** on the rows it offers | Those rows are accepted |
+| Decide each remaining ordering row on its own, accepting or dismissing it | Flagged rows ask for their own confirmation, so Accept all leaves them out |
+| Settle any staff request on the **Requests** tab | Nothing left awaiting an admin |
+
+On live on 2026-11-04 the plan had 73 rows ordering something, 19 of them flagged, and the 36 rows ordering nothing have no buttons and do not count. Those are a baseline, not constants: the page reads the current rows. These decisions are written to `ssm_local`, the pages' database, and stay there until the next `--reset`. Not yet timed.
+
+## 5. The five steps
+
+Back on **Data Management**.
 
 | Do this | Screen shows | Wait |
 |---|---|---|
-| **Step 1:** click **No file? Generate practice sales** | Step 1 changes to "2026-03 sales are in the database." The blue note gains: **"709 sales rows this month are generated practice data, so nothing here is a real result."** | 3 s |
-| **Step 2:** choose **On (as the live forecast)**. **Run 2026-03** stays disabled until you choose | The button becomes clickable | |
-| Click **Run 2026-03** | "Running, this takes a few minutes" and a live log. A reload here is safe: it comes back still running | 2 to 3.5 min |
-| **Step 3:** read the table | See below. The blue note still carries the 709 label | |
-| **Step 4:** tick **I have read the plan above (1,213,168 pieces)**. **Close 2026-03** stays disabled until you tick | The button becomes clickable | |
+| **Step 1:** click **No file? Generate practice sales** | Step 1 changes to "2026-03 sales are in the database." The blue note gains: **"709 sales rows this month are generated practice data, so nothing here is a real result."** | About 10 s |
+| **Step 2:** click **Run Validation** | The Reorder page's decisions are carried onto the practice copy through `decide_row`. The checklist reads **All required checks passed**, with a warning for the generated sales. If orders are still undecided, the **Pending Reorder Decisions** dialog opens and **Review Recommendations** takes you back to section 4 | A few seconds |
+| **Step 3:** choose **On (as the live forecast)**. **Run the Month** stays disabled until you choose | The button becomes clickable | |
+| Click **Run the Month**, then **Confirm and Run** | **Processing 2026-03** and the stages it has reached. A reload here is safe: it comes back still running | 2 to 3.5 min when last timed, with nothing decided |
+| **Step 4:** read **Monthly Processing Complete** and the table | See below. The blue note still carries the 709 label | |
+| **Step 5:** tick **I have read the plan above**. **Close 2026-03** stays disabled until you tick | The button becomes clickable | |
 | Click **Close 2026-03** | "2026-03 is closed." | 3 s |
 
 **The review screen should read:**
@@ -64,16 +78,18 @@ Do not reload after step 4 until you have finished talking about the plan (see "
 | Plan | Products | Ordering | Pieces | Note |
 |---|---|---|---|---|
 | 2026-03 | 109 | 73 | 435,988 | Current |
-| 2026-04 | 121 | 110 | 1,213,168 | 2.78x the current plan |
+| 2026-04 | **not yet measured** | | | |
 
-Below it: "stock count 2026-03 (taken 2026-04-06): 1,685,621 pieces, 0.70x the median of the 6 before it"; "forecast error withheld: 709 generated sales rows are in this cycle..."; "0 accepted, 0 dismissed, 109 not decided."
+**The April row will change, and that is correct.** It read 121, 110 and 1,213,168 pieces when nothing was decided. Accepted orders now count as stock on the way (`stock_opening_v`: a receipt due after the count date), so expect a different figure, probably a smaller one. Do not force the old total. Write the measured figure here after the first walkthrough. On this copy the decisions are dated today, months after the 2026-04-06 count, so every accepted order counts as still on the way, which a real month's timing would not do.
 
-The 2026-03 row is the only place the panel shows 109 and 435,988, and it appears only from this step on. The withheld error is deliberate: no accuracy figure is shown on generated sales. 1,213,168 is a practice number, never quote it as a plan.
+Below it: "stock count 2026-03 (taken 2026-04-06): 1,685,621 pieces, 0.70x the median of the 6 before it"; "forecast error withheld: 709 generated sales rows are in this cycle..."; the decisions you made, with the rows that order nothing shown as not decided.
+
+The 2026-03 row is the only place the panel shows 109 and 435,988, and it appears only from this step on. The withheld error is deliberate: no accuracy figure is shown on generated sales. The April figure is a practice number, never quote it as a plan.
 
 ## After the close
 
-- **The Reorder page is unchanged**, on purpose: it still shows March 2026 with 109 pending and 435,988 pieces, because the pages do not read the practice copy.
-- **A reload moves the panel on.** It then reads "Monthly batch for 2026-04" with empty steps, and the plan table and the 709 label are gone from the screen. Nothing is lost.
+- **The Reorder page still shows March 2026**, with the decisions you made in section 4, because the pages do not read the practice copy. A decision travels one way, from the page to the copy.
+- **A reload moves the panel on.** Its processing month then reads 2026-04 with empty steps, and the plan table and the 709 label are gone from the screen. Nothing is lost.
 - **To show that the rows stay labelled** (should print `709 | 709`):
 
 ```powershell
@@ -93,8 +109,8 @@ An earlier app is still running. Stop it, then repeat section 1:
 Get-NetTCPConnection -LocalPort 8000,5173 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
-**3. A step says "The last step stopped (exit N)", or you need to start again.**
-Open the log under the panel and read its last lines: the reason is there. Clicking Run again skips the finished steps. To go back to the start, including after a close, repeat section 1 with `--reset` and then sections 2 and 3. It takes about 45 s, and it can only touch the throwaway server. If you hit this in front of the panel and do not have 5 minutes, say what stopped and move on: do not improvise a command.
+**3. The panel says "Monthly Processing Failed", or you need to start again.**
+It names the stage that stopped and what to do. The whole output is in `local/monthly_batch/logs`, in the file named by the job number under **Review available details**. Running again skips the finished steps. To go back to the start, including after a close, repeat section 1 with `--reset` and then sections 2, 3 and 4: the reset also undoes the decisions. It takes about 45 s, and it can only touch the throwaway server. If you hit this in front of the panel and do not have 5 minutes, say what stopped and move on: do not improvise a command.
 
 ## When you finish
 

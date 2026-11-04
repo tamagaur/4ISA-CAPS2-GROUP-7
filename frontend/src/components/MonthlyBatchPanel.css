@@ -154,27 +154,6 @@
   color: var(--color-text);
 }
 
-.mb-log summary {
-  cursor: pointer;
-  font-size: 0.875rem;
-  color: var(--color-text);
-}
-
-.mb-log pre {
-  margin: 8px 0 0;
-  padding: 12px;
-  max-height: 280px;
-  overflow: auto;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .mb-spin {
   vertical-align: -2px;
   animation: mb-spin 1s linear infinite;
@@ -188,6 +167,324 @@
   .mb-spin { animation: none; }
 }
 
+/* The section's own heading, and the five facts under it. */
+.mb-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mb-title {
+  margin: 0 0 2px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.mb-status {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 14px var(--card-padding);
+  box-shadow: var(--shadow-card);
+}
+
+.mb-status dt,
+.mb-result-facts dt,
+.mb-dialog-facts dt {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-status dd,
+.mb-result-facts dd,
+.mb-dialog-facts dd {
+  margin: 2px 0 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* A step across both columns: the upload, the checklist and the close. */
+.mb-step-wide { grid-column: 1 / -1; }
+
+.mb-step-head {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mb-step-head .btn { flex-shrink: 0; }
+
+.mb-files {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 12px 24px;
+  align-items: center;
+}
+
+/* The Monthly Processing Checklist: compact rows, two across where they fit. */
+.mb-check {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mb-check-heading {
+  margin: 0 0 2px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.mb-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 0 24px;
+}
+
+.mb-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.mb-check-icon { flex-shrink: 0; margin-top: 1px; }
+.mb-check-row.is-passed .mb-check-icon { color: var(--color-success-deep); }
+.mb-check-row.is-failed .mb-check-icon { color: var(--color-danger-text); }
+.mb-check-row.is-warning .mb-check-icon { color: var(--color-warning-text); }
+.mb-check-row.is-not_checked .mb-check-icon { color: var(--color-text-subtle); }
+
+.mb-check-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mb-check-title {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.mb-check-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.mb-check-action { margin-top: 3px; }
+.mb-check-hint { font-weight: 500; }
+
+.mb-check-past summary,
+.mb-check-details summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.mb-check-past .mb-check-list { margin-top: 8px; }
+.mb-check-details { width: 100%; margin-top: 3px; }
+
+.mb-check-details ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.mb-check-details li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-wrap: anywhere;
+}
+
+.mb-check-file { font-weight: 500; }
+
+/* What a run has done so far: progress, not a verdict. */
+.mb-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.mb-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mb-progress li.is-done { color: var(--color-text); }
+.mb-progress li.is-done svg { color: var(--color-success-deep); }
+
+/* How the run ended. */
+.mb-result {
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 14px var(--card-padding);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.mb-result h5 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.mb-result p { margin: 0; }
+.mb-result.is-completed { border-color: var(--color-success-ui); }
+.mb-result.is-completed h5 svg { color: var(--color-success-deep); }
+.mb-result.is-failed { border-color: var(--color-danger-border); background-color: var(--color-danger-bg); }
+.mb-result.is-failed h5 { color: var(--color-danger-text); }
+
+.mb-result-facts,
+.mb-dialog-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 16px;
+}
+
+.mb-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8125rem;
+}
+
+.mb-stages li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 340px;
+}
+
+.mb-stages li.is-stopped { font-weight: 600; }
+
+/* The three dialogs, on the shared Modal, which leaves the look to its caller. */
+.mb-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.mb-dialog {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: var(--color-surface);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+}
+
+.mb-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--color-surface-sunken);
+}
+
+.mb-dialog-head h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.mb-dialog-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+.mb-dialog-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.mb-dialog-body p { margin: 0; }
+
+.mb-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--color-surface-sunken);
+}
+
 @media (max-width: 900px) {
   .mb-steps { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .mb-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mb-step-head .btn,
+  .mb-dialog-actions .btn { width: 100%; }
+  .mb-dialog-actions { flex-direction: column-reverse; }
 }
