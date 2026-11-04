@@ -1,15 +1,16 @@
 // The top sellers the current plan has no row for (GET /recommendations
-// ?include_not_planned=true, 2026-11-03). The plan only covers Class A products whose
+// not_planned, 2026-11-03). The plan only covers Class A products whose
 // forecast passed the accuracy check, so without this the page says nothing about the
 // rest, however low their stock. Read-only and beside the plan: no order quantity, no
-// action, and never in the plan's counts, total or Accept all. The server orders it,
+// action, and never in the plan's counts, total or Accept all. Sorted here,
 // lowest cover first, with no cut-off: nothing here decides what counts as low.
 import React, { useState } from 'react';
 import { AlertTriangle, ChevronDown, PackageSearch } from 'lucide-react';
 import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import { formatMonth } from '../utils/formatDate';
-import { matchesSearch, notPlannedLede, revenueShareBasis } from '../utils/reorderView';
+import { formatCoverDays } from '../utils/formatNumber';
+import { matchesSearch, notPlannedByCover, notPlannedLede, revenueShareBasis } from '../utils/reorderView';
 
 // How many rows show before "Show all". A length for the page, not a limit on the
 // list: the first rows are the lowest cover, and the rest are one click away.
@@ -21,9 +22,10 @@ const ReorderNotPlanned = ({
 }) => {
   const [showAll, setShowAll] = useState(false);
   const searching = query.trim() !== '';
+  const ordered = notPlannedByCover(items);
   const matched = searching
-    ? items.filter((item) => matchesSearch({ product: item.product_name, sku: item.sku_id }, query, brandOf({ sku: item.sku_id })))
-    : items;
+    ? ordered.filter((item) => matchesSearch({ product: item.product_name, sku: item.sku_id }, query, brandOf({ sku: item.sku_id })))
+    : ordered;
   if (matched.length === 0) return null;
   const listed = searching || showAll ? matched : matched.slice(0, FIRST_ROWS);
   const shareBasis = abcLabel ? revenueShareBasis('unilever', abcLabel) : null;
@@ -83,7 +85,7 @@ const ReorderNotPlanned = ({
                     openLabel="See this product’s sales history and forecast"
                   />
                 </td>
-                <td className="col-text reorder-notplanned-why" data-label="Why It Isn’t Planned">{item.reason}</td>
+                <td className="col-text reorder-notplanned-why" data-label="Why It Isn’t Planned">{item.reason_text}</td>
                 <td className="table-center" data-label="Opening Stock">
                   {item.stock_not_in_count && (
                     <span className="reorder-count-flag" title={notInCountNote}>
@@ -93,16 +95,16 @@ const ReorderNotPlanned = ({
                   )}
                   {!item.stock_not_in_count && item.current_stock != null && Math.round(item.current_stock).toLocaleString()}
                   {!item.stock_not_in_count && item.current_stock == null && (
-                    <span className="cell-empty" title={item.cover_blocked_reason || undefined}>—</span>
+                    <span className="cell-empty" title={item.stock_blocked_reason || undefined}>—</span>
                   )}
                 </td>
                 <td className="table-center" data-label="Sales a Month">
-                  {item.avg_monthly_pieces != null
-                    ? Math.round(item.avg_monthly_pieces).toLocaleString()
+                  {item.recent_monthly_pieces != null
+                    ? Math.round(item.recent_monthly_pieces).toLocaleString()
                     : <span className="cell-empty">—</span>}
                 </td>
                 <td className="table-center" data-label="Cover (Days)" title={item.days_of_cover != null ? undefined : (item.cover_blocked_reason || undefined)}>
-                  {item.days_of_cover != null ? item.days_of_cover.toFixed(1) : <span className="cell-empty">—</span>}
+                  {item.days_of_cover != null ? formatCoverDays(item.days_of_cover) : <span className="cell-empty">—</span>}
                 </td>
                 {tier !== 'tablet' && (
                   <td className="table-center" data-label="Revenue Share">

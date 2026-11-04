@@ -19,6 +19,9 @@ from urllib.parse import urlparse
 REPO = Path(__file__).resolve().parents[1]
 NONLIVE_DIR = REPO / "local" / "nonlive_reports"
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+PRACTICE_DATABASE = "ssm_practice"   # scripts/local_pg.py
+# Put in every file a practice run writes, so the file says it itself. scripts/practice_artefacts.py fails on one without it.
+PRACTICE_MARKER = "PRACTICE RUN ON GENERATED SALES, NOT A RESULT"
 
 
 def is_live_target() -> bool:
@@ -30,6 +33,12 @@ def is_live_target() -> bool:
         except ImportError:
             pass
     return (urlparse(url).hostname or "") not in _LOCAL_HOSTS
+
+
+def is_practice_target() -> bool:
+    """The run's database is the practice copy, by the name in its URL. For labelling output only: permission to accept generated
+    rows comes from analytics/forecasting/practice_switch, which asks the connection."""
+    return urlparse(os.environ.get("SUPABASE_DB_URL") or "").path == f"/{PRACTICE_DATABASE}"
 
 
 def report_path(tracked: str | os.PathLike) -> Path:

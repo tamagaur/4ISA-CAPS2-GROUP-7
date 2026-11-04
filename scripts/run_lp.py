@@ -8,7 +8,9 @@ target stock, within the supplier allocation (Sir Abe's rule). lp.py's
 module docstring has the model. This script fetches its inputs, solves one LP
 per planning cycle, and writes (or, with --dry-run, reports) one row per
 product:
-  q_i         the month's order, in pieces (the app splits it into weekly POs)
+  q_i         the month's order, in pieces: one figure, not split into weekly POs by
+              any code. The 8-business-day window assumes SSM's own stated practice of
+              ordering weekly, which the system neither implements nor verifies.
   rop_i       the target stock T_i
   ss_i        the safety stock
   lp_run_key  the lp_run row (migration 0037) holding every input the run
@@ -95,7 +97,7 @@ is still refused, never projected over. --require-count restores the old refusal
                   per principal); its revenue share is the product's priority
                   when the allocation is short.
 
-PLACEHOLDERS (agreed with Yuan, 2026-09-29): the allocation %, review and
+PLACEHOLDERS (agreed with Yuan, 2026-09-29; the four cost and capacity inputs are DEC-44, 2026-11-02): the allocation %, review and
 lead days, target weeks, cover rule, warehouse capacity and the two costs
 have no source in SSM's data yet. Their defaults are
 analytics/params.PLACEHOLDERS, the same dict
@@ -142,6 +144,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from analytics.etl.granularity import business_days_in_month, resolve_delmonte_category_grain, resolve_unilever_sku_grain
 from analytics.allocation import basis_year, monthly_allocation
 from analytics.config import long_read_db_url
+from scripts.report_target import PRACTICE_MARKER, is_practice_target, report_path
 from scripts.run_guards import cycles_with_a_plan, stale_abc_refusal
 from analytics.demo.prescriptive import plan_category, sigma_d_for_category
 from analytics.optimization.lp import (
@@ -659,6 +662,11 @@ def check_stock_periods(products: list[ProductInput], planning_cycle_date) -> No
                          f"{len(wrong)} product(s) carry another month's stock: {wrong[:5]}")
 
 
+def _practice_labelled(df: pd.DataFrame) -> pd.DataFrame:
+    """A file from a run on the practice copy says so on every row. Anywhere else, df untouched."""
+    return df.assign(practice_marker=PRACTICE_MARKER) if is_practice_target() else df
+
+
 def rows_to_retire(rows: list[dict], planning_cycle_date, solved_keys: set[int]) -> list[dict]:
     """The rows --retire-stale-pending removes: this cycle's pending rows for
     products this run did not solve. Accepted and dismissed rows, and every
@@ -682,9 +690,9 @@ def retire_stale_pending(
     rows = rows_to_retire([dict(zip(columns, r)) for r in cur.fetchall()], planning_cycle_date, solved_keys)
     if dry_run or not rows:
         return rows, None
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"retired_{planning_cycle_date}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.csv"
-    pd.DataFrame(rows, columns=columns).to_csv(path, index=False)
+    path = report_path(out_dir / f"retired_{planning_cycle_date}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.csv")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _practice_labelled(pd.DataFrame(rows, columns=columns)).to_csv(path, index=False)
     cur.execute(RETIRE_QUERY, ([int(r["recommendation_key"]) for r in rows], planning_cycle_date))
     if cur.rowcount != len(rows):
         raise RuntimeError(f"retiring cycle {planning_cycle_date} deleted {cur.rowcount} row(s), expected "
@@ -1695,7 +1703,7 @@ def main():
         refresh_marts(db_url, "run_lp")
 
     if args.csv:
-        pd.DataFrame(csv_rows).to_csv(args.csv, index=False)
+        _practice_labelled(pd.DataFrame(csv_rows)).to_csv(args.csv, index=False)
         logger.info(f"Per-product plan written to {args.csv}")
 
     # ---- Summary -----------------------------------------------------

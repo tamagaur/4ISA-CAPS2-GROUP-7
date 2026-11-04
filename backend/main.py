@@ -30,6 +30,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
 from backend import mailer
 from backend.api_errors import ApiError, api_error_handler
@@ -38,9 +39,10 @@ from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
 from backend.security_headers import SecurityHeadersMiddleware
+from backend.startup_checks import validate_secrets
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
-    inventory, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
+    inventory, monthly_batch, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
     segment, sku, two_factor, users,
 )
 
@@ -67,6 +69,7 @@ async def lifespan(app: FastAPI):
     real engine is never touched by any request either, so checking it
     would just fail the test suite against a DB it was never going to use.
     """
+    validate_secrets()  # G8: a weak JWT_SECRET_KEY in production or a malformed MFA key stops the boot
     mailer.warn_if_frontend_url_unset()
     if get_db in app.dependency_overrides:
         logger.info("get_db is overridden (test/mock mode) — skipping startup DB connectivity check.")
@@ -145,6 +148,14 @@ app.include_router(decomposition.router)
 app.include_router(category_trends.router)
 app.include_router(data_mode.router)
 app.include_router(demo.router)
+if monthly_batch.enabled():   # local practice database only: the deployed API does not have these routes (docs/CHAPTER4_CODE_FIGURES.json)
+    app.include_router(monthly_batch.router)
+
+if monthly_batch.on_practice_copy():   # never the deployed API: it is not connected to ssm_practice
+    @app.middleware("http")
+    async def refuse_practice_copy(request, call_next):
+        refusal = monthly_batch.practice_copy_refusal(request.url.path)
+        return JSONResponse(refusal, status_code=409) if refusal else await call_next(request)
 
 
 @app.get("/health", tags=["health"])

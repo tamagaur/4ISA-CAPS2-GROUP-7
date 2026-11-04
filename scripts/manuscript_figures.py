@@ -950,28 +950,43 @@ def fig_n(plt, d) -> Fig:
     return f
 
 
+def fig_o_values(pesos: dict) -> dict:
+    """fig_o's bars, every one from the one row of GET /policy-comparison it draws. The other reading is for the source note only."""
+    row, other = pesos["readings"]["rule_read_as_peak"], pesos["readings"]["rule_read_as_average"]
+    return {"row": row["label"],
+            "plan": [row["average"]["lp_stock_pesos"], row["peak"]["lp_stock_pesos"]],
+            "rule": [row["average"]["rule_stock_pesos"], row["peak"]["rule_stock_pesos"]],
+            "pct": [row["average"]["pct_vs_rule"], row["peak"]["pct_vs_rule"]],
+            "other_label": other["label"], "other_pct": [other["average"]["pct_vs_rule"], other["peak"]["pct_vs_rule"]]}
+
+
 def fig_o(plt, d) -> Fig:
     pol = d["api"]["policy"]
+    v = fig_o_values(pol["pesos"])
     f = Fig("o", "fig_o_plan_vs_rule.png", "Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026)",
             "GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are "
             "the last purchase price per piece from the stock file)", "planning cycle March 2026",
             "the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list "
-            "item 13); capital freed (none is claimed); the rule is held flat at 3 weeks, so its average equals its "
-            "peak. If 3 weeks is the rule's own peak, its average is lower (marked) and the plan's average is 7.1% "
-            "less, not 22.6%; SSM has not confirmed the prices or which reading applies",
+            "item 13); capital freed (none is claimed). The peso panel's bars are one row of GET /policy-comparison, "
+            f"the {v['row']}: 3 weeks is the stock right after a delivery, and its average is half a weekly order lower. "
+            f"On the other reading, the {v['other_label']}, the plan's average is {v['other_pct'][0]:+.1f}% and its peak "
+            f"{v['other_pct'][1]:+.1f}%. Weekly ordering is assumed, not implemented; SSM has not confirmed the prices, "
+            "its weekly ordering or which reading applies",
             chart_note="Two panels: target stock is in pieces and average and peak stock are in pesos.")
     pf, pe = pol["portfolio"], pol["pesos"]
+    as_average, as_peak = pe["readings"]["rule_read_as_average"], pe["readings"]["rule_read_as_peak"]
     f.check("target stock, plan (pieces)", round(pf["lp_target_stock_units"]), 1005661, basis="Table 4.2.22")
     f.check("target stock, rule (pieces)", round(pf["rule_stock_units"]), 840092, basis="Table 4.2.22")
     f.check("target vs rule (%)", round(100 * (pf["lp_target_stock_units"] / pf["rule_stock_units"] - 1), 1), 19.7,
             basis="Table 4.2.22")
-    f.check("average stock, plan (PHP)", round(pe["average"]["lp_stock_pesos"]), 7496532, basis="Table 4.2.22")
-    f.check("rule stock (PHP)", round(pe["average"]["rule_stock_pesos"]), 9680196, basis="Table 4.2.22")
-    f.check("peak stock, plan (PHP)", round(pe["peak"]["lp_stock_pesos"]), 11045937, basis="Table 4.2.22")
-    f.check("average vs rule (%)", pe["average"]["pct_vs_rule"], -22.6, basis="Table 4.2.22")
-    f.check("peak vs rule (%)", pe["peak"]["pct_vs_rule"], 14.1, basis="Table 4.2.22")
-    f.check("rule average if 3 weeks is a peak (%)", pe["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"],
-            -7.1, basis="edit list item 13")
+    f.check("average stock, plan (PHP)", round(as_peak["average"]["lp_stock_pesos"]), 7496532, basis="rule_read_as_peak")
+    f.check("average stock, rule (PHP)", round(as_peak["average"]["rule_stock_pesos"]), 8066830, basis="rule_read_as_peak")
+    f.check("average vs rule (%)", as_peak["average"]["pct_vs_rule"], -7.1, basis="rule_read_as_peak")
+    f.check("peak stock, plan (PHP)", round(as_peak["peak"]["lp_stock_pesos"]), 11045937, basis="rule_read_as_peak")
+    f.check("peak stock, rule (PHP)", round(as_peak["peak"]["rule_stock_pesos"]), 9680196, basis="rule_read_as_peak")
+    f.check("peak vs rule (%)", as_peak["peak"]["pct_vs_rule"], 14.1, basis="rule_read_as_peak")
+    f.check("the other reading's average vs rule (%), source note only", as_average["average"]["pct_vs_rule"], -22.6, basis="rule_read_as_average")
+    f.check("the other reading's peak vs rule (%), source note only", as_average["peak"]["pct_vs_rule"], -2.2, basis="rule_read_as_average")
     f.check("products holding less than the rule", pf["skus_lp_holds_less"], 56, basis="Table 4.2.22")
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(6.5, 3.7), gridspec_kw={"width_ratios": [0.7, 1.3]})
     w = 0.36
@@ -989,22 +1004,18 @@ def fig_o(plt, d) -> Fig:
     a1.set_title("Pieces", fontsize=8)
     ygrid(a1)
     x = np.arange(2)
-    plan = [pe["average"]["lp_stock_pesos"], pe["peak"]["lp_stock_pesos"]]
-    rule = [pe["average"]["rule_stock_pesos"], pe["peak"]["rule_stock_pesos"]]
+    plan, rule = v["plan"], v["rule"]
     a2.bar(x - w / 2, plan, w, color=DARK, label="DSD plan")
     a2.bar(x + w / 2, rule, w, color=LIGHT, hatch="////", edgecolor=INK, linewidth=0.4,
-           label="3-week rule (held flat: average = peak)")
-    for i, (p, r, pct) in enumerate(zip(plan, rule, (pe["average"]["pct_vs_rule"], pe["peak"]["pct_vs_rule"]))):
+           label="3-week rule, read as a peak")
+    for i, (p, r, pct) in enumerate(zip(plan, rule, v["pct"])):
         a2.text(i - w / 2, p * 1.01, f"₱{p / 1e6:.2f} M\n({pct:+.1f}%)", ha="center", fontsize=6.5)
         a2.text(i + w / 2, r * 1.01, f"₱{r / 1e6:.2f} M", ha="center", fontsize=6.5)
-    alt = pe["rule_average_if_three_weeks_is_a_peak"]["rule_stock_pesos"]
-    a2.plot([0, w], [alt, alt], color=INK, linewidth=1.4, linestyle="--",
-            label=f"Rule average if 3 weeks is its peak: ₱{alt / 1e6:.2f} M (plan −7.1%)")
     a2.set_xticks(x, ["Average stock", "Peak stock (after delivery)"])
     a2.set_ylim(0, max(plan + rule) * 1.22)
     a2.yaxis.set_major_formatter(millions)
     a2.set_ylabel("₱ millions (last purchase price)")
-    a2.set_title("Pesos", fontsize=8)
+    a2.set_title("Pesos, rule read as a peak", fontsize=8)
     h, lab = a2.get_legend_handles_labels()
     fig.legend(h, lab, loc="lower center", bbox_to_anchor=(0.5, 0.21), ncol=2, fontsize=6.5)
     ygrid(a2)

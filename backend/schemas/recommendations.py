@@ -126,12 +126,13 @@ class RecommendationItem(BaseModel):
     # migration 0062). q_i stays what the LP produced; recommended_q_i repeats it under an unambiguous
     # name so a page can show "recommended X, decided Y". decided_q_i is the quantity the planner chose
     # when it differs from q_i (None = no override: pending, dismissed, or accepted as recommended).
-    # decision_reason is why (required on dismiss). Nothing in forecasting, safety stock or the LP reads
-    # these, and none of them changes a recommended value. The one reader is the displayed plan total.
+    # decision_reason is why (required on dismiss) and enters no computation. A decision changes neither the
+    # forecast nor the safety stock. An accepted order becomes an expected receipt and so part of the next
+    # cycle's opening stock, which the optimisation reads (backend/expected_receipts.py); this row's own q_i
+    # does not change.
     recommended_q_i: float | None = None
     decided_q_i: float | None = None
-    # What this row contributes to the displayed plan total and count (2026-10-24, the narrow lift of the
-    # capture-only rule): decided_q_i where the planner accepted a different quantity, else q_i. Equal to
+    # What this row contributes to the displayed plan total and count (2026-10-24): decided_q_i where the planner accepted a different quantity, else q_i. Equal to
     # q_i for every undecided row, so with nothing decided the plan total is unchanged.
     plan_q_i: float | None = None
     decision_reason: str | None = None
@@ -145,19 +146,28 @@ class RecommendationItem(BaseModel):
 
 
 class NotPlannedItem(BaseModel):
-    """A Class A product the current plan has no row for (2026-11-03, GET /recommendations?include_not_planned=true).
-    Read-only and never a recommendation: it has no order quantity, and nothing upstream reads it. Stock and cover are
-    read as a plan row's are, so the two lists compare: current_stock is 0 with stock_not_in_count where the count omits
-    the product, None where there is no figure in pieces, and days_of_cover None with cover_blocked_reason saying why."""
+    """A Tier A product with no plan row in the cycle, and why. Read-only and with no order quantity on purpose: the
+    plan orders nothing for it."""
     sku_id: str
     product_name: str | None = None
-    principal: str
-    reason: str                     # why it isn't planned, in the words of GET /abc's no_target_reason
-    reason_code: str                # backend/routers/abc._no_target_reason's code
-    revenue_share: float | None = None
+    # 'mase_gate' | 'insufficient_data' | 'dead'; 'other' for a product the three do not explain (none in cycle 2026-03).
+    reason: str
+    reason_text: str
+    # Pieces at the cycle's opening count, read as a plan row reads it: 0 with stock_not_in_count when the count omits
+    # the product, None with stock_blocked_reason when its cases can't be put in pieces.
     current_stock: float | None = None
     stock_not_in_count: bool = False
-    avg_monthly_pieces: float | None = None
+    stock_blocked_reason: str | None = None
+    # Mean pieces a month over the 3 sales months up to the cycle's opening count (SKU_COVER_HISTORY_MONTHS; a month with no row = 0).
+    recent_monthly_pieces: float
+    # The cycle's review_flag row, as on RecommendationItem. needs_review None = not assessed. No order follows from it.
+    needs_review: bool | None = None
+    review_reasons: list[str] = []
+    review_over_run_months: int | None = None
+    review_collapse_ratio: float | None = None
+    # For the Reorder page's Not in This Plan list: the ABC run's revenue share, and days of cover by _cover's rules (pieces
+    # over pieces; None with cover_blocked_reason saying why), so a row here compares with a row of the plan.
+    revenue_share: float | None = None
     days_of_cover: float | None = None
     cover_blocked_reason: str | None = None
 
@@ -204,8 +214,8 @@ class RecommendationsResponse(BaseModel):
     stock_counts: list[dict] = []
     # {principal display name: 'YYYY-MM'} — each principal's ABC run at or before the cycle month.
     tier_a_periods: dict[str, str] = {}
-    # Only with ?include_not_planned=true, lowest cover first (NotPlannedItem). None = not asked for, or it doesn't
-    # apply (not the current plan's whole view, preview, Del Monte); [] = the plan leaves nothing out.
+    # The Tier A products of the current cycle with no plan row, whatever status, cycle or date filter the rows were
+    # asked with. None where it is not computed (preview, or no current cycle). See recommendations.not_planned.
     not_planned: list[NotPlannedItem] | None = None
 
 

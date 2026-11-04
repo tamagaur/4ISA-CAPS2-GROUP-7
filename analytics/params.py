@@ -25,7 +25,8 @@ from __future__ import annotations
 # accuracy", IJF 22(4). MASE < 1 means the forecast beat the in-sample
 # one-step naive forecast on average. A definition, not a tuned cut. This is
 # THE reliability gate: the LP's candidate pool (scripts/run_lp.py), the
-# dashboard's forecast card and the runner's pass rates all use it.
+# dashboard's forecast card and the runner's pass rates all use it. Adopted as
+# the plan's quality gate by the team (DEC-46), not confirmed by SSM or the adviser.
 MASE_GATE = 1.0
 
 # TEAM: the 2026-09-23 fit review's severity bands, fixed before computing
@@ -110,7 +111,8 @@ FSN_MIN_FAST_SALES_MONTHS = 3
 # --------------------------------------------------------------------------- #
 # Tier A basis (analytics/classification/orchestrate_abc.py)
 # --------------------------------------------------------------------------- #
-# TEAM, PENDING TA CONFIRMATION (decided 2026-10-05 for this refresh): which
+# DEC-42 (team decision, adopted 2026-11-02, in use since 2026-10-05; the
+# Technical Adviser has not confirmed it): which
 # ABC run is "Tier A" for Unilever, read by the forecast runner, segmentation,
 # the LP's pool and every backend tier read. 't12m_new' = Class A on the last
 # 12 months' revenue, plus products first sold within those 12 months that are
@@ -153,12 +155,13 @@ XGB_NTHREAD = 1
 # --------------------------------------------------------------------------- #
 # Calendar factor (analytics/forecasting/calendar.py)
 # --------------------------------------------------------------------------- #
-# TEAM: approved by Kelvin 2026-10-19 for build + dry run, pending Sir Catubag's
-# sign-off (a methodology change); the runner applies it only with --calendar-factor.
+# DEC-41 (team decision, adopted 2026-11-02; approved by Kelvin 2026-10-19 for build + dry run).
+# Sir Catubag has not signed it off (a methodology change); the runner applies it only with --calendar-factor.
 # LIVE STATUS (corrected 2026-10-20, calc audit): the factor IS applied to the stored forecast. All 175
 # 'ok' Forecast_Result rows written 2026-10-19 10:37 UTC carry calendar_factor 1.0762 (March 2026, 2 earlier
 # years) and value_before_calendar, so lp_run 3 (2026-10-19) plans on adjusted forecasts. Sir Catubag's
-# sign-off is STILL PENDING. The runner's default stays OFF (opt-in --calendar-factor); the live write used it.
+# sign-off has not been given: DEC-41 records the team's adoption, not his approval. The runner's default
+# stays OFF (opt-in --calendar-factor); the live write used it.
 # Measured sensitivity (closed form on the 107 stored LP rows, stored safety stock and 2026-02 stock held
 # fixed): 424,127 pieces with the factor, 354,975 without, a 16.3% difference across 70 changed rows. Total
 # forecast 2,036,469 with vs 1,892,199 without (+7.62%). reports/diagnostics/calc_audit_2026-10-20/.
@@ -169,19 +172,19 @@ XGB_NTHREAD = 1
 # window, the trailing level the factor corrects.
 CALENDAR_FACTOR_SHRINK = 0.5
 CALENDAR_FACTOR_PRIOR_MONTHS = 3
-# TEAM: whether Sir Catubag has signed the factor off (Kelvin's note above).
-# The live 2026-03 forecast was nonetheless written with --calendar-factor on
-# 2026-10-19 (Forecast_Result.model_params.calendar_factor on every 'ok' row),
-# so the dashboard says the forecast is adjusted AND that the adjustment awaits
-# his sign-off, from this flag. Set True when he approves it.
+# DEC-41: whether Sir Catubag has signed the factor off (he has not; the team
+# adopted it without him). The live 2026-03 forecast was written with
+# --calendar-factor on 2026-10-19 (Forecast_Result.model_params.calendar_factor
+# on every 'ok' row), so the dashboard says the forecast is adjusted AND that
+# his sign-off is missing, from this flag. Set True only when he approves it.
 CALENDAR_FACTOR_SIGNED_OFF = False
 
 # --------------------------------------------------------------------------- #
 # Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern
 # label (analytics/forecasting/decomposition.py)
 # --------------------------------------------------------------------------- #
-# TEAM: the collapse rule, last-3-month mean < 0.5 x last-12-month mean, with
-# at least 12 months since the first sale. 0.5 is Yuan's example (2026-10-03),
+# TEAM: the collapse rule, last-3-month mean < 0.5 x last-12-month mean, on the
+# history the product has (2026-11-03: no 12-month minimum). 0.5 is Yuan's example (2026-10-03),
 # recorded in reports/diagnostics/forecast_error_business_2026-10-03/README.md
 # section 7 (kelvin/forecast-error-business b4f6b77).
 REVIEW_COLLAPSE_RATIO = 0.5
@@ -242,9 +245,9 @@ SKU_COVER_HISTORY_MONTHS = 3
 # sales — x103% minimum, x105% mid, x108% maximum (Sir Abe, client meeting
 # Sep 2026). analytics/allocation.py applies it.
 ALLOCATION_LEVELS_PCT = (103, 105, 108)
-# PLACEHOLDER: which level applies is SSM's to say. Until then the
-# guaranteed minimum (Yuan, 2026-09-30): the LP's --allocation-pct default
-# and the level the dashboard card reports as the default.
+# DEC-44 (stated assumption, adopted 2026-11-02; SSM has not said which level
+# applies): the guaranteed minimum (Yuan, 2026-09-30): the LP's --allocation-pct
+# default and the level the dashboard card reports as the default.
 ALLOCATION_DEFAULT_PCT = 103
 # What the sales basis is counted in; the caller says which. The LP needs
 # pieces; the dashboard card uses pesos (Del Monte's sell-out has no pieces).
@@ -259,6 +262,9 @@ ALLOCATION_UNITS = ("pieces", "pesos")
 # Sir Abe hasn't said which he means yet.
 COVER_RULES = ("aggregate", "per-sku")
 
+# DEC-44 (2026-11-02): the four optimisation inputs below (procurement cost,
+# storage cost, warehouse capacity, supplier ceiling = the allocation %) are
+# adopted by the team as stated assumptions. SSM has not confirmed any of them.
 # PLACEHOLDER: THESE ARE NOT SSM'S FIGURES. Each is a realistic value picked
 # from our own data or from what Sir Abe said in the 2026-09-29 meeting,
 # agreed as a placeholder with Yuan the same day. Keys are scripts/run_lp.py's
@@ -270,7 +276,9 @@ PLACEHOLDERS = {
     # 105% (mid) or 108% (maximum). ALLOCATION_DEFAULT_PCT until SSM says
     # which applies.
     "allocation_pct": float(ALLOCATION_DEFAULT_PCT),
-    # Business days. Weekly purchase orders, delivered 2-3 days later (Sir Abe).
+    # Business days. SSM's own stated practice: weekly purchase orders, delivered 2-3 days
+    # later (Sir Abe). An assumption the system neither implements nor verifies: no code
+    # splits the month's order into weekly POs (analytics/optimization/lp.py).
     "review_days": 5.0,
     "lead_days": 3.0,
     "target_weeks": float(POLICY_COVER_WEEKS),
@@ -291,7 +299,8 @@ PLACEHOLDERS = {
     "default_procurement_cost_per_unit": 33.48,
     # ₱ per piece per month: 2% of ₱25 (about 24% a year). The ₱25 is the old
     # procurement default; the rate is kept, not re-derived, because this value
-    # enters the objective for every product (a placeholder pending SSM).
+    # enters the objective for every product (a stated assumption, DEC-44; not
+# confirmed by SSM).
     "storage_cost_per_unit": 0.50,
 }
 

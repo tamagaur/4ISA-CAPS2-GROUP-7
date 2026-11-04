@@ -528,6 +528,12 @@ def prepare_soh(soh_dir: Path, engine: Engine) -> Prepared:
     return Prepared(df, records, ["sku_code", "snapshot_date", "region"])
 
 
+def known_duplicate_months() -> set[str | None]:
+    """The months of the known-duplicate return files, wherever they sit under data/raw (found by search, as
+    run_canonical_load.known_duplicate_file_records finds them: they live in a month's folder, not at the top)."""
+    return {file_month(path) for name in KNOWN_DUPLICATES for path in RAW_DIR.rglob(name)}
+
+
 def prepare(fam: Family, staged: pd.DataFrame, engine: Engine | Connection, soh_dir: Path | None = None,
             references: frozenset = frozenset(), extra_known_keys: set | None = None,
             months: set[str] | None = None) -> Prepared:
@@ -540,8 +546,7 @@ def prepare(fam: Family, staged: pd.DataFrame, engine: Engine | Connection, soh_
         return Prepared(pd.DataFrame(), [], [], item.dimension_fks)
     p = rcl.prepare_fact(item, staged, engine, reference_pairs=references, extra_known_keys=extra_known_keys)
     records = p.quarantine
-    if fam.key == "sales_return" and (months is None or any(
-            file_month(REPO_ROOT / "data" / "raw" / n) == m for n in KNOWN_DUPLICATES for m in months)):
+    if fam.key == "sales_return" and (months is None or known_duplicate_months() & set(months)):
         records = records + rcl.known_duplicate_file_records()
     return Prepared(p.load_input, records, p.natural_key, item.dimension_fks, p.transformed)
 

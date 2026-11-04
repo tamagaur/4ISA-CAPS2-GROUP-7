@@ -930,7 +930,8 @@ def test_portfolio_forecast_scope_label_and_series():
     pf = resp.json()["portfolio_forecast"]
     assert pf["gated_sku_count"] == 2
     assert pf["scope_label"] == (
-        "Unilever (product forecasts that beat a simple last-month guess, the order plan's own check)."
+        "Unilever (product forecasts whose test error was below the average month-to-month change in "
+        "their sales before the test months, the order plan's own check)."
     )
     by_period = {pt["period"]: pt for pt in pf["series"]}
     assert by_period["2024-01"]["actual"] == pytest.approx(90.0)
@@ -993,8 +994,9 @@ def test_portfolio_forecast_all_scope_says_which_principal_it_covers():
     with make_client(session) as c:
         resp = c.get("/dashboard", headers={"Authorization": f"Bearer {user_token()}"})
     assert resp.json()["portfolio_forecast"]["scope_label"] == (
-        "All principals — only Unilever has product forecasts that beat a simple "
-        "last-month guess (the order plan's own check), so this matches the Unilever view."
+        "All principals — only Unilever has product forecasts whose test error was below the "
+        "average month-to-month change in their sales before the test months (the order "
+        "plan's own check), so this matches the Unilever view."
     )
 
 

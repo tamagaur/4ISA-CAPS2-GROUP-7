@@ -467,14 +467,14 @@ const STORY = {
     text: 'Products that joined or left the top sellers.',
     more: 'Compared with the same months a year earlier, with how much each one\'s sales changed.',
   },
-  // The reliability check (MASE < 1) awaits the Technical Adviser's sign-off,
+  // The reliability check (MASE < 1) is a team decision (DEC-46), not confirmed by SSM or the adviser,
   // and the band's 9 in 10 is its design (z = 1.645), never measured
   // (Technical Adviser, 2 Oct 2026; 2026-10-22).
   forecast: {
     name: 'the forecast',
     text: 'Expected demand for the top sellers, in pieces.',
-    more: 'Only the top sellers whose forecast beat a simple last-month guess (a reliability check pending adviser '
-      + 'confirmation). The shaded band is meant to cover about 9 in 10 months.',
+    more: 'Only the top sellers whose forecast test error was below the average month-to-month change in their sales before the test months (a reliability check the team adopted, '
+      + 'not confirmed by SSM or the adviser). The shaded band is meant to cover about 9 in 10 months.',
   },
   accuracy: {
     name: 'past forecasts',

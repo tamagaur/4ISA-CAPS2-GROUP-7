@@ -7,7 +7,7 @@ from the previous year's sales — x103% minimum, x105% mid, x108% maximum
 (analytics.params.ALLOCATION_LEVELS_PCT) — revised in Q4 on how the market
 went.
 
-Open SSM questions, held as placeholders (Yuan, 2026-09-30):
+Open SSM questions, held as stated assumptions (Yuan, 2026-09-30; DEC-44):
   basis year  the calendar year before the PLANNING month, the month being
               ordered for (basis_year). A January plan uses the whole of
               last year even when last December is the latest data month.

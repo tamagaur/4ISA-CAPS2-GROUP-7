@@ -1,0 +1,120 @@
+"""scripts/cycle_feedback.py: the scoring and the blocked states. The SQL runs in the local rehearsal."""
+from __future__ import annotations
+
+from scripts import cycle_feedback as cf
+
+
+def _row(sku, forecast, actual, blanks=0, has_row=True):
+    return {"sku_code": sku, "forecast": forecast, "actual": actual, "blanks": blanks, "has_row": has_row}
+
+
+def test_no_sales_for_the_month_is_blocked_never_zero():
+    result = cf.score([_row("A", 100.0, None, has_row=False)], month_loaded=False)
+    assert result["status"] == "blocked" and "not loaded" in result["reason"]
+    assert "wape" not in result
+
+
+def test_a_product_with_no_row_in_a_loaded_month_counts_as_zero_sales():
+    result = cf.score([_row("A", 100.0, None, has_row=False), _row("B", 100.0, 100.0)], month_loaded=True)
+    assert result["scored"] == 2 and result["no_sale"] == 1 and result["actual"] == 100.0
+
+
+def test_a_blank_quantity_is_excluded_not_read_as_zero():
+    result = cf.score([_row("A", 100.0, None, blanks=1), _row("B", 100.0, 100.0)], month_loaded=True)
+    assert result["scored"] == 1 and result["excluded_blank"] == 1 and result["forecast"] == 100.0
+
+
+def test_wape_and_bias_are_weighted_by_pieces():
+    result = cf.score([_row("A", 150.0, 100.0), _row("B", 50.0, 100.0)], month_loaded=True)
+    assert result["wape"] == 0.5 and result["bias"] == 0.0
+    assert result["over"] == 1 and result["under"] == 1
+
+
+def test_no_actual_sales_at_all_gives_no_ratio_rather_than_a_number():
+    result = cf.score([_row("A", 100.0, None, has_row=False)], month_loaded=True)
+    assert result["wape"] is None and result["bias"] is None
+
+
+def test_decisions_separate_overrides_from_plain_accepts_and_count_the_reasons():
+    rows = [
+        {"status": "accepted", "q_i": 100.0, "decided_q_i": None, "decision_reason": None, "in_plan": True},
+        {"status": "accepted", "q_i": 100.0, "decided_q_i": 60.0, "decision_reason": "Truck is full", "in_plan": True},
+        {"status": "dismissed", "q_i": 50.0, "decided_q_i": None, "decision_reason": "Overstocked now", "in_plan": True},
+        {"status": "dismissed", "q_i": 50.0, "decided_q_i": None, "decision_reason": "Overstocked now", "in_plan": True},
+        {"status": "pending", "q_i": 10.0, "decided_q_i": None, "decision_reason": None, "in_plan": True},
+        {"status": "accepted", "q_i": 1331.24, "decided_q_i": None, "decision_reason": None, "in_plan": False},
+    ]
+    result = cf.summarize_decisions(rows)
+    assert result["accepted"] == 2 and result["dismissed"] == 2 and result["pending"] == 1 and result["outside_plan"] == 1
+    assert result["overrides"] == 1 and result["override_change_pieces"] == -40.0
+    assert result["reasons"] == [("Overstocked now", 2), ("Truck is full", 1)]
+
+
+def test_no_figure_that_could_rebuild_an_error_survives_a_generated_row():
+    result = cf.score([_row("A", 150.0, 100.0), _row("B", 50.0, 100.0)], month_loaded=True, generated_rows=1)
+    assert result["status"] == "blocked" and "generated sales" in result["reason"]
+    assert not {"wape", "bias", "forecast", "actual", "over", "under", "scored"} & set(result)
+
+
+def test_the_withheld_error_reaches_every_screen_as_the_reason():
+    # MonthlyBatchPanel.jsx prints fc.reason when fc.status is "blocked", and the same report object reaches it (--json).
+    report = {"cycle": "2026-03", "synthetic_rows": 709, "forecast": cf.score([_row("A", 150.0, 100.0)], True, 709),
+              "decisions": cf.summarize_decisions([]), "receipts": []}
+    text = "\n".join(cf.render(report))
+    assert "WAPE" not in text and "bias" not in text and "%" not in text and "generated sales" in text
+
+
+class _Cursor:
+    def __init__(self, generated, synthetic):
+        self.answers = {cf.MONTH_LOADED_SQL: [(True,)], cf.SYNTHETIC_SQL: [(synthetic,)], cf.GENERATED_IN_SCORE_SQL: [(generated,)],
+                        cf.FORECAST_SQL: [("A", 150.0, 100.0, 0, True)], cf.DECISIONS_SQL: [], cf.RECEIPTS_SQL: []}
+        self.last = None
+
+    def execute(self, sql, params=None):
+        self.last = sql
+
+    def fetchone(self):
+        return self.answers[self.last][0]
+
+    def fetchall(self):
+        return self.answers[self.last]
+
+
+def test_a_generated_row_empties_the_report_and_its_per_product_file():
+    for generated, synthetic in ((709, 709), (709, 0), (0, 709)):
+        report, rows = cf.read_report(_Cursor(generated, synthetic), {"period": "2026-03"})
+        assert report["forecast"]["status"] == "blocked" and rows == []
+
+
+def test_a_real_month_is_still_scored_despite_retired_backfill_rows_in_the_base_table():
+    # Live holds is_demo backfill rows in months a real file may yet fill. They never reach the _Real view, so they suppress nothing.
+    report, rows = cf.read_report(_Cursor(0, 0), {"period": "2026-03"})
+    assert report["forecast"]["status"] == "ok" and report["forecast"]["wape"] == 0.5 and len(rows) == 1
+
+
+def test_the_generated_check_reads_what_the_score_reads():
+    assert "_Real" in cf.GENERATED_IN_SCORE_SQL and "_Real" in cf.FORECAST_SQL and "is_demo" in cf.GENERATED_IN_SCORE_SQL
+
+
+def test_a_synthetic_month_is_labelled_on_every_report():
+    lines = cf.render({"cycle": "2026-03", "synthetic_rows": 709, "forecast": cf.score([], month_loaded=True),
+                       "decisions": cf.summarize_decisions([]), "receipts": []})
+    assert "SYNTHETIC" in lines[0]
+
+
+def test_a_real_month_carries_no_synthetic_label():
+    lines = cf.render({"cycle": "2026-03", "synthetic_rows": 0, "forecast": cf.score([], month_loaded=True),
+                       "decisions": cf.summarize_decisions([]), "receipts": []})
+    assert not any("SYNTHETIC" in line for line in lines)
+
+
+def test_nothing_in_this_report_writes():
+    import pathlib
+    source = pathlib.Path(cf.__file__).read_text(encoding="utf-8")
+    for word in ("INSERT INTO", "UPDATE ", "DELETE FROM", ".commit("):
+        assert word not in source
+
+
+def test_generated_rows_are_counted_on_the_base_table():
+    # Labelled is_demo = true, they never pass the _Real views: a count through a view would read 0 and drop the label.
+    assert "_Real" not in cf.SYNTHETIC_SQL and "unilever_sku_demand_fact" in cf.SYNTHETIC_SQL

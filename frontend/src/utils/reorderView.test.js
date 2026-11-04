@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   COVER_BASIS_NOTE, MONTH_TOTAL_NOTE, awaitsDecision, bulkSummary, casesCell, casesNote, filterRows, formatUpdatedAgo,
-  forecastsNoSales, isBelowTarget, isProjectedOpening, matchesSearch, noOrderReason, notPlannedLede, ordersNothing,
+  forecastsNoSales, isBelowTarget, isProjectedOpening, matchesSearch, noOrderReason, notPlannedByCover, notPlannedLede, ordersNothing,
   paramsWithView, parseView, planOrderCounts, projectedLabel,
   projectedNote, provisionalDetail, revenueShareBasis, rowActions, splitBulkRows, tableTier, viewCounts,
 } from './reorderView.js';
@@ -343,7 +343,7 @@ test('the suggested quantity is called the month\'s total on the page and in the
   ['ReorderRecommendations.jsx', 'ReorderReviewDrawer.jsx'].forEach((name) => {
     assert.ok(source(name).includes('MONTH_TOTAL_NOTE'), name);
   });
-  assert.ok(source('DataDictionary.jsx').includes('which SSM splits into weekly purchase orders'));
+  assert.ok(source('DataDictionary.jsx').includes('Nothing in the system divides it into weekly purchase orders'));
 });
 
 test('the planning cycle is a dropdown only when there is more than one to choose', () => {
@@ -391,7 +391,7 @@ test('last update reads in words', () => {
 test('the page reads the whole plan, so a decided row stays on it after a reload', () => {
   // Manuscript 4.2.3.3: a decided row stays part of the plan. The API's default is the current cycle's plan rows.
   const page = source('ReorderRecommendations.jsx');
-  assert.ok(page.includes('getRecommendations({ principal, includeNotPlanned: true })'));
+  assert.ok(page.includes('getRecommendations({ principal })'));
   assert.ok(!page.includes("status: 'pending'"));
 });
 
@@ -481,9 +481,9 @@ test('a no-order reason names a flagged count, and only where the stock is the r
 
 test('the not-planned lede counts every reason and names the ABC month', () => {
   const items = [
-    ...Array.from({ length: 3 }, () => ({ reason_code: 'accuracy' })),
-    { reason_code: 'short_history' },
-    { reason_code: 'forecast_failed' },
+    ...Array.from({ length: 3 }, () => ({ reason: 'mase_gate' })),
+    { reason: 'insufficient_data' },
+    { reason: 'other' },
   ];
   assert.equal(
     notPlannedLede(items, 'Feb 2026'),
@@ -491,9 +491,20 @@ test('the not-planned lede counts every reason and names the ABC month', () => {
       + '1 with too little sales history, 1 for another reason.',
   );
   assert.equal(
-    notPlannedLede([{ reason_code: 'no_recent_sales' }], null),
-    '1 top seller (Class A) has no suggested order: 1 with no recent sales.',
+    notPlannedLede([{ reason: 'dead' }], null),
+    '1 top seller (Class A) has no suggested order: 1 with no sale in the last 6 months.',
   );
+});
+
+test('the not-planned list reads lowest cover first, and no figure last', () => {
+  const items = [
+    { sku_id: 'U-2', days_of_cover: 15.2, revenue_share: 0.02 },
+    { sku_id: 'U-3', days_of_cover: 0, revenue_share: 0.02 },
+    { sku_id: 'U-4', days_of_cover: null, revenue_share: 0.9 },
+    { sku_id: 'U-5', days_of_cover: 15.2, revenue_share: 0.05 },
+  ];
+  assert.deepEqual(notPlannedByCover(items).map((i) => i.sku_id), ['U-3', 'U-5', 'U-2', 'U-4']);
+  assert.equal(items[0].sku_id, 'U-2'); // the server's list is left as it came
 });
 
 test('the not-planned list offers no quantity and no decision', () => {

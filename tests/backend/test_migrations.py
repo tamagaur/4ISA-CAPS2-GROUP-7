@@ -92,3 +92,12 @@ def test_every_public_users_view_lists_every_app_users_column():
     # 0060, DEC-?): avatar_data_url (0058) is retired, avatar_path (0059)
     # stays, nothing else has touched app.users.
     assert columns == ["user_id", "email", "password_hash", "role", "created_at", "full_name", "avatar_path"]
+
+
+def test_0073_only_changes_comments():
+    sql = (MIGRATIONS_DIR / "0073_decision_column_comments.sql").read_text(encoding="utf-8")
+    body = "\n".join(line for line in sql.splitlines() if not line.startswith("--"))
+    statements = [s.strip() for s in body.split(";") if s.strip()]
+    assert [s.split(" IS")[0].strip() for s in statements] == ["COMMENT ON COLUMN lp_recommendation.decided_q_i",
+                                                               "COMMENT ON COLUMN lp_recommendation.decision_reason"]
+    assert "nothing reads" not in body

@@ -43,8 +43,10 @@ LIVE_MODEL = {"short": "ma3", "medium": "tsb", "long": "xgb_ma3_avg"}
 def assert_real_rows(frame: pd.DataFrame, allow_placeholder: bool = False) -> None:
     """Raise if a demand frame carries any is_demo=true (placeholder) row. The
     _Real views exclude them structurally, so one here means the caller read a
-    base table. Months are not judged by date: real 2021-22 rows pass.
-    allow_placeholder=True is for scripts/preview_router_synth.py only."""
+    base table, or that this is the practice copy, whose view admits its own generated
+    rows. Months are not judged by date: real 2021-22 rows pass.
+    allow_placeholder=True: scripts/preview_router_synth.py and the what-if simulation
+    (read-only); the runner passes only what practice_switch.labelled_rows_permitted says."""
     for col in ("is_demo", "is_placeholder"):
         if not allow_placeholder and col in frame.columns and frame[col].fillna(False).astype(bool).any():
             raise ValueError(f"demand frame contains {col}=true rows: forecasting models read the _Real views only")
@@ -71,11 +73,11 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
     it. `force_bin` scores a fixed model over past months (holdout error of
     the model served today); leave it None to bin from the history.
     `allow_placeholder` lets placeholder (is_demo) months through for the
-    what-if preview only; the live runner never passes it.
+    what-if preview, and for the runner when practice_switch permits it: never on live.
     `calendar_totals` (calendar.company_totals) multiplies the final value,
     after the guards, by the calendar factor for `target_month`; None = no
     adjustment. The runner's default, but NOT what is live: the 2026-10-19 Forecast_Result was written with
-    the factor on (all 175 'ok' rows), pending Sir Catubag's sign-off.
+    the factor on (all 175 'ok' rows): team decision DEC-41; adviser sign-off outstanding (still pending).
     `ma3_value` stays the unadjusted benchmark either way.
 
     Guard order, first hit wins, fallback is always MA3 with the reason kept:

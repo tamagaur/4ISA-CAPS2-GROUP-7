@@ -22,7 +22,7 @@ const TECHNICAL = {
 // A basis still waiting on the adviser (DEC-38): said behind the line's "?",
 // not in the visible line (2026-10-19), on every page that shows it.
 const CAVEAT = {
-  Unilever: 'This rule for Unilever\'s top sellers is pending adviser confirmation.',
+  Unilever: 'This rule for Unilever\'s top sellers is a team decision; adviser sign-off is pending.',
 };
 
 const PRINCIPAL_LABEL = { unilever: 'Unilever', delmonte: 'Del Monte' };

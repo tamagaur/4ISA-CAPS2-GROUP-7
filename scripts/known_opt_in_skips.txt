@@ -1,29 +1,32 @@
 # The 21 tests allowed to skip in scripts/check.sh --full (18 decided 2026-10-30, 3 added 2026-11-02). One per line:
-# <test id> TAB <exact skip reason>. Each is an opt-in that needs something a fresh clone does not have: a filled
-# rehearsal schema (17), ROLLOVER_SCRATCH=1, which clones the live database (1), or SSM's real files, which are never
+# <test id> TAB <exact skip reason> [TAB <what runs it>]. Each is an opt-in that needs something a fresh clone does not have: a
+# filled rehearsal schema (17), a database to clone for the rollover test (1), or SSM's real files, which are never
 # committed (3: the real data/raw corpus for test_layout_regression and the Unilever workbook's row count, and the
 # git-ignored per-product policy table whose real totals test_policy_comparison pins). Their synthetic twins
 # (tests/fixtures/) run everywhere. Allowed means 'known and not run', never 'passed'.
+# COVERED: the 18 marked 'check.sh --optin' (the 17 fill tests and the rollover test) run with scripts/check.sh --optin, on a
+# disposable database on 127.0.0.1:55432 seeded from a backup, and are refused anywhere else. The other 3 need SSM's real files
+# and run in --full on a machine that holds them.
 # A skip with any other name, or the same name with a different reason, fails the check. A line here whose test no
 # longer exists also fails it, so this file cannot drift. Add a line only with a reason on record.
-tests.etl.test_fills_db::test_a_second_run_changes_nothing	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_real_rows_replace_the_fill_and_the_missing_branch_gets_its_adjacent_month	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_the_sweep_removes_fills_the_loader_missed	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_cell_that_once_held_real_rows_stays_empty	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_new_stock_and_sales_month_produces_new_derived_receipts	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_del_monte_split_totals_equal_real_sell_out_totals	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_real_views_hold_only_real_rows_and_pass_the_forecast_guard	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_the_estimated_received_series_reads_only_the_derived_table	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_reviewed_category_map_switches_the_split_to_category_level	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_missing_branch_beside_a_real_branch_copies_its_previous_month	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_branch_copy_follows_its_adjacent_month	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_real_rows_for_the_missing_branch_replace_its_fill	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_branch_that_once_held_real_rows_is_not_refilled	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_product_missing_from_the_previous_count_gets_receipts_from_opening_0	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_a_product_missing_from_this_months_count_gets_receipts_from_closing_0	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_every_assumed_zero_keeps_the_negative_balance_rule	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_fills_db::test_an_assumed_zero_opening_from_a_possibly_partial_count_is_flagged	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)
-tests.etl.test_rollover_scratch::test_rollover_on_a_scratch_schema_with_a_synthetic_march	clones the live database into a scratch schema: opt in with ROLLOVER_SCRATCH=1
+tests.etl.test_fills_db::test_a_second_run_changes_nothing	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_real_rows_replace_the_fill_and_the_missing_branch_gets_its_adjacent_month	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_the_sweep_removes_fills_the_loader_missed	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_cell_that_once_held_real_rows_stays_empty	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_new_stock_and_sales_month_produces_new_derived_receipts	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_del_monte_split_totals_equal_real_sell_out_totals	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_real_views_hold_only_real_rows_and_pass_the_forecast_guard	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_the_estimated_received_series_reads_only_the_derived_table	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_reviewed_category_map_switches_the_split_to_category_level	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_missing_branch_beside_a_real_branch_copies_its_previous_month	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_branch_copy_follows_its_adjacent_month	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_real_rows_for_the_missing_branch_replace_its_fill	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_branch_that_once_held_real_rows_is_not_refilled	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_product_missing_from_the_previous_count_gets_receipts_from_opening_0	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_a_product_missing_from_this_months_count_gets_receipts_from_closing_0	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_every_assumed_zero_keeps_the_negative_balance_rule	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_fills_db::test_an_assumed_zero_opening_from_a_possibly_partial_count_is_flagged	needs FILLS_SCRATCH_SCHEMA (a filled rehearsal schema)	check.sh --optin
+tests.etl.test_rollover_scratch::test_rollover_on_a_scratch_schema_with_a_synthetic_march	needs ROLLOVER_SCRATCH=1 and the throwaway database: scripts/check.sh --optin	check.sh --optin
 tests.etl.test_layout_regression::test_content_identification_reproduces_todays_family_and_month_for_every_file	needs the real data/raw corpus
 tests.etl.test_extract::test_parse_unilever_sku_against_real_file	needs the real data/raw corpus
 tests.backend.test_policy_comparison::test_pesos_reproduce_the_lp_logic_check_totals	local/issue4_policy_card_per_product.csv is not on this machine

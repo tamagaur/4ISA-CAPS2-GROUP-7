@@ -975,9 +975,9 @@ export const PendingReordersCard = ({
               + `the reliability check and are planned; ${n(scope.failed)} did not (their forecast was no better than last `
               + `month's number${scope.gate != null ? `: MASE ${scope.gate} or more` : ''}); ${n(scope.total - scope.evaluated)} `
               + `had too little history. The ${n(scope.total - scope.passed)} not planned stay on SSM's own rule. `
-              + 'The reliability check is pending adviser confirmation.'}
+              + 'The team adopted this reliability check; it is not confirmed by SSM or the adviser.'}
           >
-            {n(scope.passed)} of {n(scope.total)} planned · reliability check pending review
+            {n(scope.passed)} of {n(scope.total)} planned · reliability check adopted by the team
           </HoverValue>
         </p>
       )}

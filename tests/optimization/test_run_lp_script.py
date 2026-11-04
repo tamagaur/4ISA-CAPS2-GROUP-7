@@ -17,6 +17,8 @@ import datetime
 import math
 
 import pandas as pd
+
+from scripts.report_target import PRACTICE_MARKER
 import pytest
 
 from analytics.optimization.lp import Z_SCORE, weekly_demand
@@ -280,6 +282,13 @@ def test_real_retire_saves_every_column_before_deleting(tmp_path):
     assert "FOR UPDATE" in cur.statements[0][0]  # nobody can decide a row between the read and the delete
     delete_sql, delete_params = cur.statements[-1]
     assert delete_sql.startswith("DELETE") and delete_params == ([2], CYCLE)
+
+
+def test_rows_retired_on_the_practice_copy_are_saved_labelled(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://postgres@127.0.0.1:55432/ssm_practice")
+    cur = _RecordingCursor([_lp_row(1, 101), _lp_row(2, 102)], watch_dir=tmp_path)
+    _, path = retire_stale_pending(cur, CYCLE, {101}, dry_run=False, out_dir=tmp_path)
+    assert pd.read_csv(path)["practice_marker"].tolist() == [PRACTICE_MARKER]
 
 
 def test_nothing_stale_writes_no_csv_and_deletes_nothing(tmp_path):

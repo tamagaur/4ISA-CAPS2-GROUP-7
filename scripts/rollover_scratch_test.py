@@ -141,6 +141,8 @@ def main(keep: bool = False) -> int:
     os.environ.setdefault("JWT_EXPIRY_HOURS", "1")
     os.environ["DM_DEMO_ENABLED"] = ""
     url = os.environ["SUPABASE_DB_URL"]
+    from scripts.optin_guard import require_throwaway
+    require_throwaway(url)      # the opt-in test's fence, so a direct run with the repo's .env refuses instead of cloning live
 
     from analytics import marts as analytics_marts
     from analytics import receipt_settlement

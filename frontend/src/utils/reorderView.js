@@ -37,7 +37,7 @@ export function revenueShareBasis(principal, month) {
 
 // The suggested order is the month's need (forecast + target stock − opening
 // stock), not one delivery. Worded as the Data Dictionary's Suggested Order.
-export const MONTH_TOTAL_NOTE = 'This is the total for the month, which SSM splits into weekly purchase orders.';
+export const MONTH_TOTAL_NOTE = 'This is the total for the month: one quantity per product. Nothing in the system divides it into weekly purchase orders.';
 
 // How a plan's opening stock was obtained (GET /recommendations stock_counts[]
 // .opening_basis, backend/stock_units.py with_opening_basis). A plan made before
@@ -92,18 +92,29 @@ export function noOrderReason(row, { countLabel, countFlag } = {}) {
 // GET /recommendations' not_planned, in words from its own rows: how many, as of
 // which ABC run, and why. Any other reason the server gives is counted, not dropped.
 const NOT_PLANNED_REASONS = [
-  ['accuracy', 'with a forecast that did not pass the accuracy check'],
-  ['short_history', 'with too little sales history'],
-  ['no_recent_sales', 'with no recent sales'],
+  ['mase_gate', 'with a forecast that did not pass the accuracy check'],
+  ['insufficient_data', 'with too little sales history'],
+  ['dead', 'with no sale in the last 6 months'],
 ];
+
+// Lowest cover first, then the larger revenue share. A row with no cover figure goes
+// last, since its risk is unknown rather than high. The server sends its own order.
+export function notPlannedByCover(items) {
+  return [...items].sort((a, b) => (
+    (a.days_of_cover == null) - (b.days_of_cover == null)
+    || (a.days_of_cover ?? 0) - (b.days_of_cover ?? 0)
+    || (b.revenue_share ?? 0) - (a.revenue_share ?? 0)
+    || String(a.sku_id).localeCompare(String(b.sku_id))
+  ));
+}
 
 export function notPlannedLede(items, month) {
   const named = new Set(NOT_PLANNED_REASONS.map(([code]) => code));
   const parts = NOT_PLANNED_REASONS
-    .map(([code, words]) => [items.filter((item) => item.reason_code === code).length, words])
+    .map(([code, words]) => [items.filter((item) => item.reason === code).length, words])
     .filter(([count]) => count > 0)
     .map(([count, words]) => `${count.toLocaleString()} ${words}`);
-  const other = items.filter((item) => !named.has(item.reason_code)).length;
+  const other = items.filter((item) => !named.has(item.reason)).length;
   if (other > 0) parts.push(`${other.toLocaleString()} for another reason`);
   const one = items.length === 1;
   return `${items.length.toLocaleString()} top seller${one ? '' : 's'} (Class A${month ? ` as of ${month}` : ''}) `

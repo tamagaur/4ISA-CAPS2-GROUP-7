@@ -5,7 +5,7 @@ Two bases are live and both are defensible; before this, neither said which it w
 
   * the ABC page, the SKU list and the order plan (LP) use analytics.params.TIER_A_BASIS ('t12m_new' for Unilever:
     Class A on the last 12 months, plus products first sold within those 12 months that are Class A on the last 3;
-    DEC-38, pending the Technical Adviser) and 'single' for Del Monte;
+    DEC-38, adopted by the team as DEC-42; not confirmed by the Technical Adviser) and 'single' for Del Monte;
   * the Dashboard's tier cards (abc_mix, tier_stock) rank the date range the picker applies with a plain Pareto
     (backend/marts.pareto; the Technical Adviser's request of 2026-10-04).
 
@@ -19,7 +19,7 @@ from analytics.params import TIER_A_BASIS, TIER_A_BASIS_WINDOW_MONTHS, TIER_A_NE
 _NAMES = {
     "t12m_new": (f"Class A on the last {TIER_A_BASIS_WINDOW_MONTHS} months of revenue, plus products first sold within "
                  f"those {TIER_A_BASIS_WINDOW_MONTHS} months that are Class A on the last {TIER_A_NEW_PRODUCT_WINDOW_MONTHS} "
-                 "(DEC-38, pending Technical Adviser confirmation)"),
+                 "(team decision, DEC-42; not confirmed by SSM or the adviser)"),
     "single": "Class A on the one classification month alone",
 }
 

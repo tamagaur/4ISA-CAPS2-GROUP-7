@@ -25,19 +25,29 @@ price the LP plan itself uses). SSM has not confirmed that price as its
 purchase cost, nor the weekly-order assumption, so the block carries
 status = "pending_ssm_confirmation" and the page must show that label.
 
-  headline  = AVERAGE stock on hand: ss_i + half of one weekly order (one
-              order covers review_days of demand: w x review_days / 5 / 2)
-  alongside = PEAK stock: rop_i, the order-up-to target, the level right
-              after a delivery
-  rule      = POLICY_WEEKS x weekly forecast, at the same price
+  plan average = ss_i + half of one weekly order (one order covers review_days
+                 of demand: w x review_days / 5 / 2). The weekly order is SSM's
+                 stated practice, assumed here; no code splits the plan into one.
+  plan peak    = rop_i, the order-up-to target, the level right after a delivery
+  rule         = POLICY_WEEKS x weekly forecast, at the same price
+
+The plan cycles between an average and a peak, so the rule must too. SSM has not
+said which of the two its 3 weeks is, so `readings` gives both, each complete:
+
+  rule_read_as_average  the rule's average = 3 weeks, its peak = 3 weeks + half an order
+  rule_read_as_peak     the rule's average = 3 weeks - half an order, its peak = 3 weeks
+
+Before 2026-11-03 this block returned the plan's average and peak against one flat
+3 weeks: a pair taken from two readings (-22.6% and +14.1% on cycle 2026-03, where the
+consistent pairs are -22.6 / -2.2 and -7.1 / +14.1). Nothing returns that pair now.
 
 reports/diagnostics/lp_logic_check_2026-10-03 section 4 is the check these
-reproduce (cycle 2026-03, 73 products: average 28.1% less than the rule, peak
-PHP 706,464 more). A product with no price is left out of the peso sums and
-counted in skus_without_price — never given a default price.
+reproduce (cycle 2026-03, 73 products: rule_read_as_average's average 28.1% less,
+rule_read_as_peak's peak PHP 706,464 more). A product with no price is left out of
+the peso sums and counted in skus_without_price — never given a default price.
 
-working_capital / capital_freed stay null: neither figure is claimed (at peak
-the targets hold MORE than the rule). est_stockout_rate is null too: ss_i
+working_capital / capital_freed stay null: neither figure is claimed (read as a
+peak, the targets' peak is ABOVE the rule's). est_stockout_rate is null too: ss_i
 covers the review + lead window (5 + 3 business days, placeholders in
 analytics/params.py) under a daily-independence assumption still awaiting the
 adviser's ruling — computing it now would state a risk the model hasn't settled.
@@ -61,10 +71,10 @@ router = APIRouter(prefix="/policy-comparison", tags=["policy-comparison"])
 
 VALUATION_BLOCKED_REASON = (
     "No working-capital or capital-freed figure is claimed. The pesos block values both policies at "
-    "each product's last purchase price (the stock file's unit cost per case ÷ pack size), pending SSM "
-    "confirmation; at peak the per-product targets hold more than the 3-week rule, not less. "
+    "each product's last purchase price (the stock file's unit cost per case ÷ pack size), a team decision "
+    "(DEC-44); not confirmed by SSM; with the 3 weeks read as a peak, the per-product targets peak above the rule, not below. "
     "Stockout exposure is left out until the safety stock's "
-    "window (review + lead days, placeholders until SSM confirms them) and its daily-independence "
+    "window (review + lead days, stated assumptions, DEC-44, not confirmed by SSM) and its daily-independence "
     "assumption are settled — see analytics/params.py."
 )
 
@@ -75,7 +85,8 @@ PESOS_STATUS_LABEL = (
 )
 PESOS_PRICE_BASIS = "last purchase price per piece (stock file's unit cost per case ÷ pack size), without VAT"
 
-# One purchase order covers this many weeks of demand (review_days is a placeholder).
+# One purchase order covers this many weeks of demand, if SSM orders weekly as it says (review_days is a
+# placeholder, and no code splits the plan into weekly orders).
 ORDER_WEEKS = PLACEHOLDERS["review_days"] / BUSINESS_DAYS_PER_WEEK
 
 
@@ -101,38 +112,40 @@ def pesos_comparison(rows: list[dict]) -> dict:
     rule = sum(r["price"] * r["rule_units"] for r in priced)
     peak = sum(r["price"] * r["target_units"] for r in priced)
     average = sum(r["price"] * (r["ss_units"] + r["weekly_units"] * ORDER_WEEKS / 2) for r in priced)
-    rule_average_if_peak = sum(r["price"] * (r["rule_units"] - r["weekly_units"] * ORDER_WEEKS / 2) for r in priced)
+    half_order = sum(r["price"] * r["weekly_units"] * ORDER_WEEKS / 2 for r in priced)
     block = {
         "status": PESOS_STATUS,
         "status_label": PESOS_STATUS_LABEL,
         "price_basis": PESOS_PRICE_BASIS,
-        "headline": "average",
         "sku_count": len(priced),
         "skus_without_price": len(rows) - len(priced),
         "rule_weeks": POLICY_WEEKS,
         "review_days": PLACEHOLDERS["review_days"],
         "inputs_are_placeholders": True,
-        "average": None,
-        "peak": None,
-        "rule_average_if_three_weeks_is_a_peak": None,
+        "readings": None,
         "blocked_reason": None,
     }
     if not priced or rule <= 0:
         block["blocked_reason"] = ("No product in the comparison has a last purchase price, "
                                    "so nothing is valued in pesos.")
         return block
-    block["average"] = _vs_rule(
-        average, rule, "Average stock on hand",
-        "Per-product safety stock plus half of one weekly order, against 3 weeks of forecast sales held all the time.")
-    block["peak"] = _vs_rule(
-        peak, rule, "Peak stock (right after a delivery)",
-        "Per-product order-up-to targets against 3 weeks of forecast sales.")
-    # If SSM's 3 weeks is itself a peak, the rule's own average is 3 weeks minus half an order.
-    block["rule_average_if_three_weeks_is_a_peak"] = {
-        "label": "If the 3 weeks is the rule's own peak, its average is 3 weeks minus half a weekly order.",
-        "rule_stock_pesos": round(rule_average_if_peak, 2),
-        "average_pct_vs_rule": (round((average - rule_average_if_peak) / rule_average_if_peak * 100, 1)
-                                if rule_average_if_peak > 0 else None),
+    plan_average = "Per-product safety stock plus half of one weekly order (weekly ordering is assumed, not implemented)"
+    plan_peak = "Per-product order-up-to targets"
+    block["readings"] = {
+        "rule_read_as_average": {
+            "label": "rule read as an average",
+            "definition": "The 3 weeks is the stock the rule holds on average, so its peak is 3 weeks plus half a weekly order.",
+            "average": _vs_rule(average, rule, "Average stock on hand", f"{plan_average}, against 3 weeks of forecast sales."),
+            "peak": _vs_rule(peak, rule + half_order, "Peak stock (right after a delivery)",
+                             f"{plan_peak}, against 3 weeks of forecast sales plus half a weekly order."),
+        },
+        "rule_read_as_peak": {
+            "label": "rule read as a peak",
+            "definition": "The 3 weeks is the stock the rule holds right after a delivery, so its average is 3 weeks minus half a weekly order.",
+            "average": _vs_rule(average, rule - half_order, "Average stock on hand",
+                                f"{plan_average}, against 3 weeks of forecast sales minus half a weekly order."),
+            "peak": _vs_rule(peak, rule, "Peak stock (right after a delivery)", f"{plan_peak}, against 3 weeks of forecast sales."),
+        },
     }
     return block
 

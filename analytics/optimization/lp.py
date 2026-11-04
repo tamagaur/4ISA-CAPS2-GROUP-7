@@ -22,8 +22,13 @@ Per SKU i, for one monthly planning cycle (quantities in pieces):
   need_i  = max(0, F_i + T_i - S_i): the month's demand plus the gap to the
             target, net of the stock on hand S_i.
 
-Decision variable: 0 <= Q_i <= need_i, the month's order (the app splits it
-into weekly POs). Q_i never exceeds the need, so an overstocked SKU orders 0.
+Decision variable: 0 <= Q_i <= need_i, the month's order, one figure per SKU.
+Q_i never exceeds the need, so an overstocked SKU orders 0.
+
+The 8-business-day review-and-lead window (R + L in T_i and SS_i) assumes SSM's
+own stated practice of ordering weekly (Sir Abe), which the system neither
+implements nor verifies: no code here or in the app splits Q_i into weekly
+purchase orders, and nothing checks how SSM actually orders.
 
 Constraints:
   1. warehouse   sum(S_i + Q_i) <= W. Counts the month's deliveries as if

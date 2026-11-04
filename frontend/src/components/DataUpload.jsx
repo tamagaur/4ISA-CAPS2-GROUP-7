@@ -1,13 +1,24 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import SectionLede from './ui/SectionLede';
 import { Upload, FileText, AlertTriangle } from 'lucide-react';
 import PageHeader from './ui/PageHeader';
+import MonthlyBatchPanel from './MonthlyBatchPanel';
+import { getBatchAvailable } from '../api/monthlyBatch';
 import './DataUpload.css';
 
 const DataUpload = () => {
   const [uploads, setUploads] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
+  // The monthly batch, when the backend offers it (local practice database only).
+  // Null everywhere else, and this page is exactly what it was without it.
+  const [batch, setBatch] = useState(null);
+
+  useEffect(() => {
+    let current = true;
+    getBatchAvailable().then((status) => { if (current) setBatch(status); });
+    return () => { current = false; };
+  }, []);
 
   // Trigger file dialog
   const onButtonClick = () => {
@@ -81,17 +92,19 @@ const DataUpload = () => {
           subtitle="The sales and stock files the system runs on. Excel (.xlsx, .xls) and CSV (.csv)."
         />
 
+        {batch && <MonthlyBatchPanel initialStatus={batch} />}
+
         {/* Honest status. There is no ingestion endpoint on the backend yet,
             so this page cannot actually send a file anywhere — saying so
             plainly is the only correct behavior until one exists. */}
-        <p className="ui-note is-warning" role="note">
+        {!batch && <p className="ui-note is-warning" role="note">
           <AlertTriangle size={16} aria-hidden="true" />
           <span>
             <strong>Ingestion is not connected yet.</strong> You can select files here to check
             names and sizes, but nothing is sent to the server and no data is imported. Loading
             data into Supabase currently runs through the ETL scripts.
           </span>
-        </p>
+        </p>}
 
         {/* Accepted Formats */}
         <div className="du-formats-section">
@@ -128,7 +141,7 @@ const DataUpload = () => {
         </div>
 
         {/* File Dropzone Area */}
-        <div 
+        {!batch && <div 
           className={`du-dropzone ${dragActive ? 'drag-active' : ''}`}
           onDragEnter={handleDrag}
           onDragOver={handleDrag}
@@ -152,7 +165,7 @@ const DataUpload = () => {
           <button type="button" className="btn btn-secondary" onClick={(e) => { e.stopPropagation(); onButtonClick(); }}>
             Select files
           </button>
-        </div>
+        </div>}
 
         {/* Upload Status list */}
         {uploads.length > 0 && (

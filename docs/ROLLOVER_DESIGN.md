@@ -2,7 +2,7 @@
 
 **Proposal only. Nothing here is built; no migration is written (next free number is 0069).** Facts below were read from the code and the live database (read-only) on 2026-10-24; the rest is recommendation. Unilever only: Del Monte has no per-product plan to roll.
 
-**The hole.** An accepted order feeds nothing: `run_lp` reads stock only from `inventory_fact_real` at the opening count, `decided_q_i` is capture-only, and the PO Qty columns (`inventory_fact.po_qty_cases/po_qty_pieces`, migration 0042) are empty in every recent Unilever count. The next plan learns an order existed only by finding its pieces in the next count. Unilever has no delivery records at all (receipts are derived as closing − opening + sold).
+**The hole.** An accepted order feeds nothing: `run_lp` reads stock only from `inventory_fact_real` at the opening count, `decided_q_i` was read by no computation (this is the state before migration 0069, which since lets an accepted order become an expected receipt in the next opening stock), and the PO Qty columns (`inventory_fact.po_qty_cases/po_qty_pieces`, migration 0042) are empty in every recent Unilever count. The next plan learns an order existed only by finding its pieces in the next count. Unilever has no delivery records at all (receipts are derived as closing − opening + sold).
 
 ## a. Expected receipts
 
@@ -40,7 +40,7 @@ When the month's count is **not yet loaded**, a clearly labelled projection: `co
 | Sales / forecast | `unilever_sku_demand_fact_real`, `forecast_result` |
 | Decided quantity | `lp_recommendation.decided_q_i` (read by the ledger writer only, through `plan_q_i`) |
 
-`run_lp` reads one new view, `stock_opening_v`, instead of the count directly. This lifts the capture-only rule (and its test) on purpose, by decision.
+`run_lp` reads one new view, `stock_opening_v`, instead of the count directly. This lets an accepted order reach the optimisation through opening stock, on purpose, by decision; the forecast and the safety stock still never read a decision.
 
 **The safety property relaxed, plainly (built 2026-10-24).** Until now `run_lp` refused to plan a cycle with no stock count for the month before it, and used no other month's stock. It now plans on a **projected** opening when that count is not loaded yet (the earlier count + receipts on the way − that month's sales). What that costs: a projection is an estimate, not a measurement, and an order can be sized on stock that is not what the warehouse holds. What keeps it honest: every plan built that way carries `opening_basis = projected` in `lp_run.inputs`, in the run notes, in `GET /recommendations` and `GET /dashboard` (`stock_counts[].opening_basis`, with `count_now_loaded` once the real count arrives, so the plan can be re-run), and on the dashboard card text. What does not change: a later count than the opening month is never used, a count a team ruling sets aside is still refused (never projected over), receipts of a cycle's own orders never change that cycle's plan, and `--require-count` restores the old refusal. Decided quantities reach the opening stock only; the forecast, the safety stock and the LP objective still never read them (`tests/optimization/test_run_lp_projected.py`).
 
@@ -48,7 +48,7 @@ When the month's count is **not yet loaded**, a clearly labelled projection: `co
 
 | Step | Exists | To build |
 |---|---|---|
-| Load the month's sales and count | `run_canonical_load` (idempotent); `EXPECTED_MONTHS`/`WINDOW` edited by hand | check "both loaded" before going on |
+| Load the month's sales and count | `run_canonical_load --slice principal:table:YYYY-MM` (idempotent; nothing is edited by hand) | check "both loaded" before going on |
 | Settle receipts against the new count | no | `expected_receipt` update (b) |
 | ABC, then forecast run | `orchestrate_abc`, `run_baseline_forecast --write` | refuses unless the step before finished |
 | Stock roll-forward | no (a count is only ever the next opening) | `stock_opening_v` (c) |
@@ -65,7 +65,7 @@ Rows flagged `is_demo = true` never pass the `_Real` views, so they cannot exerc
 
 Proof sequence: accept orders on the March plan, check the ledger rows and that a reversal voids one; project the April opening and check the formula by hand on three products; load the real 6 Apr count and check receipts ≤ `D` settle and later ones stay; run `close_cycle` twice (second run changes nothing); check decided rows survive as `closed`.
 
-Isolation, all checked by the test, not by habit: schema name must start `ssm_` and the script refuses `--target-public`; row counts of ten public tables before and after must be equal; no `rollover_test` string may exist in public or `mart`; the scratch schema is dropped afterwards (rule 16). Known hazard: a scratch build applies pending migrations, and one naming `app.users` runs on live (RUNNING.md); none is pending now, and the test checks that first. **This reads rule 2 as allowing test data in a disposable schema, outside every result; Yuan to confirm.**
+Isolation, all checked by the test, not by habit: schema name must start `ssm_` and the script refuses `--target-public`; row counts of ten public tables before and after must be equal; no `rollover_test` string may exist in public or `mart`; the scratch schema is dropped afterwards (rule 16). Known hazard: a scratch build applies pending migrations, and one naming `app.users` runs on live (RUNNING.md, deleted 2026-11-03; `git show 468c6d8:RUNNING.md`); none is pending now, and the test checks that first. **This reads rule 2 as allowing test data in a disposable schema, outside every result; Yuan to confirm.**
 
 ## f. Schema, and po_qty_pieces
 

@@ -21,6 +21,13 @@ export function formatUnits(value) {
   return units == null ? '—' : units.toLocaleString();
 }
 
+// Days of cover as the Reorder page shows it (2026-11-03): whole days, "<1" below one day. Stock over a recent average
+// sales rate does not carry a tenth of a day. Display only: the API keeps its value.
+export function formatCoverDays(days) {
+  if (days == null || Number.isNaN(Number(days))) return null;
+  return Number(days) < 1 ? '<1' : Math.round(Number(days)).toLocaleString();
+}
+
 export function exactUnits(value) {
   if (value == null || Number.isNaN(Number(value))) return undefined;
   return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} pcs (exact)`;

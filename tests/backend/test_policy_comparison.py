@@ -163,28 +163,37 @@ PRICED_ROWS = [
 ]
 
 
-def test_pesos_headline_is_average_stock_with_peak_alongside():
+def test_each_reading_of_the_rule_carries_its_own_average_and_peak():
     with make_client(FakeSession(PRICED_ROWS)) as c:
         body = c.get("/policy-comparison?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
     pesos = body["pesos"]
     assert pesos["status"] == "pending_ssm_confirmation" and "Pending SSM confirmation" in pesos["status_label"]
     assert "last purchase price" in pesos["price_basis"]
-    assert pesos["headline"] == "average"
+    # The old top-level pair was the plan's average and peak against one flat level: two readings at once.
+    assert not {"average", "peak", "headline", "rule_average_if_three_weeks_is_a_peak"} & set(pesos)
+    as_average, as_peak = pesos["readings"]["rule_read_as_average"], pesos["readings"]["rule_read_as_peak"]
+    assert (as_average["label"], as_peak["label"]) == ("rule read as an average", "rule read as a peak")
     assert (pesos["sku_count"], pesos["skus_without_price"]) == (2, 1)
     w1, w2 = 100.0 / AVG_WEEKS_PER_MONTH, 500.0 / AVG_WEEKS_PER_MONTH
     rule = 10.0 * 3 * w1 + 2.0 * 3 * w2
     # Average on hand = safety stock + half of one weekly order (review_days = 5 = one week).
     average = 10.0 * (40.0 + w1 / 2) + 2.0 * (10.0 + w2 / 2)
     peak = 10.0 * 120.0 + 2.0 * 60.0
-    assert pesos["average"]["rule_stock_pesos"] == pytest.approx(rule, abs=0.01)
-    assert pesos["average"]["lp_stock_pesos"] == pytest.approx(average, abs=0.01)
-    assert pesos["average"]["difference_pesos"] == pytest.approx(average - rule, abs=0.01)
-    assert pesos["average"]["pct_vs_rule"] == pytest.approx(round((average - rule) / rule * 100, 1))
-    assert pesos["average"]["direction"] == "less"
-    assert pesos["peak"]["lp_stock_pesos"] == pytest.approx(peak, abs=0.01)
-    assert pesos["peak"]["difference_pesos"] == pytest.approx(peak - rule, abs=0.01)
-    rule_avg = rule - (10.0 * w1 + 2.0 * w2) / 2
-    assert pesos["rule_average_if_three_weeks_is_a_peak"]["rule_stock_pesos"] == pytest.approx(rule_avg, abs=0.01)
+    half_order = (10.0 * w1 + 2.0 * w2) / 2
+    # Read as an average: 3 weeks is the rule's average, and its peak is half an order above it.
+    assert as_average["average"]["rule_stock_pesos"] == pytest.approx(rule, abs=0.01)
+    assert as_average["average"]["lp_stock_pesos"] == pytest.approx(average, abs=0.01)
+    assert as_average["average"]["difference_pesos"] == pytest.approx(average - rule, abs=0.01)
+    assert as_average["average"]["pct_vs_rule"] == pytest.approx(round((average - rule) / rule * 100, 1))
+    assert as_average["average"]["direction"] == "less"
+    assert as_average["peak"]["rule_stock_pesos"] == pytest.approx(rule + half_order, abs=0.01)
+    assert as_average["peak"]["lp_stock_pesos"] == pytest.approx(peak, abs=0.01)
+    # Read as a peak: 3 weeks is the rule's peak, and its average is half an order below it.
+    assert as_peak["average"]["rule_stock_pesos"] == pytest.approx(rule - half_order, abs=0.01)
+    assert as_peak["average"]["lp_stock_pesos"] == pytest.approx(average, abs=0.01)
+    assert as_peak["peak"]["rule_stock_pesos"] == pytest.approx(rule, abs=0.01)
+    assert as_peak["peak"]["lp_stock_pesos"] == pytest.approx(peak, abs=0.01)
+    assert as_peak["peak"]["difference_pesos"] == pytest.approx(peak - rule, abs=0.01)
     items = {i["sku_id"]: i for i in body["items"]}
     assert items["A1"]["lp_peak_stock_pesos"] == pytest.approx(1200.0)
     assert items["A1"]["lp_average_stock_pesos"] == pytest.approx(10.0 * (40.0 + w1 / 2), abs=0.01)
@@ -205,7 +214,7 @@ def test_pesos_blocked_when_no_product_has_a_price():
     with make_client(FakeSession(ROWS)) as c:   # ROWS carry no price column at all
         body = c.get("/policy-comparison", headers={"Authorization": f"Bearer {user_token()}"}).json()
     pesos = body["pesos"]
-    assert pesos["average"] is None and pesos["peak"] is None and pesos["blocked_reason"]
+    assert pesos["readings"] is None and pesos["blocked_reason"]
     assert pesos["status"] == "pending_ssm_confirmation"
     assert pesos["skus_without_price"] == 2
 
@@ -231,12 +240,13 @@ def test_pesos_reproduce_the_lp_logic_check_totals():
              "price": float(r["cost_per_piece_php"])} for r in table]
     pesos = pesos_comparison(rows)
     # The table is rounded (price to 4 places), so pesos match to a few pesos, percents exactly.
-    assert pesos["average"]["pct_vs_rule"] == -28.1
-    assert pesos["peak"]["pct_vs_rule"] == 8.6
-    assert pesos["peak"]["difference_pesos"] == pytest.approx(706_464, abs=25)
-    assert pesos["average"]["lp_stock_pesos"] == pytest.approx(5_906_832, abs=25)
-    assert pesos["average"]["rule_stock_pesos"] == pytest.approx(8_211_106, abs=25)
-    assert pesos["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"] == -13.7
+    as_average, as_peak = pesos["readings"]["rule_read_as_average"], pesos["readings"]["rule_read_as_peak"]
+    assert as_average["average"]["pct_vs_rule"] == -28.1
+    assert as_peak["peak"]["pct_vs_rule"] == 8.6
+    assert as_peak["peak"]["difference_pesos"] == pytest.approx(706_464, abs=25)
+    assert as_average["average"]["lp_stock_pesos"] == pytest.approx(5_906_832, abs=25)
+    assert as_average["average"]["rule_stock_pesos"] == pytest.approx(8_211_106, abs=25)
+    assert as_peak["average"]["pct_vs_rule"] == -13.7
 
 
 def test_pesos_on_the_synthetic_per_product_table():
@@ -259,10 +269,14 @@ def test_pesos_on_the_synthetic_per_product_table():
              "price": float(r["cost_per_piece_php"])} for r in table]
     pesos = pesos_comparison(rows)
     assert pesos["sku_count"] == 4 and pesos["skus_without_price"] == 0
-    assert pesos["average"]["rule_stock_pesos"] == pytest.approx(11_216.09, abs=0.01)
-    assert pesos["average"]["lp_stock_pesos"] == pytest.approx(5_519.35, abs=0.01)
-    assert pesos["peak"]["lp_stock_pesos"] == pytest.approx(9_050.00, abs=0.01)
-    assert pesos["average"]["pct_vs_rule"] == -50.8
-    assert pesos["peak"]["pct_vs_rule"] == -19.3
-    assert pesos["rule_average_if_three_weeks_is_a_peak"]["average_pct_vs_rule"] == -40.9
-    assert pesos["average"]["direction"] == "less"
+    as_average, as_peak = pesos["readings"]["rule_read_as_average"], pesos["readings"]["rule_read_as_peak"]
+    assert as_average["average"]["rule_stock_pesos"] == pytest.approx(11_216.09, abs=0.01)
+    assert as_average["average"]["lp_stock_pesos"] == pytest.approx(5_519.35, abs=0.01)
+    assert as_average["average"]["pct_vs_rule"] == -50.8
+    assert as_average["average"]["direction"] == "less"
+    # 11,216.09 + half of one weekly order (11,216.09 / 3 / 2 = 1,869.35) is 13,085.43 unrounded; 9,050.00 against it is -30.8%.
+    assert as_average["peak"]["rule_stock_pesos"] == pytest.approx(13_085.43, abs=0.02)
+    assert as_average["peak"]["pct_vs_rule"] == -30.8
+    assert as_peak["peak"]["lp_stock_pesos"] == pytest.approx(9_050.00, abs=0.01)
+    assert as_peak["peak"]["pct_vs_rule"] == -19.3
+    assert as_peak["average"]["pct_vs_rule"] == -40.9

@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from scripts.report_target import report_path
+from scripts.report_target import PRACTICE_MARKER, report_path
 from scripts.run_guards import stale_abc_refusal
 from analytics.forecasting.split import train_holdout_split
 from analytics.classification.fsn import no_sale_in_last_months
@@ -63,6 +63,7 @@ from analytics.forecasting.baseline import (
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
 from analytics.forecasting.calendar import company_totals
 from analytics.forecasting.global_model import GlobalForecaster, missing_months, with_missing, with_placeholder
+from analytics.forecasting.practice_switch import labelled_rows_permitted
 from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -246,7 +247,8 @@ def build_series(sku_df: pd.DataFrame, end_month: str | None = None) -> pd.Serie
     (NULL) quantity is MISSING - NaN, marked on the series (with_missing),
     never 0 - and every model and score skips it.
     Months whose rows are is_demo=true are marked on the series (DEC-27), so
-    the router / global model's assert_real_history refuses it."""
+    the router / global model's assert_real_history refuses it, unless
+    practice_switch permits them on the practice copy."""
     idx = pd.to_datetime(sku_df["calendar_month"] + "-01")
     s = pd.Series(sku_df["quantity"].to_numpy(dtype=float), index=idx).sort_index()
     blank = s.index[s.isna()]
@@ -361,7 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Multiply each served forecast by the company calendar factor "
                              "(analytics/forecasting/calendar.py). OFF by default (opt-in), but the live "
                              "Forecast_Result written 2026-10-19 WAS run with it (x1.0762 for March, all 175 'ok' "
-                             "rows): applied, pending Sir Catubag's sign-off. Without it the LP plans 354,975 "
+                             "rows): applied; team decision DEC-41; adviser sign-off outstanding (still pending). Without it the LP plans 354,975 "
                              "pieces instead of 424,127 (-16.3%, 70 of 107 rows change).")
     parser.add_argument("--allow-stale-abc", action="store_true", default=False,
                         help="Go on when the resolved ABC period is older than the latest real sales month. Without it "
@@ -413,7 +415,8 @@ def main():
 
     tier_a = fetch_tier_a(cur, abc_period)
     demand = fetch_demand(cur)
-    assert_real_rows(demand)  # report-only runs refuse placeholder rows too, not only --write
+    labelled = labelled_rows_permitted(cur, demand)  # True only on the practice copy, from the connection itself
+    assert_real_rows(demand, allow_placeholder=labelled)  # report-only runs refuse placeholder rows too, not only --write
 
     # ---- ETL-gap check (fresh, every run) -------------------------------- #
     months_present = set(demand["calendar_month"].unique())
@@ -557,8 +560,8 @@ def main():
     _pre_acceptance(df, cur, abc_period)
 
     # ---- write files ------------------------------------------------- #
-    _write_csv(df)
-    _write_md(df, abc_period, latest_demand_month)
+    _write_csv(df, labelled)
+    _write_md(df, abc_period, latest_demand_month, labelled)
 
     # ---- optional DB write ----------------------------------------- #
     if args.write:
@@ -858,16 +861,26 @@ def _pre_acceptance(df, cur, abc_period):
         print("  *** ABC PERIOD MISMATCH - do not trust this run. ***")
 
 
-def _write_csv(df):
+def _write_csv(df, labelled: bool = False):
+    """`labelled` (practice_switch.labelled_rows_permitted): the accuracy columns are computed partly on generated sales,
+    and rule 2 forbids presenting those. The file stays what the last real run wrote."""
+    if labelled:
+        print(f"\nNot writing {PER_SKU_CSV}: this run's accuracy figures are computed on generated sales.")
+        return
     out = df.drop(columns=[c for c in ("_per_method", "_series_mean") if c in df.columns])
     os.makedirs(os.path.dirname(PER_SKU_CSV), exist_ok=True)
     out.to_csv(PER_SKU_CSV, index=False)
     print(f"\nWrote {PER_SKU_CSV}  ({len(out)} rows, every real Tier A SKU)")
 
 
-def _write_md(df, abc_period, latest_demand_month):
+def _md_opening(labelled: bool) -> list[str]:
+    """`labelled`: as in _write_csv. The markdown is still written, so its first line says what it is computed on."""
+    return [f"**{PRACTICE_MARKER}.** Every figure below, accuracy included, is computed partly on generated sales (is_demo = true).\n"] if labelled else []
+
+
+def _write_md(df, abc_period, latest_demand_month, labelled: bool = False):
     df_ok = df[df["status"] == "ok"].copy()
-    lines = []
+    lines = _md_opening(labelled)
     lines.append("# Baseline Forecast Run - Unilever Category A (MA3 / Naive / SBA)\n")
     lines.append(f"- ABC period used: `{abc_period}`  (latest real demand month: `{latest_demand_month}`)")
     lines.append(f"- Methods: naive, ma3 (window={MA_WINDOW}), sba (alpha={SBA_ALPHA}, tuned={SBA_ALPHA_TUNED})")
@@ -997,7 +1010,7 @@ def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float |
     )
 
 
-def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) -> dict:
+def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None, allow_placeholder=False) -> dict:
     """{product_key: {...}} for every status='ok' SKU: the routed one-step
     forecast for `planning_month`, plus the SERVED model's holdout error.
 
@@ -1013,20 +1026,23 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None) ->
     `calendar_totals` (--calendar-factor): the served value AND its holdout
     are calendar-adjusted, so the stored error describes what is served.
 
+    `allow_placeholder`: labelled rows pass the guards. Only ever the value of
+    practice_switch.labelled_rows_permitted (tests/forecasting/test_practice_switch.py).
+
     No DB access. Metrics come from analytics.forecasting.diagnostic_metrics.
     """
     wanted = {int(k) for k in df["product_key"]}
     last_month = (planning_month - pd.DateOffset(months=1)).strftime("%Y-%m")   # the latest real demand month
     series_by_key = {int(k): build_series(g, last_month) for k, g in demand_by_key.items() if int(k) in wanted}
-    forecaster = GlobalForecaster(series_by_key)          # Tier A training pool, refit per target month
+    forecaster = GlobalForecaster(series_by_key, allow_placeholder=allow_placeholder)   # Tier A training pool, refit per target month
     out = {}
     for _, r in df[df["status"] == "ok"].iterrows():
         p_key = int(r["product_key"])
         series = series_by_key[p_key]
-        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals)
+        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals, allow_placeholder=allow_placeholder)
         train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
         scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"],
-                                  calendar_totals=calendar_totals)
+                                  calendar_totals=calendar_totals, allow_placeholder=allow_placeholder)
         a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()     # missing months are not scored
         out[p_key] = {
             **routed,
@@ -1156,14 +1172,17 @@ def _write_forecast_result(cur, df, calendar: bool = False):
     logger.warning(f"--write: upserting {len(df)} Tier A rows to Forecast_Result at forecast_date={planning_date} "
                    f"(served per bin: {LIVE_MODEL}; benchmark/fallback {BENCHMARK_METHOD.upper()}). One transaction.")
 
-    assert_real_rows(demand)
+    labelled = labelled_rows_permitted(cur, demand)
+    assert_real_rows(demand, allow_placeholder=labelled)
     calendar_totals = company_totals(demand) if calendar else None
     run_meta = {"code_version": _code_version(), "calendar_factor_on": bool(calendar),
                 "written_at": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
+    if labelled:
+        run_meta["generated_sales_in_history"] = True   # practice copy only: the row itself says what it was built on
     if calendar:
         logger.warning("--calendar-factor: served values and their holdout are calendar-adjusted "
-                       "(analytics/forecasting/calendar.py; pending Sir Catubag's sign-off).")
-    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals)
+                       "(analytics/forecasting/calendar.py; team decision, DEC-41; not confirmed by SSM or the adviser).")
+    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals, allow_placeholder=labelled)
 
     target_keys = [int(k) for k in df["product_key"]]
     conn = cur.connection

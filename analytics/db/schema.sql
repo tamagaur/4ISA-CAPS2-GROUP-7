@@ -664,12 +664,13 @@ CREATE OR REPLACE VIEW BO_Monitoring_View AS
 WITH purchases AS (
     SELECT principal, region, _period, SUM(net_amount) AS purchase_net_amount
     FROM Purchase_Fact
+    WHERE is_demo = false   -- migration 0074
     GROUP BY principal, region, _period
 ),
 bo_returns AS (
     SELECT principal, region, _period, SUM(net_amount) AS bo_net_amount
     FROM SalesReturn_Fact
-    WHERE return_type = 'BO'
+    WHERE return_type = 'BO' AND is_demo = false   -- migration 0074
     GROUP BY principal, region, _period
 )
 SELECT
@@ -825,6 +826,7 @@ SELECT
     u.region, u._src_file, u._src_sheet
 FROM Unilever_SKU_Demand_Fact u
 JOIN Product_Dimension pd ON pd.product_key = u.product_key   -- NOT NULL FK, always resolves
+WHERE u.is_demo = false   -- migration 0074
 
 UNION ALL
 
@@ -840,7 +842,8 @@ SELECT
     s.net_amount,
     s.region, s._src_file, s._src_sheet
 FROM SellOut_Fact s
-LEFT JOIN Product_Dimension pd ON pd.product_key = s.product_key;
+LEFT JOIN Product_Dimension pd ON pd.product_key = s.product_key
+WHERE s.is_demo = false;  -- migration 0074
 
 -- ============================================================
 -- SECTION 8 — DEMO-DATA ISOLATION (Phase 4, 2026-08)

@@ -2151,12 +2151,14 @@ def get_dashboard(
         if scope == "all" and len(covered) == 1:
             only = names.get(covered[0], covered[0])
             scope_label = (
-                f"All principals — only {only} has product forecasts that beat a simple "
-                f"last-month guess (the order plan's own check), so this matches the {only} view."
+                f"All principals — only {only} has product forecasts whose test error was below the "
+                f"average month-to-month change in their sales before the test months (the order "
+                f"plan's own check), so this matches the {only} view."
             )
         else:
             who = "All principals" if scope == "all" else names.get(scope, scope)
-            scope_label = f"{who} (product forecasts that beat a simple last-month guess, the order plan's own check)."
+            scope_label = (f"{who} (product forecasts whose test error was below the average month-to-month change in "
+                           f"their sales before the test months, the order plan's own check).")
     elif scoped_forecast_count == 0:
         scope_label = (
             "No SKU-level forecasts exist for Del Monte — its sales data is invoice-grain "

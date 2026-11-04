@@ -31,7 +31,7 @@ import { sameQuantity } from '../utils/reorderRequests';
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
 import { DemoOrderPlanCard } from './DemoOrderPlan';
-import { formatUnits, wholeUnits } from '../utils/formatNumber';
+import { formatCoverDays, formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
 import { LoadingStatus, SkeletonLine, SkeletonStatCards, SkeletonTable } from './Skeleton';
 import LoadError, { describeLoadError } from './ui/LoadError';
@@ -530,7 +530,7 @@ const ReorderRecommendations = () => {
     // plan (backend/lp_cycle.PLAN_STATUSES). Asking for pending rows only dropped
     // decided rows on a reload, so the total fell below the Dashboard's, Act Now
     // refilled from lower ranks and nothing showed what had been decided.
-    getRecommendations({ principal, includeNotPlanned: true })
+    getRecommendations({ principal })
       .then((res) => {
         if (cancelled) return;
         setLoadedAt(Date.now());
@@ -1342,7 +1342,7 @@ const ReorderRecommendations = () => {
         </td>
         {wide && (
           <td className="table-center" title={item.daysOfCover != null ? coverNote : (item.coverReason || coverNote)}>
-            {item.daysOfCover != null ? item.daysOfCover.toFixed(1) : <span className="cell-empty">—</span>}
+            {item.daysOfCover != null ? formatCoverDays(item.daysOfCover) : <span className="cell-empty">—</span>}
           </td>
         )}
         <td className="table-center reorder-qty-cell reorder-group-start" data-label="Suggested Order, month's total" title={lpQtyTitle(item)}>
@@ -1543,13 +1543,14 @@ const ReorderRecommendations = () => {
             {/* Methods that set these numbers and still await the adviser's
                 sign-off, flagged where they act (Technical Adviser, 2 Oct
                 2026; 2026-10-22): which products get a plan (MASE < 1,
-                analytics/params.py MASE_GATE, an open question in
-                reports/ADVISER_QUESTIONS_SIRCG.md §3) and how safety stock
+                analytics/params.py MASE_GATE, a team decision, DEC-46, not
+                confirmed by SSM or the adviser) and how safety stock
                 scales monthly variation to days (lp_model
                 .safety_stock_assumption, CLAUDE.md "needs adviser ruling"). */}
             <p className="reorder-table-note">
               One run per planning cycle, for the month after the latest sales data. Only Class A products whose forecast
-              beats a simple last-month guess are planned here (a reliability check pending adviser confirmation).
+              test error is below the average month-to-month change in their sales before the test months are planned here
+              (a reliability check the team adopted, not confirmed by SSM or the adviser).
               {meta?.notPlanned?.length > 0 && ' The rest are listed under “Not in This Plan”, below the table.'}
               {meta?.lpModel?.safety_stock_assumption && (
                 <>

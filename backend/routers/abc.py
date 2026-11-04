@@ -166,8 +166,9 @@ PARETO_MIN_ITEMS = 10
 
 # The LP's forecast-accuracy gate (scripts/run_lp.py MASE_GATE, the same
 # 1.0 as analytics/forecasting/baseline.py's MASE_GATE and the dashboard's
-# MASE_UNRELIABLE_GATE): a forecast enters the plan only if it beat a naive
-# repeat-last-month forecast, MASE < 1. Restated rather than imported because
+# MASE_UNRELIABLE_GATE): a forecast enters the plan only if MASE < 1, its test
+# error below the one-step naive error over the months before the first test
+# origin (diagnostic_metrics.naive_scale). Restated rather than imported because
 # run_lp.py pulls in the pulp solver and baseline.py statsmodels, batch-job
 # dependencies the API doesn't need (and importing a sibling router for one
 # number would couple the two); tests/backend/test_abc.py pins it to
