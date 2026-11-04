@@ -163,9 +163,10 @@ def record_signoff(
     notes: str | None = None, staging_dir: Path | None = None,
 ) -> Path:
     """Writes transform_dir/_signoff.json — the ONLY way a sign-off record
-    comes into existence (no default/auto-approve path). Requires a real
-    decision and a named person; raises otherwise rather than recording an
-    ambiguous or anonymous "decision"."""
+    comes into existence (no default/auto-approve path, except the system's
+    own signature on the practice copy, scripts/practice_signed_load.py, which
+    names itself as the system). Requires a real decision and a name; raises
+    otherwise rather than recording an ambiguous or anonymous "decision"."""
     if decision not in DECISIONS:
         raise ValueError(f"decision must be one of {DECISIONS}, got {decision!r}")
     if not decided_by or not decided_by.strip():

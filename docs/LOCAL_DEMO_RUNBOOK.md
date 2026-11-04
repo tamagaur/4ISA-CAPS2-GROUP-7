@@ -88,20 +88,20 @@ A failure reads differently: the panel changes to **"The last step stopped (exit
 
 | Plan | Products | Ordering | Pieces | Note |
 |---|---|---|---|---|
-| 2026-03 | 109 | 73 | 435,988 | Current |
-| 2026-04 | 121 | 110 | 1,213,168 | 2.78x the current plan |
+| 2026-03 | 109 | 73 | 435,988 | Last month's plan, not closed yet |
+| 2026-04 | 121 | 110 | 1,213,168 | On the Reorder page now, not closed. 2.78x the 2026-03 plan |
 
-Below it: "stock count 2026-03 (taken 2026-04-06): 1,685,621 pieces, 0.70x the median of the 6 before it". A moment later: "forecast error withheld: 709 generated sales rows are in this cycle..." and "0 accepted, 0 dismissed, 109 not decided. 0 quantity changes (+0 pieces)."
+Below it: "stock count 2026-03 (taken 2026-04-06): 1,685,621 pieces, 0.70x the median of the 6 before it". A moment later: "forecast error withheld: 709 generated or uploaded practice sales rows are in this cycle..." and "0 accepted, 0 dismissed, 109 not decided. 0 quantity changes (+0 pieces)."
 
-"Current" in that table means the plan the month being closed started from. The Reorder page has already moved on to April by now.
+The panel is closing March while the Reorder page already shows April's plan: the page moves at Run, the panel's month at Close. Both screens now say so, and the Reorder page's line ends "This plan (2026-04) is run, not closed. 2026-03 is run, not closed."
 
-1,213,168 is a practice number, never quote it as a plan. The panel withholds the forecast error on purpose. **The Dashboard does not:** see the next section.
+1,213,168 is a practice number, never quote it as a plan. Every page withholds the forecast error on purpose: see the next section.
 
 ## After the close
 
 - **The pages have moved, and have said so all along.** Reorder shows the Apr 2026 plan: 121 products, 1,213,168 pieces, "0 accepted, 0 dismissed, 121 not decided". Dashboard shows Apr 2025 to Mar 2026, latest month Mar 2026 ₱27.5M. They move at **Run**, when the April plan is written.
 - **The Close changes neither page.** Their text and `GET /recommendations` are the same before and after it, and nothing on the Reorder page says whether a plan has been run or closed. Do not point at the page to show the close: point at the panel's "2026-03 is closed."
-- **Do not quote the Dashboard's forecast miss here.** It reads "Company-wide miss: 11% · Typical product miss: 46%" after the Run, against 10% and 35% before it, because it now scores the generated March. That figure is on generated sales and means nothing. This is an open defect (`STATE.md`), not a feature.
+- **The forecast error is withheld.** The Dashboard's "How close the forecasts were" card, the product's reliability and past misses, and the likely range say "Forecast error withheld..." instead of a number, because March is generated (hard rule 2). A date range ending Feb 2026 still shows the real 10% and 35%. The same happens after a sales file is uploaded, with its own reason: nothing on the copy can tell a real file from a made-up one.
 - **Every answer labels itself.** Besides the yellow note, each answer's body says it is practice: a `practice_copy` block with `"not_a_result": true` and `"generated_months": ["2026-03"]`. Anything dated March carries `"generated_sales_month": true`, its `data_kind` reads `generated_practice`, and anything dated later carries `"rests_on_generated_sales": true`. To see it: F12, **Network**, click a request, **Response**.
 - **A reload moves the panel on.** It then reads "Monthly batch for 2026-04" with empty steps, and the plan table and the 709 label are gone from the screen. Nothing is lost.
 - **To show that the rows stay labelled** (should print `709|709`):
@@ -117,8 +117,8 @@ The **Stock count** slot in step 1 loads the workbook you give it. Use it **befo
 - **It is checked at once**, against what the loader needs (`docs/RAW_FILE_REQUIREMENTS.md`), and refused with what is missing. A file named for another month is refused, for example: "SSIS FEBRUARY 2026.xlsx says it is 2026-02, and this is the 2026-03 batch."
 - **The name matters.** The month comes from the file name: `SSIS MARCH 2026.xlsx`. The sheet must be named `SOH(<date>)`.
 - **It replaces that month's count, on this copy only.** The workbook in `data/raw/` for that month is left out of the run, and `data/raw/` itself is not touched.
-- **The Run takes much longer.** Measured with one count: 763 s, about 13 minutes, against 2 minutes without a file. Every SSIS workbook is read twice: a dry run, then the load. Do not do this in front of an audience.
-- **The log gains** `[practice load] dry run of the uploaded files`, `[manifest] run key ...`, and `[practice load] sign-off recorded for <you>: ...`. That sign-off is your pressing Run, on a throwaway copy. It is not a review of the manifest, the notes say so, and it is deleted when the run ends.
+- **The Run takes much longer.** Measured with one count, in Chrome: 466 s, about 8 minutes, against about 2 minutes with no file (763 s before 2026-11-04, when a dry run read every SSIS workbook first). The load reads every SSIS workbook once, because the manifest covers them all, and that read is about 4 minutes. A sales file alone took 200 s. Do not do this in front of an audience.
+- **The log gains** `[practice load] Run pressed by <you>. The system signs the manifest; nobody reviews it.`, `[manifest] run key ...` and `[practice load] sign-off recorded by system: auto-signed on the practice copy, no review`. The manifest was read by nobody, and the record says so: `_signoff_practice_auto.json` in that run's folder under `transform/slices/`, and `system: auto-signed...` as the name on the `audit_log` and `etl_load_event` rows.
 - **To confirm it read your file** (should print the upload's path and the row count):
 
 ```powershell

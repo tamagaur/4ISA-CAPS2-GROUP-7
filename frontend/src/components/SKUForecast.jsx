@@ -765,7 +765,7 @@ const SKUForecast = () => {
     let cancelled = false;
     getForecastAccuracy({ level: 'product', period: rangeEndPeriod, startPeriod: rangeStartPeriod, principal })
       .then((res) => {
-        if (!cancelled) setAccuracy({ key: accuracyKey, rows: res.rows || [], basis: res.pesos_basis || null });
+        if (!cancelled) setAccuracy({ key: accuracyKey, rows: res.rows || [], basis: res.pesos_basis || null, withheld: res.accuracy_withheld ? res.blocked_reason : null });
       })
       // The cards are extra to the page: on a failure they are left out.
       .catch(() => { if (!cancelled) setAccuracy({ key: accuracyKey, rows: [], basis: null }); });
@@ -783,7 +783,7 @@ const SKUForecast = () => {
     const rows = accuracy.rows
       .filter((r) => String(r.sku_code) === String(selectedSKU.code))
       .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0));
-    if (!rows.length) return { checked: false };
+    if (!rows.length) return { checked: false, withheld: accuracy.withheld || null };
     const sum = (key) => rows.reduce((total, r) => total + (r[key] ?? 0), 0);
     const net = sum('miss_pieces');
     const forecastTotal = sum('forecast_pieces');
@@ -1444,7 +1444,9 @@ const SKUForecast = () => {
 
   // The headline's reliability sentence (src/labels.js): MASE below 1 is
   // reliable; sample data, a browser preview or no score is "not checked".
-  const reliabilityState = !storedForecast || storedParams.demonstration || derivedForecast?.source !== 'stored'
+  // accuracy_withheld comes only from the practice copy (backend/practice_copy.py): the MASE exists and is not presented.
+  const reliabilityState = storedForecast?.accuracy_withheld ? 'withheld'
+    : !storedForecast || storedParams.demonstration || derivedForecast?.source !== 'stored'
     || storedForecast.mase == null ? 'unchecked' : storedForecast.mase < 1 ? 'reliable' : 'unreliable';
   // The usual miss is the real forecasts' record: not said beside the sample
   // forecast, which is never checked (rule 2). Shown in "Show details" only,
@@ -1487,6 +1489,7 @@ const SKUForecast = () => {
     }
     if (!storedForecast || servedModel?.kind === 'provisional') return 'It has no forecast yet (too few months of sales), and the plan needs one.';
     if (servedModel?.kind === 'no_order') return 'No sales in the last 6 months, so no order is planned.';
+    if (storedForecast.accuracy_withheld) return storedForecast.accuracy_withheld;
     if (storedForecast.mase != null && storedForecast.mase >= 1) {
       return 'Its forecast isn\u2019t reliable enough to use for ordering yet, so the plan leaves it out; nothing forecasts it '
         + 'another way.';
@@ -2338,7 +2341,7 @@ const SKUForecast = () => {
                       )}
                       {productAccuracy && !productAccuracy.checked && !storedParams.demonstration && (
                         <p className="forecast-headline-sub">
-                          Our forecasts for this product haven&apos;t been checked against past sales in this date range yet.
+                          {productAccuracy.withheld || 'Our forecasts for this product haven\u2019t been checked against past sales in this date range yet.'}
                         </p>
                       )}
                     </div>
@@ -3044,8 +3047,8 @@ const SKUForecast = () => {
                   )}
                   {productAccuracy && !productAccuracy.checked && (
                     <p className="forecast-accuracy-none">
-                      Not checked against sales in {formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}:
-                      no forecast for this product was scored in those months.
+                      {productAccuracy.withheld || <>Not checked against sales in {formatPeriod(rangeStartPeriod)} – {formatPeriod(rangeEndPeriod)}:
+                      no forecast for this product was scored in those months.</>}
                     </p>
                   )}
                   <div className="forecast-details-section">

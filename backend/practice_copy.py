@@ -23,6 +23,27 @@ deployed API) rewrites every 2xx JSON answer, whatever route made it:
     rests_on_generated_sales  on any object dated after the last generated month: the forecast and the plan made from it.
     data_kind, estimated, estimated_rows, synthetic_months   corrected on those objects, because each would state the opposite.
 Del Monte objects keep only the top-level label: the generated month is Unilever's.
+
+ACCURACY IS WITHHELD, NOT LABELLED (hard rule 2, 2026-11-04). No accuracy figure computed on a generated month is presented, so the same
+middleware, on the same copy-only mount, replaces them in the answer: no query changes and no other database is reached.
+    A range that reaches a generated month    GET /dashboard's forecast_accuracy, GET /dashboard/accuracy (every level), the four
+                                              /dashboard/error-decomposition routes: the figures go, blocked_reason says why. A range
+                                              ending before that month keeps its figures: they are the real months'.
+    A stored figure dated on or after it      mase, mape, the holdout metrics in model_params and the confidence band, which rebuilds
+                                              the holdout error (GET /forecast's interval.basis). March's row was tested on February's
+                                              history, and goes with April's: the rule is one line and it errs towards withholding.
+    An undated figure                         GET /dashboard's evaluated and unreliable counts read the newest forecast. Withheld.
+    A figure in a sentence                    "(MASE 2.54)" in GET /abc's reasons.
+    A figure in the job log                   the Data Management panel shows the Run's log (GET /batch/job, /batch/status), where the forecast
+                                              prints its MASE summary: that line goes, and a line says it went.
+A month whose sales came through the panel's upload slot is withheld the same way, with its own reason (uploaded_months). Nothing here can tell a real
+file from a made-up one, those rows are is_demo = false, and no real new monthly file has ever existed. They are not labelled generated: nobody knows that.
+Which months could not be read: everything is withheld. No generated or uploaded month in the copy: nothing is.
+What stays: whether a product is planned, and the rule's own threshold (mase_gate). The plan rests on the test; it is not an error figure.
+
+RUN OR CLOSED (2026-11-04). scripts/close_cycle writes lp_recommendation.closed_at and no route read it. plan_state on GET /recommendations says
+whether the plan shown is closed, and whether the month before it is. Added here because the copy is the only place a cycle has ever closed, and
+live's answers are not changed by this work: serving it on every database is a separate decision.
 """
 from __future__ import annotations
 
@@ -42,10 +63,18 @@ LABEL_HEADER = "X-Practice-Copy"              # on every answer from the copy; f
 PRACTICE_NOTE = "Read from the practice copy (ssm_practice), whose sales may be generated. Practice, not a result."
 GENERATED_TAG = "qa_synthetic_march"          # scripts/local_pg.py TAG: what `local_pipeline_qa.py synth` writes
 GENERATED_KIND = "generated_practice"
+UPLOAD_SRC_PREFIX = "local/monthly_batch/uploads/"   # backend/routers/monthly_batch.UPLOADS, as the loader records it in _src_file
 # The keys that date an object. Anything else dated (a count date, a range edge) is covered by the top-level label, not by these.
 MONTH_KEYS = ("period", "month", "calendar_month", "sales_period", "last_sale_period", "latest_sales_month", "latest_actual_month",
               "planning_cycle_date", "forecast_date", "forecast_period", "cycle", "cycle_date", "tier_period", "last_month")
 _MONTH = re.compile(r"^(20\d{2}-\d{2})(-\d{2})?")
+ACCURACY_RANGE_ROUTES = ("/dashboard/accuracy", "/dashboard/error-decomposition")   # the whole answer is a range's scored figures
+STORED_ACCURACY_KEYS = ("mase", "mape", "wape", "confidence_lower", "confidence_upper", "evaluated_count", "unreliable_count")
+MODEL_PARAMS_ACCURACY_KEYS = ("wape", "holdout_metrics_served", "holdout_metrics_all_methods", "oracle_method")
+_MASE_IN_TEXT = re.compile(r"\s*\(MASE \d+(?:\.\d+)?\)")
+# scripts/run_baseline_forecast.py's printed summary: every line of it that states or rebuilds an error, the win counts per class included.
+_ACCURACY_LOG_LINE = re.compile(r"(?i)((mase|mape|wape|rmse|\bmae\b|\bbias\b|gap rule|outright wins).*\d|oracle_method=|\(\d+\)(\s+\d+){5}\s*$)")
+LOG_LINE_WITHHELD = "[a forecast error figure was printed here: withheld on the practice copy]"
 
 
 def _url() -> str:
@@ -91,6 +120,26 @@ def generated_months(url: str | None = None) -> list[str] | None:
         return [r[0] for r in cur.fetchall()]
     except psycopg2.Error as exc:
         logger.warning("The practice copy's generated months could not be read: %s", exc)
+        return None
+    finally:
+        conn.close()
+
+
+def uploaded_months(url: str | None = None) -> list[str] | None:
+    """The months whose sales came through the panel's upload slot. None when it could not be read, which withholds everything."""
+    import psycopg2
+    try:
+        conn = psycopg2.connect(url or _url(), connect_timeout=5)
+    except psycopg2.Error as exc:
+        logger.warning("The practice copy's uploaded months could not be read: %s", exc)
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT DISTINCT left(calendar_month::text, 7) FROM unilever_sku_demand_fact WHERE NOT is_demo AND starts_with(_src_file, %s) ORDER BY 1",
+                    (UPLOAD_SRC_PREFIX,))
+        return [r[0] for r in cur.fetchall()]
+    except psycopg2.Error as exc:
+        logger.warning("The practice copy's uploaded months could not be read: %s", exc)
         return None
     finally:
         conn.close()
@@ -145,8 +194,98 @@ def _label_points(node, months: list[str], delmonte: bool = False) -> None:
         node["estimated_rows"] = sum(1 for r in node["rows"] if isinstance(r, dict) and r.get("estimated"))
 
 
-def label_payload(body, months: list[str] | None):
-    """The body with its label. Changes the object it is given."""
+def accuracy_withheld_reason(months: list[str] | None, uploaded: list[str] | None = ()) -> str:
+    """Worded as the panel words it (scripts/cycle_feedback.score)."""
+    if months is None or uploaded is None:
+        return "Forecast error withheld: which months are generated could not be read, and an error computed on generated sales is not presented."
+    said = []
+    if months:
+        said.append(f"sales for {', '.join(months)} on this practice copy are generated")
+    if uploaded:
+        said.append(f"sales for {', '.join(uploaded)} on this practice copy came from an uploaded file that nothing here has checked")
+    first = min(*months, *uploaded) if len([*months, *uploaded]) > 1 else [*months, *uploaded][0]
+    return (f"Forecast error withheld: {' and '.join(said)}, and an error computed on them is not presented. "
+            f"A date range ending before {first} shows the real months' error.")
+
+
+def _reaches_generated(block: dict, months: list[str] | None) -> bool:
+    end = _month_of(block.get("end_period") or block.get("period_end"))
+    return months is None or end is None or end >= months[0]
+
+
+def _withheld_range(block: dict, reason: str) -> dict:
+    """The answer a range with nothing to score gives, so a page reads it the way it reads Del Monte's: blocked_reason and no figures."""
+    from analytics.params import REVIEW_OVER_RUN_MONTHS
+    from backend.marts import accuracy_summary
+    start, end = block.get("start_period"), block.get("end_period")
+    keep = {k: block[k] for k in ("coverage", "level") if k in block}
+    return {**accuracy_summary([], start, end, REVIEW_OVER_RUN_MONTHS), **keep, "rows": [], "compare_run": None, "actuals_version": None,
+            "blocked_reason": reason, "accuracy_withheld": True}
+
+
+def _withheld_decomposition(block: dict, reason: str) -> dict:
+    keep = ("coverage", "product_key", "sku_code", "product_name", "category_path", "period_start", "period_end", "products_tier")
+    return {**{k: block[k] for k in keep if k in block}, "available": False, "blocked_reason": reason, "accuracy_withheld": True}
+
+
+def _stands(node: dict, months: list[str] | None) -> bool:
+    """A stored figure stands only on an object dated, every date of it, before the first generated month."""
+    if months is None:
+        return False
+    dated = [m for m in (_month_of(node.get(k)) for k in MONTH_KEYS) if m]
+    return bool(dated) and all(m < months[0] for m in dated)
+
+
+def _withhold_log(log: str) -> str:
+    return "\n".join(LOG_LINE_WITHHELD if _ACCURACY_LOG_LINE.search(line) else line for line in log.split("\n"))
+
+
+def _withhold_stored(node, months: list[str] | None, reason: str, delmonte: bool = False, stands: bool = False) -> None:
+    if isinstance(node, list):
+        for item in node:
+            _withhold_stored(item, months, reason, delmonte, stands)
+        return
+    if not isinstance(node, dict):
+        return
+    if isinstance(node.get("principal"), str):
+        delmonte = node["principal"].lower().replace(" ", "") == "delmonte"
+    stands = stands or _stands(node, months)
+    if not (delmonte or stands):
+        held = [k for k in STORED_ACCURACY_KEYS if node.get(k) is not None]
+        params = node.get("model_params")
+        held_params = [k for k in MODEL_PARAMS_ACCURACY_KEYS if k in params] if isinstance(params, dict) else []
+        for key in held:
+            node[key] = None
+        for key in held_params:
+            del params[key]
+        if held or held_params:
+            node["accuracy_withheld"] = reason
+    for key, value in list(node.items()):
+        if isinstance(value, str):
+            node[key] = _withhold_log(value) if key == "log" else _MASE_IN_TEXT.sub(" (its MASE is withheld on the practice copy)", value)
+        else:
+            _withhold_stored(value, months, reason, delmonte, stands)
+
+
+def withhold_accuracy(body, generated: list[str] | None, path: str = "", uploaded: list[str] | None = ()):
+    """The body with no accuracy figure computed on a generated or uploaded month. A new dict where a whole range goes; else changes what it is given."""
+    months = None if generated is None or uploaded is None else sorted({*generated, *uploaded})
+    if months == []:
+        return body
+    reason = accuracy_withheld_reason(generated, uploaded)
+    if isinstance(body, dict) and path.startswith(ACCURACY_RANGE_ROUTES) and not body.get("blocked_reason") and _reaches_generated(body, months):
+        return _withheld_range(body, reason) if path == "/dashboard/accuracy" else _withheld_decomposition(body, reason)
+    if isinstance(body, dict) and path == "/dashboard" and isinstance(body.get("forecast_accuracy"), dict):
+        block = body["forecast_accuracy"]
+        if block.get("coverage") and _reaches_generated(block, months):
+            body["forecast_accuracy"] = _withheld_range(block, reason)
+    _withhold_stored(body, months, reason)
+    return body
+
+
+def label_payload(body, months: list[str] | None, path: str = "", uploaded: list[str] | None = ()):
+    """The body with its label and without the accuracy it may not present. Changes the object it is given, except where a whole range goes."""
+    body = withhold_accuracy(body, months, path, uploaded)
     if months:
         _label_points(body, months)
     if isinstance(body, dict):
@@ -158,13 +297,57 @@ def label_payload(body, months: list[str] | None):
     return body
 
 
-def _labelled_bytes(raw: bytes) -> bytes:
+PLAN_STATE_SQL = """
+    SELECT COUNT(*), COUNT(lr.closed_at), MAX(lr.closed_at)::text,
+           (SELECT pc.state FROM planning_cycle pc WHERE pc.principal = 'unilever' AND pc.cycle = %(cycle)s)
+    FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key
+    WHERE pd.principal = 'unilever' AND lr.planning_cycle_date = %(cycle)s AND lr.lp_run_key IS NOT NULL
+"""
+
+
+def plan_state_of(rows: int, closed: int, cycle_state: str | None) -> str:
+    """closed only when every plan row is marked and the cycle says so: anything less is a plan that can still change."""
+    if rows and closed == rows and cycle_state == "closed":
+        return "closed"
+    return "closing" if cycle_state == "closing" else "run"
+
+
+def plan_state(cycle: str) -> dict | None:
+    """The plan of `cycle` (YYYY-MM-DD) and of the month before it, read from the copy. None when it could not be read."""
+    import datetime
+
+    import psycopg2
+    this = datetime.date.fromisoformat(cycle[:10])
+    prior = (this.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+    try:
+        conn = psycopg2.connect(_url(), connect_timeout=5)
+    except psycopg2.Error as exc:
+        logger.warning("The practice copy's plan state could not be read: %s", exc)
+        return None
+    try:
+        cur = conn.cursor()
+        out = {}
+        for name, when in (("this", this), ("prior", prior)):
+            cur.execute(PLAN_STATE_SQL, {"cycle": when})
+            rows, closed, closed_at, state = cur.fetchone()
+            out[name] = {"cycle": f"{when:%Y-%m}", "rows": rows, "state": plan_state_of(rows, closed, state), "closed_at": closed_at}
+        return {**out["this"], "prior": out["prior"] if out["prior"]["rows"] else None}
+    except psycopg2.Error as exc:
+        logger.warning("The practice copy's plan state could not be read: %s", exc)
+        return None
+    finally:
+        conn.close()
+
+
+def _labelled_bytes(raw: bytes, path: str = "") -> bytes:
     try:
         body = json.loads(raw)
     except ValueError:
-        logger.warning("An answer on the practice copy said it was JSON and was not: it went out without a body label")
+        logger.warning("An answer on the practice copy said it was JSON and was not: it went out without its label")
         return raw
-    return json.dumps(label_payload(body, generated_months()), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if path == "/recommendations" and isinstance(body, dict) and isinstance(body.get("planning_cycle_date"), str):
+        body["plan_state"] = plan_state(body["planning_cycle_date"])
+    return json.dumps(label_payload(body, generated_months(), path, uploaded_months()), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 class PracticeBodyLabel:
@@ -193,7 +376,7 @@ class PracticeBodyLabel:
                 chunks.append(message.get("body", b""))
                 if message.get("more_body"):
                     return
-                body = await run_in_threadpool(_labelled_bytes, b"".join(chunks))
+                body = await run_in_threadpool(_labelled_bytes, b"".join(chunks), scope.get("path", ""))
                 headers = [(k, v) for k, v in start["headers"] if k.lower() != b"content-length"]
                 await send({**start, "headers": [*headers, (b"content-length", str(len(body)).encode())]})
                 await send({"type": "http.response.body", "body": body})

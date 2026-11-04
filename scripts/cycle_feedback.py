@@ -40,7 +40,10 @@ SYNTHETIC_TAG = "qa_synthetic%%"   # scripts/local_pipeline_qa.py's _src_file on
 MONTH_LOADED_SQL = "SELECT EXISTS (SELECT 1 FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month = %(period)s)"
 # The base table: these rows are is_demo = true, so a count through a _Real view would read 0 and lose the label.
 SYNTHETIC_SQL = f"SELECT COUNT(*) FROM unilever_sku_demand_fact WHERE calendar_month = %(period)s AND _src_file LIKE '{SYNTHETIC_TAG}'"
-GENERATED_IN_SCORE_SQL = "SELECT COUNT(*) FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month <= %(period)s AND is_demo"
+# The panel's upload folder counts too: nothing can tell a real file from a made-up one there, and no real new monthly file has ever existed. It is a folder of
+# the local practice app (backend/practice_copy.UPLOAD_SRC_PREFIX), so on any other database this clause matches no row.
+GENERATED_IN_SCORE_SQL = ("SELECT COUNT(*) FROM Unilever_SKU_Demand_Fact_Real WHERE calendar_month <= %(period)s "
+                          "AND (is_demo OR starts_with(_src_file, 'local/monthly_batch/uploads/'))")
 FORECAST_SQL = """
     SELECT pd.sku_code, fr.forecast_value, s.actual, COALESCE(s.blanks, 0), s.product_key IS NOT NULL
     FROM forecast_result fr
@@ -70,8 +73,8 @@ def score(rows: list[dict], month_loaded: bool, generated_rows: int = 0) -> dict
     """Forecast against sales, in pieces. Blocked (no ratio at all) when the month is not loaded, or when generated sales
     are in what it would be scored on: the figures that could rebuild an error are withheld with it."""
     if generated_rows:
-        return {"status": "blocked", "reason": f"forecast error withheld: {generated_rows:,} generated sales rows are in this cycle, "
-                                               "and an error computed on generated sales is not presented"}
+        return {"status": "blocked", "reason": f"forecast error withheld: {generated_rows:,} generated or uploaded practice sales rows are in this cycle, "
+                                               "and an error computed on them is not presented"}
     if not month_loaded:
         return {"status": "blocked", "reason": "the month's sales are not loaded: not scored, and not read as zero"}
     scored = [r for r in rows if not r["blanks"]]

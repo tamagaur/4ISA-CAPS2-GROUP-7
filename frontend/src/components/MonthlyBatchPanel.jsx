@@ -8,6 +8,12 @@ import { batchStage, canRun, planChange } from '../utils/monthlyBatchSteps';
 import './MonthlyBatchPanel.css';
 
 const POLL_MS = 2000;
+// One moment, two months, named so the panel and the Reorder page agree: the batch is still closing this month while the Reorder page already
+// shows the plan the Run made (backend/lp_cycle.current_cycle moves at Run; this panel's month moves at Close).
+const planNote = (label, reorderPage, closed) => {
+  if (label === reorderPage) return 'On the Reorder page now, not closed';
+  return label < reorderPage ? `Last month's plan, ${closed ? 'closed' : 'not closed yet'}` : 'Not made yet';
+};
 const pieces = (n) => Math.round(n).toLocaleString('en-US');
 const pct = (n) => (n == null ? 'n/a' : `${(n * 100).toFixed(1)}%`);
 
@@ -225,8 +231,8 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
                 <table className="mb-table">
                   <thead><tr><th scope="col">Plan</th><th scope="col">Products</th><th scope="col">Ordering</th><th scope="col">Pieces</th><th scope="col">Note</th></tr></thead>
                   <tbody>
-                    <PlanRow label={month} plan={status.plan} note="Current" />
-                    <PlanRow label={status.next_month} plan={status.next_plan} note={change ? `${change} the current plan` : 'New'} />
+                    <PlanRow label={month} plan={status.plan} note={planNote(month, status.reorder_page_month, status.cycle_state === 'closed')} />
+                    <PlanRow label={status.next_month} plan={status.next_plan} note={[planNote(status.next_month, status.reorder_page_month, false), change && `${change} the ${month} plan`].filter(Boolean).join('. ')} />
                   </tbody>
                 </table>
               </div>

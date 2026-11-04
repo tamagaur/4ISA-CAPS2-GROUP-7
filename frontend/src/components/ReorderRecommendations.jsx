@@ -28,7 +28,7 @@ import { sameQuantity } from '../utils/reorderRequests';
 import { formatDate, formatDateTime, formatMonth } from '../utils/formatDate';
 import { labelForPrincipal } from '../principals';
 import { ReviewBadge } from './PendingCards';
-import { decisionCounts, decisionLine } from '../decisionCounts';
+import { decisionCounts, decisionLine, planStateLine } from '../decisionCounts';
 import { DemoOrderPlanCard } from './DemoOrderPlan';
 import { formatCoverDays, formatUnits, wholeUnits } from '../utils/formatNumber';
 import { useBrandLookup } from '../utils/useBrandLookup';
@@ -526,6 +526,7 @@ const ReorderRecommendations = () => {
             cycle: res.planning_cycle_date || null,
             whatIf: Boolean(res.data_mode?.outputs),
             counts: decisionCounts(res.items || []),
+            planState: res.plan_state || null,
           });
         }
       })
@@ -1327,7 +1328,7 @@ const ReorderRecommendations = () => {
       {decisions?.status === 'ok' && !decisions.whatIf && decisions.cycle && (
         <p className={`ui-note ${decisions.counts.pending > 0 ? 'is-warning' : 'is-info'}`} role="status" data-testid="reorder-decision-state">
           <ClipboardList size={16} aria-hidden="true" />
-          <span><strong>{formatMonth(String(decisions.cycle).slice(0, 10))} plan:</strong> {decisionLine(decisions.counts)}.</span>
+          <span><strong>{formatMonth(String(decisions.cycle).slice(0, 10))} plan:</strong> {decisionLine(decisions.counts)}.{planStateLine(decisions.planState) && ` ${planStateLine(decisions.planState)}`}</span>
         </p>
       )}
       {decisions?.status === 'error' && (

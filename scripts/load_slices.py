@@ -609,6 +609,7 @@ class RunContext:
     soh_dir: Path | None = None
     price_list: dict | None = None
     events: list = field(default_factory=list)
+    practice_auto_sign: bool = False    # scripts/practice_signed_load.py; refused off the practice copy (practice_auto_sign_allowed)
 
 
 def _scope(conn: Connection, schema: str, read_only: bool = False) -> None:
@@ -1177,6 +1178,9 @@ def _stage_and_sign(ctx: RunContext, slices: list[Slice], files_by_family: dict[
     (transform_dir / "_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str), encoding="utf-8")
     fp = compute_manifest_fingerprint(json.loads(json.dumps(manifest, default=str)))
     print(f"\n[manifest] run key {run_key}: {len(manifest['staged'])} staged sheet(s), fingerprint {fp}")
+    if ctx.practice_auto_sign:
+        from scripts.practice_signed_load import sign_manifest
+        sign_manifest(transform_dir)
     unsigned = unsigned_reason(transform_dir)
     if unsigned:
         print(f"[sign-off] NOT SIGNED - {unsigned}. After reviewing transform/slices/{run_key}/_manifest.json:\n"
@@ -1198,10 +1202,25 @@ def _summary(ctx: RunContext) -> int:
     return 1 if refused else 0
 
 
+def practice_auto_sign_allowed(asked: bool) -> bool:
+    """Whether the system may sign this run's manifest. Asked anywhere but the practice copy, the run stops here: the connection decides."""
+    if not asked:
+        return False
+    from scripts.practice_signed_load import on_practice_copy
+    if not on_practice_copy():
+        raise SystemExit("REFUSED: --practice-auto-sign has the system sign a manifest nobody read: the practice copy only.")
+    return True
+
+
 def run(engine: Engine, args) -> int:
     run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
-    ctx = RunContext(engine=engine, schema=args.schema, run_id=run_id, run_by=getpass.getuser(), dry_run=args.dry_run,
-                     allow_shrink=args.allow_shrink, target_public=args.target_public, staging=SLICE_STAGING)
+    auto_sign = practice_auto_sign_allowed(getattr(args, "practice_auto_sign", False))
+    run_by = getpass.getuser()
+    if auto_sign:
+        from scripts.practice_signed_load import SYSTEM_SIGNER
+        run_by = SYSTEM_SIGNER
+    ctx = RunContext(engine=engine, schema=args.schema, run_id=run_id, run_by=run_by, dry_run=args.dry_run,
+                     allow_shrink=args.allow_shrink, target_public=args.target_public, staging=SLICE_STAGING, practice_auto_sign=auto_sign)
     if args.refresh_coverage:
         with engine.begin() as conn:
             _scope(conn, ctx.schema)
@@ -1383,7 +1402,10 @@ def run_full(ctx: RunContext, overrides: list[Path]) -> int:
         if fam.key == "rmr_gs_bo":
             pool = [f for f in pool if file_month(f) in rmr_allowed_periods()]
         files_by_family[fam.key] = pool
-    unsigned, problems, _ = _stage_and_sign(ctx, [], files_by_family, None, True)
+    # An SSIS workbook has no pool above (SOH is staged across every workbook at once): it takes its month's place in extract_soh,
+    # as under --slice. Left out, --file was accepted and silently ignored here.
+    soh_given = [f for f, fl in given.items() if _file_family(fl) == "ssis_soh"]
+    unsigned, problems, _ = _stage_and_sign(ctx, [], files_by_family, None, True, soh_given)
     if unsigned and not ctx.dry_run:
         print("\nrefusing the whole rebuild: fingerprint not signed (no slice events are written for an unsigned full rebuild)")
         return 1

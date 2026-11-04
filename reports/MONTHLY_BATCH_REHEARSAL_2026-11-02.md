@@ -6,7 +6,7 @@ Written for: the team members who will run the month, or defend it.
 
 ## Changed later on 2026-11-02: read this first
 
-Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy no page reads except the batch panel. Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup. The current run is this one.
+Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy. When this was written no page read it except the batch panel; since 2026-11-04 `scripts.local_app` serves every page from it, each answer labelled (`backend/practice_copy.py`), with forecast error withheld on the generated month. Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup. The current run is this one.
 
 **The practice month, labelled, end to end (run across midnight 2026-11-02/03).** Rule 2, path 2 in `CLAUDE.md`. Nothing here is a result.
 

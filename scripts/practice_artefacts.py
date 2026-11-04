@@ -14,8 +14,9 @@ docs say (generated sales, plan, close), fingerprints again, and checks each dif
             A deleted row leaves nothing to mark, so deletions are counted and printed.
     route   every GET route of the real app, on ssm_practice, called with a real product where it takes one: an answer carrying the
             X-Practice-Copy label AND the label in its body (backend/practice_copy.py), naming the generated month, with no object
-            dated that month reading data_kind real or estimated false; a /batch answer with practice_note too; a refusal (it holds
-            no figure); or /health. A 422 fails: it means this check could not read the route, not that the route is clean.
+            dated that month reading data_kind real or estimated false, and no accuracy figure on or after that month; a /batch answer
+            with practice_note too; a refusal (it holds no figure); or /health. A 422 fails: it means this check could not read the route,
+            not that the route is clean.
 
 Exit 1 names what fails. Writes to ssm_practice and to the files the run itself writes, and nothing else: never live
 (local_pg.local_url refuses any other server). Not part of scripts/check.sh: it needs the local Postgres and takes minutes.
@@ -44,6 +45,7 @@ ROW_HASH = "md5((to_jsonb(x) - 'practice_run')::text)"
 ROUTE_QUERY = {"/batch/feedback": "?cycle={month}", "/dashboard/product-sales": "?principal=unilever", "/decomposition": "?sku={sku}",
                "/segment": "?sku={sku}", "/forecast/{sku_id}": "?principal=unilever", "/demo/series": "?principal=unilever&key={sku}",
                "/demo/index": "?principal=unilever"}
+EXTRA_ACCURACY_URLS = ("/dashboard/accuracy?level=product", "/dashboard/accuracy?level=category")     # the same path, other answers
 
 
 def file_state() -> dict[str, tuple[int, int]]:
@@ -129,6 +131,42 @@ def reads_as_real(node, month: str, delmonte: bool = False) -> bool:
     return any(reads_as_real(value, month, delmonte) for value in node.values())
 
 
+def accuracy_figure(node, month: str = MONTH, delmonte: bool = False, stands: bool = False) -> str | None:
+    """The name of an accuracy figure that could rest on the generated month, or None. Written apart from the withholding, which it checks,
+    and with a longer list of names: a range counts by its end, and a date on or after the month clears nothing."""
+    if isinstance(node, list):
+        for item in node:
+            found = accuracy_figure(item, month, delmonte, stands)
+            if found:
+                return found
+        return None
+    if isinstance(node, str):
+        return "MASE in a sentence" if re.search(r"MASE \d+\.\d", node) else None
+    if not isinstance(node, dict):
+        return None
+    if isinstance(node.get("principal"), str):
+        delmonte = node["principal"].lower().replace(" ", "") == "delmonte"
+    dates = [node[k][:7] for k in (*MONTH_KEYS, "end_period", "period_end") if isinstance(node.get(k), str) and re.match(r"20\d\d-\d\d", node[k])]
+    if dates:
+        stands = all(d < month for d in dates)
+    if not (delmonte or stands):
+        for key in ("mase", "mape", "wape", "wape_pieces", "total_wape_pesos", "median_product_wape", "abs_miss_pieces", "abs_miss_pesos", "net_miss_pieces",
+                    "error_pieces", "error_pesos", "confidence_lower", "confidence_upper", "evaluated_count", "unreliable_count", "beyond_pesos",
+                    "holdout_metrics_served", "holdout_metrics_all_methods", "miss_pieces"):
+            if node.get(key) not in (None, 0, 0.0, {}, []):
+                return key
+        for key in ("company_total", "typical_product_weighted"):
+            if isinstance(node.get(key), dict) and node[key].get("value") is not None:
+                return key
+    if isinstance(node.get("log"), str) and re.search(r"(?i)^(?!.*withheld).*(mase|mape|wape|rmse).*\d", node["log"], re.M):
+        return "a forecast error figure in the job log"
+    for value in node.values():
+        found = accuracy_figure(value, month, delmonte, stands)
+        if found:
+            return found
+    return None
+
+
 def body_label_problem(body, month: str = MONTH) -> str | None:
     """None when the body alone says what it is."""
     labels = [body.get("practice_copy")] if isinstance(body, dict) else [x.get("practice_copy") if isinstance(x, dict) else None for x in body] if isinstance(body, list) else [None]
@@ -136,7 +174,10 @@ def body_label_problem(body, month: str = MONTH) -> str | None:
         return "no practice_copy label in the body"
     if any(month not in (x.get("generated_months") or []) for x in labels):
         return f"the body label does not name {month}"
-    return f"an object dated {month} reads as real" if reads_as_real(body, month) else None
+    if reads_as_real(body, month):
+        return f"an object dated {month} reads as real"
+    figure = accuracy_figure(body, month)
+    return f"an accuracy figure on or after {month} is presented: {figure}" if figure else None
 
 
 def route_verdict(path: str, status, body, headers=None) -> str | None:
@@ -195,6 +236,12 @@ def api_check() -> int:
         print(f"  {path}: {res.status_code}{'  ' + why if why else ''}")
         if why:
             failures.append(path)
+    for url in EXTRA_ACCURACY_URLS:
+        res = client.get(url, headers={"Authorization": f"Bearer {token}"})
+        why = route_verdict(url.split("?")[0], res.status_code, res.json(), res.headers)
+        print(f"  {url}: {res.status_code}{'  ' + why if why else ''}")
+        if why:
+            failures.append(url)
     print(f"routes: {len(paths)} GET, {answered} answered with figures and were read, {len(paths) - answered} refused, {len(failures)} failed")
     return 1 if failures else 0
 

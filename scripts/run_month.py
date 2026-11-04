@@ -91,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--approved-by", metavar="NAME")
     ap.add_argument("--expect-month", type=parse_cycle, metavar="YYYY-MM", help="must equal --month")
     ap.add_argument("--target-public", action="store_true", help="explicit-only: allow a write to the live database")
+    ap.add_argument("--practice-auto-sign", action="store_true", help="passed to the load step, which refuses it off the practice copy (scripts/practice_signed_load.py)")
     return ap
 
 
@@ -154,6 +155,8 @@ def plan_steps(args, py: str = sys.executable) -> list[Step]:
             load += ["--slice", spec]
         for path in args.file:
             load += ["--file", path]
+        if getattr(args, "practice_auto_sign", False):
+            load.append("--practice-auto-sign")
         steps.append(Step("load", load, "sales_loaded", always=True))
     forecast = [py, "scripts/run_baseline_forecast.py", "--write"] + (["--calendar-factor"] if args.calendar_factor == "on" else [])
     steps += [Step("abc", [py, "-m", "analytics.classification.orchestrate_abc", "--period", period, "--schema", "public",

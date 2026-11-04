@@ -273,8 +273,8 @@ def run(body: RunBody, user: TokenPayload = Depends(require_permission("upload.r
         folder = _month_folder(body.month, kind)
         for path in sorted(folder.iterdir()) if folder.is_dir() else []:
             files += ["--slice", SLICES[kind].format(month=body.month), "--file", str(path)]
-    if files:   # a load needs a signed manifest; on the copy, the person who pressed Run signs it (scripts/practice_signed_load.py)
-        cmd = [sys.executable, "-m", "scripts.practice_signed_load", "--approved-by", _approver(user), *files, "--", *cmd[1:], *files]
+    if files:   # a load needs a signed manifest; on the copy the system signs it, and says so (scripts/practice_signed_load.py)
+        cmd = [sys.executable, "-m", "scripts.practice_signed_load", "--pressed-by", _approver(user), "--", *cmd[1:], *files]
     JOB.start("plan", cmd)
     return {"started": "plan"}
 

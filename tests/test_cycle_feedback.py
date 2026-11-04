@@ -52,7 +52,7 @@ def test_decisions_separate_overrides_from_plain_accepts_and_count_the_reasons()
 
 def test_no_figure_that_could_rebuild_an_error_survives_a_generated_row():
     result = cf.score([_row("A", 150.0, 100.0), _row("B", 50.0, 100.0)], month_loaded=True, generated_rows=1)
-    assert result["status"] == "blocked" and "generated sales" in result["reason"]
+    assert result["status"] == "blocked" and "generated or uploaded" in result["reason"]
     assert not {"wape", "bias", "forecast", "actual", "over", "under", "scored"} & set(result)
 
 
@@ -61,7 +61,7 @@ def test_the_withheld_error_reaches_every_screen_as_the_reason():
     report = {"cycle": "2026-03", "synthetic_rows": 709, "forecast": cf.score([_row("A", 150.0, 100.0)], True, 709),
               "decisions": cf.summarize_decisions([]), "receipts": []}
     text = "\n".join(cf.render(report))
-    assert "WAPE" not in text and "bias" not in text and "%" not in text and "generated sales" in text
+    assert "WAPE" not in text and "bias" not in text and "%" not in text and "generated or uploaded" in text
 
 
 class _Cursor:

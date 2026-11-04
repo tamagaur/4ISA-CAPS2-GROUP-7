@@ -35,8 +35,14 @@ def main() -> int:
     status = rm._status(params)
     facts = rm._facts(params)
     row = status["cycle_row"]
+
+    def newest_plan(cur):     # the month the Reorder page shows: backend/lp_cycle.current_cycle moves at Run, this month at Close
+        cur.execute(rm.NEWEST_PLAN_SQL, {"principal": PRINCIPAL})
+        return cur.fetchone()[0]
+    reorder_page = rm._read(newest_plan)
     print(json.dumps({
         "month": f"{month:%Y-%m}", "next_month": f"{params['next_cycle']:%Y-%m}", "live": is_live_target(),
+        "reorder_page_month": f"{reorder_page:%Y-%m}" if reorder_page else None,
         "checks": status["checks"], "cycle_state": row["state"] if row else "open",
         "latest_sales_month": facts["latest_sales_month"], "synthetic_rows": facts["synthetic_rows"], "generated_rows": facts["generated_rows"],
         "plan": rm._plan(params, params["cycle"]), "next_plan": rm._plan(params, params["next_cycle"]),
