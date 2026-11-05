@@ -327,6 +327,9 @@ ALLOWED = {
     # 2026-10-25: the strict-type test builds a decision with a text quantity. Test code only.
     "tests/backend/test_qa_findings_8_15.py",
     "tests/optimization/test_run_lp_projected.py", "scripts/rollover_scratch_test.py",
+    # 2026-11-05: the live demonstration accepts the baseline plan's orders by CALLING decide_row (the one writer), passing decided_quantity=None.
+    # It reads nothing back and feeds nothing to forecasting or safety stock.
+    "scripts/demo_session.py",
     "analytics/db/migrations/0069_rollover_ledger.sql",
     # 2026-11-02: the read-only monthly feedback report shows decisions to a person; it writes nothing and nothing reads it.
     "scripts/cycle_feedback.py", "tests/test_cycle_feedback.py",

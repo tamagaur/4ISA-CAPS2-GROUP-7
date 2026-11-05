@@ -24,6 +24,19 @@ PRACTICE_DATABASE = "ssm_practice"   # scripts/local_pg.py
 PRACTICE_MARKER = "PRACTICE RUN ON GENERATED SALES, NOT A RESULT"
 
 
+DEMO_SESSION_ENV = "SSM_DEMO_SESSION"   # set by scripts/demo_session.py on its children. Only ever makes a run MORE careful: reports leave the tracked folders
+
+
+def in_demo_session() -> bool:
+    return bool(os.environ.get(DEMO_SESSION_ENV))
+
+
+def writes_tracked_reports() -> bool:
+    """Whether a script may write a tracked report: the run's database is live and no demonstration session is on. A tracked report must
+    never take figures computed on generated sales."""
+    return is_live_target() and not in_demo_session()
+
+
 def is_live_target() -> bool:
     url = os.environ.get("SUPABASE_DB_URL") or ""
     if not url:
@@ -38,13 +51,13 @@ def is_live_target() -> bool:
 def is_practice_target() -> bool:
     """The run's database is the practice copy, by the name in its URL. For labelling output only: permission to accept generated
     rows comes from analytics/forecasting/practice_switch, which asks the connection."""
-    return urlparse(os.environ.get("SUPABASE_DB_URL") or "").path == f"/{PRACTICE_DATABASE}"
+    return in_demo_session() or urlparse(os.environ.get("SUPABASE_DB_URL") or "").path == f"/{PRACTICE_DATABASE}"
 
 
 def report_path(tracked: str | os.PathLike) -> Path:
     """The path to write `tracked` to: itself for live, local/nonlive_reports/... otherwise."""
     p = Path(tracked).resolve()
-    if is_live_target():
+    if writes_tracked_reports():
         return p
     if REPO not in p.parents:  # an explicit path outside the repo is the caller's choice
         return p

@@ -112,7 +112,9 @@ def practice_copy_refusal(path: str) -> dict | None:
 class Job:
     """The one running child process, its output and how it ended."""
 
-    def __init__(self) -> None:
+    def __init__(self, env_factory: Callable[[], dict] | None = None, marker: str | None = None) -> None:
+        self._env_factory = env_factory      # the live demonstration (backend/routers/live_demo.py) runs its steps on the database it is connected to
+        self._marker = marker
         self._lock = threading.Lock()
         self.status = "idle"
         self.kind = None
@@ -140,7 +142,7 @@ class Job:
         try:
             LOGS.mkdir(parents=True, exist_ok=True)
             log = open(LOGS / f"{self.id}_{self.kind}.log", "w", encoding="utf-8")
-            log.write(f"{PRACTICE_MARKER}\n{PRACTICE_NOTE}\njob {self.id}, {self.kind}, month {self.month}\n\n")
+            log.write(f"{PRACTICE_MARKER}\n{self._marker or PRACTICE_NOTE}\njob {self.id}, {self.kind}, month {self.month}\n\n")
             return log
         except OSError as exc:
             logger.warning("monthly batch: could not open the job log: %s", exc)
@@ -159,7 +161,7 @@ class Job:
 
         try:
             proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                                    errors="replace", env=step_env())
+                                    errors="replace", env=(self._env_factory or step_env)())
             for line in proc.stdout:
                 record(line.rstrip())
             code = proc.wait()

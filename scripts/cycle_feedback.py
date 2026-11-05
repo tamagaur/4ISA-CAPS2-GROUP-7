@@ -33,7 +33,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from scripts.close_cycle import PRINCIPAL, cycle_params, parse_cycle, transaction  # noqa: E402
-from scripts.report_target import PRACTICE_MARKER, is_live_target  # noqa: E402
+from scripts.report_target import PRACTICE_MARKER, writes_tracked_reports  # noqa: E402
 
 SYNTHETIC_TAG = "qa_synthetic%%"   # scripts/local_pipeline_qa.py's _src_file on generated sales; practice database only
 
@@ -184,7 +184,7 @@ def main() -> int:
         return 0
     lines = render(report)
     print("\n".join(lines))
-    print(f"saved {save(report, rows, lines, is_live_target())}")
+    print(f"saved {save(report, rows, lines, writes_tracked_reports())}")
     return 0
 
 

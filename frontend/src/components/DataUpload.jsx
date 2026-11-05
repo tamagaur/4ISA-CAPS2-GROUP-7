@@ -3,7 +3,9 @@ import SectionLede from './ui/SectionLede';
 import { Upload, FileText, AlertTriangle, Database } from 'lucide-react';
 import PageHeader from './ui/PageHeader';
 import MonthlyBatchPanel from './MonthlyBatchPanel';
+import LiveDemoPanel from './LiveDemoPanel';
 import { getBatchAvailable } from '../api/monthlyBatch';
+import { getLiveDemoAvailable } from '../api/liveDemo';
 import './DataUpload.css';
 
 const DataUpload = () => {
@@ -13,10 +15,13 @@ const DataUpload = () => {
   // The monthly batch, when the backend offers it (local practice database only).
   // Null everywhere else, and this page is exactly what it was without it.
   const [batch, setBatch] = useState(null);
+  // The live demonstration (a person's own machine, switched on by them): the same slot on the page, and the page is what it was without it.
+  const [liveDemo, setLiveDemo] = useState(null);
 
   useEffect(() => {
     let current = true;
     getBatchAvailable().then((status) => { if (current) setBatch(status); });
+    getLiveDemoAvailable().then((status) => { if (current) setLiveDemo(status); });
     return () => { current = false; };
   }, []);
 
@@ -95,11 +100,12 @@ const DataUpload = () => {
         />
 
         {batch && <MonthlyBatchPanel initialStatus={batch} />}
+        {liveDemo && !batch && <LiveDemoPanel initialStatus={liveDemo} />}
 
         {/* Honest status. There is no ingestion endpoint on the backend yet,
             so this page cannot actually send a file anywhere — saying so
             plainly is the only correct behavior until one exists. */}
-        {!batch && <p className="ui-note is-warning" role="note">
+        {!batch && !liveDemo && <p className="ui-note is-warning" role="note">
           <AlertTriangle size={16} aria-hidden="true" />
           <span>
             <strong>Ingestion is not connected yet.</strong> You can select files here to check
@@ -139,7 +145,7 @@ const DataUpload = () => {
         </section>
 
         {/* File Dropzone Area */}
-        {!batch && <div 
+        {!batch && !liveDemo && <div 
           className={`du-dropzone ${dragActive ? 'drag-active' : ''}`}
           onDragEnter={handleDrag}
           onDragOver={handleDrag}

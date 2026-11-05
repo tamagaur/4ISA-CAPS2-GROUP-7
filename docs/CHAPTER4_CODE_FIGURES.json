@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2664,
+   "value": 2687,
    "command": "DERIVED, not run: tests_collected_with_real_data minus real_corpus_cases (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2670,
+   "value": 2693,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,13 +83,13 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2643,
+   "value": 2666,
    "command": "DERIVED, not run: tests_collected_clean_clone minus tests_skipped_clean_clone minus tests_failed (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2652,
+   "value": 2675,
    "command": "scripts/check.sh --full there"
   },
   {

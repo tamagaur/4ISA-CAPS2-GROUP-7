@@ -80,7 +80,19 @@ def test_the_module_reads_nothing_but_the_connection():
     tree = ast.parse(Path(ps.__file__).read_text(encoding="utf-8"))
     imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     imported |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-    assert imported == {"__future__", "io", "logging", "sys"}
+    # `analytics` is analytics/demo_session.py, the second witness (a demonstration session open in the connection's own database, 2026-11-05).
+    # It is held to the same rule in the next test: it imports nothing but __future__, so it cannot read an environment variable either.
+    assert imported == {"__future__", "io", "logging", "sys", "analytics"}
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert not names & {"environ", "getenv", "argv", "open", "dotenv_values", "get_settings", "read_text"}
+
+
+def test_the_demonstration_session_witness_reads_nothing_but_the_connection_either():
+    from analytics import demo_session
+    tree = ast.parse(Path(demo_session.__file__).read_text(encoding="utf-8"))
+    imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    imported |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    assert imported == {"__future__"}
     names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)} | {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
     assert not names & {"environ", "getenv", "argv", "open", "dotenv_values", "get_settings", "read_text"}
 

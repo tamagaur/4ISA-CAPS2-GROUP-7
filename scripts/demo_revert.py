@@ -94,7 +94,14 @@ def fingerprint(cur, schema: str, table: str) -> tuple[int, str]:
 
 
 def sequences(cur) -> list[tuple[str, str, int, bool]]:
-    cur.execute("SELECT schemaname, sequencename FROM pg_sequences WHERE schemaname = ANY(%s) ORDER BY 1, 2", (list(SCHEMAS),))
+    # A sequence that belongs to an excluded table (audit_log, user_session, auth_token) is left alone: the table keeps its rows through a revert,
+    # so setting its sequence back would hand out a key a surviving row already holds (found in the second browser rehearsal: a sign-in after an undo).
+    cur.execute('''SELECT s.schemaname, s.sequencename FROM pg_sequences s
+                   WHERE s.schemaname = ANY(%s) AND NOT EXISTS (
+                       SELECT 1 FROM pg_depend d JOIN pg_class t ON t.oid = d.refobjid JOIN pg_namespace tn ON tn.oid = t.relnamespace
+                       WHERE d.objid = (quote_ident(s.schemaname) || '.' || quote_ident(s.sequencename))::regclass AND d.deptype IN ('a', 'i')
+                         AND (tn.nspname || '.' || t.relname) = ANY(%s))
+                   ORDER BY 1, 2''', (list(SCHEMAS), sorted(EXCLUDED_TABLES)))
     out = []
     for s, q in cur.fetchall():
         cur.execute(f'SELECT last_value, is_called FROM "{s}"."{q}"')
@@ -106,6 +113,7 @@ def sequences(cur) -> list[tuple[str, str, int, bool]]:
 def take_snapshot(conn, tag: str) -> dict:
     sch = snap_schema(tag)
     cur = conn.cursor()
+    cur.execute("SET LOCAL statement_timeout = 0")
     cur.execute("SELECT 1 FROM pg_namespace WHERE nspname = %s", (sch,))
     if cur.fetchone():
         raise SystemExit(f"REFUSED: schema {sch} already exists. Verify or drop it; a snapshot is never overwritten.")
@@ -141,10 +149,13 @@ def compare(cur, manifest: dict) -> list[str]:
             if fingerprint(cur, *k.split('.')) != (n, h)]
 
 
-def revert(conn, tag: str) -> list[str]:
+def revert(conn, tag: str, after_tables=None) -> list[str]:
+    """`after_tables(cur)`, when given, runs inside the same transaction after the tables are back and returns a list of problems (it may also
+    change things: scripts/demo_session puts the view and function definitions back there). Any problem rolls everything back."""
     sch = snap_schema(tag)
     cur = conn.cursor()
     manifest = read_manifest(cur, tag)
+    cur.execute("SET LOCAL statement_timeout = 0")
     cur.execute("SET LOCAL session_replication_role = replica")
     touched = []
     for key in manifest:
@@ -166,7 +177,7 @@ def revert(conn, tag: str) -> list[str]:
     cur.execute(f'SELECT sch, seq, last_value, is_called FROM "{sch}"._sequences')
     for s, q, v, called in cur.fetchall():
         cur.execute("SELECT setval(%s::regclass, %s, %s)", (f'"{s}"."{q}"', v, called))
-    still = compare(cur, manifest)
+    still = compare(cur, manifest) + (list(after_tables(cur)) if after_tables else [])
     if still:
         conn.rollback()
         raise SystemExit("ROLLED BACK, nothing moved. After the revert these still differ: " + "; ".join(still))
@@ -188,6 +199,7 @@ def main(argv=None) -> int:
             conn.autocommit = False
             cur = conn.cursor()
             cur.execute("SET TRANSACTION READ ONLY")
+            cur.execute("SET LOCAL statement_timeout = 0")
             diff = compare(cur, read_manifest(cur, args.tag))
             conn.rollback()
             print("IDENTICAL to the snapshot" if not diff else "DIFFERS:\n  " + "\n  ".join(diff))
