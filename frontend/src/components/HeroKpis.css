@@ -139,6 +139,52 @@
   font-size: 36px;
 }
 
+/* The FY card's face: sales to date, the allocation, how far behind or ahead.
+   A figure never breaks inside itself; the row wraps between figures instead. */
+.hero-annual-lead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 36px;
+}
+
+.hero-annual-lead .hero-pills {
+  align-self: center;
+}
+
+/* Details sits at the foot of the card, level with the card beside it. */
+.hero-card-wide .dash-more {
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.hero-annual-figure {
+  min-width: 0;
+}
+
+.hero-annual-figure .hero-value {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.hero-value-per {
+  font-size: 0.55em;
+  font-weight: 600;
+}
+
+.hero-annual-more {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+@media (max-width: 420px) {
+  .hero-value-xl {
+    font-size: 30px;
+  }
+}
+
 /* The allocation is an estimate: a dotted underline, its rule on hover. */
 .hero-dotted {
   border-bottom: 2px dotted #98A2B3;
@@ -725,6 +771,11 @@
 
 .hero-urgency .is-urgent strong { color: #93370D; }
 
+.hero-urgency .is-none strong {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
 /* ── Links and tips ──────────────────────────────────────────────────── */
 .hero-link {
   display: inline-flex;
@@ -1009,4 +1060,92 @@
 
 .hero-note-trigger:hover {
   color: var(--color-text);
+}
+
+/* What to do first (2026-11-05): three raised tiles under the page's filters,
+   each opening where the figure is worked through. Shared tokens only. */
+.dash-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--card-gap);
+}
+
+.dash-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 18px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 160ms ease-out;
+}
+
+.dash-action:hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+.dash-action:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.dash-action-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dash-action-label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-body);
+}
+
+.dash-action-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-action-value.is-danger {
+  color: var(--color-danger-ink);
+}
+
+.dash-action-unit {
+  margin-left: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+.dash-action-sub {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+.dash-action-arrow {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-action {
+    transition: none;
+  }
 }

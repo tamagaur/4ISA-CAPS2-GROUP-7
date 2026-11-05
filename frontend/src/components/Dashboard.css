@@ -526,11 +526,6 @@
   color: var(--color-text);
 }
 
-.dash-question-hint {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
 .dash-kind-row .dash-kind {
   align-self: center;
   margin-left: auto;
@@ -933,15 +928,6 @@
   justify-content: flex-start;
 }
 
-/* The step's one plain sentence, on its own line under the question. */
-.dash-kind-row .dash-question-hint {
-  flex-basis: 100%;
-  order: 10;
-  max-width: 80ch;
-  font-size: 13.5px;
-  line-height: 1.45;
-}
-
 /* ── Phones and touch screens (2026-10-15) ──────────────────────────────
    Checked at 360, 390 and 768px with a phone's viewport: nothing ran off
    the side of the screen. These fix what was cramped, cut off, or too small
@@ -1087,10 +1073,6 @@
   margin-left: 0;
 }
 
-.dash-kind-row .dash-question-hint {
-  margin-top: -2px;
-}
-
 .dash-slot > .chart-widget {
   position: relative;
 }
@@ -1192,7 +1174,7 @@
    close under it. Scoped to the dashboard (PageHeader className): the
    other pages keep their own headers. */
 .dash-page-header {
-  margin: -8px 0 0;
+  margin: var(--space-4) 0 0;
 }
 
 .dash-page-header .page-header-title {
@@ -1300,9 +1282,10 @@
 }
 
 /* Section headings (the question above each row) and graph titles (inside
-   each card): 24px and 18px, so a row reads question, then graph. */
+   each card): 22px and 18px, so a row reads question, then graph, and the
+   question stops competing with the figures (2026-11-05). */
 .dash-question {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .dashboard .chart-widget .chart-header h4,
@@ -1314,14 +1297,92 @@
   color: var(--color-text-heading);
 }
 
-.dash-question-hint .info-tip {
-  margin-left: 4px;
-  vertical-align: middle;
+/* The top of the page, held together: context, what warns, what to do first. */
+.dash-top {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-top .dash-gap-note {
+  margin: 0;
+}
+
+/* The Summary section's context: which top sellers, and which stock count. */
+.dash-context-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.dash-context-row .tier-basis-label {
+  margin: 0;
+}
+
+/* A chip with a long count name wraps rather than cutting the date off. */
+.dash-context-row .basis-tag,
+.dash-basis .basis-tag {
+  white-space: normal;
+}
+
+/* A title or a figure that opens its own explanation (fix: no "?" beside it,
+   one per section): reachable by hover, tap and keyboard (InfoTip). */
+.info-tip.dash-tip-wrap {
+  margin-left: 0;
+  vertical-align: baseline;
+}
+
+.dash-tip-title {
+  font-weight: inherit;
+  text-transform: inherit;
+}
+
+/* Numbers on this page show no dotted underline; the exact value is still on
+   hover, tap and focus (InfoTip), with the focus ring and the help cursor. */
+.dashboard .hero-hover,
+.dashboard .exact-value,
+.dashboard .fc-miss-share .info-tip-trigger {
+  text-decoration: none;
+}
+
+/* The rest of a card's detail, one click down. */
+.dash-more {
+  margin-top: 4px;
+}
+
+.dash-more > summary {
+  width: fit-content;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.dash-more > summary:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.dash-more[open] > .abc-share-pair {
+  margin-top: 10px;
+}
+
+.idle-more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.idle-summary {
+  margin: 0 0 12px;
 }
 
 @media (max-width: 1024px) {
   .dash-question {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .dashboard .chart-widget .chart-header h4,
@@ -1333,7 +1394,7 @@
 
 @media (max-width: 600px) {
   .dash-question {
-    font-size: 20px;
+    font-size: 18px;
   }
 
   .dashboard .chart-widget .chart-header h4,

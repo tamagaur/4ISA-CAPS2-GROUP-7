@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import SectionLede from './ui/SectionLede';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePermissions } from '../permissions/context';
@@ -16,7 +15,6 @@ import {
 import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
-import { shownPiecesTotal } from '../utils/piecesTotal';
 import { formatCompactPesos, formatExactPesos, formatCompactQty } from '../utils/formatters';
 import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
 import { useChartZoom, seriesDot, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
@@ -1291,8 +1289,12 @@ export const SalesVsStockWidget = ({
           <span className="svs-head-icon" aria-hidden="true"><Box size={18} /></span>
           <div className="svs-head-text">
             <h4>
-              <span>Sales vs Inventory Value (₱)</span>
-              <InfoTip label="About Sales vs Inventory Value" size={13}>
+              <InfoTip
+                label="About Sales vs Inventory Value"
+                trigger={<span>Sales vs Inventory Value (₱)</span>}
+                triggerClassName="dash-tip-title"
+                className="dash-tip-wrap"
+              >
                 {purchasesView && (
                   <span className="chart-tip-line">
                     Sold against bought each month: when the bought bar is taller, more stock came in than went out.{' '}
@@ -1335,7 +1337,6 @@ export const SalesVsStockWidget = ({
                 </span>
               </InfoTip>
             </h4>
-            <SectionLede>{comparing ? 'Monthly performance and period comparison' : 'Monthly performance'}</SectionLede>
             {/* GET /dashboard's vat_note — only under All principals, where the
                 combined pesos mix Unilever's VAT-inclusive amounts with Del
                 Monte's VAT-exclusive ones. */}
@@ -1803,11 +1804,10 @@ const ClassListLink = ({ facts, onOpenClass, className, label = undefined, child
 // with the period it was ranked over, from the same abc_mix rows the ring
 // draws, never a figure of its own. Without a trustworthy revenue share it
 // states the count instead, and the widget puts the reason (blocked_reason)
-// under it. Under the finding, the definition of an important product on
-// the card's face (Technical Adviser, 2 Oct 2026): the ABC run's own
-// cut-off (abc_rules) and its period, never restated here, and Class A's
-// list. What the system does with Class A is the hint above the card; the
-// "?" has the full rule and each class's role.
+// under it. Under the finding, the definition of an important product on the
+// card's face (Technical Adviser, 2 Oct 2026): the ABC run's own cut-off
+// (abc_rules) and its period, never restated here, then the list. The finding
+// itself opens each class's role.
 //
 // A plain answer line, as the Forecast accuracy card's (RangeCards.css
 // .fc-answer), not a tinted strip: on this page a tinted strip with an icon
@@ -1816,25 +1816,25 @@ const ClassListLink = ({ facts, onOpenClass, className, label = undefined, child
 const AbcInsight = ({ facts, total, units, rules, onOpenClass, tip }) => {
   const pctOf = facts.skuPct.toFixed(0);
   const when = facts.month ? `, ${facts.month}` : '';
-  const noun = units === 'categories' ? 'the categories' : 'the top sellers';
   const rule = rules
-    ? `Class A = ${noun} that together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue (the ABC rule)`
-    : `Class A = ${noun} ranked highest by revenue`;
+    ? `Top sellers = the ${units} that together make the first ${Math.round(rules.tier_a_cutoff * 100)}% of revenue (the ABC rule)`
+    : `Top sellers = the ${units} ranked highest by revenue`;
   const definition = `${rule}${facts.month ? `, ranked over ${facts.month}` : ''}.`;
+  const answer = (
+    <span>
+      {facts.revenuePct != null
+        ? <>Top sellers drive <strong>{facts.revenuePct.toFixed(0)}%</strong> of revenue from just <strong>{pctOf}%</strong> of {units}{when}.</>
+        : <>Top sellers are <strong>{facts.count.toLocaleString()}</strong> of the {total.toLocaleString()} {units} ranked (<strong>{pctOf}%</strong>){when}.</>}
+    </span>
+  );
   return (
     <div className="abc-finding">
       <p className="abc-finding-answer">
-        <span>
-          {facts.revenuePct != null
-            ? <>Class A drives <strong>{facts.revenuePct.toFixed(0)}%</strong> of revenue from just <strong>{pctOf}%</strong> of {units}{when}.</>
-            : <>Class A is <strong>{facts.count.toLocaleString()}</strong> of the {total.toLocaleString()} {units} ranked (<strong>{pctOf}%</strong>){when}.</>}
-        </span>
-        {tip}
+        {tip ? (
+          <InfoTip label="How classes are decided" trigger={answer} triggerClassName="dash-tip-title" className="dash-tip-wrap">{tip}</InfoTip>
+        ) : answer}
       </p>
-      <p className="abc-finding-definition">
-        {definition}
-        {units === 'categories' && ` ${DEL_MONTE_TIER_ROLE}`}
-      </p>
+      <p className="abc-finding-definition">{definition}</p>
       <ClassListLink facts={facts} onOpenClass={onOpenClass} className="abc-finding-link">
         See the {facts.count.toLocaleString()} {units} <ArrowRight size={13} aria-hidden="true" />
       </ClassListLink>
@@ -1892,7 +1892,7 @@ const AbcTierCard = ({ facts, onOpenClass = null }) => {
     <div className="abc-panel abc-tier-card" aria-live="polite">
       <p className="abc-tier-card-name">
         <span className="legend-color" style={{ backgroundColor: abcTierColor(facts.tier) }} aria-hidden="true" />
-        Class {facts.tier}{role && <span className="abc-tier-card-alias">· {role.name}</span>}
+        {role ? role.name : `Class ${facts.tier}`}
       </p>
       <div className="abc-tier-card-body">
         <div className="abc-tier-card-stat">
@@ -1912,7 +1912,7 @@ const AbcTierCard = ({ facts, onOpenClass = null }) => {
       {/* "Which ones?" — the products behind this class's count, one click
           away. */}
       <ClassListLink facts={facts} onOpenClass={onOpenClass} className="abc-tier-card-link">
-        See the {facts.count.toLocaleString()} Class {facts.tier} {facts.units} <ArrowRight size={12} aria-hidden="true" />
+        See the {facts.count.toLocaleString()} {role ? role.name.toLowerCase() : `Class ${facts.tier} ${facts.units}`} <ArrowRight size={12} aria-hidden="true" />
       </ClassListLink>
     </div>
   );
@@ -2079,7 +2079,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
   // constants), never restated here. How a class is decided, and what each
   // class is for (ABC_TIER_ROLE), sit behind the "?" in the finding.
   const tip = rules ? (
-    <InfoTip label="How classes are decided">
+    <>
       <span className="chart-tip-line">
         {`${unitsTitle} are ranked by revenue${rankedMonth ? ` over ${rankedMonth}` : ''}`
           + `${revenue?.label || !rankedMonth ? '' : ' (a single month)'}. Class A is the top sellers that `
@@ -2096,7 +2096,8 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
             Class {t} ({ABC_TIER_ROLE[t].name.toLowerCase()}): {ABC_TIER_ROLE[t].role}
           </span>
         ))}
-    </InfoTip>
+      {units === 'categories' && <span className="chart-tip-line">{DEL_MONTE_TIER_ROLE}</span>}
+    </>
   ) : null;
   const tierA = data.find((d) => d.tier === 'A');
   const notes = [
@@ -2172,7 +2173,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                 {selectedFacts && (
                   <g className="abc-donut-centre" aria-hidden="true">
                     <text x={centre} y={centre - 20} textAnchor="middle" className="abc-donut-centre-tier">
-                      Class {selectedFacts.tier}
+                      {ABC_TIER_ROLE[selectedFacts.tier]?.name ?? `Class ${selectedFacts.tier}`}
                     </text>
                     <text x={centre} y={centre + 10} textAnchor="middle" className="abc-donut-centre-value">
                       {selectedFacts.revenuePct != null
@@ -2215,6 +2216,8 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
               <AbcTierCard facts={factsFor(selected)} onOpenClass={onOpenClass} />
             </div>
           </div>
+          <details className="dash-more">
+          <summary>Details</summary>
           <div
             className="abc-share-pair"
             role="img"
@@ -2248,6 +2251,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
               </div>
             ))}
           </div>
+          </details>
         </div>
       )}
       {hovered && <AbcHoverTooltip hover={hover} facts={factsFor(hovered)} ringRef={ringRef} />}
@@ -2649,10 +2653,11 @@ export const PortfolioForecastWidget = ({
   // Since 2026-09-29 the gate is MASE < 1 (the LP's own), which passes 73.
   gatedSkuCount = null,
   reliability = null,
-  // The list reliability.total_count is ('Tier A as of Feb 2026', or
-  // "Unilever's Tier A as of Feb 2026" under All principals); null keeps
-  // "Class A SKUs".
+  // The list reliability.total_count is ('top sellers as of Feb 2026', or
+  // "Unilever's top sellers as of Feb 2026" under All principals); null keeps
+  // "Class A SKUs". `planLabel`: the plan the summed SKUs are in ('Mar 2026 plan').
   tierLabel = null,
+  planLabel = null,
   // Why the forecast point is not drawn (a range ending before the latest
   // month: the one forecast is for the month after the latest sales).
   forecastNote = null,
@@ -2667,7 +2672,7 @@ export const PortfolioForecastWidget = ({
 }) => {
   const hasData = series.length > 0;
   const tierACount = reliability?.total_count ?? null;
-  const tierAUnits = tierLabel ? `SKUs in ${tierLabel}` : 'Class A SKUs';
+  const tierAUnits = tierLabel || 'Class A SKUs';
   const shadeId = useLineShadeId();
   const [view, setView] = useState('chart');
 
@@ -2829,14 +2834,18 @@ export const PortfolioForecastWidget = ({
               never a count the card doesn't have (2026-10-21). */}
           <h4>
             <span><span className="title-accent">Forecast</span> demand · Top sellers</span>
-            {gatedSkuCount > 0 && (
+            {gatedSkuCount > 0 && !(gatedSkuCount != null && tierACount) && (
               <span className="pf-sku-badge" title={`The chart sums ${gatedSkuCount.toLocaleString()} SKUs`}>
-                {gatedSkuCount.toLocaleString()} SKUs
+                {gatedSkuCount.toLocaleString()} SKUs{planLabel ? ` · ${planLabel}` : ''}
               </span>
             )}
             <span className="chart-unit">pieces</span>
             {gatedSkuCount != null && tierACount ? (
-              <InfoTip label="Which SKUs are summed">
+              <InfoTip
+                label="Which SKUs are summed"
+                trigger={<span className="pf-sku-badge">{gatedSkuCount.toLocaleString()} SKUs{planLabel ? ` · ${planLabel}` : ''}</span>}
+                className="dash-tip-wrap"
+              >
                 {`Demand summed across ${gatedSkuCount.toLocaleString()} of the ${tierACount.toLocaleString()} ${tierAUnits}: `
                   + 'those whose forecasts had a test error below the average month-to-month change in their sales before the test months (MASE below 1), the same check the reorder plan uses, '
                   + 'a check the team adopted, not confirmed by SSM or the adviser. '
@@ -2853,7 +2862,6 @@ export const PortfolioForecastWidget = ({
               </InfoTip>
             ) : null}
           </h4>
-          <SectionLede>What the top sellers will most likely sell</SectionLede>
           <p>
             {seriesSpan ? `Pieces per month, ${seriesSpan}` : 'Pieces per month'}
             {gatedSkuCount != null && tierACount
@@ -2866,16 +2874,13 @@ export const PortfolioForecastWidget = ({
               said, not left in a "?" (2026-10-19). */}
           {hasData && calendar && (
             <p className="chart-insight chart-calendar-note keep-visible">
-              {`The ${formatMonth(calendar.forecast_period)} forecast includes a calendar adjustment of `
+              <InfoTip
+                label="About the calendar adjustment"
+                trigger={`The ${formatMonth(calendar.forecast_period)} forecast includes a calendar adjustment of `
                 + `${calendarFactorText(calendar)}, learned from ${calendarYearsText(calendar) || 'earlier years'}.`}
-              {/* Pending sign-off as a pill, on the card's face (not behind
-                  the "?"), only while the API says signed_off is false. */}
-              {calendarSignoffText(calendar.signed_off) && (
-                <span className="badge badge-warning chart-calendar-pending">
-                  {calendarSignoffText(calendar.signed_off).replace(/^./, (c) => c.toUpperCase())}
-                </span>
-              )}
-              <InfoTip label="About the calendar adjustment">
+                triggerClassName="dash-tip-title"
+                className="dash-tip-wrap"
+              >
                 <span className="chart-tip-line">{calendar.method || CALENDAR_METHOD_FALLBACK}</span>
                 <span className="chart-tip-line">
                   {`${formatMonth(calendar.forecast_period)}: ${Math.round(calendar.before_pieces).toLocaleString()} pieces from the `
@@ -2885,6 +2890,13 @@ export const PortfolioForecastWidget = ({
                 </span>
                 <span className="chart-tip-line">{CALENDAR_HISTORY_NOTE}</span>
               </InfoTip>
+              {/* Pending sign-off as a pill, on the card's face (not behind
+                  the "?"), only while the API says signed_off is false. */}
+              {calendarSignoffText(calendar.signed_off) && (
+                <span className="badge badge-warning chart-calendar-pending">
+                  {calendarSignoffText(calendar.signed_off).replace(/^./, (c) => c.toUpperCase())}
+                </span>
+              )}
             </p>
           )}
           {hasData && sectionsLine && view === 'chart' && <p className="chart-insight">{sectionsLine}</p>}
@@ -3217,51 +3229,18 @@ export const ReorderRecommendationWidget = ({
   // Re-sorting here by order quantity used to override that.
   const sortedRows = rows;
 
-  // The strip above the table (Audrey, 2026-10-21): counts over the rows this
-  // card lists (GET /dashboard sends the 5 most urgent), never the whole
-  // plan, whose totals are the Pending reorders card's. The pieces total is
-  // left out unless every listed row has a quantity, so it is never a sum
-  // with a gap in it. It adds each row's figure as its cell shows it (rounded
-  // up to a whole piece), so it equals the rows listed (2026-10-24; rounding
-  // the sum instead printed a total 2 pieces short of them).
-  const shownCount = sortedRows.length;
-  const shownCritical = sortedRows.filter((r) => r.urgency === 'CRITICAL').length;
-  const shownNotInCount = sortedRows.filter((r) => r.notInCount).length;
-  const shownToCheck = sortedRows.filter((r) => r.needsReview).length;
-  const shownPieces = shownPiecesTotal(sortedRows);
-
   return (
     <div className={`chart-widget dash-action-card reorder-card${hasData ? '' : ' chart-widget-empty'}`}>
       <div className="chart-header">
         <div className="chart-title-area">
-          <h4><span>Suggested <span className="title-accent">orders</span></span></h4>
-          <SectionLede>What to order, most urgent first</SectionLede>
-          {/* GET /dashboard's reorder_preview has been scoped to the LP's
-              current cycle since 2026-09-23 (backend/lp_cycle.py), the same
-              rows Reorder Recs lists by default. */}
-          <p className="keep-visible">
-            Order quantities in pieces from the order plan · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
-            {runLabel ? ` · ${runLabel}` : ''}
-            {countLabel ? ` · ${countLabel}` : ''}
-          </p>
-        </div>
-      </div>
-
-      {!hasData ? (
-        <p className="dashboard-empty-note">{emptyReason || 'No pending recommendations'}</p>
-      ) : (
-        <>
-          {/* Keep the decision summary brief; the info tip retains the full
-              explanation and data caveats. */}
-          <p className="reorder-priorities-line">
-            Target stock · Short-supply priorities:{' '}
-            {LP_PRIORITY_ROWS.map((p, i) => (
-              <React.Fragment key={p.key}>
-                {i > 0 && ' · '}
-                {p.label.toLowerCase()} <strong>{solverPct[p.key] == null ? '—' : `${solverPct[p.key]}%`}</strong>
-              </React.Fragment>
-            ))}
-            <InfoTip label="How the order was worked out">
+          <h4>
+            {hasData ? (
+              <InfoTip
+                label="How the order was worked out"
+                trigger={<span>Suggested <span className="title-accent">orders</span></span>}
+                triggerClassName="dash-tip-title"
+                className="dash-tip-wrap"
+              >
               <span className="chart-tip-line">
                 Each product is ordered up to its target stock, in layers: this month&apos;s demand, then safety stock,
                 then the rest of the target (SSM&apos;s 3-week rule). The priorities only matter when the supplier
@@ -3281,7 +3260,25 @@ export const ReorderRecommendationWidget = ({
               )}
               {calendarNote && <span className="chart-tip-line">{calendarNote}</span>}
             </InfoTip>
-          </p>
+            ) : <span>Suggested <span className="title-accent">orders</span></span>}
+          </h4>
+          {/* GET /dashboard's reorder_preview has been scoped to the LP's
+              current cycle since 2026-09-23 (backend/lp_cycle.py), the same
+              rows Reorder Recs lists by default. */}
+          {hasData && (
+            <p className="keep-visible">
+              Order quantities in pieces from the order plan · {cycleLabel ? `${cycleLabel} plan` : 'current plan'}
+              {runLabel ? ` · ${runLabel}` : ''}
+              {countLabel ? ` · ${countLabel}` : ''}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {!hasData ? (
+        <p className="dashboard-empty-note">{emptyReason || 'No pending recommendations'}</p>
+      ) : (
+        <>
           {(inputsArePlaceholders || calendarSummary) && (
             <p className="reorder-plan-status">
               {inputsArePlaceholders && (
@@ -3292,27 +3289,6 @@ export const ReorderRecommendationWidget = ({
               )}
             </p>
           )}
-
-          <div
-            className="reorder-mini-strip"
-            title="These counts cover the products listed below only. The whole plan's totals are on the Pending reorders card."
-          >
-            <span className="reorder-mini-strip-scope">Of the {shownCount} shown</span>
-            <span className="reorder-mini-strip-item">
-              <strong className={shownCritical > 0 ? 'is-critical' : undefined}>{shownCritical}</strong> critical
-            </span>
-            <span className="reorder-mini-strip-item">
-              <strong className={shownNotInCount > 0 ? 'is-caution' : undefined}>{shownNotInCount}</strong> not in the stock count
-            </span>
-            <span className="reorder-mini-strip-item">
-              <strong className={shownToCheck > 0 ? 'is-caution' : undefined}>{shownToCheck}</strong> to check before ordering
-            </span>
-            {shownPieces != null && (
-              <span className="reorder-mini-strip-item">
-                <strong>{formatUnits(shownPieces)}</strong> pieces to order
-              </span>
-            )}
-          </div>
 
           <div className="reorder-mini-list">
             {/* Own class name, not "reorder-table": that one is the full

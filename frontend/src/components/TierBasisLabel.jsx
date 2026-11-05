@@ -55,18 +55,20 @@ export function latestPeriod(periods, fallback) {
   return values.length ? values.reduce((a, b) => (a > b ? a : b)) : fallback ?? null;
 }
 
-export function tierBasisText(periods, period) {
+// `short`: the period alone, for a page that says it in a chip (the Dashboard);
+// the rule then goes behind the "?".
+export function tierBasisText(periods, period, short = false) {
   const entries = Object.entries(periods || {});
   if (entries.length === 0) return period ? `Top sellers as of ${formatMonth(period)}` : null;
   if (entries.length === 1) {
     const [name, p] = entries[0];
-    return `Top sellers as of ${formatMonth(p)}${BASIS[name] ? `: ${BASIS[name]}` : ''}`;
+    return `Top sellers as of ${formatMonth(p)}${!short && BASIS[name] ? `: ${BASIS[name]}` : ''}`;
   }
   return `Top sellers as of ${entries.map(([name, p]) => `${formatMonth(p)} (${name})`).join(' · ')}`;
 }
 
-export default function TierBasisLabel({ periods, period, className = '' }) {
-  const text = tierBasisText(periods, period);
+export default function TierBasisLabel({ periods, period, className = '', short = false }) {
+  const text = tierBasisText(periods, period, short);
   if (!text) return null;
   const names = Object.keys(periods || {});
   const title = names.length > 1 ? names.map((n) => `${n}: ${BASIS[n]}`).join('\n') : undefined;
@@ -77,7 +79,7 @@ export default function TierBasisLabel({ periods, period, className = '' }) {
       {text}
       {(caveats.length > 0 || technical.length > 0) && (
         <InfoTip label="About top sellers" size={12}>
-          {[...technical, ...caveats.map((n) => CAVEAT[n])].join(' ')}
+          {[...(short && names.length === 1 ? [`${tierBasisText(periods, period)}.`] : []), ...technical, ...caveats.map((n) => CAVEAT[n])].join(' ')}
         </InfoTip>
       )}
     </p>

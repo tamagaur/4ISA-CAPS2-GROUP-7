@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useOutletContext, useNavigate, useLocation, Link } from 'react-router-dom';
 import PageHeader from './ui/PageHeader';
-import WelcomeBanner from './ui/Greeting';
 import InfoTip from './InfoTip';
 import AtRiskProductsModal from './AtRiskProductsModal';
 import ClassProductsModal from './ClassProductsModal';
@@ -10,8 +9,8 @@ import {
   CATEGORY_MISS_COLUMNS, IDLE_COLUMNS, OVER_RUN_COLUMNS, aboveRuleColumns,
 } from './RangeCards';
 import RangePicker from './RangePicker';
-import { AnnualSalesCard, BelowSafetyCard, InventoryCard, PendingReordersCard, StockCoverCard } from './HeroKpis';
-import { formatCompactCount, policyRatio, shareOf, stockChangeTone, urgencyParts } from '../utils/kpiMath';
+import { ActionStrip, AnnualSalesCard, BelowSafetyCard, InventoryCard, PendingReordersCard, StockCoverCard } from './HeroKpis';
+import { formatCompactCount, policyRatio, shareOf, stockChangeTone } from '../utils/kpiMath';
 import {
   SalesVsStockWidget, ABCDonutWidget,
   PortfolioForecastWidget, ReorderRecommendationWidget, PolicyComparisonWidget,
@@ -39,7 +38,7 @@ import { monthsBetween } from '../utils/timeline';
 import { noSaleNote } from '../utils/aboveRuleNote';
 import { calendarFactorText, calendarSignoffText, calendarYearsText } from '../utils/calendarAdjustment';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
-import { ArrowRight, AlertTriangle, CalendarX } from 'lucide-react';
+import { ArrowRight, AlertTriangle, CalendarX, Boxes, PackageX, ShoppingCart } from 'lucide-react';
 import EmptyState from './ui/EmptyState';
 import LoadError, { describeLoadError } from './ui/LoadError';
 import SlowLoadNotice from './ui/SlowLoadNotice';
@@ -233,6 +232,9 @@ const SHOW_POLICY_CARD = false;
 const DEL_MONTE_NO_ORDERS_REASON =
   'Del Monte has no real forecast, so nothing is recommended to order. No category has three consecutive months '
   + 'of real sales ending at its latest month, and the 3-month moving average needs three.';
+// What an empty card says on the category-only principal: one note at the top
+// of the page gives the reason (2026-11-05).
+const CATEGORY_ONLY_EMPTY = 'Not available';
 // The sentences that describe or interpret a chart are hidden for now
 // (Audrey, 2026-10-13): the line under each card's title, the generated
 // takeaways and the how-to-read notes, leaving a card its title, switches,
@@ -364,38 +366,41 @@ const comparePill = (now, then, label) => {
 const KIND_LABEL = { Descriptive: 'Looking back', Predictive: 'Looking ahead', Prescriptive: 'What to do' };
 
 // Each question is a section heading (2026-10-16, no step numbers): the
-// question, a thin accent rule running to the right, then the period tag
-// and the kind; its one plain sentence on the line below.
+// question with the section's one "?" (2026-11-05: what the period tag means
+// and anything else worth knowing), a thin accent rule running to the right,
+// then the period tag, the stock count's date and the kind.
 // `hideKind` leaves out the kind label ("Looking back") for one section.
 // `id` makes the slot a link target (#idle-stock, from the Reorder page).
-const Slot = ({ kind, question, hint, realOnly = false, basis = null, hideKind = false, id, children }) => (
-  <div className="dash-slot" data-kind={kind} id={id}>
-    <span className="dash-kind-row">
-      {question && <span className="dash-question">{question}</span>}
-      <span className="dash-question-rule" aria-hidden="true" />
-      {/* Whether this card moves with the date filter, and if not, what it
-          is pinned to (BasisTag). */}
-      {basis && <span className="dash-basis"><BasisTag {...basis} /></span>}
-      {!hideKind && <span className="dash-kind">{KIND_LABEL[kind] || kind}</span>}
-      {realOnly && (
-        <span className="dash-real-only" title="Synthetic data reaches the charts that show history only. This card reads real data.">
-          Real data only
-        </span>
-      )}
-      {/* The step in one plain sentence, on its own line under the question. */}
-      {hint && (
-        <span className="dash-question-hint">
-          {typeof hint === 'string' ? hint : hint.text}
-          {/* Named for its section, so a screen reader's list of buttons
-              does not read six identical "More about this section"
-              (2026-10-22). */}
-          {hint.more && <InfoTip label={`More about ${hint.name || 'this section'}`}>{hint.more}</InfoTip>}
-        </span>
-      )}
-    </span>
-    {children}
-  </div>
-);
+const Slot = ({ kind, question, hint, realOnly = false, basis = null, counted = null, hideKind = false, id, children }) => {
+  const notes = [basis?.detail, hint?.more].filter(Boolean);
+  return (
+    <div className="dash-slot" data-kind={kind} id={id}>
+      <span className="dash-kind-row">
+        {question && <span className="dash-question">{question}</span>}
+        {/* Named for its section, so a screen reader's list of buttons does
+            not read six identical "More about this section" (2026-10-22). */}
+        {notes.length > 0 && (
+          <InfoTip label={`More about ${hint?.name || 'this section'}`}>
+            {notes.map((line) => <span key={line} className="chart-tip-line">{line}</span>)}
+          </InfoTip>
+        )}
+        <span className="dash-question-rule" aria-hidden="true" />
+        {/* Whether this card moves with the date filter, and if not, what it
+            is pinned to (BasisTag). */}
+        {basis && <span className="dash-basis"><BasisTag label={basis.label} follows={basis.follows} /></span>}
+        {/* The stock count this section's figures read, said once here. */}
+        {counted && <span className="dash-basis"><BasisTag label={counted} follows={false} /></span>}
+        {!hideKind && <span className="dash-kind">{KIND_LABEL[kind] || kind}</span>}
+        {realOnly && (
+          <span className="dash-real-only" title="Synthetic data reaches the charts that show history only. This card reads real data.">
+            Real data only
+          </span>
+        )}
+      </span>
+      {children}
+    </div>
+  );
+};
 
 // Same outer structure and card classes as the loaded page below, so every
 // block lands at its final size — nothing jumps when the real data replaces
@@ -456,15 +461,13 @@ const DASH_SECTIONS = [
 // knowing, opens from the "?" beside it (Slot). Same facts as before, the
 // units and the 9-in-10 band included.
 const STORY = {
-  sales: { text: 'Yearly sales, and monthly sales against stock.' },
+  sales: { name: 'sales and stock' },
   abc: {
     name: 'the top sellers',
-    text: 'The few products that bring in most sales, and how many are running low.',
     more: 'These top sellers are the ones the system forecasts and plans orders for.',
   },
   changes: {
     name: 'products that joined or left the top sellers',
-    text: 'Products that joined or left the top sellers.',
     more: 'Compared with the same months a year earlier, with how much each one\'s sales changed.',
   },
   // The reliability check (MASE < 1) is a team decision (DEC-46), not confirmed by SSM or the adviser,
@@ -472,26 +475,22 @@ const STORY = {
   // (Technical Adviser, 2 Oct 2026; 2026-10-22).
   forecast: {
     name: 'the forecast',
-    text: 'Expected demand for the top sellers, in pieces.',
     more: 'Only the top sellers whose forecast test error was below the average month-to-month change in their sales before the test months (a reliability check the team adopted, '
       + 'not confirmed by SSM or the adviser). The shaded band is meant to cover about 9 in 10 months.',
   },
   accuracy: {
     name: 'past forecasts',
-    text: 'Past forecasts against what sold, in pesos.',
     more: 'Above zero, the forecast was higher than what sold; below zero, lower.',
   },
   order: {
     name: 'suggested orders',
-    text: "This cycle's suggested orders, most urgent first.",
     more: "Critical means the product's stock is already below its safety stock. Safety stock uses each product's "
       + 'month-to-month demand variability scaled to days, a method pending adviser confirmation.',
   },
-  idle: (months) => ({
+  idle: {
     name: 'stock with no sale',
-    text: `Stock with no sale in the last ${months ? `${months} months` : 'few months'}.`,
     more: 'Valued at what SSM last paid for it.',
-  }),
+  },
 };
 
 const DASH_SECTION_IDS = DASH_SECTIONS.map((s) => s.id);
@@ -836,10 +835,7 @@ const Dashboard = () => {
   // scrolls.
   const header = (
     <>
-      {/* "Good afternoon, Mikhaella!" (ui/Greeting.jsx), moved here from the
-          top bar on 2026-10-21. */}
-      <WelcomeBanner />
-      <PageHeader className="dash-page-header" title="Inventory" accent="pulse" subtitle="Inventory and ordering overview — SSM Urdaneta warehouse">
+      <PageHeader className="dash-page-header" title="Inventory" accent="pulse">
         {/* The question the whole page answers, before any number (Sir
             Catubag, 2 Oct: a reader measures every card against it). One
             line since 2026-10-21, with no "?" (Audrey, 2026-10-22). */}
@@ -1021,6 +1017,9 @@ const Dashboard = () => {
   const countDay = countDayKnown ? dayLabel(kpis.soh_count_date) : null;
   const countLabel = stockCountedLine(kpis.stock_counts)
     || (countDay ? `counted ${countDay}` : sohMonth ? `${sohMonth} count` : null);
+  // Said once for the Summary section, in a chip (2026-11-05). A card reading a
+  // different count keeps its own date, so every figure still shows its count.
+  const countChip = countLabel ? `${countLabel.charAt(0).toUpperCase()}${countLabel.slice(1)}` : null;
   const sohValue = kpiDisplay(
     kpis.soh_value, kpis.soh_value_blocked_reason, formatCompactPesos,
     ['At last purchase price', countLabel, sohCoverage].filter(Boolean).join(' · '),
@@ -1182,7 +1181,8 @@ const Dashboard = () => {
     .sort((a, b) => (b[0] === 'Unilever') - (a[0] === 'Unilever'))
     .map(([who, p]) => `${who} as of ${periodLabel(p)}`).join(', ');
   const planTierPeriod = mixedTier ? tierPeriods.Unilever ?? null : exposure.tier_a_period;
-  const planTierLabel = planTierPeriod ? `Tier A as of ${periodLabel(planTierPeriod)}` : 'Tier A';
+  const planTierLabel = planTierPeriod ? `Top sellers as of ${periodLabel(planTierPeriod)}` : 'Top sellers';
+  const planTierPhrase = planTierPeriod ? `top sellers as of ${periodLabel(planTierPeriod)}` : 'top sellers';
   const bothTierRuns = Boolean(mixedTier && tierPeriods.Unilever && tierPeriods['Del Monte']);
   // The Below safety stock card's line under its bar, All principals only.
   const belowScopeNote = bothTierRuns
@@ -1484,7 +1484,8 @@ const Dashboard = () => {
       provisional: coverProvisional,
       stockValue: cover.stock_value ?? null,
       basis: cover.basis ?? null,
-      counted: [coverCountLine, coverageNote(cover.coverage, pagePrincipal)].filter(Boolean).join(' · ') || null,
+      counted: [coverCountLine === countChip || cover.stock_period === kpis.soh_period ? null : coverCountLine,
+        coverageNote(cover.coverage, pagePrincipal)].filter(Boolean).join(' · ') || null,
     }
     : null;
   // When the plan was generated (lp.lp_generated_at), so a figure that moved
@@ -1532,25 +1533,32 @@ const Dashboard = () => {
     // the number (Technical Adviser, 2 Oct 2026; CLAUDE.md known open items).
     SAFETY_STOCK_METHOD_NOTE,
   ];
-  // Pending reorders: the same pending rows by urgency, from
-  // reorder_preview's counts (backend/stock_status.py's rule); "Planned" is
-  // what is left of the card's count, so the parts add up to it or no bar is
-  // drawn (utils/kpiMath.urgencyParts).
-  const pendingParts = lpHidden || noPlan ? null : urgencyParts({
-    pending: pendingCount,
-    critical: reorderPreview.critical_count,
-    urgent: reorderPreview.urgent_count,
-    noData: reorderPreview.no_data_count,
-  });
+  // Pending reorders: the Reorder page's own three counts, from
+  // reorder_preview.action_counts (2026-11-05), so "Act Now" is one number on
+  // both pages.
+  const actions = lpHidden || noPlan || !(reorderPreview.plan_count > 0) ? null : reorderPreview.action_counts ?? null;
+  // What still waits for someone, as the Reorder page counts it: a row with
+  // nothing to order has no decision to make.
+  const awaitingCount = actions ? actions.act_now + actions.review_later : reorderPreview.pending_count;
+  // The whole plan stays the card's figure, so the rows add up to it: a row
+  // already decided that orders something is its own row, once there is one.
+  const decidedCount = actions ? reorderPreview.plan_count - awaitingCount - actions.no_order : 0;
+  const pendingParts = actions ? [
+    { key: 'actNow', value: actions.act_now },
+    { key: 'reviewLater', value: actions.review_later },
+    { key: 'noOrder', value: actions.no_order },
+    ...(decidedCount > 0 ? [{ key: 'decided', value: decidedCount }] : []),
+  ] : null;
   const openingCount = stockCountedLine(reorderPreview.stock_counts);
   const pendingTooltip = lpHidden ? null : [
     `Order recommendations in the ${planLabel || 'current plan'}: the whole plan, as the Reorder page counts it. `
       + 'A row that has been accepted or dismissed stays in it. '
-      + (reorderPreview.pending_count != null
-        ? `${reorderPreview.pending_count.toLocaleString()} of them still wait for a decision `
+      + (awaitingCount != null
+        ? `${awaitingCount.toLocaleString()} of them still wait for a decision `
           + `(${(reorderPreview.pending_order_qty ?? 0).toLocaleString()} pieces). ` : '')
       + 'Undecided rows from earlier plans are not counted.',
-    'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
+    'Act Now: below the target stock (Critical: below safety stock; Urgent: above it). Review Later: at or above the '
+      + 'target stock. No order needed: a suggested order of 0 pieces, so there is no decision to make. '
       + `Stock is the count that opens the plan${openingCount ? ` (${openingCount})` : ''}; a SKU missing from that `
       + 'count is read as 0 on hand.',
     'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',
@@ -1569,18 +1577,22 @@ const Dashboard = () => {
       passed: fc.evaluated_count - fc.unreliable_count,
       gate: fc.mase_gate ?? null,
       // Forecasts exist for Unilever only, so under All the list is named as Unilever's.
-      tierLabel: mixedTier ? `Unilever's ${planTierLabel}` : planTierLabel,
+      tierLabel: mixedTier ? `Unilever's ${planTierPhrase}` : planTierPhrase,
     }
     : null;
   // Critical reads a planned product missing from the opening count as 0 on
   // hand; the Below safety stock card cannot check those. Said on the card
   // only when the two counts differ by exactly that many.
   const noCount = exposure.uncheckable?.no_stock_count;
-  const criticalNote = !lpHidden && !belowBlocked && noCount > 0 && reorderPreview.critical_count != null
-    && reorderPreview.critical_count - exposure.below_count === noCount
-    ? `${reorderPreview.critical_count} critical = the ${exposure.below_count} below safety stock + ${noCount} missing from `
-      + 'the stock count, which the plan reads as 0 on hand (the Below safety stock card cannot check those).'
+  const criticalAddsUp = !lpHidden && !belowBlocked && noCount > 0 && reorderPreview.critical_count != null
+    && reorderPreview.critical_count - exposure.below_count === noCount;
+  const criticalNote = criticalAddsUp
+    ? `${reorderPreview.critical_count} Critical = ${exposure.below_count} below safety stock + ${noCount} not in the stock count.`
     : null;
+  if (criticalAddsUp) {
+    pendingTooltip.push(`${reorderPreview.critical_count} critical = the ${exposure.below_count} below safety stock + ${noCount} missing from `
+      + 'the stock count, which the plan reads as 0 on hand (the Below safety stock card cannot check those).');
+  }
 
   // Months in the range with no sales on record (Del Monte has many). Said
   // once, under the filters, so a short total is never read as a low year.
@@ -1727,6 +1739,51 @@ const Dashboard = () => {
       };
     })();
 
+  // The one principal with no per-product plan (real data only: with synthetic
+  // data on, those cards show the demonstration, labelled).
+  const categoryOnly = pagePrincipal === 'delmonte' && !preview && noPlan;
+  const categoryOnlyReasons = categoryOnly ? [...new Set([
+    belowSs.contextLine,
+    noPlanNote,
+    portfolioForecast.scope_label,
+    data.forecast_accuracy?.blocked_reason,
+    DEL_MONTE_NO_ORDERS_REASON,
+    idle.blocked_reason,
+  ].filter(Boolean))] : [];
+  const idleCounted = idle.blocked_reason ? null
+    : idle.count_date ? `Stock counted ${dayLabel(idle.count_date)}`
+      : idle.count_period ? `${periodLabel(idle.count_period)} count` : null;
+  // The three things to act on, from figures this page already has.
+  const abovePolicy = hasStock ? kpis.above_policy : null;
+  const actionItems = [
+    actions && {
+      key: 'orders',
+      icon: ShoppingCart,
+      label: 'Orders to act on',
+      value: actions.act_now.toLocaleString(),
+      unit: actions.act_now === 1 ? 'product' : 'products',
+      sub: lpCycleLabel ? `${lpCycleLabel} plan` : null,
+      tone: actions.act_now > 0 ? 'danger' : null,
+      to: '/reorder',
+    },
+    abovePolicy?.pesos != null && abovePolicy.products > 0 && {
+      key: 'above',
+      icon: Boxes,
+      label: `Stock value above ${abovePolicy.policy_weeks ?? policyWeeks}-week target`,
+      value: formatCompactPesos(abovePolicy.pesos),
+      sub: `${abovePolicy.products.toLocaleString()} products`,
+      onClick: () => openRangeList('above'),
+    },
+    hasStock && idleCell.value != null && data.idle_stock && {
+      key: 'idle',
+      icon: PackageX,
+      label: `Stock not sold in ${idle.window_rule_months ?? 6} months`,
+      value: formatCompactPesos(idleCell.value),
+      sub: `${(idleCell.products ?? 0).toLocaleString()} products`,
+      onClick: () => jumpTo('idle-stock'),
+    },
+  ].filter(Boolean);
+
   return (
     <div className={`dashboard${SHOW_CHART_DESCRIPTIONS ? '' : ' dashboard-plain'}`}>
       <div className="dashboard-content">
@@ -1829,7 +1886,36 @@ const Dashboard = () => {
           {/* Hero strip — the four figures that answer "what is happening
               right now": money in, money parked, service risk, and work
               waiting. */}
-          <TierBasisLabel periods={exposure.tier_a_periods} period={exposure.tier_a_period} />
+          <div className="dash-top">
+          <div className="dash-context-row">
+            <TierBasisLabel short periods={exposure.tier_a_periods} period={exposure.tier_a_period} />
+            {hasStock && countChip && <BasisTag label={countChip} follows={false} />}
+          </div>
+          {/* A count the team judged unusual is kept and says so, once, as the
+              API words it (kpis.soh_count_note, Yuan 2026-10-04): the stock
+              value, the cover and the plan all read it. */}
+          {hasStock && kpis.soh_count_note && (
+            <p className="dash-gap-note" role="note">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{kpis.soh_count_note}</span>
+            </p>
+          )}
+          {/* One principal has category-level sales only, so these cards are
+              empty on purpose and are never filled. One note says why; each
+              card's own reason is behind its "?". With synthetic data on, the
+              cards show what the demonstration gives them, as before. */}
+          {categoryOnly && (
+            <p className="dash-gap-note" role="note">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                {noPlanNote} Below safety stock, Pending reorders, Forecast demand, How close the forecasts were, Suggested
+                orders and Stock with no sale stay empty for that reason.
+                <InfoTip label="Why each of these cards is empty">
+                  {categoryOnlyReasons.map((line) => <span key={line} className="chart-tip-line">{line}</span>)}
+                </InfoTip>
+              </span>
+            </p>
+          )}
           {rangeGapNote && (
             <p className="dash-gap-note" role="note">
               <AlertTriangle size={14} aria-hidden="true" />
@@ -1842,6 +1928,9 @@ const Dashboard = () => {
               <span>{syntheticNote}</span>
             </p>
           )}
+          {/* What to do first (2026-11-05), then the figures behind it. */}
+          <ActionStrip items={actionItems} />
+          </div>
           {/* Lead with sales and allocation beside inventory value, then
               move through stock cover, below-safety risk and pending orders. */}
           <div className="hero-kpis dash-section-anchor" id="dash-summary">
@@ -1850,10 +1939,7 @@ const Dashboard = () => {
               value={sohValue.value}
               subtitle={inventorySubtitle}
               subtitleTitle={inventorySubtitleTitle}
-              asOf={hasStock ? [capitalise(countLabel), sohCoverage].filter(Boolean).join(' · ') : null}
-              // A count the team judged unusual is kept and says so
-              // (kpis.soh_count_note, Yuan 2026-10-04), in the chart's words.
-              flag={hasStock && kpis.soh_count_note ? { label: 'Needs checking', detail: kpis.soh_count_note } : null}
+              asOf={hasStock ? sohCoverage || null : null}
               lastCount={lastCountCell}
               yearAgo={yearAgoCell}
               idle={idleCell}
@@ -1869,12 +1955,10 @@ const Dashboard = () => {
               runningLow={belowBlocked ? null : exposure.below_count}
               onOpenLow={canListAtRisk ? openAtRisk : null}
               // What is still to confirm about the figure, as served: where
-              // stock and sales come from (weeks_of_cover.caveat), and an
-              // unusual count (kpis.soh_count_note).
-              toConfirm={hasStock ? [
-                ...(cover.caveat ? cover.caveat.split(' · ') : []),
-                kpis.soh_count_note,
-              ].map((line) => line && `${capitalise(line)}${/[.!?]$/.test(line) ? '' : '.'}`) : []}
+              // stock and sales come from (weeks_of_cover.caveat). An unusual
+              // count (kpis.soh_count_note) is said once, at the top of the page.
+              toConfirm={hasStock ? (cover.caveat ? cover.caveat.split(' · ') : [])
+                .map((line) => line && `${capitalise(line)}${/[.!?]$/.test(line) ? '' : '.'}`) : []}
               tooltip={coverTooltip}
               // The pesos beyond the rule, product by product (kpis.above_policy),
               // and the list behind them (GET /dashboard/stock-detail).
@@ -1886,8 +1970,8 @@ const Dashboard = () => {
               checked={exposure.comparable_count ?? 0}
               total={exposure.tier_a_count ?? null}
               severity={ssTier === 'danger' ? 'danger' : ssTier === 'watch' ? 'watch' : null}
-              asOf={[planLabel, stockCountedLine(exposure.stock_counts), abcCoverage].filter(Boolean).join(' · ')}
-              reason={belowSs.contextLine}
+              asOf={[planLabel, capitalise(stockCountedLine(exposure.stock_counts) || '') === countChip ? null : stockCountedLine(exposure.stock_counts), abcCoverage].filter(Boolean).join(' · ')}
+              reason={categoryOnly ? null : belowSs.contextLine}
               tooltip={belowTooltip}
               // The list is safety_stock_exposure.below_items, the rows the
               // count was taken from, so it opens the same SKUs.
@@ -1896,21 +1980,20 @@ const Dashboard = () => {
               // Why the rest can't be checked, by reason (safety_stock_exposure.uncheckable).
               uncheckable={exposure.uncheckable || null}
               // Both principals' Tier A under All (not all of it is in the plan).
-              tierLabel={mixedTier ? 'Tier A, both principals' : planTierLabel}
+              tierLabel={mixedTier ? `Top sellers: ${tierPeriodsText}` : planTierLabel}
               inPlan={!mixedTier}
-              totalLabel={`Tier A ${abcUnits}`}
+              totalLabel={abcUnits === 'categories' ? 'top-selling categories' : 'top sellers'}
               scopeNote={belowScopeNote}
               methodNote={SAFETY_STOCK_METHOD_NOTE}
             />
             <PendingReordersCard
               count={lpHidden || noPlan ? null : pendingCount}
-              reason={noPlan ? noPlanNote : LP_HIDDEN_NOTE}
+              reason={noPlan ? (categoryOnly ? null : noPlanNote) : LP_HIDDEN_NOTE}
               asOf={planLabel}
               parts={pendingParts}
               orderQty={pendingParts ? reorderPreview.total_order_qty : null}
               tooltip={pendingTooltip}
               to="/reorder"
-              criticalTo="/reorder?urgency=critical"
               scope={planScope}
               criticalNote={criticalNote}
             />
@@ -1950,14 +2033,14 @@ const Dashboard = () => {
                 coverage={abcCoverage}
                 units={abcUnits}
                 atRisk={canListAtRisk && !ssPinned
-                  ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk, tierLabel: planTierLabel }
+                  ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk, tierLabel: planTierPhrase }
                   : null}
                 onOpenClass={setListedClass}
               />
             </Slot>
             {rangeChanges && (
               <Slot kind="Descriptive" question={<>Which products <span className="title-accent">joined or left</span> the top sellers?</>} hint={STORY.changes} basis={BASIS.classChanges}>
-                <ClassChanges changes={rangeChanges} onOpen={openForecast} />
+                <ClassChanges changes={rangeChanges} onOpen={openForecast} compact />
               </Slot>
             )}
           </div>
@@ -1975,7 +2058,7 @@ const Dashboard = () => {
                 // The local sentence only stands in if it is ever missing,
                 // so the card can't fall back to a generic "No forecast data".
                 emptyReason={
-                  portfolioForecast.scope_label
+                  categoryOnly ? CATEGORY_ONLY_EMPTY : portfolioForecast.scope_label
                     || (pagePrincipal === 'delmonte'
                       ? 'No SKU-level forecasts for Del Monte — it has no SKU-level sales data, only category sell-out.'
                       : undefined)
@@ -1983,7 +2066,8 @@ const Dashboard = () => {
                 reliability={forecastReliability}
                 // Without lp.view there is no planScope (or period), but the
                 // count is still Unilever's alone under All principals.
-                tierLabel={planScope?.tierLabel ?? (pagePrincipal === ALL_PRINCIPALS ? "Unilever's Tier A" : null)}
+                tierLabel={planScope?.tierLabel ?? (pagePrincipal === ALL_PRINCIPALS ? `Unilever's ${planTierPhrase}` : null)}
+                planLabel={lpCycleLabel ? `${lpCycleLabel} plan` : null}
                 forecastNote={forecastNote}
                 piecesShare={piecesShare}
                 calendar={forecastBeyondRange ? null : calendarAdj}
@@ -1995,6 +2079,7 @@ const Dashboard = () => {
                 <ForecastErrorSummaryCard
                   accuracy={data.forecast_accuracy}
                   scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
+                  blockedNote={categoryOnly ? CATEGORY_ONLY_EMPTY : null}
                   onOpenList={(runId) => openRangeList('over', runId)}
                   onOpenCategories={(runId) => openRangeList('category', runId)}
                   principal={principal}
@@ -2010,15 +2095,15 @@ const Dashboard = () => {
           {(!lpHidden || data.idle_stock) && (
             <div className={`dash-row ${!lpHidden && data.idle_stock ? 'dash-row-even' : 'dash-row-trend'} dash-row-natural dash-section-anchor`} id="dash-order">
               {!lpHidden && (
-                <Slot kind="Prescriptive" question={<>What should we <span className="title-accent">order now</span>?</>} hint={STORY.order} realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan}>
+                <Slot kind="Prescriptive" question={<>What should we <span className="title-accent">order now</span>?</>} hint={STORY.order} realOnly={preview && realOnly.has('reorder_preview')} basis={BASIS.plan} counted={reorderRows.length > 0 ? (openingCount ? capitalise(openingCount) : countChip) : null}>
                   <ReorderRecommendationWidget
-                    rows={reorderRows}
+                    // The first three; the Reorder page has every row ("See all suggested orders").
+                    rows={reorderRows.slice(0, 3)}
                     // One prop (a second emptyReason below used to override this one).
-                    emptyReason={pagePrincipal === 'delmonte' ? DEL_MONTE_NO_ORDERS_REASON : noPlan ? noPlanNote : undefined}
+                    emptyReason={categoryOnly ? CATEGORY_ONLY_EMPTY : pagePrincipal === 'delmonte' ? DEL_MONTE_NO_ORDERS_REASON : noPlan ? noPlanNote : undefined}
                     weights={reorderPreview.lp_weights}
                     cycleLabel={lpCycleLabel}
                     runLabel={planRun ? `run ${planRun}` : null}
-                    countLabel={countLabel}
                     calendarNote={planCalendarNote}
                     calendarSummary={planCalendarSummary}
                     inputsArePlaceholders={Boolean(data.policy_comparison?.inputs_are_placeholders)}
@@ -2029,12 +2114,13 @@ const Dashboard = () => {
                 </Slot>
               )}
               {data.idle_stock && (
-                <Slot id="idle-stock" kind="Descriptive" question={<>How much <span className="title-accent">money is stuck</span> in stock that is not selling?</>} hint={STORY.idle(data.idle_stock.window_rule_months)} basis={BASIS.idle}>
+                <Slot id="idle-stock" kind="Descriptive" question={<>How much <span className="title-accent">money is stuck</span> in stock that is not selling?</>} hint={STORY.idle} basis={BASIS.idle} counted={idleCounted}>
                   <IdleStockCard
                     idle={data.idle_stock}
                     prior={prior?.data?.idle_stock ?? null}
                     scope={coverageNote(data.idle_stock.coverage, pagePrincipal)}
                     onOpenList={() => openRangeList('idle')}
+                    blockedNote={categoryOnly ? CATEGORY_ONLY_EMPTY : null}
                   />
                 </Slot>
               )}

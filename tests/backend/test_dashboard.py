@@ -1082,6 +1082,21 @@ def test_reorder_preview_top5_sorted_by_urgency_full_set_counts():
     assert preview["total_order_qty"] == pytest.approx(80.0)  # 8 rows x q_i=10, full set not just top 5
 
 
+def test_reorder_preview_action_counts_follow_the_reorder_page_rule():
+    rows = [
+        _reco_row(1, urgency_stock=0, rop_i=100),    # CRITICAL, orders: act now
+        _reco_row(2, urgency_stock=90, rop_i=100),   # below target, orders: act now
+        _reco_row(3, urgency_stock=150, rop_i=100),  # at or above target, orders: review later
+        {**_reco_row(4, urgency_stock=150, rop_i=100), "q_i": 0.0},  # orders nothing
+        {**_reco_row(5, urgency_stock=0, rop_i=100), "q_i": 0.0},    # below target, but orders nothing: no decision to make
+        {**_reco_row(6, urgency_stock=0, rop_i=100), "status": "accepted"},  # decided: stays in the plan, not in act now
+    ]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        resp = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"})
+    assert resp.json()["reorder_preview"]["action_counts"] == {"act_now": 2, "review_later": 1, "no_order": 2}
+
+
 def test_reorder_preview_critical_means_below_safety_stock_not_half_the_target():
     """Item 9: CRITICAL is stock below ss_i. The old rule said below
     0.5 x rop_i, a threshold with no source."""
@@ -1105,6 +1120,7 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
     assert preview == {
         "rows": [], "critical_count": 0, "low_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
         "plan_count": 0, "pending_count": 0, "pending_order_qty": 0,
+        "action_counts": {"act_now": 0, "review_later": 0, "no_order": 0},
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
         "lp_weights_source": "defaults",
         "stock_counts": [],  # no LP cycle, so no opening count to name
