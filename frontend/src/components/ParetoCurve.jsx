@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { CHART_COLORS } from '../theme/colors';
 import { GRID_PROPS } from './ChartZoom';
+import { LineShade, SOLID_LINE, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import './ParetoCurve.css';
 
 const TIERS = ['A', 'B', 'C'];
@@ -43,6 +44,7 @@ const CurveTooltip = ({ active, payload, many }) => {
 };
 
 const ParetoCurve = ({ block, cutoffs = null, label = 'the selected range', height = 220 }) => {
+  const shadeId = useLineShadeId();
   const many = block?.grain === 'category' ? 'categories' : 'SKUs';
   const { points, aEnd, total } = useMemo(() => {
     const ranked = (block?.classes || [])
@@ -87,6 +89,9 @@ const ParetoCurve = ({ block, cutoffs = null, label = 'the selected range', heig
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={points} margin={{ top: 8, right: 16, left: 4, bottom: 18 }}>
+          <defs>
+            {TIERS.map((t) => <LineShade key={t} id={`${shadeId}-${t}`} color={TIER_COLOR[t]} />)}
+          </defs>
           <CartesianGrid {...GRID_PROPS} />
           <XAxis
             type="number"
@@ -115,18 +120,17 @@ const ParetoCurve = ({ block, cutoffs = null, label = 'the selected range', heig
           {TIERS.map((t) => (
             <Area
               key={t}
-              type="linear"
+              {...SOLID_LINE}
               dataKey={`y${t}`}
               stroke={TIER_COLOR[t]}
-              strokeWidth={2}
-              fill={TIER_COLOR[t]}
-              fillOpacity={0.18}
+              fill={`url(#${shadeId}-${t})`}
+              activeDot={lineHoverDot}
               connectNulls={false}
               isAnimationActive={false}
             />
           ))}
           {aEnd && (
-            <ReferenceDot x={aEnd.x} y={aEnd.y} r={5} fill={TIER_COLOR.A} stroke="var(--color-surface, #fff)" strokeWidth={2} />
+            <ReferenceDot x={aEnd.x} y={aEnd.y} r={4.5} fill={TIER_COLOR.A} stroke="var(--color-surface, #fff)" strokeWidth={2} />
           )}
         </ComposedChart>
       </ResponsiveContainer>

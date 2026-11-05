@@ -58,6 +58,9 @@ class FakeResult:
     def scalar(self):
         return self._rows[0] if self._rows else None
 
+    def __iter__(self):
+        return iter(self._rows)
+
 
 class FakeSession:
     def __init__(self, rows, stock_by_period, inventory_period_by_scope, abc_period_by_scope,
@@ -476,12 +479,13 @@ def test_lp_model_serves_what_the_stored_run_used(session, client):
     assert lp_model["run"]["run_key"] == 7 and lp_model["allocation"]["basis_year"] == 2025
 
 
-def test_response_carries_the_lp_model_and_each_rows_tier(client):
+def test_response_carries_the_lp_model_and_each_rows_tier(client, session):
     body = client.get("/recommendations?principal=unilever").json()
     assert body["lp_model"]["weights"] == {"cost": 0.45, "service_level": 0.35, "storage": 0.2}
     assert body["lp_model"]["service_level_pct"] == 90
     assert body["lp_model"]["inputs_are_placeholders"] is True
     assert body["items"] and all("tier" in item for item in body["items"])
+
 
 
 def test_whole_units_round_up_but_ignore_float_noise():
@@ -919,6 +923,28 @@ def test_not_planned_query_reads_the_cycles_tier_a_and_excludes_only_plan_rows(s
     # A decided row no LP run produced is outside the plan, so it does not hide the product.
     assert "NOT (l3.status <> 'pending' AND l3.lp_run_key IS NULL)" in sql
     assert params["nop_cycle"] == "2026-03-01" and params["inv_period"] == "2026-02" and params["abc_p_unilever"] == "2026-02"
+
+
+def test_not_planned_carries_revenue_share_and_cover_for_the_reorder_page(session):
+    session.not_planned_rows = [
+        _not_planned_row(sku_id="COV", current_stock=500.0, recent_monthly_pieces=1000.0, revenue_share=0.02),
+        # Absent from a count that omits zero-stock items: stock reads as 0, so cover does too.
+        _not_planned_row(sku_id="ABS", current_stock=None, current_stock_cases=None, in_stock_count=False,
+                         recent_monthly_pieces=300.0),
+        _not_planned_row(sku_id="DEAD", forecast_status="dead_sku", mase=None, current_stock=40.0, recent_monthly_pieces=0),
+        # In the count, but its cases can't be put in pieces: no cover figure, and why.
+        _not_planned_row(sku_id="CASES", current_stock=None, current_stock_cases=3.0),
+    ]
+    body = _get(session, "/recommendations?principal=unilever")
+    got = {i["sku_id"]: i for i in body["not_planned"]}
+    assert got["COV"]["revenue_share"] == 0.02 and got["COV"]["mase"] == 1.2
+    assert got["DEAD"]["mase"] is None
+    assert got["COV"]["days_of_cover"] == pytest.approx(15.2, abs=0.05) and got["COV"]["cover_blocked_reason"] is None
+    assert got["ABS"]["days_of_cover"] == 0.0 and got["ABS"]["revenue_share"] is None
+    assert got["DEAD"]["days_of_cover"] is None and got["DEAD"]["cover_blocked_reason"]
+    assert got["CASES"]["days_of_cover"] is None and got["CASES"]["cover_blocked_reason"]
+    # Beside the plan, never in it.
+    assert body["count"] == len(body["items"]) and not {i["sku_id"] for i in body["items"]} & set(got)
 
 
 def test_not_planned_is_absent_when_there_is_no_cycle(sample_rows):

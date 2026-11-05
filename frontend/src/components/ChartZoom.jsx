@@ -175,28 +175,6 @@ export function useChartZoom(data, { minWindow = MIN_WINDOW } = {}) {
   };
 }
 
-/**
- * Soft wash under a line: that line's own hue, fading out toward the
- * baseline. Tying each fill to its series color lets someone tracking
- * several lines at once tell whose band is whose without going back to the
- * legend, and it stays faint so overlapping bands remain readable where
- * the series cross.
- *
- * ~10% at the top (design pass 2026-09-26; was 0.22): a wash, never a
- * saturated block — at 0.22 two overlapping washes turned muddy where the
- * lines crossed, so charts now also keep at most ONE wash each.
- *
- * Goes inside the chart's <defs>; the series then references it as
- * fill="url(#<id>)". Ids are global to the document, so charts that can
- * appear on the same page need distinct ones.
- */
-export const SeriesFill = ({ id, color }) => (
-  <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stopColor={color} stopOpacity={0.12} />
-    <stop offset="100%" stopColor={color} stopOpacity={0.02} />
-  </linearGradient>
-);
-
 // Solid hairline gridlines, one shade off the surface — shared by every
 // chart so "what does the grid look like" has one answer. Dashing is
 // reserved for the marks that MEAN "projected / reference", which is why

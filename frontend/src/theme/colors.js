@@ -139,13 +139,14 @@ export const CHART_COLORS = {
   annualHistory: '#8FA3C4',
   annualYtd: '#F28C28',
   annualYtdInk: '#C2410C',
-  // SKU Forecast's "Past sales and the forecast" chart (redesign of
-  // 2026-10-26, from the mockup): the actual line a deeper teal, last year a
-  // light cyan (same hue, so colour = metric and the dash = year), and the
-  // forecast violet. Teal beside violet, per the hue-pair rule above.
-  skuActual: '#089FB5',
+  // SKU Forecast's "Past sales and the forecast" chart: last year a light
+  // cyan (same hue, so colour = metric and the dash = year). Actual and
+  // forecast have been the Dashboard's own teal and violet since every line
+  // graph took one design (2026-11-03, ui/lineDesign.jsx); they were #089FB5
+  // and #8956F6 from that chart's mockup of 2026-10-26.
+  skuActual: COLORS.dispatched,
   skuLastYear: '#67CFE0',
-  skuForecast: '#8956F6',
+  skuForecast: COLORS.forecast,
   // The stock-may-have-run-out shading and its labels on that chart.
   stockLimited: '#F59E0B',
   stockLimitedInk: '#B45309',

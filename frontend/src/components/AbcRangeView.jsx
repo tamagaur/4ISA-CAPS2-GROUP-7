@@ -15,7 +15,7 @@ import SectionLede from './ui/SectionLede';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
-import { AlertTriangle, CheckCircle2, Info, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, ChartLine, CheckCircle2, Info, Layers, ListOrdered, Search, X } from 'lucide-react';
 import KPICard from './KPICard';
 import ProductName from './ProductName';
 import Pagination from './Pagination';
@@ -158,7 +158,11 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         return (
           <React.Fragment key={block.principal}>
             {multi && <h3 className="abc-range-principal">{labelForPrincipal(block.principal)}</h3>}
-            <SectionLede className="is-standalone">How the products split by value</SectionLede>
+            <div className="ui-card ui-card-stack">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><Layers size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">How the products split by value</SectionLede></div>
+            </div>
             <div className="kpi-strip abc-summary-grid abc-range-kpis">
               {(block.classes || []).map((cls) => (
                 <KPICard
@@ -172,6 +176,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                   icon={<span className={`abc-kpi-letter abc-kpi-letter-${cls.tier.toLowerCase()}`} aria-hidden="true">{cls.tier}</span>}
                 />
               ))}
+            </div>
             </div>
             {block.blocked_reason && <p className="ui-note is-info"><Info size={14} aria-hidden="true" /><span>{block.blocked_reason}</span></p>}
             {check && check.ranked_count < PARETO_MIN_ITEMS && (
@@ -195,15 +200,23 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                 </span>
               </p>
             )}
-            <SectionLede className="is-standalone">How few products make most of the sales</SectionLede>
+            <div className="ui-card ui-card-stack">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><ChartLine size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">How few products make most of the sales</SectionLede></div>
+            </div>
             <ParetoCurve block={block} cutoffs={pareto?.cutoffs} label={label} />
+            </div>
           </React.Fragment>
         );
       })}
 
       {canSeeChanges && (
-        <section className="abc-range-changes" aria-busy={changesLoading || undefined}>
-          <SectionLede className="is-standalone">Which products joined or left Class A</SectionLede>
+        <section className="abc-range-changes ui-card ui-card-stack" aria-busy={changesLoading || undefined}>
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><ArrowLeftRight size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Which products joined or left Class A</SectionLede></div>
+            </div>
           {changesLoading ? (
             <>
               <LoadingStatus>Loading the products that joined or left Class A…</LoadingStatus>
@@ -262,8 +275,14 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         </div>
       </div>
 
-      <SectionLede className="is-standalone">Every product, ranked by sales value</SectionLede>
-      <div className="data-table-card">
+      <div className="ui-card is-flush">
+      <div className="ui-card-intro">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><ListOrdered size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Every product, ranked by sales value</SectionLede></div>
+            </div>
+      </div>
+      <div className="data-table-card ui-card-table">
         <table className="data-table abc-table">
           <thead>
             <tr>
@@ -315,6 +334,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           idPrefix="abc-range"
         />
+      </div>
       </div>
     </>
   );

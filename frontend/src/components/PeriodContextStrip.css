@@ -6,9 +6,10 @@
   gap: 4px 12px;
   margin: 0 32px 12px;
   padding: 8px 14px;
-  border: 1px solid #E7EBF0;
+  border: var(--card-border);
   border-left-width: 3px;
-  border-radius: 10px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background: #FFFFFF;
   font-size: 12.5px;
   line-height: 1.45;

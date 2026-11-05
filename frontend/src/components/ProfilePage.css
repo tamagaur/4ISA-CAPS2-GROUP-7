@@ -28,7 +28,7 @@
 
 .profile-card,
 .profile-aside {
-  border-radius: 18px;
+  border-radius: var(--radius-card);
   min-width: 0;
 }
 
@@ -47,7 +47,8 @@
   gap: 22px;
   margin: 16px 16px 0;
   padding: clamp(14px, 2.4vh, 24px) 24px;
-  border-radius: 14px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background:
     radial-gradient(70% 90% at 100% 0%, rgba(232, 92, 74, 0.1) 0%, rgba(232, 92, 74, 0) 60%),
     radial-gradient(60% 100% at 85% 100%, rgba(49, 130, 206, 0.1) 0%, rgba(49, 130, 206, 0) 65%),
@@ -247,7 +248,8 @@
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid #DFE6F1;
-  border-radius: 12px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background: #F4F7FC;
   min-width: 0;
 }
@@ -292,7 +294,8 @@
   gap: 14px;
   padding: 12px 16px;
   border: 1px solid;
-  border-radius: 12px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 .profile-security-panel.is-good {
@@ -434,7 +437,8 @@
 
 .profile-aside-panel {
   padding: 4px 18px;
-  border-radius: 14px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background: #F1F6FD;
 }
 

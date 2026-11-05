@@ -5,6 +5,7 @@ import { ArrowUpRight, ArrowDownRight, ArrowRight, Minus, X } from 'lucide-react
 import {
   Area,
   ComposedChart,
+  Curve,
   Line,
   XAxis,
   YAxis,
@@ -28,10 +29,12 @@ import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { CHART_COLORS, COLORS } from '../theme/colors';
-import { GRID_PROPS, pointLabels, seriesDot } from './ChartZoom';
+import { GRID_PROPS, pointLabels } from './ChartZoom';
+import { COMPARISON_LINE, FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, lineDots, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import { ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
+import { monthsBetween } from '../utils/timeline';
 import RefreshingNote from './RefreshingNote';
 import InfoTip from './InfoTip';
 import MonthTick, { MONTH_TICK_EXTRA_HEIGHT, monthName } from './MonthTick';
@@ -174,7 +177,9 @@ const POP_W = 240;
 const POP_H = 112;
 // The bottom padding holds the Low label's row, then the month labels.
 const POP_PAD = { top: 12, right: 6, bottom: 26, left: 6 };
+const POP_REVENUE = '#7DD3C7';
 const TrendPopup = ({ category, method }) => {
+  const shadeId = useLineShadeId();
   const history = category.history || [];
   const fitted = category.fitted || [];
   const pLine = clearText(category, method);
@@ -198,7 +203,7 @@ const TrendPopup = ({ category, method }) => {
   const ih = POP_H - POP_PAD.top - POP_PAD.bottom;
   const x = (i) => POP_PAD.left + (i / (history.length - 1)) * iw;
   const y = (v) => POP_PAD.top + ih - ((v - min) / span) * ih;
-  const line = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const line = values.map((v, i) => ({ x: x(i), y: y(v) }));
   const trend = fitted.map((v, i) => `${x(i + offset).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const hi = values.indexOf(Math.max(...values));
   const lo = values.indexOf(Math.min(...values));
@@ -209,15 +214,18 @@ const TrendPopup = ({ category, method }) => {
     <span className="ct-trend-pop">
       <svg width={POP_W} height={POP_H} viewBox={`0 0 ${POP_W} ${POP_H}`} role="img"
         aria-label={`Monthly revenue, ${formatMonth(history[0].period)} to ${formatMonth(history[history.length - 1].period)}`}>
-        <polyline points={line} fill="none" stroke="#7DD3C7" strokeWidth="1.6" strokeLinejoin="round" />
+        <defs><LineShade id={shadeId} color={POP_REVENUE} /></defs>
+        {/* layout: outside a chart, the curve has no chart to ask which way the months run. */}
+        <Curve type="monotone" layout="horizontal" points={line} baseLine={POP_PAD.top + ih} stroke="none" fill={`url(#${shadeId})`} />
+        <Curve type="monotone" layout="horizontal" points={line} fill="none" stroke={POP_REVENUE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {trend && <polyline points={trend} fill="none" stroke="#FFFFFF" strokeOpacity="0.9" strokeWidth="1.4" strokeDasharray="4 3" />}
-        <circle cx={x(hi)} cy={y(values[hi])} r="2.5" fill="#7DD3C7" />
+        <circle cx={x(hi)} cy={y(values[hi])} r="2.5" fill={POP_REVENUE} />
         <text x={x(hi)} y={y(values[hi]) - 4} textAnchor={anchor(hi)} className="ct-trend-pop-mark">
           {`High ${formatMonth(history[hi].period)}: ${formatRevenue(values[hi])}`}
         </text>
         {lo !== hi && (
           <>
-            <circle cx={x(lo)} cy={y(values[lo])} r="2.5" fill="#7DD3C7" />
+            <circle cx={x(lo)} cy={y(values[lo])} r="2.5" fill={POP_REVENUE} />
             <text x={x(lo)} y={y(values[lo]) + 11} textAnchor={anchor(lo)} className="ct-trend-pop-mark">
               {`Low ${formatMonth(history[lo].period)}: ${formatRevenue(values[lo])}`}
             </text>
@@ -466,6 +474,7 @@ const CategoryTable = ({ category, data }) => {
 // GET /category-trends' method block: every number this page states about
 // the method comes from it, never from this file.
 const CategoryChart = ({ category, method, placeholder = null }) => {
+  const shadeId = useLineShadeId();
   const [view, setView] = useState('chart');
   const data = useMemo(() => {
     const history = category.history || [];
@@ -536,6 +545,10 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
   // The months the trend line is fitted over (the last `fitted.length` of
   // the history) and the months it is projected into, named for the legend.
   const history = category.history || [];
+  // Del Monte's months nobody collected are not on this axis, so each reported
+  // month keeps its dot (ui/lineDesign.jsx, lineDots).
+  const skipsMonths = history.length > 1
+    && monthsBetween(history[0].period, history[history.length - 1].period).length > history.length;
   const fittedCount = (category.fitted || []).length;
   const fitWindow = category.available && fittedCount && history.length >= fittedCount
     ? monthSpan(history[history.length - fittedCount].period, history[history.length - 1].period)
@@ -587,6 +600,9 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
           </div>
           <ResponsiveContainer width="100%" height={340}>
             <ComposedChart data={data} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
+              <defs>
+                <LineShade id={shadeId} color={CHART_COLORS.salesSeries} />
+              </defs>
               <CartesianGrid {...GRID_PROPS} />
               {renderPlaceholderBand(bandSpan)}
               {/* The months the trend line is fitted over (2026-10-25). */}
@@ -631,9 +647,10 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                   label={<ProjectionStartLabel />}
                 />
               )}
-              <Line dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} strokeWidth={2} strokeLinecap="round" dot={seriesDot({ color: CHART_COLORS.salesSeries, r: 3 })} connectNulls={false} isAnimationActive={false} />
-              <Line dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />
-              <Line dataKey="projection" name="Projected trend" stroke={COLORS.forecast} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} label={projectionLabels} />
+              <Area {...SHADE_ONLY} dataKey="actual" fill={`url(#${shadeId})`} connectNulls={false} />
+              <Line {...SOLID_LINE} dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} dot={lineDots(CHART_COLORS.salesSeries, { everyPoint: skipsMonths })} activeDot={lineHoverDot} connectNulls={false} isAnimationActive={false} />
+              <Line {...COMPARISON_LINE} dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} dot={false} activeDot={lineHoverDot} connectNulls={false} isAnimationActive={false} />
+              <Line {...FORECAST_LINE} dataKey="projection" name="Projected trend" stroke={COLORS.forecast} dot={lineDots(COLORS.forecast)} activeDot={lineHoverDot} connectNulls={false} isAnimationActive={false} label={projectionLabels} />
             </ComposedChart>
           </ResponsiveContainer>
         </>

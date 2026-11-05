@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ArrowUp, ArrowDown, ArrowRight, AlertTriangle, Info } from 'lucide-react';
 import { STATUS_TIERS, SEMANTIC } from '../theme/colors';
 import InfoTip from './InfoTip';
+import { LineShade, useLineShadeId } from './ui/lineDesign';
 import './KPICard.css';
 
 // "colour marks what is genuinely wrong" — the caller supplies raw facts
@@ -55,15 +56,16 @@ const CARD_ACCENT_COLORS = {
   action:     SEMANTIC.recommendation,
 };
 
-// 12-point sparkline beside the value (stat-tile contract): the history
-// in a recessive gray, the CURRENT period as the one accented dot in the
-// series' own hue — a shape cue, not a second chart, so no axes and no
-// tooltip. `points` are the backend's real months only (nulls already
-// dropped); under 2 points there is no shape to draw, so nothing renders.
+// 12-point sparkline beside the value: the line design every line graph
+// wears (ui/lineDesign.jsx), at this size, with the CURRENT period as its end
+// dot — a shape cue, not a second chart, so no axes and no tooltip. `points`
+// are the backend's real months only (nulls already dropped); under 2 points
+// there is no shape to draw, so nothing renders.
 const SPARK_W = 76;
 const SPARK_H = 26;
 
 export const Sparkline = ({ points, color }) => {
+  const shadeId = useLineShadeId();
   if (!points || points.length < 2) return null;
   const recent = points.slice(-12);
   const values = recent.map((p) => p.value);
@@ -82,7 +84,9 @@ export const Sparkline = ({ points, color }) => {
       viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
       aria-hidden="true"
     >
-      <path d={path} fill="none" stroke="#CBD5E1" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <defs><LineShade id={shadeId} color={color} /></defs>
+      <path d={`${path} L${SPARK_W} ${SPARK_H} L0 ${SPARK_H} Z`} fill={`url(#${shadeId})`} />
+      <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={lastX} cy={lastY} r={3} fill={color} stroke="var(--color-surface, #fff)" strokeWidth={1.5} />
     </svg>
   );
@@ -117,6 +121,8 @@ export const Sparkline = ({ points, color }) => {
 // action: { label, onClick } or { label, to } — the way from this figure to
 // what is behind it (a list, another page), as a quiet link in the footer.
 // The figure's detail sits one click away instead of on the card.
+// decoration: an optional quiet picture beside the figure; purely visual, and
+// nothing renders without it (the Reorder page's cards).
 const KPICard = ({
   title,
   value,
@@ -137,6 +143,7 @@ const KPICard = ({
   accent,
   basis,
   toggle,
+  decoration,
 }) => {
   const tier = tierFor(metricType, direction, isOverTarget);
   const accentColor = accent || CARD_ACCENT_COLORS[tier]; // card chrome (top strip, icon)
@@ -171,6 +178,7 @@ const KPICard = ({
           {unit && <span className="kpi-unit">{unit}</span>}
         </div>
         {trend && <Sparkline points={trend.points} color={trend.color} />}
+        {decoration && <span className="kpi-decoration" aria-hidden="true">{decoration}</span>}
       </div>
       {toggle && (
         <div className="kpi-toggle" role="group" aria-label={toggle.label}>

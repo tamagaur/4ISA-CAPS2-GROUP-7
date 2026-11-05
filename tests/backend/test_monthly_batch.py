@@ -35,8 +35,9 @@ def started(monkeypatch, tmp_path):
     monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
     monkeypatch.setattr(mb, "UPLOADS", tmp_path)
     calls = []
-    monkeypatch.setattr(mb.JOB, "start", lambda kind, cmd: calls.append((kind, cmd)))
-    monkeypatch.setattr(mb, "read_status", lambda month=None: {"month": "2026-03", "checks": {}})
+    monkeypatch.setattr(mb.JOB, "start", lambda kind, cmd, *a, **k: calls.append((kind, cmd)))
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status())
+    monkeypatch.setattr(mb, "replay_decisions", lambda month: {})
     monkeypatch.setattr(mb, "check_file", lambda path, kind, month: {"ok": True})
     return calls
 
@@ -51,6 +52,31 @@ def client():
 
 def _run_body(**kw):
     return {"month": "2026-03", "calendar_factor": "on", **kw}
+
+
+def _status(**over):
+    """What scripts/batch_status.py reports: a month with sales in, nothing left to decide, and nothing run yet."""
+    checks = {"sales_loaded": True, "count_loaded": True, "abc_run": False, "forecast_next": False, "lp_next": False, **over.pop("checks", {})}
+    return {"month": "2026-03", "next_month": "2026-04", "checks": checks, "cycle_state": "open", "synthetic_rows": 0,
+            "latest_sales_month": "2026-03", "decisions": {"cycle": "2026-03", "actionable_pending": 0, "open_requests": 0},
+            "preflight": [], "next_plan": {"rows": 0}, "plan": {"rows": 109}, "signoff": None, "replay": None, "close_missing": [], **over}
+
+
+def _checked_and_approved(monkeypatch):
+    """The waiting files have a finished, clean file check, and a person has approved them."""
+    monkeypatch.setattr(mb, "read_validation", lambda month: {
+        "hashes": mb.file_hashes(month), "file_check": {"completed": True, "events": [], "run_key": "key_1"}})
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(signoff={"signed": True, "by": "someone"}))
+
+
+@pytest.fixture(autouse=True)
+def quiet_side_effects(monkeypatch, tmp_path_factory):
+    """No test writes to the repo's local/ folder or tries to reach a database for an audit entry."""
+    monkeypatch.setattr(mb, "LOGS", tmp_path_factory.mktemp("logs"))
+    monkeypatch.setattr(mb, "VALIDATIONS", tmp_path_factory.mktemp("validation"))
+    entries = []
+    monkeypatch.setattr(mb, "audit_event", lambda action, details, user: entries.append((action, details, user.email)))
+    return entries
 
 
 # ---- local only ------------------------------------------------------------------------------------------------------
@@ -76,9 +102,10 @@ def test_no_write_route_runs_outside_the_throwaway_database(monkeypatch, client,
     monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
     monkeypatch.setenv("SUPABASE_DB_URL", url)
     started = []
-    monkeypatch.setattr(mb.JOB, "start", lambda kind, cmd: started.append(cmd))
+    monkeypatch.setattr(mb.JOB, "start", lambda kind, cmd, *a, **k: started.append(cmd))
     for path, body in (("/batch/run", _run_body()), ("/batch/close", _run_body(expect_plan_pieces=1)),
-                       ("/batch/practice-month", {"month": "2026-03"})):
+                       ("/batch/practice-month", {"month": "2026-03"}), ("/batch/validate", {"month": "2026-03"}),
+                       ("/batch/signoff", {"month": "2026-03"})):
         res = client.post(path, json=body)
         assert res.status_code == 409 and res.json()["code"] == "batch_local_only"
     assert started == []
@@ -138,12 +165,13 @@ def test_a_badly_formed_month_is_refused(started, client):
     assert started == []
 
 
-def test_uploaded_files_become_slices_and_files(started, client):
+def test_uploaded_files_become_slices_and_files(started, client, monkeypatch):
     client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
                 files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
     client.post("/batch/files", data={"month": "2026-03", "kind": "count"},
                 files={"file": ("count.xlsx", io.BytesIO(b"y"), "application/octet-stream")})
-    client.post("/batch/run", json=_run_body())
+    _checked_and_approved(monkeypatch)
+    assert client.post("/batch/run", json=_run_body()).status_code == 202
     _, cmd = started[0]
     assert cmd[1:3] == ["-m", "scripts.practice_signed_load"] and cmd[cmd.index("--pressed-by") + 1] == "planner@ssmcapstone.com"
     cut = cmd.index("--")
@@ -242,7 +270,7 @@ def test_a_job_records_its_output_and_exit_code(monkeypatch):
     job.start("plan", [sys.executable, "-c", "print('hello'); raise SystemExit(3)"])
     job.thread.join(30)
     state = job.state()
-    assert state["status"] == "failed" and state["exit_code"] == 3 and "hello" in state["log"]
+    assert state["status"] == "failed" and state["exit_code"] == 3 and "hello" in job.lines
 
 
 def test_a_step_refused_outside_the_local_database_ends_the_job(monkeypatch):
@@ -253,7 +281,7 @@ def test_a_step_refused_outside_the_local_database_ends_the_job(monkeypatch):
     job.start("plan", [sys.executable, "-c", "print('ran')"])
     job.thread.join(30)
     state = job.state()
-    assert state["status"] == "failed" and "ran" not in state["log"]
+    assert state["status"] == "failed" and "ran" not in job.lines
 
 
 # ---- resuming after a failure, and switching between a file and practice sales ---------------------------------------
@@ -261,13 +289,13 @@ def test_a_step_refused_outside_the_local_database_ends_the_job(monkeypatch):
 def test_a_rerun_after_the_abc_ran_does_not_load_the_file_again(started, client, monkeypatch):
     client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
                 files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
-    monkeypatch.setattr(mb, "read_status", lambda month=None: {"month": "2026-03", "checks": {"abc_run": True}})
-    client.post("/batch/run", json=_run_body())
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(checks={"abc_run": True}))
+    assert client.post("/batch/run", json=_run_body()).status_code == 202
     assert "--slice" not in started[0][1] and "--file" not in started[0][1]
 
 
 def test_a_new_file_is_refused_once_the_abc_has_run(started, client, monkeypatch):
-    monkeypatch.setattr(mb, "read_status", lambda month=None: {"month": "2026-03", "checks": {"abc_run": True}})
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(checks={"abc_run": True}))
     res = client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
                       files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
     assert res.status_code == 409 and res.json()["code"] == "batch_already_ran"
@@ -278,3 +306,305 @@ def test_practice_sales_replace_an_uploaded_sales_file(started, client, tmp_path
                 files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
     client.post("/batch/practice-month", json={"month": "2026-03"})
     assert list(tmp_path.rglob("*.xls")) == []
+
+
+# ---- the checklist ---------------------------------------------------------------------------------------------------
+
+def test_the_checklist_is_local_only_and_needs_the_permission(monkeypatch, client):
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LIVE)
+    res = client.get("/batch/checklist")
+    assert res.status_code == 409 and res.json()["code"] == "batch_local_only"
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
+    app.dependency_overrides[get_current_user] = lambda: _user(perms=("dashboard.view",))
+    assert client.get("/batch/checklist").status_code == 403
+
+
+def test_the_checklist_comes_from_what_the_scripts_report(started, client):
+    body = client.get("/batch/checklist?month=2026-03").json()
+    assert body["practice_note"] and body["processing_month"] == "2026-03" and body["can_run"] is True
+    assert [c["id"] for c in body["checks"]] == ["sales_available", "latest_month", "not_already_run", "decisions_settled", "files_valid",
+                                                 "file_approved", "no_other_job", "stock_count", "generated_sales"]
+
+
+def test_the_checklist_names_the_month_in_play_when_none_is_given(started, client):
+    assert client.get("/batch/checklist").json()["processing_month"] == "2026-03"
+
+
+def test_the_checklist_only_reads(started, client, monkeypatch):
+    def replay(month):
+        raise AssertionError("a GET must not write")
+    monkeypatch.setattr(mb, "replay_decisions", replay)
+    assert client.get("/batch/checklist").status_code == 200 and started == []
+
+
+def test_the_answers_say_what_they_are_for_the_artefact_check(started, client):
+    # The X-Practice-Copy header and the body's practice_copy block are the middleware's (tests/test_practice_artefacts.py); the route's own part is the note.
+    for path in ("/batch/status", "/batch/checklist", "/batch/job"):
+        res = client.get(path)
+        assert res.status_code == 200 and res.json().get("practice_note"), path
+
+
+def test_the_practice_marker_matches_the_one_the_scripts_use():
+    from scripts.report_target import PRACTICE_MARKER
+    assert mb.PRACTICE_MARKER == PRACTICE_MARKER
+
+
+# ---- validating ------------------------------------------------------------------------------------------------------
+
+def test_validating_with_no_file_replays_the_decisions_and_starts_no_job(started, client, monkeypatch, quiet_side_effects):
+    calls = []
+    monkeypatch.setattr(mb, "replay_decisions", lambda month: calls.append(month) or {"applied": 4, "reversed": 1})
+    res = client.post("/batch/validate", json={"month": "2026-03"})
+    assert res.status_code == 202 and res.json()["started"] is None and calls == ["2026-03"] and started == []
+    assert quiet_side_effects[-1][0] == "Monthly Batch Validation Passed" and "4 decision(s)" in quiet_side_effects[-1][1]
+    assert client.get("/batch/checklist").json()["validated"] is True
+
+
+def test_validating_a_file_runs_the_check_and_never_a_load(started, client):
+    client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
+                files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
+    res = client.post("/batch/validate", json={"month": "2026-03"})
+    assert res.json()["started"] == "validate"
+    kind, cmd = started[0]
+    assert kind == "validate" and "--check-files" in cmd and cmd[1:3] == ["-m", "scripts.run_month"]
+    assert "--approved-by" not in cmd and "--target-public" not in cmd and "--close" not in cmd
+    assert cmd[cmd.index("--slice") + 1] == "unilever:unilever_sku_demand_fact:2026-03"
+
+
+def test_validation_failing_is_audited_with_what_failed(started, client, monkeypatch, quiet_side_effects):
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(decisions={"actionable_pending": 2, "open_requests": 0}))
+    client.post("/batch/validate", json={"month": "2026-03"})
+    assert quiet_side_effects[-1][0] == "Monthly Batch Validation Failed" and "Reorder decisions settled" in quiet_side_effects[-1][1]
+
+
+def test_validating_while_a_job_runs_is_refused(started, client, monkeypatch):
+    monkeypatch.setattr(mb.JOB, "state", lambda: {"status": "running", "kind": "plan"})
+    res = client.post("/batch/validate", json={"month": "2026-03"})
+    assert res.status_code == 409 and res.json()["code"] == "batch_busy"
+
+
+# ---- the run asks everything again -----------------------------------------------------------------------------------
+
+def test_open_decisions_refuse_the_run_with_the_counts(started, client, monkeypatch, quiet_side_effects):
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(decisions={"actionable_pending": 3, "open_requests": 1}))
+    res = client.post("/batch/run", json=_run_body())
+    body = res.json()
+    assert res.status_code == 409 and body["code"] == "batch_checks_failed" and started == []
+    assert body["decisions"]["unresolved"] == 3 and body["decisions"]["staff_requests"] == 1
+    assert [c["id"] for c in body["checks"]] == ["decisions_settled"]
+    assert quiet_side_effects[-1][0] == "Monthly Batch Run Refused"
+
+
+def test_the_run_replays_the_decisions_before_it_asks(started, client, monkeypatch):
+    order = []
+    monkeypatch.setattr(mb, "replay_decisions", lambda month: order.append("replay") or {})
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: order.append("status") or _status())
+    assert client.post("/batch/run", json=_run_body()).status_code == 202
+    assert order[0] == "replay" and "status" in order
+
+
+def test_a_file_never_checked_refuses_the_run(started, client):
+    client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
+                files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
+    res = client.post("/batch/run", json=_run_body())
+    assert res.status_code == 409 and "Files valid" in res.json()["detail"] and started == []
+
+
+def test_a_file_changed_after_its_check_refuses_the_run(started, client, monkeypatch):
+    client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
+                files={"file": ("sales.xls", io.BytesIO(b"first"), "application/octet-stream")})
+    _checked_and_approved(monkeypatch)
+    checked = mb.read_validation("2026-03")
+    monkeypatch.setattr(mb, "read_validation", lambda month: checked)
+    client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
+                files={"file": ("sales.xls", io.BytesIO(b"second"), "application/octet-stream")})
+    res = client.post("/batch/run", json=_run_body())
+    assert res.status_code == 409 and "Files valid" in res.json()["detail"] and started == []
+
+
+def test_a_decision_undone_after_validation_refuses_the_run(started, client, monkeypatch):
+    client.post("/batch/validate", json={"month": "2026-03"})
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(decisions={"actionable_pending": 1, "open_requests": 0}))
+    assert client.post("/batch/run", json=_run_body()).status_code == 409 and started == []
+
+
+def test_a_finished_month_is_not_run_twice(started, client, monkeypatch):
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(checks={"abc_run": True, "forecast_next": True, "lp_next": True}))
+    res = client.post("/batch/run", json=_run_body())
+    assert res.status_code == 409 and "Monthly run not already completed" in res.json()["detail"] and started == []
+
+
+def test_a_run_that_stopped_after_writing_the_plan_can_finish(started, client, monkeypatch):
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(checks={"abc_run": True, "forecast_next": True, "lp_next": True}))
+    monkeypatch.setattr(mb.JOB, "state", lambda: {"id": "j", "status": "failed", "kind": "plan", "month": "2026-03", "failed_stage": "marts"})
+    assert client.post("/batch/run", json=_run_body()).status_code == 202
+
+
+def test_a_run_while_another_runs_is_refused(started, client, monkeypatch):
+    monkeypatch.setattr(mb.JOB, "state", lambda: {"status": "running", "kind": "validate"})
+    res = client.post("/batch/run", json=_run_body())
+    assert res.status_code == 409 and res.json()["code"] == "batch_busy" and started == []
+
+
+def test_uploading_while_a_job_runs_is_refused(started, client, monkeypatch):
+    monkeypatch.setattr(mb.JOB, "state", lambda: {"status": "running", "kind": "plan"})
+    res = client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
+                      files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
+    assert res.status_code == 409 and res.json()["code"] == "batch_busy"
+
+
+def test_a_run_and_a_close_are_audited_with_who_and_which_month(started, client, quiet_side_effects):
+    client.post("/batch/run", json=_run_body())
+    client.post("/batch/close", json=_run_body(expect_plan_pieces=5))
+    actions = [(a, who) for a, _, who in quiet_side_effects]
+    assert ("Monthly Batch Run Started", "planner@ssmcapstone.com") in actions and ("Monthly Batch Close Started", "planner@ssmcapstone.com") in actions
+    assert all("2026-03" in d for _, d, _ in quiet_side_effects)
+
+
+def test_a_finished_run_is_audited_once_with_its_run_id(monkeypatch, quiet_side_effects):
+    monkeypatch.setattr(mb, "read_status", lambda month=None, *a, **k: _status(next_plan={"rows": 121, "pieces": 10.0, "run_key": 9}))
+    job = mb.Job()
+    job.status, job.id = "done", "j1"
+    mb._finish_run_audit("2026-03", _user())(job)
+    assert [a for a, _, _ in quiet_side_effects] == ["Monthly Batch Run Completed"] and "LP run 9" in quiet_side_effects[0][1]
+
+
+def test_a_failed_run_is_audited_with_where_it_stopped(quiet_side_effects):
+    job = mb.Job()
+    job.status, job.id, job.exit_code = "failed", "j1", 2
+    job.lines.append("[forecast] exited 2: batch stopped. Fix it and run the same command again; finished steps are skipped.")
+    mb._finish_run_audit("2026-03", _user())(job)
+    assert quiet_side_effects[0][0] == "Monthly Batch Run Failed" and "stopped at forecast" in quiet_side_effects[0][1]
+
+
+# ---- approving a file -------------------------------------------------------------------------------------------------
+
+def _uploaded(client):
+    client.post("/batch/files", data={"month": "2026-03", "kind": "sales"},
+                files={"file": ("sales.xls", io.BytesIO(b"x"), "application/octet-stream")})
+
+
+def _sign_recorder(monkeypatch, returncode=0):
+    calls = []
+
+    class Done:
+        pass
+
+    def fake(cmd, **kw):
+        calls.append(cmd)
+        done = Done()
+        done.returncode = returncode
+        return done
+
+    monkeypatch.setattr(mb.subprocess, "run", fake)
+    return calls
+
+
+def test_a_checked_clean_file_is_approved_with_the_loaders_own_command(started, client, monkeypatch, quiet_side_effects):
+    _uploaded(client)
+    monkeypatch.setattr(mb, "read_validation", lambda month: {"hashes": mb.file_hashes(month), "file_check": {"completed": True, "events": [], "run_key": "key_1"}})
+    calls = _sign_recorder(monkeypatch)
+    res = client.post("/batch/signoff", json={"month": "2026-03"})
+    assert res.status_code == 200 and res.json()["by"] == "planner@ssmcapstone.com"
+    cmd = calls[0]
+    assert cmd[1:3] == ["-m", "analytics.etl.transform_signoff"] and cmd[cmd.index("--decision") + 1] == "approved"
+    assert cmd[cmd.index("--transform-dir") + 1] == "transform/slices/key_1" and cmd[cmd.index("--by") + 1] == "planner@ssmcapstone.com"
+    assert quiet_side_effects[-1][0] == "Monthly Batch File Approved"
+
+
+def test_approval_with_no_check_on_record_is_refused(started, client, monkeypatch):
+    _uploaded(client)
+    calls = _sign_recorder(monkeypatch)
+    res = client.post("/batch/signoff", json={"month": "2026-03"})
+    assert res.status_code == 409 and res.json()["code"] == "batch_not_validated" and calls == []
+
+
+def test_approval_of_a_changed_file_is_refused(started, client, monkeypatch):
+    _uploaded(client)
+    monkeypatch.setattr(mb, "read_validation", lambda month: {"hashes": {"sales": {"name": "sales.xls", "sha256": "other"}}, "file_check": {"completed": True, "events": [], "run_key": "k"}})
+    calls = _sign_recorder(monkeypatch)
+    res = client.post("/batch/signoff", json={"month": "2026-03"})
+    assert res.status_code == 409 and res.json()["code"] == "batch_validation_stale" and calls == []
+
+
+def test_approval_of_a_file_with_problems_is_refused(started, client, monkeypatch):
+    _uploaded(client)
+    monkeypatch.setattr(mb, "read_validation", lambda month: {"hashes": mb.file_hashes(month), "file_check": {"completed": True, "run_key": "k", "events": [{"status": "refused", "reason": "layout_changed"}]}})
+    calls = _sign_recorder(monkeypatch)
+    res = client.post("/batch/signoff", json={"month": "2026-03"})
+    assert res.status_code == 409 and res.json()["code"] == "batch_files_invalid" and calls == []
+
+
+def test_an_unsafe_run_key_never_reaches_the_command(started, client, monkeypatch):
+    _uploaded(client)
+    monkeypatch.setattr(mb, "read_validation", lambda month: {"hashes": mb.file_hashes(month), "file_check": {"completed": True, "events": [], "run_key": "../../evil"}})
+    calls = _sign_recorder(monkeypatch)
+    assert client.post("/batch/signoff", json={"month": "2026-03"}).status_code == 409 and calls == []
+
+
+def test_approval_that_cannot_be_recorded_says_so_without_internals(started, client, monkeypatch):
+    _uploaded(client)
+    monkeypatch.setattr(mb, "read_validation", lambda month: {"hashes": mb.file_hashes(month), "file_check": {"completed": True, "events": [], "run_key": "k"}})
+    _sign_recorder(monkeypatch, returncode=1)
+    res = client.post("/batch/signoff", json={"month": "2026-03"})
+    assert res.status_code == 502 and res.json()["code"] == "batch_signoff_failed" and "transform" not in res.json()["detail"]
+
+
+def test_approval_needs_the_permission(started, monkeypatch):
+    app.dependency_overrides[get_db] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: _user(perms=("dashboard.view",))
+    try:
+        for path in ("/batch/signoff", "/batch/validate"):
+            assert TestClient(app).post(path, json={"month": "2026-03"}).status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ---- the job's log and what the page sees of it -----------------------------------------------------------------------
+
+def test_the_whole_output_goes_to_a_file_and_the_page_gets_only_the_stages(monkeypatch):
+    import sys
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
+    script = ("print('[abc] running'); print('Traceback: secret at postgresql://u:pw@host/db'); "
+              "print('[abc] exited 2: batch stopped. Fix it and run the same command again; finished steps are skipped.'); raise SystemExit(2)")
+    job = mb.Job()
+    job.start("plan", [sys.executable, "-c", script], "2026-03")
+    job.thread.join(30)
+    state = job.state()
+    assert "log" not in state and "Traceback" not in str(state)
+    assert state["failed_stage"] == "abc" and state["steps"] == [{"stage": "abc", "label": "ABC classification", "state": "stopped"}]
+    saved = next(mb.LOGS.glob("*_plan.log")).read_text(encoding="utf-8")
+    assert "Traceback" in saved and "u:pw" not in saved and mb.PRACTICE_MARKER in saved[:200] and "exit code 2" in saved
+
+
+def test_the_end_of_a_job_is_reported_once(monkeypatch):
+    import sys
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
+    ended = []
+    job = mb.Job()
+    job.start("plan", [sys.executable, "-c", "print('x')"], "2026-03", ended.append)
+    job.thread.join(30)
+    assert ended == [job] and job.state()["status"] == "done"
+
+
+def test_a_failure_to_record_the_end_does_not_hide_how_the_job_ended(monkeypatch):
+    import sys
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
+
+    def broken(_job):
+        raise RuntimeError("no database")
+
+    job = mb.Job()
+    job.start("plan", [sys.executable, "-c", "print('x')"], "2026-03", broken)
+    job.thread.join(30)
+    assert job.state()["status"] == "done"
+
+
+def test_steps_carry_the_pages_database_for_the_decision_replay(monkeypatch):
+    monkeypatch.setenv("MONTHLY_BATCH_ENABLED", "true")
+    monkeypatch.setenv("SUPABASE_DB_URL", LOCAL)
+    assert mb.step_env()[mb.PAGES_URL_ENV] == LOCAL

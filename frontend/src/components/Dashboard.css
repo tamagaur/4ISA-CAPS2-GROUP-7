@@ -57,17 +57,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin: -1rem -2.5rem 0;
-  padding: 0.55rem 2.5rem;
-  background-color: var(--app-canvas-bar);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  transition: box-shadow 160ms ease-out;
-}
-
-/* Only once it is actually pinned: at rest it is part of the header. */
-.dash-toolbar.is-stuck {
-  box-shadow: 0 1px 0 var(--color-border), 0 8px 14px -10px rgba(15, 23, 42, 0.22);
+  margin: -1rem 0 0;
+  padding: 8px 10px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-card);
 }
 
 /* The chips give up space before the date picker does, scrolling sideways
@@ -99,13 +94,6 @@
   scroll-margin-top: calc(var(--topbar-h, 0px) + 4.75rem);
 }
 
-@media (max-width: 1280px) {
-  .dash-toolbar {
-    margin: -1rem -1.5rem 0;
-    padding: 0.55rem 1.5rem;
-  }
-}
-
 @media (max-width: 768px) {
   /* The filters are one compact row now (RangePicker), so the toolbar stays
      pinned on a phone too: the chips, then the range and the comparison. */
@@ -113,8 +101,7 @@
     flex-direction: column;
     align-items: stretch;
     gap: 0.5rem;
-    margin: -0.75rem -1rem 0;
-    padding: 0.5rem 1rem;
+    margin: -0.75rem 0 0;
   }
   /* The toolbar is two rows here (the chips, then the range: about 93px),
      so a jump leaves 8rem under the top bar. */
@@ -125,7 +112,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dash-toolbar,
   .dash-section-chip {
     transition: none;
   }
@@ -286,8 +272,9 @@
   gap: 1rem;
   padding: 4rem 2rem;
   background-color: var(--color-surface);
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
 }
 
 .dashboard-error-state p {
@@ -713,8 +700,9 @@
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--color-warning-border, #f0d38a);
   border-left-width: 3px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--color-warning-bg, #fdf6e3);
+  box-shadow: var(--shadow-nested);
   color: var(--color-text-strong, #3f3a2e);
   font-size: 0.9rem;
   line-height: 1.45;
@@ -860,8 +848,9 @@
   margin: 0 0 16px;
   padding: 10px 14px;
   border: 1px solid #F6E1B8;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: #FFF8EB;
+  box-shadow: var(--shadow-nested);
   font-size: 13px;
   line-height: 1.45;
   color: #7A4B0B;
@@ -870,15 +859,6 @@
 .dash-gap-note svg {
   flex: none;
   margin-top: 2px;
-}
-
-/* The analytical cards below the top row share its look (2026-10-10):
-   white, a very light border, large radius, almost no shadow. */
-.dashboard .dash-slot > .chart-widget,
-.dashboard .dash-split > .chart-widget {
-  border: 1px solid #E7EBF0;
-  border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 /* "What happened?": the Annual View bars beside the Sales vs Inventory
@@ -1159,9 +1139,9 @@
   margin-top: 18px;
   padding: 22px 28px;
   border: 1px solid rgba(232, 93, 74, 0.18);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   background: var(--color-brand-tint);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 18px -6px rgba(232, 93, 74, 0.14);
+  box-shadow: var(--shadow-card);
 }
 
 .welcome-text {
@@ -1299,23 +1279,18 @@
   }
 }
 
-/* Graph cards: raised off the page like the KPI cards (HeroKpis.css), a
-   little more on hover, with no movement. The accent line along the top
-   follows the larger corner. */
+/* Graph cards: the shared card, a little more on hover, with no movement. The
+   accent line along the top follows the card's corner. */
 .dashboard .chart-widget {
-  border-radius: 16px;
-  border: 1px solid #E7EBF0;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 14px rgba(16, 24, 40, 0.06);
   transition: box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .dashboard .chart-widget:hover {
-  border-color: #DDE2EA;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 22px rgba(16, 24, 40, 0.08);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .dash-slot > .chart-widget::before {
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

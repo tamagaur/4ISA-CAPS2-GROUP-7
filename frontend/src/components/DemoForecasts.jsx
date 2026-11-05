@@ -8,8 +8,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FlaskConical } from 'lucide-react';
 import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import { GRID_PROPS } from './ChartZoom';
+import { FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import { getDemoIndex } from '../api/demo';
 import { getDemoCategoryForecast } from '../api/forecast';
 import { COLORS, SEMANTIC } from '../theme/colors';
@@ -112,7 +114,7 @@ const OriginDot = ({ cx, cy, payload }) => {
 // Only the forecast month gets a dot; the dashed line leaves from the last month's own dot.
 const ForecastDot = ({ cx, cy, payload }) => (
   cx == null || cy == null || !payload?.isForecast ? null
-    : <circle key={`fc-${payload.period}`} cx={cx} cy={cy} r={4} fill={COLORS.forecast} stroke={COLORS.forecast} />
+    : <circle key={`fc-${payload.period}`} cx={cx} cy={cy} r={4.5} fill={COLORS.forecast} stroke="var(--color-surface, #fff)" strokeWidth={2} />
 );
 
 const DemoTooltip = ({ active, payload }) => {
@@ -139,6 +141,7 @@ const DemoTooltip = ({ active, payload }) => {
 // /forecast/{category}?principal=delmonte&category=) and its forecast. The
 // categories are the 2025 ones in GET /demo/index.
 export const DemoCategoryForecast = () => {
+  const shadeId = useLineShadeId();
   const [categories, setCategories] = useState(null);
   const [selected, setSelected] = useState(null);
   const [result, setResult] = useState(undefined);
@@ -237,8 +240,11 @@ export const DemoCategoryForecast = () => {
           )}
           <div className="demo-cat-chart">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rows} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
-                <CartesianGrid stroke="var(--color-border, #E4E7EC)" strokeDasharray="3 3" vertical={false} />
+              <ComposedChart data={rows} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
+                <defs>
+                  <LineShade id={shadeId} color={SEMANTIC.noData} />
+                </defs>
+                <CartesianGrid {...GRID_PROPS} />
                 <XAxis
                   dataKey="period"
                   ticks={ticks}
@@ -254,29 +260,28 @@ export const DemoCategoryForecast = () => {
                   axisLine={false}
                 />
                 <Tooltip content={<DemoTooltip />} />
+                <Area {...SHADE_ONLY} dataKey="quantity" fill={`url(#${shadeId})`} connectNulls={false} />
                 <Line
-                  type="monotone"
+                  {...SOLID_LINE}
                   dataKey="quantity"
                   name="History"
                   stroke={SEMANTIC.noData}
-                  strokeWidth={1.5}
                   dot={OriginDot}
-                  activeDot={{ r: 5 }}
+                  activeDot={lineHoverDot}
                   connectNulls={false}
                   isAnimationActive={false}
                 />
                 <Line
-                  type="monotone"
+                  {...FORECAST_LINE}
                   dataKey="ahead"
                   name="Forecast"
                   stroke={COLORS.forecast}
-                  strokeWidth={2}
-                  strokeDasharray="6 4"
                   dot={ForecastDot}
+                  activeDot={lineHoverDot}
                   connectNulls
                   isAnimationActive={false}
                 />
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
           <ul className="demo-cat-legend">

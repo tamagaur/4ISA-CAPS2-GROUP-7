@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import SectionLede from './ui/SectionLede';
 import {
+  Area,
   ComposedChart,
   Bar,
   Cell,
@@ -19,6 +20,7 @@ import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { CHART_COLORS } from '../theme/colors';
 import { GRID_PROPS } from './ChartZoom';
+import { LineShade, SHADE_ONLY, SOLID_LINE, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { LoadingStatus, SkeletonChart, SkeletonTable } from './Skeleton';
 import './AbcBreakdowns.css';
@@ -64,6 +66,7 @@ const ParetoTooltip = ({ active, payload, periodText, unit }) => {
 };
 
 export const ParetoCard = ({ principal, period }) => {
+  const shadeId = useLineShadeId();
   const [grain, setGrain] = useState(principal === 'delmonte' ? 'category' : 'brand');
   const [months, setMonths] = useState(1);
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
@@ -192,6 +195,9 @@ export const ParetoCard = ({ principal, period }) => {
               <div className="abcb-chart">
                 <ResponsiveContainer width="100%" height={260}>
                   <ComposedChart data={rows} margin={{ top: 8, right: 12, left: 8, bottom: 48 }}>
+                    <defs>
+                      <LineShade id={shadeId} color={CHART_COLORS.cumulativeCurve} />
+                    </defs>
                     <CartesianGrid {...GRID_PROPS} />
                     <XAxis
                       dataKey="name"
@@ -226,7 +232,9 @@ export const ParetoCard = ({ principal, period }) => {
                     <Bar dataKey="sharePct" name="Revenue share" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false}>
                       {rows.map((r) => <Cell key={r.name} fill={PARETO_BAR_COLOR[r.tier]} />)}
                     </Bar>
-                    <Line dataKey="cumPct" name="Cumulative share" stroke={CHART_COLORS.cumulativeCurve} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
+                    {/* The shade goes behind the bars, the line over them. */}
+                    <Area {...SHADE_ONLY} dataKey="cumPct" fill={`url(#${shadeId})`} />
+                    <Line {...SOLID_LINE} dataKey="cumPct" name="Cumulative share" stroke={CHART_COLORS.cumulativeCurve} dot={false} activeDot={lineHoverDot} isAnimationActive={false} />
                     {/* The month's Pareto moment: where the cumulative curve
                         clears the A cutoff — the dot the headline sentence
                         is pointing at. */}
@@ -234,7 +242,7 @@ export const ParetoCard = ({ principal, period }) => {
                       <ReferenceDot
                         x={crossing.name}
                         y={crossing.cumPct}
-                        r={5}
+                        r={4.5}
                         fill={CHART_COLORS.cumulativeCurve}
                         stroke="var(--color-surface, #fff)"
                         strokeWidth={2}

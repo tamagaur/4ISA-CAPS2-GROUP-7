@@ -138,3 +138,16 @@ def test_lp_files_are_labelled_on_the_practice_copy_only(monkeypatch):
     assert run_lp._practice_labelled(df)["practice_marker"].tolist() == [PRACTICE_MARKER]
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:p@db.example.supabase.co:5432/postgres")
     assert list(run_lp._practice_labelled(df).columns) == ["sku"]
+
+
+def test_settling_decisions_refuses_any_database_but_the_practice_copy(monkeypatch):
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://user:pw@aws-0.pooler.supabase.com:6543/postgres")
+    assert pa.settle_decisions() == 2
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://postgres@127.0.0.1:55432/ssm_local")
+    assert pa.settle_decisions() == 2
+
+
+def test_the_practice_run_settles_its_decisions_before_the_month():
+    """run_month refuses a month with open decisions, and this check goes through the same door."""
+    source = Path(pa.__file__).read_text(encoding="utf-8")
+    assert source.index('"--settle-decisions"],') < source.index('[py, "-m", "scripts.run_month", *month]')

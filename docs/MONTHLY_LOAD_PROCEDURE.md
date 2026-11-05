@@ -8,6 +8,16 @@
 
 **On live this moves things on purpose.** A real month moves the live marts and creates a new plan for the month after, so the 109 rows and 435,988 pieces stop being the current plan. Update STATE.md in the same commit. The 51 pinned figures read frozen rows and do not move.
 
+## Before anything: this month's reorder decisions
+
+**`scripts.run_month` and the Data Management panel refuse to run while this month's plan has an order nobody has decided, or a staff request an admin has not settled** (2026-11-04, provisional, for Yuan's review: [MONTHLY_BATCH_REVIEW.md](MONTHLY_BATCH_REVIEW.md)). Once the next plan exists those rows can no longer be decided, and accepted orders count as stock on the way in it. Rows ordering nothing and pending rows of older plans do not count. There is no override.
+
+**The steps below run by hand are not gated.** `scripts/run_lp.py` does not make this check. Before step 9, see where the month stands, read-only:
+
+```bash
+python -m scripts.batch_status
+```
+
 ## Steps
 
 ### 0. Migrations must be clear
@@ -149,7 +159,9 @@ The old step also no longer worked. As written it exited 1 and wrote nothing, be
 |---|---|---|
 | Closing the month, after a person has read the plan | `python -m scripts.close_cycle --cycle YYYY-MM --approved-by NAME --expect-cycle YYYY-MM --target-public` | Rehearsed on the practice copy only. No live cycle has been closed |
 | Feedback report | `python -m scripts.cycle_feedback --cycle YYYY-MM` | Read-only. Withholds the forecast error when generated rows are in what it scores |
-| Load, ABC, forecast and plan as one command (Unilever slices only) | `python -m scripts.run_month --month YYYY-MM --calendar-factor on ...` (usage in that file) | Leaves out steps 2, 3, 4, 8 and 10. A real file still stops at the sign-off in step 4. Its load has never run as a write on real new data |
+| Load, ABC, forecast and plan as one command (Unilever slices only) | `python -m scripts.run_month --month YYYY-MM --calendar-factor on ...` (usage in that file) | Refuses while this month's decisions are open. Leaves out steps 2, 3, 4, 8 and 10. A real file still stops at the sign-off in step 4. Its load has never run as a write on real new data |
+| Check files without loading them (step 3 through the same command) | `python -m scripts.run_month --month YYYY-MM --calendar-factor on --check-files --slice ... --file ...` | The loader's own dry run. Writes only `etl_load_event` rows marked `dry_run` and working files in git-ignored folders. On live it also needs `--target-public`. Not yet run against a database |
+| Decisions onto the practice copy (local setup only) | `python -m scripts.replay_practice_decisions --cycle YYYY-MM --write --json` | Replays through `decide_row`. The panel's Validate and Run do this. It refuses anything but two databases on the throwaway server. Not yet run against a database |
 
 ## Rehearsing on a scratch copy
 

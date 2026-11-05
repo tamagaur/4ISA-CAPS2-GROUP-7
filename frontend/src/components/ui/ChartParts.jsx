@@ -30,8 +30,7 @@ export const CalloutNote = ({ children }) => <p className="chart-tooltip-placeho
 // A vertical fade in one colour, for a chart's <defs>: `from` opaque at the
 // top to `to` at the bottom; `flip` turns it over, for a bar below zero
 // (solid at its tip, fading up to the zero line). Every bar on the
-// dashboard wears one, down to BAR_FADE_FLOOR; the shade under a line is
-// another, fading out at the axis floor.
+// dashboard wears one, down to BAR_FADE_FLOOR.
 export const BAR_FADE_FLOOR = 0.4;
 
 export const Fade = ({ id, color, from = 1, to = 0, flip = false }) => (
@@ -41,10 +40,5 @@ export const Fade = ({ id, color, from = 1, to = 0, flip = false }) => (
   </linearGradient>
 );
 
-// A line's end: its last point, ringed in the surface colour, where its
-// latest value is read (the hover). For a Line's or an Area's `dot` prop.
-export const endDot = (color, lastIndex) => ({ cx, cy, index }) => (
-  index === lastIndex && cx != null && cy != null
-    ? <circle key={`end-${index}`} cx={cx} cy={cy} r={4.5} fill={color} stroke="var(--color-surface, #fff)" strokeWidth={2} />
-    : null
-);
+// How a line looks is one design of its own: ui/lineDesign.jsx.
+export { endDot } from './lineDesign';

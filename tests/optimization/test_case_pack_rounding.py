@@ -125,6 +125,7 @@ def test_plan_cycle_keeps_both_quantities_and_does_not_touch_need():
     assert on.orders["SKU2"] == off.orders["SKU2"] and on.orders["SKU3"] == off.orders["SKU3"]
     assert all(v >= -1e-9 for v in on.slacks_after_pack_rounding.values())
     assert on.slacks_before_pack_rounding.keys() == on.slacks_after_pack_rounding.keys()
+    assert on.summary()["allocation_binds"]["unilever"] is False
 
 
 def test_plan_cycle_rounds_inside_a_binding_allocation():
@@ -134,3 +135,5 @@ def test_plan_cycle_rounds_inside_a_binding_allocation():
     assert sum(plan.orders_before_pack_rounding.values()) == pytest.approx(ceiling, rel=1e-6)   # the LP used it all
     assert sum(plan.orders.values()) <= ceiling + 1e-6
     assert all(o % 24.0 == 0.0 for o in plan.orders.values())
+    assert sum(plan.orders.values()) < ceiling - 0.5                    # rounding leaves it a few pieces under...
+    assert plan.summary()["allocation_binds"]["unilever"] is True       # ...and the ceiling is still what cut the orders

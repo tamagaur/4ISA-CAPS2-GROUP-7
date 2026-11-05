@@ -2,7 +2,7 @@
 
 **What this shows:** the real monthly steps running on labelled generated sales, on a copy on this laptop, and the Dashboard and Reorder pages following them. **What to say about it:** the April plan it produces is practice, not a result. It does not show the deployed service, which has not been redeployed, and it does not show a real new monthly file running, because none has ever existed.
 
-Walked through in Chrome on 2026-11-04, from the branch `kelvin/practice-pages`, on this laptop. It has not been walked on any other machine. Takes about 5 minutes from the first command to a closed month.
+Walked through in a browser on 2026-11-03, from `Main-BE`, with the commands below typed into PowerShell, and it took about 5 minutes then. **Sections 4 and 5 changed on 2026-11-04 and have not been walked through since**: the plan's decisions now come first, so expect it to take longer.
 
 **Before you start:**
 
@@ -59,17 +59,31 @@ You land on **Data management**, signed in without a password as the first admin
 
 Open the **Reorder** page in a second tab now if you want the before and after. It shows the Mar 2026 plan: "0 accepted, 0 dismissed, 109 not decided" and 435,988 pieces. The Dashboard shows Mar 2025 to Feb 2026.
 
-## 4. The four steps
+## 4. Settle the March plan first
 
-Do not reload the panel after step 4 until you have finished talking about the plan (see "After the close").
+**Changed 2026-11-04, and not yet walked through in a browser.** `scripts.run_month` now refuses to run while this month's plan has an order nobody has decided, so the demo goes through the real approval. Details and limits: [MONTHLY_BATCH_REVIEW.md](MONTHLY_BATCH_REVIEW.md).
+
+| Do this | Screen shows |
+|---|---|
+| Open **Reorder Recommendations** in the sidebar | The March 2026 plan |
+| Use **Accept all** on the rows it offers | Those rows are accepted |
+| Decide each remaining ordering row on its own, accepting or dismissing it | Flagged rows ask for their own confirmation, so Accept all leaves them out |
+| Settle any staff request on the **Requests** tab | Nothing left awaiting an admin |
+
+On live on 2026-11-04 the plan had 73 rows ordering something, 19 of them flagged, and the 36 rows ordering nothing have no buttons and do not count. Those are a baseline, not constants: the page reads the current rows. These decisions are written to `ssm_local`, the pages' database, and stay there until the next `--reset`. Not yet timed.
+
+## 5. The five steps
+
+Back on **Data Management**.
 
 | Do this | Screen shows | Wait |
 |---|---|---|
-| **Step 1:** click **No file? Generate practice sales** | Step 1 changes to "2026-03 sales are in the database." The blue note gains: **"709 sales rows this month are generated practice data, so nothing here is a real result."** The two file slots disappear | 3 s |
-| **Step 2:** choose **On (as the live forecast)**. **Run 2026-03** stays disabled until you choose | The button becomes clickable | |
-| Click **Run 2026-03** | "Running, this takes a few minutes" and a live log (see below). A reload here is safe: it comes back still running | 2 to 3.5 min |
-| **Step 3:** read the table | See below. The blue note still carries the 709 label | |
-| **Step 4:** tick **I have read the plan above (1,213,168 pieces)**. **Close 2026-03** stays disabled until you tick | The button becomes clickable | |
+| **Step 1:** click **Generate practice sales** | Step 1 changes to "2026-03 sales are in the database." The blue note gains: **"709 sales rows this month are generated practice data, so nothing here is a real result."** | About 10 s |
+| **Step 2:** click **Run Validation** | The Reorder page's decisions are carried onto the practice copy through `decide_row`. The checklist reads **All required checks passed**, with a warning for the generated sales. If orders are still undecided, the **Pending Reorder Decisions** dialog opens and **Review Recommendations** takes you back to section 4 | A few seconds |
+| **Step 3:** choose **On (as the live forecast)**. **Run the Month** stays disabled until you choose | The button becomes clickable | |
+| Click **Run the Month**, then **Confirm and Run** | **Processing 2026-03** and the stages it has reached. A reload here is safe: it comes back still running | 2 to 3.5 min when last timed, with nothing decided |
+| **Step 4:** read **Monthly Processing Complete** and the table | See below. The blue note still carries the 709 label | |
+| **Step 5:** tick **I have read the plan above**. **Close 2026-03** stays disabled until you tick | The button becomes clickable | |
 | Click **Close 2026-03** | "2026-03 is closed." | 3 s |
 
 **The log during the Run.** Normal lines, none of them a failure:
@@ -88,23 +102,20 @@ A failure reads differently: the panel changes to **"The last step stopped (exit
 
 | Plan | Products | Ordering | Pieces | Note |
 |---|---|---|---|---|
-| 2026-03 | 109 | 73 | 435,988 | Last month's plan, not closed yet |
-| 2026-04 | 121 | 110 | 1,213,168 | On the Reorder page now, not closed. 2.78x the 2026-03 plan |
+| 2026-03 | 109 | 73 | 435,988 | Current |
+| 2026-04 | **not yet measured** | | | |
 
-Below it: "stock count 2026-03 (taken 2026-04-06): 1,685,621 pieces, 0.70x the median of the 6 before it". A moment later: "forecast error withheld: 709 generated or uploaded practice sales rows are in this cycle..." and "0 accepted, 0 dismissed, 109 not decided. 0 quantity changes (+0 pieces)."
+**The April row will change, and that is correct.** It read 121, 110 and 1,213,168 pieces when nothing was decided. Accepted orders now count as stock on the way (`stock_opening_v`: a receipt due after the count date), so expect a different figure, probably a smaller one. Do not force the old total. Write the measured figure here after the first walkthrough. On this copy the decisions are dated today, months after the 2026-04-06 count, so every accepted order counts as still on the way, which a real month's timing would not do.
 
-The panel is closing March while the Reorder page already shows April's plan: the page moves at Run, the panel's month at Close. Both screens now say so, and the Reorder page's line ends "This plan (2026-04) is run, not closed. 2026-03 is run, not closed."
+Below it: "stock count 2026-03 (taken 2026-04-06): 1,685,621 pieces, 0.70x the median of the 6 before it"; "forecast error withheld: 709 generated sales rows are in this cycle..."; the decisions you made, with the rows that order nothing shown as not decided.
 
-1,213,168 is a practice number, never quote it as a plan. Every page withholds the forecast error on purpose: see the next section.
+The 2026-03 row is the only place the panel shows 109 and 435,988, and it appears only from this step on. The withheld error is deliberate: no accuracy figure is shown on generated sales. The April figure is a practice number, never quote it as a plan.
 
 ## After the close
 
-- **The pages have moved, and have said so all along.** Reorder shows the Apr 2026 plan: 121 products, 1,213,168 pieces, "0 accepted, 0 dismissed, 121 not decided". Dashboard shows Apr 2025 to Mar 2026, latest month Mar 2026 ₱27.5M. They move at **Run**, when the April plan is written.
-- **The Close changes neither page.** Their text and `GET /recommendations` are the same before and after it, and nothing on the Reorder page says whether a plan has been run or closed. Do not point at the page to show the close: point at the panel's "2026-03 is closed."
-- **The forecast error is withheld.** The Dashboard's "How close the forecasts were" card, the product's reliability and past misses, and the likely range say "Forecast error withheld..." instead of a number, because March is generated (hard rule 2). A date range ending Feb 2026 still shows the real 10% and 35%. The same happens after a sales file is uploaded, with its own reason: nothing on the copy can tell a real file from a made-up one.
-- **Every answer labels itself.** Besides the yellow note, each answer's body says it is practice: a `practice_copy` block with `"not_a_result": true` and `"generated_months": ["2026-03"]`. Anything dated March carries `"generated_sales_month": true`, its `data_kind` reads `generated_practice`, and anything dated later carries `"rests_on_generated_sales": true`. To see it: F12, **Network**, click a request, **Response**.
-- **A reload moves the panel on.** It then reads "Monthly batch for 2026-04" with empty steps, and the plan table and the 709 label are gone from the screen. Nothing is lost.
-- **To show that the rows stay labelled** (should print `709|709`):
+- **The Reorder page still shows March 2026**, with the decisions you made in section 4, because the pages do not read the practice copy. A decision travels one way, from the page to the copy.
+- **A reload moves the panel on.** Its processing month then reads 2026-04 with empty steps, and the plan table and the 709 label are gone from the screen. Nothing is lost.
+- **To show that the rows stay labelled** (should print `709 | 709`):
 
 ```powershell
 & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h 127.0.0.1 -p 55432 -U postgres -d ssm_practice -At -c "select count(*), count(*) filter (where is_demo and _src_file='qa_synthetic_march') from unilever_sku_demand_fact where calendar_month::text like '2026-03%'"
@@ -141,8 +152,8 @@ $found = Get-NetTCPConnection -LocalPort 8000,5173 -State Listen -ErrorAction Si
 if ($found) { $found | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }; "Stopped the running app." } else { "Nothing is running on 8000 or 5173." }
 ```
 
-**3. A step says "The last step stopped (exit N)", or you need to start again.**
-Open the log under the panel and read its last lines: the reason is there. Clicking Run again skips the finished steps. To go back to the start, including after a close, stop the app (item 2), repeat section 1 with `--reset` and then sections 2 and 3. It takes about a minute, it also clears any uploaded files, and it can only touch the throwaway server. If you hit this in front of the panel and do not have 5 minutes, say what stopped and move on: do not improvise a command.
+**3. The panel says "Monthly Processing Failed", or you need to start again.**
+It names the stage that stopped and what to do. The whole output is in `local/monthly_batch/logs`, in the file named by the job number under **Review available details**. Running again skips the finished steps. To go back to the start, including after a close, repeat section 1 with `--reset` and then sections 2, 3 and 4: the reset also undoes the decisions. It takes about 45 s, and it can only touch the throwaway server. If you hit this in front of the panel and do not have 5 minutes, say what stopped and move on: do not improvise a command.
 
 ## When you finish
 

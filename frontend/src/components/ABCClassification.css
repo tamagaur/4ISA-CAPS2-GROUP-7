@@ -250,10 +250,11 @@
 }
 
 .abc-page-grain-note {
-  margin: -0.5rem 0 0 0;
+  margin: 0;
   padding: 0.6rem 0.9rem;
   background-color: var(--color-surface-raised);
-  border-radius: 8px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   font-size: 0.82rem;
   color: var(--color-text-muted);
   line-height: 1.4;
@@ -1071,10 +1072,22 @@
 }
 /* Joined / left Class A on the range view (RangeCards ClassChanges + the
    class each product came from or went to). */
-.abc-range-changes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* The section card is the frame here: the dashboard's card inside it gives up its own. */
+.abc-range-changes .chart-widget {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.abc-range-changes .data-table-card {
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+}
+
+.ui-card .pareto-curve {
+  margin: 0;
 }
 
 /* A drill-down count that opens the Reorder page on its urgency (2026-10-22). */

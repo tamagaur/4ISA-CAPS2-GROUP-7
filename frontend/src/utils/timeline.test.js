@@ -1,7 +1,14 @@
 // node --test (npm test).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { labelledMonths, monthsBetween, showsYear, timelineMonths, yearEarlier } from './timeline.js';
+import { labelledMonths, monthsBetween, monthsEarlier, showsYear, timelineMonths, yearEarlier } from './timeline.js';
+
+test('months earlier, across a year end', () => {
+  assert.equal(monthsEarlier('2026-02', 6), '2025-08');
+  assert.equal(monthsEarlier('2026-02', 12), '2025-02');
+  assert.equal(monthsEarlier('2026-02', 24), '2024-02');
+  assert.equal(monthsEarlier(null, 12), null);
+});
 
 test('months between two months, across a year end', () => {
   assert.deepEqual(monthsBetween('2025-11', '2026-02'), ['2025-11', '2025-12', '2026-01', '2026-02']);

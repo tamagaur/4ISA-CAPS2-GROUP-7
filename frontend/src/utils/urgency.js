@@ -15,6 +15,10 @@ export function getUrgencyBadge(urgency) {
   }
 }
 
+// The same urgency as a word, for a badge that isn't all capitals.
+const URGENCY_WORD = { CRITICAL: 'Critical', URGENT: 'Urgent', PLANNED: 'Planned', 'NO DATA': 'No data' };
+export const urgencyWord = (urgency) => URGENCY_WORD[urgency] ?? urgency;
+
 // What each urgency means and what to do, for the pill's hover.
 export const URGENCY_HOVER = {
   CRITICAL: 'Below safety stock: order now',

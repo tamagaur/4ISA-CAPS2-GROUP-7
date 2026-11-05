@@ -23,41 +23,72 @@
   white-space: nowrap;
 }
 
-/* ── Desktop: a docked sidebar, flush to the window's edge ─────────────
-   Full height and full width, a column of the layout that pushes the
-   page; the topbar's menu button slides it away and back, as it did
-   before 2026-10-01. The floating icon rail that stretched open on hover
-   was taken out on 2026-10-11 (Audrey: not a floating bar for now); it is
-   in git at 419506b if it comes back. The spacing further down (icons at
-   27px, the 20px bottom padding) was set for that rail and is unchanged. */
+/* ── Desktop: a docked sidebar that folds to an icon rail ──────────────
+   Open is a 264px column of the layout, flush to the window's edge, and it
+   pushes the page. The topbar's menu button folds it to a 72px navy rail of
+   icons (Audrey, 2026-11-03; it used to slide away completely), still flush
+   to the edge: this is not the floating bar taken out on 2026-10-11, which
+   is in git at 419506b. Hovering the rail or tabbing into it opens the whole
+   menu OVER the page, so the page and its charts never move or redraw for a
+   hover; leaving folds it back.
+
+   Everything the fold changes hangs off one switch, --rail (1 folded, 0 or
+   unset otherwise), read by the rules further down. Labels and the footer
+   keep the open pane's width all the time and the pane clips them, so no
+   line re-wraps while it moves: only the width and the labels' opacity
+   animate, and no icon jumps. */
 .sidebar-shell {
   flex-shrink: 0;
 }
 
-/* Closed means slid away, at every width. Hidden once it has gone, so the
-   Tab key doesn't land on links that are off-screen. */
-.sidebar.is-closed {
-  transform: translateX(-100%);
-  visibility: hidden;
-  transition: transform 0.3s ease, visibility 0s linear 0.3s;
-}
-
 /* How it moves on desktop: the column's width changes once, at the start,
-   and the slide itself is only a transform on the sidebar and on the page
-   beside it. Sliding by margin (until 2026-10-11) changed the page's width
-   on every frame, so every chart was measured and redrawn some 18 times
-   per open or close, and the slide stuttered. The page's slide only runs
-   after the menu button has been used (sidebar-animated, set in
+   and the page's slide is only a transform. Sliding by margin (until
+   2026-10-11) changed the page's width on every frame, so every chart was
+   measured and redrawn some 18 times per open or close, and the slide
+   stuttered. The pane is out of the column's flow, so its own width can
+   animate without touching the page's. The page's slide only runs after
+   the menu button has been used (sidebar-animated, set in
    DashboardLayout.jsx), never on first load. */
 @media (min-width: 901px) {
   .sidebar-shell {
     position: relative;
-    z-index: 20; /* its shadow stays over the page while both slide */
+    z-index: 20; /* over the topbar (10): the pane opens over it on hover */
     width: 264px;
   }
 
   .sidebar-shell.is-closed {
-    width: 0;
+    width: 72px;
+  }
+
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: width 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .sidebar.is-closed {
+    --rail: 1;
+    width: 72px;
+  }
+
+  /* :focus-visible, not :focus-within: a mouse click leaves focus on the
+     link, and the pane would then stay open after the pointer has left. */
+  .sidebar.is-closed:has(:focus-visible) {
+    --rail: 0;
+    width: var(--sidebar-width);
+    box-shadow: 8px 0 28px rgba(15, 23, 42, 0.28);
+  }
+
+  /* The open pane's measures, 263px inside its 1px border: 24px of margin,
+     24px of padding, an 18px icon and a 12px gap leave a label 185px. */
+  .nav-item-text {
+    flex: none;
+    width: 185px;
+  }
+
+  .sidebar-bottom {
+    width: 263px;
   }
 
   .dashboard-layout.sidebar-animated .main-content {
@@ -69,17 +100,51 @@
   }
 }
 
+/* Hover only where there is a real pointer: on a touch screen a tap would
+   open it and navigate at once, with no way to "leave". There the menu
+   button still opens the full pane. A short delay keeps a pointer that is
+   only passing by from flashing it open. */
+@media (min-width: 901px) and (hover: hover) {
+  .sidebar.is-closed:hover {
+    --rail: 0;
+    width: var(--sidebar-width);
+    box-shadow: 8px 0 28px rgba(15, 23, 42, 0.28);
+    transition-delay: 0.08s;
+  }
+}
+
+/* The difference between the open and the folded column: 264 - 72. */
 @keyframes main-slide-from-left {
-  from { transform: translateX(-264px); }
+  from { transform: translateX(-192px); }
 }
 
 @keyframes main-slide-from-right {
-  from { transform: translateX(264px); }
+  from { transform: translateX(192px); }
+}
+
+/* What the fold hides, faded rather than removed, so a screen reader still
+   reads every label. Out quickly as the rail folds, back in once it has
+   started to open. */
+.modules-title,
+.nav-item-text,
+.profile-info,
+.profile-security-text,
+.status-text,
+.logout-text {
+  opacity: calc(1 - var(--rail, 0));
+  transition: opacity 0.15s ease calc((1 - var(--rail, 0)) * 0.12s);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
-  .sidebar-profile-top {
+  .sidebar-profile-top,
+  .nav-icon,
+  .modules-title,
+  .nav-item-text,
+  .profile-info,
+  .profile-security-text,
+  .status-text,
+  .logout-text {
     transition: none !important;
   }
 
@@ -110,6 +175,14 @@
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
   }
 
+  /* Closed means slid away here. Hidden once it has gone, so the Tab key
+     doesn't land on links that are off-screen. */
+  .sidebar.is-closed {
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.3s ease, visibility 0s linear 0.3s;
+  }
+
   .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -128,8 +201,10 @@
 /* Holds the real logo image now (logo-navbar.png) instead of an "S"
    avatar + text lockup. */
 .sidebar-profile-top {
-  width: 202px;
-  margin: 0 0 1.75rem 24px;
+  /* On the rail only the swoosh shows, 44px wide and centred; the full
+     "SAN2" is revealed, not scaled, as the pane opens. */
+  width: calc(202px - var(--rail, 0) * 158px);
+  margin: 0 0 1.75rem calc(24px - var(--rail, 0) * 10px);
   overflow: hidden;
   flex-shrink: 0;
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1);
@@ -251,6 +326,9 @@
     padding: 0.75rem 0;
   }
   .sidebar-profile-top {
+    /* The 148px logo's swoosh is 32px wide. */
+    width: calc(202px - var(--rail, 0) * 170px);
+    margin-left: calc(24px - var(--rail, 0) * 4px);
     margin-bottom: 0.75rem;
   }
   .sidebar-logo {
@@ -292,7 +370,8 @@
 
 /* Every item is the same rounded row, inset 12px, so hover and active
    share one shape (hover used to run edge to edge while active was inset).
-   12px margin + 15px padding = the 27px every icon starts at in the rail. */
+   12px margin + 12px padding: the icon starts at 24px, under the group
+   labels. On the rail .nav-icon moves 3px, onto the 36px centre line. */
 .nav-item {
   display: flex;
   align-items: center;
@@ -341,7 +420,8 @@
 .nav-item-text {
   /* One line at the normal text size; a label too long for the pane (a
      larger browser font) wraps onto a second line instead of being cut
-     off. The stretching icon rail that needed nowrap is gone (2026-10-11). */
+     off. Above 900px its width is fixed, so it wraps the same on the rail
+     and while the pane opens. */
   white-space: normal;
   overflow-wrap: anywhere;
   min-width: 0;
@@ -449,11 +529,22 @@
 .profile-security.is-pending {
   align-self: flex-start;
   padding: 3px 8px 3px 6px;
-  border: 1px solid rgba(244, 178, 102, 0.4);
+  /* On the rail only the triangle shows: the pill itself would be cut off
+     at the rail's edge. */
+  border: 1px solid rgba(244, 178, 102, calc(0.4 * (1 - var(--rail, 0))));
   border-radius: 999px;
-  background: rgba(244, 178, 102, 0.14);
+  background: rgba(244, 178, 102, calc(0.14 * (1 - var(--rail, 0))));
   color: #F4B266;
   font-weight: 600;
+}
+
+/* The state's icon on the rail's 36px centre line. */
+.profile-security.is-pending svg {
+  transform: translateX(calc(var(--rail, 0) * -1px));
+}
+
+.profile-security.is-protected svg {
+  transform: translateX(calc(var(--rail, 0) * 6px));
 }
 
 .profile-security.is-pending:hover,
@@ -579,6 +670,11 @@
 .nav-icon,
 .avatar {
   flex-shrink: 0;
+}
+
+.nav-icon {
+  transform: translateX(calc(var(--rail, 0) * 3px));
+  transition: transform 0.3s ease;
 }
 
 .logout-btn:hover .logout-icon {

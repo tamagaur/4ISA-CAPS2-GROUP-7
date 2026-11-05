@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import SectionLede from './ui/SectionLede';
-import { Upload, FileText, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, AlertTriangle, Database } from 'lucide-react';
 import PageHeader from './ui/PageHeader';
 import MonthlyBatchPanel from './MonthlyBatchPanel';
 import { getBatchAvailable } from '../api/monthlyBatch';
@@ -87,6 +87,8 @@ const DataUpload = () => {
     <div className="du-page">
       <div className="du-content">
         <PageHeader
+          className="du-header"
+          icon={<Database size={24} />}
           title="Data"
           accent="management"
           subtitle="The sales and stock files the system runs on. Excel (.xlsx, .xls) and CSV (.csv)."
@@ -106,39 +108,35 @@ const DataUpload = () => {
           </span>
         </p>}
 
-        {/* Accepted Formats */}
-        <div className="du-formats-section">
-          <span className="du-section-label">Accepted Formats</span>
-          <div className="du-badges-row">
-            <span className="du-badge">.xlsx</span>
-            <span className="du-badge">.xls</span>
-            <span className="du-badge">.csv</span>
-          </div>
-        </div>
+        {/* Where the data comes from. Information only: nothing in here can be
+            clicked, so nothing in here reacts to the mouse. The accepted formats
+            are said where a file is chosen: the batch's upload slots, the dropzone. */}
+        <section className="du-support" aria-label="Where the data comes from">
+          <div className="du-support-sources">
+            <h3 className="du-support-title"><Database size={18} aria-hidden="true" /> Where the data comes from</h3>
+            <div className="du-cards-grid">
+              <div className="du-file-card">
+                <div className="du-card-header">
+                  <span className="du-blue-dot"></span>
+                  <span className="du-card-label">File 01</span>
+                </div>
+                <h4 className="du-card-title">Sales Data</h4>
+                <p className="du-card-desc">Daily or monthly transactions</p>
+                <span className="badge badge-neutral">Loaded through the ETL scripts</span>
+              </div>
 
-        {/* Target Files Cards */}
-        <SectionLede className="is-standalone">Where the data comes from</SectionLede>
-        <div className="du-cards-grid">
-          <div className="du-file-card">
-            <div className="du-card-header">
-              <span className="du-blue-dot"></span>
-              <span className="du-card-label">File 01</span>
+              <div className="du-file-card">
+                <div className="du-card-header">
+                  <span className="du-blue-dot"></span>
+                  <span className="du-card-label">File 02</span>
+                </div>
+                <h4 className="du-card-title">Inventory Log</h4>
+                <p className="du-card-desc">Stock-in and stock-out records</p>
+                <span className="badge badge-neutral">Loaded through the ETL scripts</span>
+              </div>
             </div>
-            <h3 className="du-card-title">Sales Data</h3>
-            <p className="du-card-desc">Daily or monthly transactions</p>
-            <span className="badge badge-neutral">Loaded through the ETL scripts</span>
           </div>
-
-          <div className="du-file-card">
-            <div className="du-card-header">
-              <span className="du-blue-dot"></span>
-              <span className="du-card-label">File 02</span>
-            </div>
-            <h3 className="du-card-title">Inventory Log</h3>
-            <p className="du-card-desc">Stock-in and stock-out records</p>
-            <span className="badge badge-neutral">Loaded through the ETL scripts</span>
-          </div>
-        </div>
+        </section>
 
         {/* File Dropzone Area */}
         {!batch && <div 

@@ -11,6 +11,152 @@
   gap: var(--card-gap);
 }
 
+.reorder-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  min-width: 0;
+}
+
+/* The plan's provisional notice: the Dashboard's stale-plan note, in the panel's own spacing. */
+.reorder-tabpanel .reorder-provisional-note {
+  margin: 0;
+}
+
+/* The page header: an icon tile, the title and one line, and the planning
+   panel at the right. Colours and type are this page's own. */
+.reorder-head {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 16px;
+  margin-bottom: 4px;
+  padding-top: 8px;
+}
+
+.reorder-head .page-header-text {
+  flex: 1 1 340px;
+}
+
+.reorder-head .page-header-title {
+  font-size: 1.65rem;
+  letter-spacing: -0.015em;
+}
+
+.reorder-head .page-header-subtitle {
+  margin-top: 4px;
+  font-size: 0.95rem;
+}
+
+.reorder-head .page-header-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(232, 92, 74, 0.28);
+  border-radius: 12px;
+  background: rgba(232, 92, 74, 0.08);
+  color: var(--color-brand-primary);
+}
+
+/* Planning Cycle | Plan Run | Last Update. The cycle's own <select> lies over
+   its cell, so a click or the keyboard opens the browser's native list. */
+.reorder-planinfo {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.reorder-planinfo-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  color: var(--color-text-muted);
+}
+
+.reorder-planinfo-item + .reorder-planinfo-item {
+  border-left: 1px solid var(--color-border);
+}
+
+.reorder-planinfo dt {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+}
+
+.reorder-planinfo dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 1px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reorder-planinfo-cycle {
+  border-radius: var(--radius-card) 0 0 var(--radius-card);
+}
+.reorder-planinfo-cycle.has-choice {
+  cursor: pointer;
+}
+
+.reorder-planinfo-cycle.has-choice:hover {
+  background: var(--color-surface-sunken);
+}
+
+.reorder-planinfo-cycle.has-choice:focus-within {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: -2px;
+}
+
+.reorder-planinfo-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  /* The header stacks here, so its text's 340px basis would become a height. */
+  .reorder-head .page-header-text {
+    flex: none;
+    width: 100%;
+  }
+
+  .reorder-planinfo {
+    width: 100%;
+  }
+
+  .reorder-planinfo-item {
+    flex: 1 1 150px;
+    padding: 10px 14px;
+  }
+
+  .reorder-planinfo-item + .reorder-planinfo-item {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .reorder-planinfo-cycle {
+    border-radius: 14px 14px 0 0;
+  }
+}
+
 /* Header */
 .reorder-page-header {
   margin-bottom: 0.5rem;
@@ -29,10 +175,8 @@
   border-radius: 999px;
   background-color: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
-  font-size: 0.79rem;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   color: var(--color-text-muted);
 }
 
@@ -110,30 +254,59 @@
 }
 
 /* The page's three views (Recommendations / Decision log / Staff requests):
-   the shared segmented control (ui/ui.css), with the active view lifted to a
-   white chip in the brand coral so it reads at a glance. The Staff requests
-   tab carries a red badge, the requests waiting for a decision. */
+   the shared segmented control (ui/ui.css) as a raised bar, Data Management's
+   stage bar (.mb-flow), with the active view in its current-step tint so it
+   reads at a glance. The Staff requests tab carries a red badge, the requests
+   waiting for a decision. */
 .segmented.reorder-tabs {
+  display: flex;
   flex-wrap: wrap;
-  max-width: 100%;
-  margin-bottom: 0.25rem;
-  padding: 4px;
-  border-radius: 14px;
+  gap: 4px;
+  width: 100%;
+  padding: 8px;
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .reorder-tabs .segmented-item {
-  height: 34px;
-  padding: 0 16px;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-body);
+  transition: background-color 0.12s, color 0.12s, box-shadow 0.12s;
+}
+
+.reorder-tabs .segmented-item:hover {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text);
 }
 
 .reorder-tabs .segmented-item.is-active,
 .reorder-tabs .segmented-item[aria-selected='true'] {
-  background-color: var(--color-surface);
-  color: var(--color-brand-primary);
+  border-color: rgba(232, 92, 74, 0.28);
+  background-color: var(--badge-brand-bg);
+  color: var(--color-brand-strong-hover);
   font-weight: 700;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), inset 0 0 0 1px rgba(232, 92, 74, 0.35);
+  box-shadow: var(--shadow-nested);
+}
+
+.reorder-tabs .segmented-item:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+@media (max-width: 480px) {
+  .reorder-tabs .segmented-item {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0 12px;
+    font-size: 13px;
+  }
 }
 
 .reorder-tab-badge {
@@ -152,138 +325,893 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Summary Cards */
+/* The four summary cards: each tinted in its own accent (the KPICard `accent`
+   prop reads these), on this page only. Act Now is the one to look at first.
+   The wrapper measures the room there is, so the sidebar's state counts: four
+   across while each card has room, then two, then one. */
+.reorder-kpi-wrap {
+  container: reorder-kpis / inline-size;
+}
+
 .reorder-summary-grid {
+  --reorder-kpi-act: #D92D20;
+  --reorder-kpi-later: #2469C4;
+  --reorder-kpi-count: #C77A0A;
+  --reorder-kpi-total: #6B46D6;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--card-gap);
 }
 
-.reorder-summary-card {
-  background-color: var(--color-surface);
+@container reorder-kpis (max-width: 939px) {
+  .reorder-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container reorder-kpis (max-width: 479px) {
+  .reorder-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.reorder-summary-grid .kpi-card {
+  gap: 10px;
+  padding: 18px;
+  border: 1.5px solid color-mix(in srgb, var(--kpi-accent) 45%, white);
   border-radius: var(--radius-card);
-  padding: 20px;
+  background-color: color-mix(in srgb, var(--kpi-accent) 8%, white);
   box-shadow: var(--shadow-card);
-  border: var(--card-border);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
 }
 
-/* Colored borders top and left, by the app-wide SEMANTIC rule
-   (theme/colors.js): red = act now, amber = watch, slate = no data,
-   indigo = model output. The old card-green "CURRENT STOCK" card wore the
-   healthy green for what was just a quantity. */
-.card-act {
-  border-left: 3px solid var(--color-critical);
-  border-top: 3px solid var(--color-critical);
-}
-.card-watch {
-  border-left: 3px solid var(--color-warning);
-  border-top: 3px solid var(--color-warning);
-}
-.card-nodata {
-  border-left: 3px solid var(--color-slate-500);
-  border-top: 3px solid var(--color-slate-500);
-}
-.card-recommendation {
-  border-left: 3px solid var(--color-sales-trend);
-  border-top: 3px solid var(--color-sales-trend);
+.reorder-summary-grid .kpi-card:first-child {
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--kpi-accent) 72%, white);
+  background-color: color-mix(in srgb, var(--kpi-accent) 10%, white);
 }
 
-.card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+.reorder-summary-grid .kpi-card::before {
+  display: none;
 }
 
-.reorder-card-label {
-  font-size: 0.79rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--color-text-subtle);
-  text-transform: uppercase;
-  margin-bottom: 0.2rem;
+.reorder-summary-grid .kpi-header {
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
-.reorder-card-value {
-  font-size: 2rem;
+.reorder-summary-grid .kpi-title {
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  text-transform: none;
   color: var(--color-text);
-  line-height: 1.1;
 }
 
-.reorder-card-desc {
-  font-size: 0.86rem;
-  color: var(--color-text-subtle);
-  margin-top: 0.3rem;
+.reorder-summary-grid .kpi-card:first-child .kpi-title {
+  color: #A81C12;
 }
 
-/* Table */
-/* Table base styles live in index.css (.data-table-card / .data-table). */
-
-/* The per-row severity stripe is gone (2026-09-18): with 248 of 250 rows
-   CRITICAL it striped the whole table red and said nothing. Position in
-   the ranked list now carries urgency; the pill keeps the LP state. */
-/* All thirteen columns: the table keeps its own width and scrolls sideways
-   inside its card on a narrow screen rather than squeezing every header
-   into a tower. Headers may wrap to two lines; the product column gets
-   the room a two-line name needs. */
-.reorder-table {
-  min-width: 1180px;
+.reorder-summary-grid .kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
 }
 
-.data-table.reorder-table thead th.col-fit {
-  white-space: normal;
-  min-width: 74px;
+.reorder-summary-grid .kpi-icon svg {
+  width: 21px;
+  height: 21px;
 }
 
-/* Thirteen columns in one laptop-wide card: less side padding per cell
-   than the shared table. */
-.data-table.reorder-table th,
-.data-table.reorder-table td {
-  padding-left: 8px;
-  padding-right: 8px;
+.reorder-summary-grid .kpi-value {
+  font-size: 2.1rem;
+  line-height: 1.05;
 }
 
-/* The class column holds one letter, so it takes its content's width. */
-.data-table.reorder-table thead th.reorder-th-class {
+.reorder-summary-grid .kpi-unit {
+  font-size: 15px;
+  color: var(--color-text-body);
+}
+
+.reorder-summary-grid .kpi-context {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--color-text-body);
+}
+
+/* The quiet picture beside the figure, only where the card has room for both. */
+.reorder-summary-grid .kpi-decoration {
+  display: none;
+  flex-shrink: 0;
+  color: var(--kpi-accent);
+  opacity: 0.6;
+}
+
+@container reorder-kpis (min-width: 1100px) {
+  .reorder-summary-grid .kpi-decoration {
+    display: flex;
+  }
+}
+
+@container reorder-kpis (min-width: 640px) and (max-width: 939px) {
+  .reorder-summary-grid .kpi-decoration {
+    display: flex;
+  }
+}
+
+@container reorder-kpis (max-width: 479px) {
+  .reorder-summary-grid .kpi-decoration {
+    display: flex;
+  }
+}
+
+/* The heading and controls above the table: title at the left, quick filters
+   in the middle, search and Filter at the right; they wrap as the width runs out. */
+.reorder-table-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: 6px;
+}
+
+.reorder-table-title {
+  flex: 1 1 240px;
   min-width: 0;
 }
 
-/* The rank column is a short "#12". */
-.data-table.reorder-table thead th:first-child {
-  min-width: 44px;
+.reorder-table-title h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.reorder-table-title p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.reorder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reorder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-body);
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.reorder-chip:hover {
+  border-color: #CBD2DC;
+  color: var(--color-text);
+}
+
+.reorder-chip.is-active {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: #fff;
+}
+
+.reorder-chip.is-critical {
+  border-color: #F6C9C3;
+  background: #FEF1EF;
+  color: #B42318;
+}
+
+.reorder-chip.is-critical:hover {
+  border-color: #EFA79E;
+  color: #961D13;
+}
+
+.reorder-chip.is-critical.is-active {
+  border-color: #C4271A;
+  background: #C4271A;
+  color: #fff;
+}
+
+.reorder-chip:focus-visible,
+.reorder-filter-btn:focus-visible,
+.reorder-menu-btn:focus-visible,
+.reorder-search-clear:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.reorder-chip-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-table-tools {
+  display: flex;
+  flex: 0 1 400px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reorder-search {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+
+.reorder-search > svg {
+  position: absolute;
+  left: 12px;
+  pointer-events: none;
+}
+
+.reorder-search input {
+  width: 100%;
+  height: 38px;
+  padding: 0 32px 0 34px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--color-text);
+}
+
+.reorder-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.reorder-search input:focus {
+  border-color: var(--color-brand-primary);
+  outline: 2px solid rgba(232, 92, 74, 0.25);
+}
+
+.reorder-search-clear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.reorder-filter-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text-body);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reorder-filter-btn:hover {
+  border-color: #CBD2DC;
+  color: var(--color-text);
+}
+
+.reorder-filter-btn.is-active {
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+
+/* The Filter menu and a row's secondary actions (ReorderActionMenu.jsx): in a
+   portal on <body>, so the table's scroll area can't clip them. */
+.reorder-menu {
+  position: fixed;
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 6px;
+  border: var(--card-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-raised), var(--shadow-card);
+}
+
+.reorder-menu-item {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.reorder-menu-item:hover,
+.reorder-menu-item:focus-visible {
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  outline: none;
+}
+
+.reorder-menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reorder-menu-item[aria-checked='true'] {
+  font-weight: 700;
+  color: var(--color-brand-primary);
+}
+
+/* The table. Its card is the scroll area: a header that sticks needs a scroller
+   of its own, since a card that scrolls sideways can't stick to the page's. It
+   reads left to right as which SKU, its stock, its demand, what to order, the
+   decision and what can be done, with a faint rule where each group starts.
+   The cell padding opens up as the table gets room (the wrapper measures it).
+   This page's tables centre every column under its heading but the free text
+   (the product, a reason), Audrey's choice of 2026-11-02; the shared .data-table
+   rule, numbers to the right, stays for the other pages. */
+.reorder-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.reorder-table-area {
+  container: reorder-table / inline-size;
+  min-width: 0;
+}
+
+.reorder-table-scroll {
+  --reorder-cell-x: 9px;
+  max-height: max(440px, calc(100vh - 170px));
+  border: 1px solid rgba(17, 26, 53, 0.09);
+  border-radius: 16px;
+  overflow: auto;
+}
+
+@container reorder-table (min-width: 1240px) {
+  .reorder-table-scroll { --reorder-cell-x: 14px; }
+}
+
+@container reorder-table (min-width: 1400px) {
+  .reorder-table-scroll { --reorder-cell-x: 16px; }
+}
+
+@container reorder-table (max-width: 919px) {
+  .reorder-table-scroll { --reorder-cell-x: 7px; }
+
+  .reorder-split .table-btn { height: 32px; }
+
+  .reorder-split-main { min-width: 60px; }
+
+  .reorder-split.has-menu .reorder-menu-btn { width: 28px; }
+}
+
+.reorder-table-scroll:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.data-table.reorder-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+}
+
+.reorder-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.data-table.reorder-table thead th {
+  padding: 8px var(--reorder-cell-x);
+  border-bottom: none;
+  background-color: #F8FAFC;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  color: var(--color-text-body);
+  vertical-align: middle;
+}
+
+/* Group row: small capitals over a rule, each with its period under it. */
+.data-table.reorder-table thead .reorder-head-groups th {
+  padding-top: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.data-table.reorder-table thead .reorder-head-groups th.reorder-head-group {
+  box-shadow: inset 0 -1px 0 var(--color-border);
+}
+
+.data-table.reorder-table thead .reorder-head-groups th.col-product {
+  text-align: left;
+}
+
+/* The cells spanning both header rows carry the header's bottom rule themselves. */
+.data-table.reorder-table thead .reorder-head-groups th[rowspan],
+.data-table.reorder-table thead .reorder-head-columns th {
+  border-bottom: 1px solid var(--color-border);
 }
 
 .data-table.reorder-table thead th.col-product {
   width: auto;
-  min-width: 230px;
+  min-width: 194px;
 }
 
-/* Urgency pill with the review badge under it. 2026-10-26: at 1440px the
-   one-line "Review before ordering" badge (nowrap, 150px floor) pushed the
-   column past the card's right edge; the badge now wraps its words under
-   the pill inside a narrower column, and the pill stays on one line. */
-.reorder-urgency-cell {
-  min-width: 112px;
-  max-width: 132px;
+.is-compact .data-table.reorder-table thead th.col-product {
+  min-width: 176px;
 }
 
-.reorder-urgency-cell > span:first-child {
+.is-tablet .data-table.reorder-table thead th.col-product {
+  min-width: 190px;
+  padding-left: 14px;
+}
+
+.is-tablet .data-table.reorder-table tbody td.cell-product {
+  padding-left: 14px;
+}
+
+.is-full .reorder-head-label {
+  display: inline-flex;
+  align-items: center;
   white-space: nowrap;
 }
 
-.reorder-urgency-cell .pending-review-badge {
-  display: inline-flex;
-  margin-top: 4px;
-  max-width: 100%;
-  white-space: normal;
-  line-height: 1.25;
+.is-full .data-table.reorder-table thead .reorder-head-group .reorder-th-period {
+  white-space: nowrap;
 }
 
-/* The solver's weights inside the fold. */
+.data-table thead th .reorder-th-period {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-muted);
+}
+
+/* The rows: room to breathe, no vertical rules but the group's faint one. */
+.data-table.reorder-table tbody td {
+  padding: 11px var(--reorder-cell-x);
+  border-bottom: 1px solid #EEF1F5;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
+.data-table.reorder-table tbody tr.reorder-row:hover td {
+  background-color: #FAFBFC;
+}
+
+.data-table.reorder-table th.reorder-group-start,
+.data-table.reorder-table td.reorder-group-start {
+  border-left: 1px solid #EEF1F5;
+}
+
+.data-table.reorder-table td.reorder-rank {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.reorder-table .product-name-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Code, brand and class on one quiet line under the name. */
+.reorder-product-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-product-meta > * + *::before {
+  content: '·';
+  margin: 0 5px;
+  color: var(--color-text-subtle);
+}
+
+.reorder-product-meta .tier-chip {
+  display: inline;
+  font-weight: 500;
+}
+
+.reorder-product-meta .tier-chip > * {
+  margin-left: 4px;
+}
+
+/* The figure the page exists for: the order, larger than anything else in the row. */
+.reorder-qty {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-text);
+}
+
+.data-table.reorder-table td.reorder-cases-cell {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* Decision: small badges, each its own concept, in sentence case. */
+.reorder-urgency-cell {
+  min-width: 112px;
+}
+
+.reorder-urgency-cell > * + * {
+  margin-top: 4px;
+}
+
+/* Fit-content badges, so the cell's text-align can't centre them itself. */
+.reorder-urgency-cell > .pill,
+.reorder-urgency-cell > .reorder-review-pill {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.is-cards .reorder-urgency-cell > .pill,
+.is-cards .reorder-urgency-cell > .reorder-review-pill {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.reorder-badges > .pill {
+  display: flex;
+  width: fit-content;
+  font-size: 11.5px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* A tablet's badges: in a row under the product. */
+.reorder-product-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 6px;
+}
+
+.reorder-review-pill {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #FEF3DC;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: #7A4A07;
+  white-space: nowrap;
+}
+
+/* A staff request waiting: its own colour, apart from urgency's and the flag's. */
+.pill.reorder-request-pill {
+  background-color: #ECEEFB;
+  color: #3F3A9E;
+}
+
+.reorder-badges > .pill.reorder-request-pill {
+  border-radius: 8px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+/* The row's action: Accept (or Review order) and the rest in a menu beside it. */
+.reorder-action-cell {
+  white-space: nowrap;
+}
+
+/* Pinned to the card's right edge: where the columns don't quite fit and the
+   table scrolls sideways, the row's action stays in reach. */
+.reorder-table-area:not(.is-cards) .reorder-action-cell,
+.data-table.reorder-table thead .reorder-head-groups th.reorder-head-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+}
+
+.reorder-table-area:not(.is-cards) .reorder-action-cell {
+  background-color: var(--color-surface);
+}
+
+.reorder-split {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.reorder-split .table-btn {
+  height: 34px;
+  border-radius: 9px;
+}
+
+.reorder-split-main {
+  min-width: 68px;
+}
+
+.reorder-split.has-menu .reorder-menu-btn {
+  width: 32px;
+  padding: 0;
+}
+
+/* Review order: the row's main action without the fill Accept has, so a staff
+   member's list isn't a column of red buttons. */
+.table-btn.reorder-btn-review {
+  border-color: rgba(232, 92, 74, 0.55);
+  color: #C2412F;
+  font-weight: 600;
+}
+
+.table-btn.reorder-btn-review:hover {
+  border-color: var(--color-brand-primary);
+  background: rgba(232, 92, 74, 0.07);
+  color: #A63424;
+}
+
+.reorder-action-status {
+  flex-direction: row;
+  gap: 6px;
+}
+
+.reorder-action-status .reorder-menu-btn {
+  width: 30px;
+  padding: 0;
+}
+
+.reorder-table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+/* The orders card: heading, controls, table and footer in one raised card
+   (2026-11-05), the table flush at the width it had as its own card. */
+.reorder-orders-card .reorder-table-head {
+  margin-top: 0;
+}
+
+.reorder-orders-card .reorder-table-tools {
+  flex: 1 1 400px;
+}
+
+.reorder-orders-card .reorder-table-section {
+  gap: 0;
+  margin-top: 0;
+}
+
+.reorder-orders-card .reorder-table-footer {
+  padding: 12px var(--card-padding) 16px;
+}
+
+/* A phone's width: the rows are tiles inside the card. */
+.reorder-orders-card .is-cards .reorder-table-scroll {
+  padding: 0 16px;
+  border: none;
+  border-radius: 0;
+}
+
+.reorder-orders-card .is-cards .reorder-table tbody tr.reorder-row {
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+}
+
+.reorder-table-footer .reorder-table-note {
+  margin: 0;
+}
+
+.reorder-log-note.reorder-table-note {
+  margin: 0;
+}
+
+/* Decision log: wide enough to read its reasons, scrolling inside its card. */
+.data-table.reorder-log-table {
+  min-width: 780px;
+}
+
+/* The synthetic order plan, when the switch shows it here: centred like the rest
+   of this page's tables (the Dashboard's copy keeps its own alignment). */
+.reorder-page .demo-plan-table .num {
+  text-align: center;
+}
+
+/* A phone's width: each row is a card, product and badges first, the figures in
+   two columns, the order across the card with its action under it. Cover is in
+   the row's review drawer. */
+.is-cards .reorder-table-scroll {
+  max-height: none;
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.is-cards .data-table.reorder-table,
+.is-cards .reorder-table tbody {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.is-cards .reorder-table tbody tr.reorder-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 16px;
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.is-cards .data-table.reorder-table tbody tr.reorder-row td,
+.is-cards .data-table.reorder-table tbody tr.reorder-row:hover td {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.is-cards .reorder-table td[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.is-cards .data-table.reorder-table td.reorder-rank {
+  order: 0;
+  grid-column: 1 / -1;
+  margin-bottom: -8px;
+}
+
+.is-cards .data-table.reorder-table td.cell-product {
+  order: 1;
+  grid-column: 1 / -1;
+}
+
+.is-cards .data-table.reorder-table tbody tr.reorder-row td.reorder-urgency-cell {
+  order: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  grid-column: 1 / -1;
+}
+
+.is-cards .reorder-urgency-cell > * + * {
+  margin-top: 0;
+}
+
+.is-cards .data-table.reorder-table td.reorder-stock-cell { order: 3; }
+.is-cards .data-table.reorder-table td[data-label='Safety Stock'] { order: 4; }
+.is-cards .data-table.reorder-table td[data-label='Target Stock'] { order: 5; }
+.is-cards .data-table.reorder-table td[data-label='Forecast'] { order: 6; }
+
+.is-cards .data-table.reorder-table td.reorder-qty-cell {
+  order: 7;
+  grid-column: 1 / -1;
+}
+
+.is-cards .reorder-qty {
+  font-size: 18px;
+}
+
+.is-cards .data-table.reorder-table td.reorder-action-cell {
+  order: 8;
+  grid-column: 1 / -1;
+}
+
+.is-cards .reorder-split {
+  display: flex;
+  width: 100%;
+}
+
+.is-cards .reorder-split .table-btn {
+  height: 42px;
+}
+
+.is-cards .reorder-split-main {
+  flex: 1;
+}
+
+.is-cards .reorder-split.has-menu .reorder-menu-btn {
+  width: 46px;
+}
+
+.is-cards .reorder-action-status {
+  justify-content: flex-start;
+}
+
+.is-cards .reorder-table tbody tr.reorder-group-row,
+.is-cards .reorder-table tbody tr.table-empty-row {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.is-cards .reorder-table tbody tr.reorder-group-row td,
+.is-cards .reorder-table tbody tr.table-empty-row td {
+  display: block;
+  border-radius: 10px;
+}
+
+@media (max-width: 720px) {
+  /* Keep the bulk action in reach down a long list of cards: the footer gives
+     way, so the button sticks to the panel rather than to the footer's own box. */
+  .reorder-table-footer {
+    display: contents;
+  }
+  .reorder-table-footer .reorder-bulk-btn {
+    position: sticky;
+    bottom: 12px;
+    z-index: 4;
+    width: 100%;
+    justify-content: center;
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
 .reorder-weights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -323,9 +1251,9 @@
 }
 
 /* Group header rows: "Act now" and the collapsible "Review later". */
-.data-table .reorder-group-row td {
-  padding: 0.45rem 1rem;
-  font-size: 0.8rem;
+.data-table.reorder-table .reorder-group-row td {
+  padding: 8px 14px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -359,15 +1287,6 @@
 .reorder-group-toggle:hover {
   color: var(--color-text);
   text-decoration: underline;
-}
-
-.reorder-table-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: -0.5rem;
 }
 
 .reorder-table-note {
@@ -405,14 +1324,48 @@
   font-weight: 500;
 }
 
-.reorder-stock-critical {
+.data-table.reorder-table tbody td.reorder-stock-critical {
   color: var(--color-severity-critical);
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.reorder-stock-low {
+.data-table.reorder-table tbody td.reorder-stock-low {
   color: var(--color-severity-urgent);
+  font-weight: 700;
+}
+
+/* A SKU the stock count doesn't list: the plan reads it as 0, but this says what
+   is true of it, so it reads as unknown rather than as a counted zero. */
+.reorder-count-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #FEF3DC;
+  font-size: 11.5px;
   font-weight: 600;
+  line-height: 1.3;
+  color: #7A4A07;
+  white-space: nowrap;
+}
+
+.reorder-count-flag svg {
+  flex-shrink: 0;
+  color: #C77A0A;
+}
+
+.is-compact .reorder-count-flag,
+.is-tablet .reorder-count-flag {
+  padding: 3px 7px;
+  border-radius: 8px;
+  text-align: center;
+  white-space: normal;
+}
+
+.is-compact .reorder-count-flag svg,
+.is-tablet .reorder-count-flag svg {
+  display: none;
 }
 
 /* Decision Log */
@@ -452,14 +1405,12 @@
   .reorder-content {
     padding: 0 1.5rem 1.5rem 1.5rem;
   }
-  .reorder-summary-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
-@media (max-width: 640px) {
-  .reorder-summary-grid {
-    grid-template-columns: 1fr;
+
+@media (max-width: 480px) {
+  .reorder-content {
+    padding: 0 1rem 1.5rem 1rem;
   }
 }
 
@@ -506,6 +1457,78 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.reorder-accept-card.reorder-bulk-card {
+  width: min(500px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.reorder-bulk-facts,
+.reorder-bulk-warning,
+.reorder-bulk-excluded {
+  text-align: left;
+}
+
+.reorder-bulk-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--color-surface-sunken);
+}
+
+.reorder-bulk-facts dt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.reorder-bulk-facts dd {
+  margin: 1px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.reorder-bulk-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #F4DDB0;
+  border-radius: 10px;
+  background: #FEF8EC;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6B4306;
+}
+
+.reorder-bulk-warning svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.reorder-bulk-excluded {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.reorder-bulk-excluded strong {
+  color: var(--color-text);
+}
+
+.reorder-bulk-excluded ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
 }
 
 .reorder-accept-title {
@@ -590,20 +1613,6 @@
   white-space: nowrap;
 }
 
-/* The period under a column's label ("Mar 2026 plan", "counted Apr 6,
-   2026"): four periods meet in one row, so each header names its own.
-   Sentence case and lighter than the uppercase label, so the label still
-   reads first and the period reads as its qualifier. */
-.data-table thead th .reorder-th-period {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.79rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--color-text-muted);
-}
-
 /* The plan's own facts (run, date, allocation, service level, stock count):
    the line the rest of the page's numbers rest on, so it reads first. */
 .reorder-plan-facts {
@@ -611,17 +1620,89 @@
   color: var(--color-text-heading);
 }
 
-/* "How this was optimized": a compact block above the table — the rule as
-   small print at the left, the solver's weights as thin bars at the right. */
+/* "How this was optimized": one line with a chevron until it is opened, then
+   the rule and notes as small print at the left, the solver's weights as thin
+   bars at the right. */
 .reorder-how {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 16px 32px;
-  padding: 16px 20px;
   border-radius: var(--radius-card);
   background-color: var(--color-surface);
   border: var(--card-border);
   box-shadow: var(--shadow-card);
+}
+
+.reorder-how-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  list-style: none;
+}
+
+.reorder-how-summary::-webkit-details-marker {
+  display: none;
+}
+
+.reorder-how-summary:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+.reorder-how-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(232, 92, 74, 0.1);
+  color: var(--color-brand-primary);
+}
+
+.reorder-how-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reorder-how-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.reorder-how-lede {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.reorder-how-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
+}
+
+.reorder-how[open] .reorder-how-chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reorder-how-chevron {
+    transition: none;
+  }
+}
+
+.reorder-how-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px 32px;
+  padding: 16px 20px 18px;
+  border-top: 1px solid var(--color-border);
 }
 
 .reorder-how-text {
@@ -634,12 +1715,6 @@
 .reorder-how-text .reorder-table-note {
   margin: 0;
   line-height: 1.5;
-}
-
-.reorder-how-title {
-  font-size: var(--text-card-title);
-  font-weight: 600;
-  color: var(--color-text);
 }
 
 .reorder-how-weights {
@@ -682,8 +1757,8 @@
 }
 
 @media (max-width: 900px) {
-  .reorder-how {
-    grid-template-columns: 1fr;
+  .reorder-how-body {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -872,4 +1947,118 @@
   .reorder-compare-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Not in This Plan: the top sellers the plan leaves out. Read-only, so it wears
+   the "How this was optimized" card rather than the plan table's. */
+.reorder-notplanned {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
+}
+
+.reorder-notplanned-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+}
+
+.reorder-notplanned-head .reorder-how-title {
+  margin: 0;
+}
+
+.reorder-notplanned-head .reorder-how-lede {
+  margin: 0;
+}
+
+.reorder-notplanned-scroll {
+  overflow-x: auto;
+  border-top: 1px solid rgba(17, 26, 53, 0.09);
+}
+
+.data-table.reorder-notplanned-table {
+  font-size: 13.5px;
+}
+
+/* Headers wrap, so the periods they name don't push the table past its card. */
+.data-table.reorder-notplanned-table thead th {
+  padding: 10px 12px;
+  white-space: normal;
+}
+
+.data-table.reorder-notplanned-table tbody td {
+  padding: 10px 12px;
+}
+
+.data-table.reorder-notplanned-table thead th:first-child,
+.data-table.reorder-notplanned-table tbody td:first-child {
+  padding-left: 20px;
+}
+
+.reorder-notplanned-why {
+  min-width: 170px;
+  color: var(--color-text-muted);
+}
+
+.reorder-notplanned-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px;
+  border-top: 1px solid rgba(17, 26, 53, 0.09);
+}
+
+.reorder-notplanned-chevron-open {
+  transform: rotate(180deg);
+}
+
+/* Each row a block on a phone, as the plan's rows are, inside the one card. */
+.reorder-notplanned.is-cards .reorder-notplanned-head {
+  align-items: flex-start;
+  padding: 14px 16px;
+}
+
+.reorder-notplanned.is-cards .data-table.reorder-notplanned-table,
+.reorder-notplanned.is-cards .reorder-notplanned-table tbody {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.reorder-notplanned.is-cards .reorder-notplanned-table tbody tr {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 14px 16px;
+}
+
+.reorder-notplanned.is-cards .reorder-notplanned-table tbody tr + tr {
+  border-top: 1px solid rgba(17, 26, 53, 0.09);
+}
+
+.reorder-notplanned.is-cards .data-table.reorder-notplanned-table tbody tr td,
+.reorder-notplanned.is-cards .data-table.reorder-notplanned-table tbody tr:hover td {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+}
+
+.reorder-notplanned.is-cards .reorder-notplanned-table td[data-label]::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.reorder-notplanned.is-cards .data-table.reorder-notplanned-table td.cell-product,
+.reorder-notplanned.is-cards .data-table.reorder-notplanned-table td.reorder-notplanned-why {
+  grid-column: 1 / -1;
 }

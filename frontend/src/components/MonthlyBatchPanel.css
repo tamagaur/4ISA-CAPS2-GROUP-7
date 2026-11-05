@@ -1,121 +1,949 @@
+/* The Data Management page's monthly batch. Colours are the system's own tokens
+   (index.css, ui.css): coral for the accent and the main action, the sidebar's
+   navy for the finalising one, the shared badge tints for status, the shared
+   depth tokens (ui.css). Column counts follow the width of .mb-body, not the
+   window, because the sidebar takes some of it. */
 .mb-panel {
   display: flex;
   flex-direction: column;
   gap: var(--card-gap);
 }
 
+/* A container query host. It stops short of the dialogs on purpose: they are
+   position: fixed inside .mb-panel, and containment could trap them. */
+.mb-body {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  min-width: 0;
+}
+
+.mb-small {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* Small status words on the shared tints: the deeper ink of each same hue, all
+   system tokens, because the shared badge inks measure under 4.5:1 on their tints
+   (warning 3.7, brand 4.05, success 4.16, critical 4.31). Here only; the other pages keep the shared ones. */
+.mb-body .badge-success,
+.mb-note-raised.is-success { color: var(--color-success-text); }
+.mb-body .badge-critical { color: var(--color-danger-ink); }
+.mb-body .badge-warning,
+.mb-note-raised.is-warning { color: var(--color-warning-text); }
+.mb-body .badge-brand { color: var(--color-brand-strong-hover); }
+
+/* The icon tile before a heading: the base is shared (ui/ui.css .icon-tile). */
+.mb-tile.is-small {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.mb-tile.is-info {
+  border-color: rgba(43, 76, 126, 0.22);
+  background: var(--color-surface);
+  color: var(--badge-info-fg);
+}
+
+/* ── The heading and the five facts ──────────────────────────────────── */
+.mb-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+}
+
+.mb-head {
+  flex: 1 1 300px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.mb-title {
+  margin: 0 0 2px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--color-text-heading);
+}
+
+/* The processing month, the one fact the stage bar does not carry. */
+.mb-month {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-card);
+}
+
+.mb-month svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.mb-month > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.mb-month-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-month strong {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-text-heading);
+}
+
+.mb-result-facts dt,
+.mb-dialog-facts dt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-result-facts dd,
+.mb-dialog-facts dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/* ── The five stages ─────────────────────────────────────────────────── */
+.mb-flow {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-card);
+}
+
+.mb-flow-step {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-flow-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+/* The stage's own state: the line that replaced the status bar. */
+.mb-flow-detail {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.mb-flow-step.is-current .mb-flow-detail { color: var(--color-brand-strong-hover); }
+.mb-flow-step.is-failed .mb-flow-detail { color: var(--color-danger-ink); }
+
+.mb-flow-sep {
+  flex-shrink: 0;
+  color: var(--color-border-strong);
+}
+
+.mb-flow-dot {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 50%;
+  background-color: var(--color-surface);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.mb-flow-step.is-current {
+  border-color: rgba(232, 92, 74, 0.28);
+  background-color: var(--badge-brand-bg);
+  box-shadow: var(--shadow-nested);
+  font-weight: 700;
+  color: var(--color-brand-strong-hover);
+}
+
+.mb-flow-step.is-current .mb-flow-dot {
+  border-color: var(--color-brand-strong);
+  background-color: var(--color-brand-strong);
+  color: #fff;
+  box-shadow: 0 3px 8px -2px rgba(199, 78, 61, 0.55);
+}
+
+.mb-flow-step.is-done { color: var(--color-text); }
+
+.mb-flow-step.is-done .mb-flow-dot {
+  border-color: var(--color-success-deep);
+  background-color: var(--color-success-deep);
+  color: #fff;
+}
+
+.mb-flow-step.is-failed {
+  border-color: var(--color-severity-critical-border);
+  background-color: var(--color-severity-critical-bg);
+  font-weight: 700;
+  color: var(--color-danger-ink);
+}
+
+.mb-flow-step.is-failed .mb-flow-dot {
+  border-color: var(--color-danger-ink);
+  background-color: var(--color-danger-ink);
+  color: #fff;
+}
+
+/* ── The sections ────────────────────────────────────────────────────── */
 .mb-steps {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--card-gap);
 }
 
 .mb-step {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px;
   background-color: var(--color-surface);
   border: var(--card-border);
   border-radius: var(--radius-card);
-  padding: var(--card-padding);
   box-shadow: var(--shadow-card);
+}
+
+/* Run beside Review, 60/40, with the close under the run and Review as
+   tall as both (the empty state fills it; results grow it). */
+@container (min-width: 940px) {
+  .mb-steps {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-rows: auto auto auto 1fr;
+  }
+
+  .mb-step-upload,
+  .mb-step-validate { grid-column: 1 / -1; }
+
+  .mb-step-run { grid-column: 1; grid-row: 3; }
+  .mb-step-review { grid-column: 2; grid-row: 3 / span 2; }
+  .mb-step-close { grid-column: 1; grid-row: 4; }
+}
+
+.mb-step-head {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
-.mb-step h4 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
+.mb-step-title {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.mb-small {
+.mb-step-title h4 {
+  margin: 0 0 2px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text-heading);
+}
+
+.mb-step-action { flex-shrink: 0; }
+
+.mb-subhead {
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-heading);
 }
 
 .mb-done {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.9rem;
-  color: var(--color-text);
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(39, 133, 82, 0.22);
+  border-radius: var(--radius-nested);
+  background-color: var(--badge-success-bg);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-success-text);
+}
+
+.mb-done svg { flex-shrink: 0; }
+
+/* Controls: raised, lifting a little under the mouse. Never on a disabled one,
+   and only inside the sections, so the dialogs keep the shared buttons. */
+.mb-steps .btn-primary,
+.mb-steps .btn-secondary,
+.mb-close-btn {
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.mb-steps .btn-secondary:not(:disabled) {
+  box-shadow: var(--shadow-control);
+}
+
+/* A filled button with white text takes the logo's red, 4.6:1 (index.css
+   --color-brand-strong), and casts a shadow of its own colour. */
+.mb-steps .btn-primary {
+  background-color: var(--color-brand-strong);
+  border-color: var(--color-brand-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(17, 26, 53, 0.12), 0 8px 16px -6px rgba(199, 78, 61, 0.55);
+}
+
+.mb-steps .btn-primary:hover:not(:disabled) {
+  background-color: var(--color-brand-strong-hover);
+  border-color: var(--color-brand-strong-hover);
+}
+
+.mb-close-btn {
+  align-self: flex-start;
+  background-color: var(--color-nav-bg);
+  border-color: var(--color-nav-bg);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(17, 26, 53, 0.16), 0 8px 16px -6px rgba(17, 29, 50, 0.5);
+}
+
+.mb-close-btn:hover:not(:disabled) {
+  background-color: var(--color-nav-border);
+  border-color: var(--color-nav-border);
+}
+
+.mb-steps .btn-primary:disabled,
+.mb-close-btn:disabled {
+  opacity: 1;
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-text-subtle);
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .mb-steps .btn-secondary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-control-hover);
+  }
+
+  .mb-steps .btn-primary:hover:not(:disabled),
+  .mb-close-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+.mb-steps .btn-primary:active:not(:disabled),
+.mb-steps .btn-secondary:active:not(:disabled),
+.mb-close-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-pressed);
+}
+
+.mb-steps .btn:focus-visible {
+  outline: 3px solid rgba(232, 92, 74, 0.45);
+  outline-offset: 2px;
+}
+
+/* ── 1. Upload ───────────────────────────────────────────────────────── */
+.mb-files {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+
+.mb-file,
+.mb-practice {
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--radius-nested);
 }
 
 .mb-file {
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: var(--card-border);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-nested);
+}
+
+.mb-file-main {
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
 }
 
-.mb-file-text {
+.mb-file.is-refused {
+  border-color: var(--color-severity-critical-border);
+  box-shadow: inset 3px 0 0 var(--color-severity-critical), var(--shadow-nested);
+}
+
+/* A refused file's reason, in the slot it belongs to. */
+.mb-file-refusal {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background-color: var(--color-severity-critical-bg);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-danger-ink);
+  overflow-wrap: anywhere;
+}
+
+.mb-file-refusal svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.mb-file-text,
+.mb-practice-text {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mb-file-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
 }
 
 .mb-file-label {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.mb-file-optional {
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 
 .mb-file-hint {
-  font-size: 0.8rem;
+  font-size: 13px;
+  line-height: 1.45;
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
 
-.mb-choice {
-  border: 0;
-  padding: 0;
+.mb-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--color-text-heading);
+  overflow-wrap: anywhere;
+}
+
+.mb-file-size {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.mb-file-formats {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.mb-file-btn { flex-shrink: 0; }
+
+.mb-practice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(43, 76, 126, 0.16);
+  background-color: var(--badge-info-bg);
+  box-shadow: var(--shadow-nested);
+}
+
+.mb-practice .btn { margin-top: 6px; }
+
+/* ── 2. Validate ─────────────────────────────────────────────────────── */
+.mb-check {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mb-check-heading {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.mb-check-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+@container (min-width: 560px) { .mb-check-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 880px) { .mb-check-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 1200px) { .mb-check-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (min-width: 1500px) { .mb-check-list { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+.mb-check-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-nested);
+}
+
+.mb-check-icon { flex-shrink: 0; margin-top: 1px; }
+.mb-check-row.is-passed .mb-check-icon { color: var(--color-success-deep); }
+.mb-check-row.is-failed .mb-check-icon { color: var(--color-danger-ink); }
+.mb-check-row.is-warning .mb-check-icon { color: var(--color-warning-text); }
+.mb-check-row.is-not_checked .mb-check-icon { color: var(--color-text-subtle); }
+
+/* What needs doing stands out by its border and rail as well as its colour. */
+.mb-check-row.is-failed {
+  border-color: var(--color-severity-critical-border);
+  box-shadow: inset 3px 0 0 var(--color-severity-critical), var(--shadow-nested);
+}
+
+.mb-check-row.is-warning {
+  border-color: var(--color-severity-urgent-border);
+  box-shadow: inset 3px 0 0 var(--color-severity-urgent), var(--shadow-nested);
+}
+
+.mb-check-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mb-check-title {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mb-check-title .badge { flex-shrink: 0; }
+
+.mb-check-name {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.mb-check-action {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--color-brand-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mb-check-row.is-failed .mb-check-action { color: var(--color-danger-ink); }
+.mb-check-hint { font-weight: 500; }
+
+.mb-check-past summary,
+.mb-check-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.mb-check-past .mb-check-list { margin-top: 10px; }
+.mb-check-details { width: 100%; margin-top: 3px; }
+
+.mb-check-details ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.mb-check-details li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-wrap: anywhere;
+}
+
+.mb-check-file { font-weight: 500; }
+
+/* ── 3. Run ──────────────────────────────────────────────────────────── */
+.mb-step-run { container-type: inline-size; }
+
+.mb-run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.mb-run-controls {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mb-run-progress {
+  container-type: inline-size;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+  background-color: var(--color-surface-raised);
+}
+
+@container (min-width: 700px) {
+  .mb-run { grid-template-columns: minmax(290px, 4fr) minmax(0, 7fr); }
+}
+
+.mb-choice {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
-  font-size: 0.9rem;
-  color: var(--color-text);
+  gap: 8px;
 }
 
 .mb-choice legend {
   padding: 0;
-  margin-bottom: 4px;
-  font-size: 0.85rem;
-  font-weight: 500;
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-heading);
 }
 
-.mb-confirm {
-  font-size: 0.9rem;
-  color: var(--color-text);
+/* A real radio in each, so the arrow keys and a screen reader work as usual. */
+.mb-choice-option {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 10px;
+  background-color: var(--color-surface);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-text-body);
+  cursor: pointer;
+  box-shadow: var(--shadow-control);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+.mb-choice-option input {
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-brand-strong);
+}
+
+.mb-choice-option.is-selected {
+  border-color: var(--color-brand-strong);
+  background-color: var(--badge-brand-bg);
+  font-weight: 600;
+  color: var(--color-brand-strong-hover);
+}
+
+.mb-choice-option:focus-within {
+  outline: 3px solid rgba(232, 92, 74, 0.45);
+  outline-offset: 2px;
+}
+
+.mb-choice:disabled .mb-choice-option {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-text-subtle);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .mb-choice:not(:disabled) .mb-choice-option:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-control-hover);
+  }
+}
+
+.mb-run-btn {
+  width: 100%;
+  height: 44px;
+  font-size: 14.5px;
+}
+
+/* Why the run is not available: a gate before the run, not a stage of it. */
+.mb-run-gate {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--color-text-body);
+}
+
+.mb-run-gate svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+}
+
+/* What the last job reported. */
+.mb-output {
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-nested);
+  background-color: var(--color-surface-raised);
+}
+
+.mb-output summary {
+  cursor: pointer;
+}
+
+.mb-output-title {
+  margin-right: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.mb-output .mb-stages,
+.mb-output > p { margin-top: 8px; }
+
+/* The tracker: dots on one line, each label under its dot. A narrow column
+   turns it into a list down the side, so no label is ever clipped. */
+.mb-tracker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mb-node {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 14px;
+}
+
+.mb-node:last-child { padding-bottom: 0; }
+
+/* The line up to the next dot. */
+.mb-node:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 26px;
+  bottom: 0;
+  left: 12px;
+  width: 2px;
+  background-color: var(--color-border-strong);
+}
+
+.mb-node.is-done:has(+ .mb-node.is-done)::after { background-color: var(--color-success-deep); }
+
+.mb-node-dot {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 50%;
+  background-color: var(--color-surface);
+  color: #fff;
+}
+
+.mb-node.is-done .mb-node-dot {
+  border-color: var(--color-success-deep);
+  background-color: var(--color-success-deep);
+}
+
+.mb-node.is-active .mb-node-dot {
+  border-color: var(--color-brand-strong);
+  color: var(--color-brand-strong);
+  box-shadow: 0 0 0 4px rgba(232, 92, 74, 0.16);
+}
+
+.mb-node.is-failed .mb-node-dot {
+  border-color: var(--color-danger-ink);
+  background-color: var(--color-danger-ink);
+}
+
+.mb-node-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 3px;
+}
+
+.mb-node-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+}
+
+.mb-node.is-done .mb-node-label { color: var(--color-text); }
+
+.mb-node.is-active .mb-node-label {
+  font-weight: 700;
+  color: var(--color-brand-strong-hover);
+}
+
+.mb-node.is-failed .mb-node-label {
+  font-weight: 700;
+  color: var(--color-danger-ink);
+}
+
+.mb-node-note {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.mb-node.is-failed .mb-node-note { color: var(--color-danger-ink); }
+
+@container (min-width: 340px) {
+  .mb-tracker { flex-direction: row; }
+
+  .mb-node {
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 0 2px;
+    text-align: center;
+  }
+
+  .mb-node:last-child { padding: 0 2px; }
+
+  .mb-node-label { font-size: 12px; }
+
+  .mb-node:not(:last-child)::after {
+    top: 12px;
+    bottom: auto;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+  }
+
+  .mb-node-text { padding-top: 0; }
+}
+
+/* ── 4. Review ───────────────────────────────────────────────────────── */
+.mb-empty {
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: 28px 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+  background-color: var(--color-surface-raised);
+}
+
+.mb-empty .empty-state-icon {
+  border: 1px solid rgba(232, 92, 74, 0.26);
+  border-radius: 12px;
+  background: rgba(232, 92, 74, 0.08);
+  color: var(--color-brand-strong);
+  box-shadow: var(--shadow-nested);
 }
 
 .mb-table-wrap {
-  width: 100%;
   overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-nested);
 }
 
 .mb-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.85rem;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text);
 }
 
 .mb-table th,
 .mb-table td {
-  padding: 6px 8px;
+  padding: 9px 12px;
   text-align: right;
   white-space: nowrap;
   border-bottom: 1px solid var(--color-border);
 }
+
+.mb-table tbody tr:last-child th,
+.mb-table tbody tr:last-child td { border-bottom: 0; }
 
 .mb-table th:first-child,
 .mb-table td:last-child,
@@ -124,12 +952,27 @@
 }
 
 .mb-table thead th {
-  font-weight: 500;
+  background-color: var(--color-surface-raised);
+  font-size: 12px;
+  font-weight: 600;
   color: var(--color-text-muted);
 }
 
+.mb-table tbody th { font-weight: 500; }
+
+.mb-table td:last-child {
+  min-width: 7.5rem;
+  white-space: normal;
+}
+
+/* The new plan's row: a tint and bolder figures, so colour is not the only sign. */
+.mb-table tr.is-new th,
+.mb-table tr.is-new td {
+  background-color: var(--color-brand-tint);
+  font-weight: 700;
+}
+
 .mb-feedback {
-  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -143,38 +986,49 @@
 }
 
 .mb-facts dt {
-  font-size: 0.8rem;
+  font-size: 13px;
   font-weight: 500;
   color: var(--color-text-muted);
 }
 
 .mb-facts dd {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 14px;
   color: var(--color-text);
 }
 
-.mb-log summary {
+/* ── 5. Close ────────────────────────────────────────────────────────── */
+.mb-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   cursor: pointer;
-  font-size: 0.875rem;
-  color: var(--color-text);
 }
 
-.mb-log pre {
-  margin: 8px 0 0;
-  padding: 12px;
-  max-height: 280px;
-  overflow: auto;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.mb-confirm input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--color-brand-strong);
+  cursor: inherit;
 }
 
+.mb-confirm:has(input:disabled) { cursor: not-allowed; }
+
+.mb-confirm-text {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.mb-confirm-help {
+  display: block;
+  margin-top: 2px;
+}
+
+/* ── How the run ended ───────────────────────────────────────────────── */
 .mb-spin {
   vertical-align: -2px;
   animation: mb-spin 1s linear infinite;
@@ -184,10 +1038,173 @@
   to { transform: rotate(360deg); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .mb-spin { animation: none; }
+.mb-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 22px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  font-size: 14px;
+  color: var(--color-text);
 }
 
-@media (max-width: 900px) {
-  .mb-steps { grid-template-columns: minmax(0, 1fr); }
+.mb-result h5 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mb-result p { margin: 0; }
+.mb-result.is-completed { border-color: var(--color-success-ui); }
+.mb-result.is-completed h5 svg { color: var(--color-success-deep); }
+.mb-result.is-closed { border-color: var(--color-nav-border); }
+.mb-result.is-closed h5 svg { color: var(--color-nav-bg); }
+.mb-result.is-failed { border-color: var(--color-danger-border); background-color: var(--color-danger-bg); }
+.mb-result.is-failed h5 { color: var(--color-danger-text); }
+
+.mb-result-facts,
+.mb-dialog-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 16px;
+}
+
+.mb-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.mb-stages li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 340px;
+}
+
+.mb-stages li.is-stopped { font-weight: 600; }
+
+/* The three dialogs, on the shared Modal, which leaves the look to its caller. */
+.mb-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.mb-dialog {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: var(--color-surface);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.25);
+}
+
+.mb-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--color-surface-sunken);
+}
+
+.mb-dialog-head h3 {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.mb-dialog-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+.mb-dialog-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.mb-dialog-body p { margin: 0; }
+
+.mb-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--color-surface-sunken);
+}
+
+/* The stages reflow with the section, not the window. */
+@container (max-width: 860px) {
+  .mb-flow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .mb-flow-sep { display: none; }
+}
+
+@container (max-width: 480px) {
+  .mb-flow { grid-template-columns: minmax(0, 1fr); }
+
+  .mb-step { padding: 18px 16px; }
+
+  .mb-step-head { flex-wrap: wrap; }
+  .mb-step-title { flex: 1 1 0; min-width: 60%; }
+  .mb-step-action { width: 100%; }
+
+  .mb-file-main { flex-wrap: wrap; }
+  .mb-file-text { flex: 1 1 0; min-width: 60%; }
+  .mb-file-btn { width: 100%; }
+
+  .mb-close-btn { align-self: stretch; }
+}
+
+@media (max-width: 480px) {
+  .mb-dialog-actions .btn { width: 100%; }
+  .mb-dialog-actions { flex-direction: column-reverse; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-spin { animation: none; }
+
+  .mb-steps .btn-primary,
+  .mb-steps .btn-secondary,
+  .mb-close-btn,
+  .mb-choice-option {
+    transition: none;
+    transform: none !important;
+  }
 }

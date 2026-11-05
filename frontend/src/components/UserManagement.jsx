@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import SectionLede from './ui/SectionLede';
 import {
-  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck, ShieldOff,
+  Plus, Pencil, Trash2, AlertTriangle, Mail, KeyRound, Link2, Copy, Check, Loader2, ShieldCheck, ShieldOff, Users,
 } from 'lucide-react';
 import UserFormModal from './UserFormModal';
 import PermissionsModal from './PermissionsModal';
@@ -329,8 +329,14 @@ const UserManagement = () => {
         )}
 
         {loading && <LoadingStatus>Loading users…</LoadingStatus>}
-        <SectionLede className="is-standalone">Who has access</SectionLede>
-        <div className="user-mgmt-table-wrapper">
+        <div className="ui-card is-flush">
+          <div className="ui-card-intro">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><Users size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Who has access</SectionLede></div>
+            </div>
+          </div>
+        <div className="user-mgmt-table-wrapper ui-card-table">
           <table className="user-mgmt-table">
             <thead>
               <tr>
@@ -493,6 +499,7 @@ const UserManagement = () => {
               )}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
 

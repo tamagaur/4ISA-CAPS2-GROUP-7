@@ -200,38 +200,6 @@
 }
 
 /* ── Row actions in the plan table ────────────────────────────────────── */
-.rq-row-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.rq-row-actions .table-btn-group {
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.rq-row-more {
-  display: inline-flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.15rem 0.6rem;
-  font-size: 0.82rem;
-}
-
-/* Link buttons in a table row: at least 24px tall to tap (WCAG 2.5.8). */
-.rq-row-more .link-button,
-.rq-open-cell .link-button {
-  min-height: 24px;
-  font-size: 0.82rem;
-}
-
-.rq-open-cell {
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
 .rq-plan-note {
   color: var(--color-text);
   font-weight: 600;
@@ -289,11 +257,10 @@
   gap: 0.75rem;
   min-width: 0;
   padding: 16px 18px;
-  border: var(--card-border);
-  border-left: 3px solid var(--rq-accent);
-  border-radius: 14px;
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  border: 1px solid color-mix(in srgb, var(--rq-accent) 26%, white);
+  border-radius: var(--radius-nested);
+  background-color: color-mix(in srgb, var(--rq-accent) 5%, white);
+  box-shadow: var(--shadow-nested);
   font: inherit;
   text-align: left;
   color: inherit;
@@ -302,7 +269,7 @@
 }
 
 .rq-summary-card:hover {
-  box-shadow: var(--shadow-card), 0 2px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-nested), 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 .rq-summary-card:focus-visible {
@@ -311,7 +278,7 @@
 }
 
 .rq-summary-card[aria-pressed='true'] {
-  box-shadow: var(--shadow-card), inset 0 0 0 1px var(--rq-accent);
+  box-shadow: var(--shadow-nested), inset 0 0 0 1px var(--rq-accent);
 }
 
 .rq-tone-pending {
@@ -325,7 +292,7 @@
 }
 
 .rq-tone-rejected {
-  --rq-accent: #C98A86;
+  --rq-accent: #D8432F;
   --rq-accent-bg: var(--badge-critical-bg);
 }
 
@@ -352,11 +319,9 @@
 }
 
 .rq-summary-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
+  font-size: 14px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--rq-accent) 72%, #182230);
 }
 
 .rq-summary-value {
@@ -403,6 +368,12 @@
   overflow-x: auto;
 }
 
+/* The whole tab is one raised card, so its table sits one depth down. */
+.rq-tab .data-table-card {
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+}
+
 .rq-table .rq-cell-product {
   min-width: 200px;
 }
@@ -432,6 +403,11 @@
   min-width: 0;
 }
 
+/* Wide enough that an email stays on one line beside the other columns. */
+.rq-table .rq-person {
+  min-width: 190px;
+}
+
 .rq-person-name {
   font-weight: 600;
   color: var(--color-text);
@@ -447,6 +423,7 @@
 .rq-badges {
   display: inline-flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.3rem;
 }
 
@@ -468,9 +445,9 @@
   gap: 0.5rem;
   padding: 2rem 1rem;
   border: var(--card-border);
-  border-radius: 14px;
+  border-radius: var(--radius-nested);
   background-color: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-nested);
   color: var(--color-text-subtle);
   text-align: center;
 }
@@ -626,9 +603,9 @@
 .rq-other-obs {
   padding: 16px 18px;
   border: var(--card-border);
-  border-radius: 14px;
+  border-radius: var(--radius-nested);
   background-color: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-nested);
 }
 
 .rq-other-obs-head {
@@ -699,8 +676,7 @@
 
 /* index.css .table-btn has no disabled look; a disabled action must read as
    unavailable, not just ignore the click. */
-.rq-row-actions .table-btn:disabled,
-.rq-row-more .link-button:disabled {
+.reorder-split .table-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -812,10 +788,18 @@
     border-bottom: none;
   }
 
-  .rq-table tbody td {
+  .data-table.rq-table tbody td {
     padding: 0;
     border-bottom: none;
     text-align: left;
+    min-width: 0;
+  }
+
+  .rq-badges {
+    justify-content: flex-start;
+  }
+
+  .rq-table .rq-person {
     min-width: 0;
   }
 

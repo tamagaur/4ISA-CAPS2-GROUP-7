@@ -327,7 +327,8 @@
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 /* A table standing where its card's plot was: it takes the plot's height
@@ -559,11 +560,12 @@
 .legend-line {
   width: 16px;
   height: 0;
-  border-top: 2px solid;
+  border-top: 3px solid;
 }
 
 .legend-line-dashed {
   border-top-style: dashed;
+  border-top-width: 2.5px;
 }
 
 /* Placeholder months (preview mode): the band's own tint as a swatch. The
@@ -1074,7 +1076,8 @@
   margin: 0 0 12px;
   padding: 8px 12px;
   border: 1px solid #EDF0F4;
-  border-radius: 8px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background: #F9FAFB;
   font-size: var(--text-secondary);
   color: var(--color-text-body);
@@ -1612,7 +1615,8 @@
 .abc-panel {
   padding: 14px 16px;
   border: 1px solid #EDF0F4;
-  border-radius: 12px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background: #F9FAFB;
 }
 
@@ -1802,8 +1806,11 @@
   flex-direction: column;
   gap: 14px;
   margin-top: 2px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
+  padding: 14px 16px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 .abc-share-row {
@@ -2496,24 +2503,16 @@
   opacity: 0.45;
 }
 
-/* Sales vs Inventory Value keeps one height whatever it shows: the two
-   panels of "Both", a single plot, the Purchases bars or the table. Until
-   2026-10-13 only "Both" was this tall; switching to any other view made
-   the card up to 145px shorter (236px on a phone), and the Annual View
-   card beside it and every card below moved with it. The legend, plots
-   and notes share the height (the lower panel keeps 44px more than the
-   upper for its month axis), and the table scrolls inside it. */
+/* Sales vs Inventory Value keeps one height whatever it shows: every chart
+   view and the table (2026-11-03: the table used to be as tall as its rows, so
+   Chart to Table made the card up to 204px shorter, and the Annual View card
+   beside it and every card below moved with it). The legend, plot, year band,
+   change panel and notes share the height, and the table scrolls inside it. */
 .yoy-body {
   display: flex;
   flex-direction: column;
-  height: 500px;
+  height: 560px;
   min-height: 0;
-}
-
-/* A phone's legend wraps onto more lines; a little less height keeps the
-   card from filling the whole screen. */
-@media (max-width: 600px) {
-  .yoy-body { height: 470px; }
 }
 
 .chart-widget .yoy-body .chart-container-yoy {
@@ -2561,8 +2560,8 @@
 }
 
 .chart-widget-svs .chart-title-area {
-  flex: 1 1 20rem;
-  min-width: min(100%, 20rem);
+  flex: 1 1 23rem;
+  min-width: min(100%, 23rem);
 }
 
 .chart-widget-svs .chart-header h4 > span:first-child {
@@ -2570,36 +2569,38 @@
 }
 
 .chart-widget-svs .chart-header-controls {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+/* Never wider than the card: on a narrow card its buttons wrap instead of
+   running off either side. */
+.chart-widget-svs .chart-view-toggle {
+  flex-shrink: 1;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .chart-widget-svs.is-narrow .chart-header {
   flex-wrap: wrap;
 }
 
-/* Every subtitle the card can switch to, laid in one grid cell with only
-   the current one visible: the cell is as tall as the longest, at any
-   width, so changing the view never moves the card or the page below it
-   (2026-10-19; before this the Weeks of stock and Purchases subtitles,
-   wrapping under the title, made the card up to two lines taller). A
-   hidden one is out of the accessibility tree too (visibility). */
-.svs-lede-stack {
-  display: grid;
+/* On a phone the two controls take a row each if they must, so neither runs
+   off the card. */
+.chart-widget-svs.is-narrow .chart-header-controls {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.svs-lede-stack > .section-lede {
-  grid-area: 1 / 1;
+/* A phone's title may take two lines, with the info button staying beside it. */
+.chart-widget-svs.is-narrow .chart-header h4 {
+  flex-wrap: nowrap;
 }
 
-.svs-lede-stack > .section-lede.is-reserved {
-  visibility: hidden;
-}
-
-/* The table view is as tall as its rows, up to the chart's height (it
-   scrolls past that), so no empty band sits under the last row. */
-.yoy-body.is-table {
-  height: auto;
-  max-height: 500px;
+.chart-widget-svs.is-narrow .chart-header h4 > span:first-child {
+  white-space: normal;
 }
 
 /* Forecast demand (2026-10-19): the calendar adjustment inside the forecast,
@@ -2788,6 +2789,575 @@
   vertical-align: -1px;
 }
 
+/* ── Its head and panels, to the 2026-11-03 mockups. The card itself is the shared
+   one (.chart-widget). */
+.chart-widget-svs .chart-header {
+  margin-bottom: 10px;
+}
+
+/* The icon, a thin rule, then the title and subtitle. */
+.chart-widget-svs .svs-head {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.svs-head-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background-color: #E7F6F8;
+  color: #0E7480;
+}
+
+.chart-widget-svs .svs-head-text {
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 1px solid #E7EBF0;
+}
+
+.chart-widget-svs .chart-header h4 {
+  margin: 0;
+  color: #1F2A3A;
+}
+
+.chart-widget-svs .section-lede {
+  margin: 1px 0 0;
+  color: #475467;
+}
+
+/* Compact segmented controls: the selected one dark. */
+.chart-widget-svs .chart-view-toggle {
+  padding: 3px;
+  border: 1px solid #E7EBF0;
+  border-radius: 10px;
+  background-color: #F5F7FA;
+}
+
+.chart-widget-svs .chart-view-toggle button {
+  border-radius: 7px;
+  color: #475467;
+}
+
+.chart-widget-svs .chart-view-toggle button.active {
+  background-color: #1F2A3A;
+  color: #FFFFFF;
+  box-shadow: none;
+}
+
+.chart-widget-svs .chart-view-toggle button:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+/* What is selected and what it is compared with. */
+.svs-period-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #475467;
+}
+
+.svs-period-row svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.svs-period {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1F2A3A;
+}
+
+.svs-compared {
+  font-size: 0.8rem;
+  color: #667085;
+}
+
+/* On a phone the legend and the panel stack up further. */
+.chart-widget-svs.is-narrow .yoy-body {
+  height: 650px;
+}
+
+/* A table long enough to nearly fill the body stretches its rows to the bottom,
+   so no empty band sits under the last one; a longer one scrolls. A short range
+   keeps normal rows. */
+.yoy-body.is-table.is-filled .chart-table {
+  height: 100%;
+}
+
+/* A view's legend or note kept only for its height. */
+.svs-spacer {
+  visibility: hidden;
+}
+
+/* The legend: a group per metric on one flowing line. Each group after the first
+   on a line has a thin rule before it; the overflow hides the rule of a group
+   that wraps to the start of a line. Every view's legend sits in the one grid
+   cell, the others hidden, so the space is the tallest one's at this width and
+   the plot below stays put when a view's legend takes fewer lines. */
+.svs-legend {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.svs-legend-flow {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 0;
+  margin-left: -15px;
+}
+
+.svs-legend-flow .svs-legend-group {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 0 14px;
+  border-left: 1px solid #E7EBF0;
+}
+
+.svs-legend-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #1F2A3A;
+}
+
+.svs-legend .legend-item {
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #475467;
+}
+
+.svs-legend .svs-swatch {
+  margin-right: 0;
+}
+
+.svs-legend .legend-metric-line {
+  width: 22px;
+}
+
+/* The plot, the year band, the change panel and the month being read, as one
+   frame: its flexible part is the plot, so the plot takes what the rest leave. */
+.svs-plot-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.svs-plot-frame:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* The month being read: a very light wash, in the plot and in the panel. */
+.svs-month-highlight {
+  position: absolute;
+  background-color: rgba(56, 91, 169, 0.08);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* One quiet band per calendar year, under the months. */
+.svs-year-band {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.svs-year-band span {
+  flex-basis: 0;
+  min-width: 0;
+  padding: 1px 0;
+  border-radius: 5px;
+  background-color: #F2F4F8;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-align: center;
+  color: #667085;
+}
+
+/* The change panel: set apart, its rows lined up with the plot's months above. */
+.svs-strips {
+  flex: none;
+  margin: 8px -13px 0;
+  padding: 6px 12px 5px;
+  border: 1px solid #E7EBF0;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+  background-color: #FCFDFE;
+}
+
+.svs-strips-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 10px;
+}
+
+.svs-strips-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #1F2A3A;
+}
+
+.svs-strips-note {
+  font-size: 0.74rem;
+  color: #667085;
+}
+
+.svs-strips-body {
+  position: relative;
+}
+
+.svs-strip {
+  margin-top: 3px;
+}
+
+.svs-strip + .svs-strip {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid #EDF0F4;
+}
+
+.svs-strip-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1F2A3A;
+}
+
+.svs-strip-range {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: #667085;
+}
+
+.svs-strip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background-color: #F2F4F8;
+  color: #475467;
+}
+
+.svs-strip-row {
+  display: flex;
+}
+
+/* The scale, in the column the plot's peso axis sits in. */
+.svs-strip-ticks {
+  position: relative;
+  flex: none;
+}
+
+.svs-strip-ticks span {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 0.64rem;
+  line-height: 1;
+  color: #667085;
+}
+
+.svs-strip-plot {
+  flex: none;
+  overflow: visible;
+}
+
+.svs-strip-grid {
+  stroke: #EDF0F4;
+  stroke-width: 1;
+}
+
+.svs-strip-zero-line {
+  stroke: #98A2B3;
+  stroke-width: 1;
+}
+
+.svs-strip-pill {
+  fill: #EEF3FC;
+  stroke: #C9D6F0;
+  stroke-width: 0.75;
+}
+
+.svs-strip-over {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #1F2A3A;
+}
+
+.svs-strip-months {
+  display: flex;
+}
+
+.svs-strip-months span {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-align: center;
+  color: #667085;
+}
+
+.svs-strip-months span.is-active {
+  font-weight: 700;
+  color: #1F2A3A;
+}
+
+/* The notes that depend on the view, in one cell (see .svs-legend). */
+.svs-note-slot {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.svs-note-slot > .gap-note {
+  grid-area: 1 / 1;
+}
+
+/* A comparison with nothing to draw, in the panel's place. */
+.svs-compare-note {
+  flex: none;
+  margin: 6px 0 0;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background-color: var(--color-surface-raised, #F8FAFC);
+  font-size: 0.8rem;
+  color: #475467;
+}
+
+/* The month windows: what is showing, and the way to the others. */
+.svs-window-nav {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin-top: 6px;
+}
+
+.svs-window-label {
+  font-size: 0.78rem;
+  color: #667085;
+}
+
+.svs-window-buttons {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.svs-window-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border: 1px solid #E7EBF0;
+  border-radius: 7px;
+  background-color: #FFFFFF;
+  color: #475467;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.svs-window-buttons button:hover:not(:disabled) {
+  background-color: #F5F7FA;
+}
+
+.svs-window-buttons button:focus-visible {
+  outline: 2px solid var(--color-brand-primary);
+  outline-offset: 1px;
+}
+
+.svs-window-buttons button:disabled {
+  color: #98A2B3;
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* The hover: a white card with a small pointer towards the month, its figures
+   lined up on the right. */
+.svs-tip {
+  position: absolute;
+  top: 2px;
+  z-index: 20;
+  width: 300px;
+  max-width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #E7EBF0;
+  border-radius: 13px;
+  background-color: #FFFFFF;
+  box-shadow: 0 12px 28px -6px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.06);
+  font-size: 0.78rem;
+  color: #475467;
+  pointer-events: none;
+}
+
+.svs-tip-arrow {
+  position: absolute;
+  top: min(var(--tip-arrow-top, 26px), calc(100% - 22px));
+  width: 11px;
+  height: 11px;
+  border: 1px solid #E7EBF0;
+  background-color: #FFFFFF;
+  transform: rotate(45deg);
+}
+
+.svs-tip.is-right .svs-tip-arrow {
+  left: -6px;
+  border-top-color: transparent;
+  border-right-color: transparent;
+}
+
+.svs-tip.is-left .svs-tip-arrow {
+  right: -6px;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+}
+
+.chart-widget-svs.is-narrow .svs-tip {
+  left: 0 !important;
+  right: 0 !important;
+  width: auto;
+}
+
+.chart-widget-svs.is-narrow .svs-tip-arrow {
+  display: none;
+}
+
+.svs-tip-head {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+  color: #667085;
+}
+
+.svs-tip-head strong {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #1F2A3A;
+}
+
+.svs-tip-section {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  border-top: 1px solid #EDF0F4;
+}
+
+.svs-tip-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 3px;
+  font-weight: 700;
+  color: #1F2A3A;
+}
+
+.svs-tip-title .legend-metric-line {
+  width: 20px;
+  margin-right: 6px;
+}
+
+.svs-tip-basis {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: #667085;
+}
+
+.svs-tip-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  line-height: 1.55;
+}
+
+.svs-tip-line strong {
+  flex: none;
+  max-width: 62%;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: #1F2A3A;
+}
+
+.svs-tip-line strong.is-missing {
+  font-weight: 500;
+  color: #667085;
+}
+
+.svs-tip-aside {
+  color: #667085;
+  font-size: 0.72rem;
+}
+
+.svs-tip-change span:first-child {
+  font-weight: 600;
+  color: #1F2A3A;
+}
+
+.svs-tip-insight {
+  display: flex;
+  gap: 7px;
+  margin: 4px 0 0;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background-color: #EEF3FC;
+  line-height: 1.35;
+  color: #1F2A3A;
+}
+
+.svs-tip-insight svg {
+  flex: none;
+  margin-top: 1px;
+  color: #385BA9;
+}
+
+.svs-tip-note {
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px solid #EDF0F4;
+  line-height: 1.4;
+}
+
+.svs-tip-note strong {
+  display: block;
+  color: #1F2A3A;
+}
+
+.svs-tip-note strong.is-inline {
+  display: inline;
+}
+
 /* One plot, as tall as the two panels of the year overlay were together. */
 .chart-container-yoy.svs-plot {
   flex: 1 1 auto;
@@ -2866,7 +3436,8 @@
   margin-top: 14px;
   padding: 12px 16px 14px;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   background-color: var(--color-surface-raised);
 }
 

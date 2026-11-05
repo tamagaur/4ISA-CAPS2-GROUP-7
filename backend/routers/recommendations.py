@@ -179,6 +179,16 @@ in cases: an order of 104,575 pieces is about 363 cases of 288. pack_size
 backend/stock_units.py converts stock with) lets the page show the case
 count beside each quantity. Only 6 of the 73 live orders are whole cases;
 the LP doesn't round to cases, and nothing here does either.
+
+WHAT THE NOT-PLANNED LIST IS FOR (2026-11-03). The plan covers Class A products
+whose forecast passed the accuracy check, so the rest of Class A had no row and
+no signal on the Reorder page: 80 of the 189 as of 2026-02 (66 failed the check,
+9 too little history, 5 dead), 33.16% of 12-month revenue, 12 of them with under
+a week of cover on the opening count (all queried read-only, 2026-11-03). Each
+row also carries revenue_share and days_of_cover (or cover_blocked_reason, by
+_cover's rules), so it compares with a row of the plan. It is a list beside the
+plan, not part of it: count, order_count and the plan total don't include it, and
+nothing in forecasting, safety stock or the LP reads it.
 """
 from __future__ import annotations
 
@@ -612,7 +622,7 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
 # Tier A at the cycle's ABC run, less the products with a plan row (a decided row is still the plan; a decided row no LP
 # run produced is not, the row query's outside_plan). Only principals that have a plan in the cycle.
 _NOT_PLANNED_SQL = f"""
-    SELECT COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.product_name, pd.principal,
+    SELECT COALESCE(pd.sku_code, pd.category_path) AS sku_id, pd.product_name, pd.principal, ac.revenue_share,
            fr.status AS forecast_status, fr.mase,
            inv.stock_pieces AS current_stock, inv.stock_cases AS current_stock_cases,
            CASE WHEN inv.product_key IS NOT NULL THEN TRUE
@@ -692,11 +702,15 @@ def not_planned(db: Session, cycle, principal: str | None, abc_periods: dict | N
         reason = _not_planned_reason(r["forecast_status"], r["mase"])
         stock = None if r["current_stock"] is None else float(r["current_stock"])
         absent = r["in_stock_count"] is False and r["principal"] in COUNT_OMITS_ZERO_STOCK
+        recent = float(r["recent_monthly_pieces"] or 0)
+        days_of_cover, cover_reason = _cover(0.0 if absent else stock, recent)
         out.append(NotPlannedItem(
             sku_id=r["sku_id"] or "", product_name=r["product_name"], reason=reason, reason_text=NOT_PLANNED_REASONS[reason],
+            mase=_opt_float(r, "mase"), revenue_share=_opt_float(r, "revenue_share"),
             current_stock=0.0 if absent else stock, stock_not_in_count=absent,
             stock_blocked_reason=NO_PACK_SIZE_REASON if stock is None and r["current_stock_cases"] is not None else None,
-            recent_monthly_pieces=float(r["recent_monthly_pieces"] or 0),
+            recent_monthly_pieces=recent,
+            days_of_cover=days_of_cover, cover_blocked_reason=cover_reason,
             needs_review=r.get("needs_review"), review_reasons=list(r.get("review_reasons") or []),
             review_over_run_months=r.get("review_over_run_months"), review_collapse_ratio=_opt_float(r, "review_collapse_ratio"),
         ))

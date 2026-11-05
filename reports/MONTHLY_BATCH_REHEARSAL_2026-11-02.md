@@ -123,7 +123,7 @@ Clicked through in a real browser (Chrome, driven by Playwright) on a clean copy
 
 | Limit | Effect |
 |---|---|
-| A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | The page has no sign-off button: run the `transform_signoff` command the log prints. (On the practice copy only, `scripts/practice_signed_load.py` signs it since 2026-11-04, as `SYSTEM_SIGNER`; that is not a review.) Not built because there is no real new file to test it with. |
+| A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | Since 2026-11-04 the panel has an **Approve the file** action that runs the same `transform_signoff` command (docs/MONTHLY_BATCH_REVIEW.md). Tested with stand-ins only, because there is no real new file to test it with. |
 | `LATEST_DATA_PERIOD` in `frontend/src/dataCoverage.js` is hand-set | After a run, the Dashboard's default range stays at Feb 2026 and it shows a banner saying so. The frontend's own file, left alone. |
 | ~~The Dashboard and Reorder pages never show the batch~~ (no longer true since 2026-11-04) | Under `scripts.local_app` the pages read `ssm_practice`, labelled; they move at Run, not at Close (STATE.md). On any other server they show nothing of the batch, which never runs there. |
 | A second month can't be practised | `local_pipeline_qa synth` only generates 2026-03. |
@@ -178,3 +178,7 @@ The answers are not coming (team, 2026-11-02). Each one is a written limitation 
 | Costs, capacity, ceilings, PO Qty, deliveries, promotions | L1-L4, already written |
 
 Synthetic data stays in the local database or the `demo` schema, labelled. The batch refuses to start on live if the rehearsal's generated sales are in the month.
+
+## Changed after this rehearsal (2026-11-04)
+
+The rehearsal above ran with nothing decided, and its April plan (121 rows, 110 ordering, 1,213,168 pieces) stands as what that run produced. `scripts.run_month` now refuses that sequence, so it cannot be repeated as written. The panel now has five steps, `GET /batch/job` returns the stages reached rather than the raw log, and each job's full output is saved under `local/monthly_batch/logs`. What changed, what is provisional and what has not been run: [docs/MONTHLY_BATCH_REVIEW.md](../docs/MONTHLY_BATCH_REVIEW.md).
