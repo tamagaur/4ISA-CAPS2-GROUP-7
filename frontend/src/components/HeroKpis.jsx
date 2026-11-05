@@ -12,7 +12,7 @@
 // "less crowded at 100%"): a worked-out number is itself the trigger
 // (HoverValue: dotted underline, hover or tap) for its formula with the live
 // values; a base figure opens its detail (NumLink: underlined on hover); each
-// card keeps one "?" for its own explanation. A figure the backend does not
+// card's own explanation opens from its title. A figure the backend does not
 // send yet is "—" with the reason, never a made-up number: the same month a
 // year earlier on the annual card, the reasons Class A products can't be
 // checked, and the value of the pending orders (no cost data from SSM).
@@ -102,13 +102,16 @@ export const KpiCard = ({
     <section className={`hero-card is-${tone}${action ? ' is-action' : ''} ${className}`} aria-label={title}>
       <header className="hero-card-head">
         <span className="hero-card-name">
-          <h3 className="hero-card-title">{title}</h3>
+          <h3 className="hero-card-title">
+            {lines.length > 0 ? (
+              <InfoTip label={`About ${title}`} trigger={title} triggerClassName="dash-tip-title" className="dash-tip-wrap">
+                {tipLines(lines)}
+              </InfoTip>
+            ) : title}
+          </h3>
         </span>
         <span className="hero-card-side">
           {basis && <BasisTag label={basis.label} follows={basis.follows} />}
-          {lines.length > 0 && (
-            <InfoTip label={`About ${title}`} size={14}>{tipLines(lines)}</InfoTip>
-          )}
         </span>
       </header>
       <div className="hero-card-body">{children}</div>
@@ -203,179 +206,181 @@ export const AnnualSalesCard = ({
 
   return (
     <KpiCard tone="blue" title={year ? `FY ${year} sales vs allocation` : 'Sales vs allocation'} tooltip={tips} basis={basis} className="hero-card-wide">
-      <div className="hero-annual-cols">
-        {/* ── Allocation ── */}
-        <div className="hero-annual-col">
-          <p className="hero-label">Allocation · estimated</p>
-          {level ? (
-            <>
-              <p className="hero-value hero-value-xl">
-                <HoverValue
-                  label="How the allocation is worked out"
-                  what={target
-                    ? `FY ${a.basis_year} sales × the SSM target you picked.`
-                    : `An average month of FY ${a.basis_year} sales × the SSM target you picked. FY ${a.basis_year} has `
-                      + `${a.basis_months} of 12 months on record, so there is no yearly figure.`}
-                  sums={[target
-                    ? `${fp(a.basis_sales)} × ${level.pct}% = ${fp(target)}`
-                    : `${fp(a.basis_sales)} ÷ ${a.basis_months} months × ${level.pct}% = ${fp(level.monthly)} a month`]}
-                >
-                  {target ? fp(target) : `${fp(level.monthly)}/month`}
-                </HoverValue>
-              </p>
-              <p className="hero-kpi-asof">
-                FY {a.basis_year} sales:{' '}
-                <NumLink onClick={onOpenYearly} title="See sales per year"><strong>{fp(a.basis_sales)}</strong></NumLink>
-                {a.basis_months < 12 ? ` (${a.basis_months} of 12 months on record)` : ''}
-              </p>
-            </>
-          ) : (
-            <p className="hero-note">{a.blocked_reason || 'The allocation is not available for this range.'}</p>
-          )}
-          {allocSynthetic && <p className="hero-note hero-synthetic">{allocSynthetic}</p>}
-          {/* "SSM target" and its buttons, stacked under FY sales (2026-10-18). */}
-          {levelsBox}
-        </div>
-
-        {/* ── Progress so far ── */}
-        <div className="hero-annual-col">
+      {/* What the card is for, on its face (2026-11-05): sales to date, the
+          allocation, and how far behind or ahead. The rest is under Details. */}
+      <div className="hero-annual-lead">
+        <div className="hero-annual-figure">
           {hasYtd ? (
             <>
               <p className="hero-label">Sales to date · {span}{onRecord}</p>
-              <div className="hero-figure-row">
-                <p className="hero-value">{fp(a.ytd_sales)}</p>
-                {shareText && (
-                  <p className="hero-figure-aside">
-                    <HoverValue
-                      label="How the share is worked out"
-                      what={`FY ${year} sales so far ÷ the ${level.pct}% allocation.`}
-                      sums={[`${fp(a.ytd_sales)} ÷ ${fp(target)} = ${shareText}`]}
-                    >
-                      {shareText}
-                    </HoverValue>
-                    {' '}of the allocation
-                    {expected != null && (
-                      <>
-                        {' · '}should be{' '}
-                        <HoverValue
-                          label="How “should be by now” is worked out"
-                          what={`Last year's sales for the same months × the SSM target, so it follows last year's pattern `
-                            + `(a slow start in ${year - 1} lowers it too) rather than an even share of the year.`}
-                          sums={[`${priorLabel} sales ${fp(a.prior_ytd_sales)} × ${level.pct}% = ${fp(expected)}`]}
-                        >
-                          {fp(expected)}
-                        </HoverValue>
-                        {' '}by now
-                      </>
-                    )}
-                  </p>
-                )}
-              </div>
-              {ytdSynthetic && <p className="hero-note hero-synthetic">{ytdSynthetic}</p>}
-
-              {soldAt != null && (
-                <div className="hero-progress">
-                  <HoverValue
-                    label="What the bar shows"
-                    block
-                    plain
-                    notes={[
-                      `Sold (blue): ${fp(a.ytd_sales)}`,
-                      behind ? `Short (red): ${fp(Math.abs(pace.gap))}, up to "should be by now"` : null,
-                      expectedAt != null ? `Should be by now (dashed tick): ${fp(expected)}` : null,
-                      `End of the bar: the ${level.pct}% allocation, ${fp(target)}`,
-                    ]}
-                  >
-                    <span className="hero-progress-track">
-                      <span className="hero-progress-fill" style={{ width: `${soldAt * 100}%` }} />
-                      {behind && expectedAt != null && (
-                        <span
-                          className="hero-progress-short"
-                          style={{ left: `${soldAt * 100}%`, width: `${(expectedAt - soldAt) * 100}%` }}
-                        />
-                      )}
-                      {expectedAt != null && <span className="hero-progress-pace" style={{ left: `${expectedAt * 100}%` }} />}
-                    </span>
-                  </HoverValue>
-                  <div className="hero-progress-axis" aria-hidden="true">
-                    <span>₱0</span>
-                    <span>{fp(target)}</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="hero-action-row">
-                <div className="hero-pills">
-                  {pace?.gap != null ? (
-                    <HoverValue
-                      label="How the gap is worked out"
-                      plain
-                      what="Should be by now − sales so far."
-                      sums={[
-                        `${fp(expected)} − ${fp(a.ytd_sales)} = ${behind ? '' : '−'}${fp(Math.abs(pace.gap))}`,
-                        yoySum,
-                      ]}
-                    >
-                      <Pill
-                        text={`${behind ? 'Behind' : 'Ahead'} by ${fp(Math.abs(pace.gap))}`}
-                        tone={behind ? 'negative' : 'positive'}
-                        icon={behind ? AlertTriangle : Check}
-                      />
-                    </HoverValue>
-                  ) : yoyText && (
-                    <HoverValue label="How the change is worked out" plain what={`Sales so far against ${priorLabel}.`} sums={[yoySum]}>
-                      <Pill text={yoyText} tone={yoy.pct >= 0 ? 'positive' : 'negative'} icon={yoy.pct >= 0 ? ArrowUpRight : ArrowDownRight} />
-                    </HoverValue>
-                  )}
-                </div>
-
-                {pace?.reached ? (
-                  <p className="hero-sentence">Allocation reached</p>
-                ) : pace?.perMonthNeeded != null && (
-                  <div className="hero-monthly-summary">
-                    <div>
-                      <span>Needed / month</span>
-                      <strong>
-                        <HoverValue
-                          label="Monthly sales needed to reach the allocation"
-                          what={`Allocation left ÷ ${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} remaining.`}
-                          sums={[`(${fp(target)} − ${fp(a.ytd_sales)}) ÷ ${monthsLeft} = ${fp(pace.perMonthNeeded)}`]}
-                        >
-                          {fp(pace.perMonthNeeded)}
-                        </HoverValue>
-                      </strong>
-                    </div>
-                    {a.basis_sales > 0 && a.basis_months === 12 && (
-                      <div>
-                        <span>FY {a.basis_year} avg / month</span>
-                        <strong>
-                          <HoverValue
-                            label="Previous fiscal year's average monthly sales"
-                            what={`FY ${a.basis_year} sales ÷ 12 months.`}
-                            sums={[`${fp(a.basis_sales)} ÷ 12 = ${fp(a.basis_sales / 12)}`]}
-                          >
-                            {fp(a.basis_sales / 12)}
-                          </HoverValue>
-                        </strong>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {yoy?.note && <p className="hero-note">{yoy.note}</p>}
+              <p className="hero-value hero-value-xl">{fp(a.ytd_sales)}</p>
             </>
           ) : (
             // No sales yet in the year being planned (Del Monte: latest sales
             // Dec 2025, planning 2026): the selected range's sales instead.
             <>
               <p className="hero-label">{range?.label || 'Sales'}</p>
-              <p className="hero-value">{range?.value ?? '—'}</p>
-              {range?.synthetic && <p className="hero-note hero-synthetic">{range.synthetic}</p>}
-              {year && <p className="hero-note">No FY {year} sales are on record yet.</p>}
+              <p className="hero-value hero-value-xl">{range?.value ?? '—'}</p>
             </>
           )}
-          {/* Separate the latest month from the year-to-date figure: it is
-              useful context, but belongs to one month rather than the year. */}
+        </div>
+        <div className="hero-annual-figure">
+          <p className="hero-label">Allocation · estimated</p>
+          {level ? (
+            <p className="hero-value hero-value-xl">
+              <HoverValue
+                label="How the allocation is worked out"
+                what={target
+                  ? `FY ${a.basis_year} sales × the SSM target you picked.`
+                  : `An average month of FY ${a.basis_year} sales × the SSM target you picked. FY ${a.basis_year} has `
+                    + `${a.basis_months} of 12 months on record, so there is no yearly figure.`}
+                sums={[target
+                  ? `${fp(a.basis_sales)} × ${level.pct}% = ${fp(target)}`
+                  : `${fp(a.basis_sales)} ÷ ${a.basis_months} months × ${level.pct}% = ${fp(level.monthly)} a month`]}
+              >
+                {target ? fp(target) : <>{fp(level.monthly)}<span className="hero-value-per">/month</span></>}
+              </HoverValue>
+            </p>
+          ) : (
+            <p className="hero-note">{a.blocked_reason || 'The allocation is not available for this range.'}</p>
+          )}
+          {/* Fewer than 12 months behind the figure is a gap in the data, so it stays on the face. */}
+          {level && a.basis_months < 12 && (
+            <p className="hero-kpi-asof">FY {a.basis_year} sales: <strong>{fp(a.basis_sales)}</strong> ({a.basis_months} of 12 months on record)</p>
+          )}
+        </div>
+        {hasYtd && (
+          <div className="hero-pills">
+            {pace?.gap != null ? (
+              <HoverValue
+                label="How the gap is worked out"
+                plain
+                what="Should be by now − sales so far."
+                sums={[
+                  `${fp(expected)} − ${fp(a.ytd_sales)} = ${behind ? '' : '−'}${fp(Math.abs(pace.gap))}`,
+                  yoySum,
+                ]}
+              >
+                <Pill
+                  text={`${behind ? 'Behind' : 'Ahead'} by ${fp(Math.abs(pace.gap))}`}
+                  tone={behind ? 'negative' : 'positive'}
+                  icon={behind ? AlertTriangle : Check}
+                />
+              </HoverValue>
+            ) : yoyText && (
+              <HoverValue label="How the change is worked out" plain what={`Sales so far against ${priorLabel}.`} sums={[yoySum]}>
+                <Pill text={yoyText} tone={yoy.pct >= 0 ? 'positive' : 'negative'} icon={yoy.pct >= 0 ? ArrowUpRight : ArrowDownRight} />
+              </HoverValue>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Warnings stay on the face: generated months, and why a figure is missing. */}
+      {allocSynthetic && <p className="hero-note hero-synthetic">{allocSynthetic}</p>}
+      {hasYtd && ytdSynthetic && <p className="hero-note hero-synthetic">{ytdSynthetic}</p>}
+      {!hasYtd && range?.synthetic && <p className="hero-note hero-synthetic">{range.synthetic}</p>}
+      {!hasYtd && year && <p className="hero-note">No FY {year} sales are on record yet.</p>}
+      {hasYtd && yoy?.note && <p className="hero-note">{yoy.note}</p>}
+      {latest?.blockedReason && latest.blockedReason !== a.blocked_reason && (
+        <p className="hero-note">{latest.blockedReason}</p>
+      )}
+
+      {hasYtd && soldAt != null && (
+        <div className="hero-progress">
+          <HoverValue
+            label="What the bar shows"
+            block
+            plain
+            notes={[
+              `Sold (blue): ${fp(a.ytd_sales)}`,
+              behind ? `Short (red): ${fp(Math.abs(pace.gap))}, up to "should be by now"` : null,
+              expectedAt != null ? `Should be by now (dashed tick): ${fp(expected)}` : null,
+              `End of the bar: the ${level.pct}% allocation, ${fp(target)}`,
+            ]}
+          >
+            <span className="hero-progress-track">
+              <span className="hero-progress-fill" style={{ width: `${soldAt * 100}%` }} />
+              {behind && expectedAt != null && (
+                <span
+                  className="hero-progress-short"
+                  style={{ left: `${soldAt * 100}%`, width: `${(expectedAt - soldAt) * 100}%` }}
+                />
+              )}
+              {expectedAt != null && <span className="hero-progress-pace" style={{ left: `${expectedAt * 100}%` }} />}
+            </span>
+          </HoverValue>
+        </div>
+      )}
+
+      <details className="dash-more">
+        <summary>Details</summary>
+        <div className="hero-annual-more">
+          {level && a.basis_months === 12 && (
+            <p className="hero-kpi-asof">
+              FY {a.basis_year} sales:{' '}
+              <NumLink onClick={onOpenYearly} title="See sales per year"><strong>{fp(a.basis_sales)}</strong></NumLink>
+            </p>
+          )}
+          {hasYtd && shareText && (
+            <p className="hero-figure-aside">
+              <HoverValue
+                label="How the share is worked out"
+                what={`FY ${year} sales so far ÷ the ${level.pct}% allocation.`}
+                sums={[`${fp(a.ytd_sales)} ÷ ${fp(target)} = ${shareText}`]}
+              >
+                {shareText}
+              </HoverValue>
+              {' '}of the allocation
+              {expected != null && (
+                <>
+                  {' · '}should be{' '}
+                  <HoverValue
+                    label="How “should be by now” is worked out"
+                    what={`Last year's sales for the same months × the SSM target, so it follows last year's pattern `
+                      + `(a slow start in ${year - 1} lowers it too) rather than an even share of the year.`}
+                    sums={[`${priorLabel} sales ${fp(a.prior_ytd_sales)} × ${level.pct}% = ${fp(expected)}`]}
+                  >
+                    {fp(expected)}
+                  </HoverValue>
+                  {' '}by now
+                </>
+              )}
+            </p>
+          )}
+          {hasYtd && (pace?.reached ? (
+            <p className="hero-sentence">Allocation reached</p>
+          ) : pace?.perMonthNeeded != null && (
+            <div className="hero-monthly-summary">
+              <div>
+                <span>Needed / month</span>
+                <strong>
+                  <HoverValue
+                    label="Monthly sales needed to reach the allocation"
+                    what={`Allocation left ÷ ${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} remaining.`}
+                    sums={[`(${fp(target)} − ${fp(a.ytd_sales)}) ÷ ${monthsLeft} = ${fp(pace.perMonthNeeded)}`]}
+                  >
+                    {fp(pace.perMonthNeeded)}
+                  </HoverValue>
+                </strong>
+              </div>
+              {a.basis_sales > 0 && a.basis_months === 12 && (
+                <div>
+                  <span>FY {a.basis_year} avg / month</span>
+                  <strong>
+                    <HoverValue
+                      label="Previous fiscal year's average monthly sales"
+                      what={`FY ${a.basis_year} sales ÷ 12 months.`}
+                      sums={[`${fp(a.basis_sales)} ÷ 12 = ${fp(a.basis_sales / 12)}`]}
+                    >
+                      {fp(a.basis_sales / 12)}
+                    </HoverValue>
+                  </strong>
+                </div>
+              )}
+            </div>
+          ))}
+          {/* The latest month belongs to one month, not the year. */}
           {latest?.value && latest.value !== '—' && (
             <div className="hero-latest-line">
               <p>
@@ -393,11 +398,9 @@ export const AnnualSalesCard = ({
               {latest.synthetic && <p className="hero-note hero-synthetic">{latest.synthetic}</p>}
             </div>
           )}
-          {latest?.blockedReason && latest.blockedReason !== a.blocked_reason && (
-            <p className="hero-note">{latest.blockedReason}</p>
-          )}
+          {levelsBox}
         </div>
-      </div>
+      </details>
     </KpiCard>
   );
 };
@@ -743,7 +746,7 @@ export const BelowSafetyCard = ({
   // Tier A, not all of it in the plan, so the head names the lists
   // (`tierLabel`) without "In the order plan"; `scopeNote` says what the plan
   // leaves out. `totalLabel`: what one counted row is.
-  inPlan = true, totalLabel = 'Tier A products', scopeNote = null,
+  inPlan = true, totalLabel = 'top sellers', scopeNote = null,
 }) => {
   const share = below == null ? null : shareOf(below, checked);
   if (share == null) {
@@ -772,7 +775,7 @@ export const BelowSafetyCard = ({
                 See {below === 1 ? 'the product' : `the ${n(below)} products`} <ArrowUpRight size={14} aria-hidden="true" />
               </button>
             )}
-            {abcTo && <Link to={abcTo} className="hero-link">Class A list <ArrowUpRight size={14} aria-hidden="true" /></Link>}
+            {abcTo && <Link to={abcTo} className="hero-link">Top sellers list <ArrowUpRight size={14} aria-hidden="true" /></Link>}
           </span>
         </>
       )}
@@ -790,9 +793,8 @@ export const BelowSafetyCard = ({
 
       {parts && (
         <div className="hero-block">
-          {tierLabel && <p className="hero-note">{tierLabel}</p>}
           <p className="hero-idle-head">
-            <span>Tier A total</span>
+            <span>{tierLabel || 'Top sellers'}</span>
             <strong><NumLink to={abcTo} title="See the ABC classification">{n(total)}</NumLink></strong>
           </p>
           <div
@@ -860,28 +862,26 @@ export const BelowSafetyCard = ({
 };
 
 // ── Pending reorders ──────────────────────────────────────────────────────
-// `count` null is the card without LP access (`reason`). `parts` is
-// utils/kpiMath.urgencyParts' split of the same pending rows, or null when
-// there is nothing to split; `orderQty` the pieces those rows ask for (in the
-// count's pop-up). The orders' value needs SSM's cost data, so it is "—"
-// (`valueReason`, in its pop-up). `criticalTo` opens the Reorder page
-// filtered to critical rows.
-const URGENCY_ROWS = {
-  critical: { name: 'Critical', what: 'below safety stock', act: 'Act now' },
-  urgent: { name: 'Urgent', what: 'below target stock', act: 'Next' },
-  // "planned", the Reorder page's word (URGENCY_LABEL) and the Suggested
-  // orders badge's, for the same bucket (2026-10-22; it read "routine").
-  planned: { name: 'Planned', what: 'at or above target stock', act: 'Can wait' },
-  nodata: { name: 'No stock data', what: 'stock can\'t be read', act: 'Check count' },
+// `count` null is the card without LP access (`reason`). `parts` is the Reorder
+// page's three counts (GET /dashboard's reorder_preview.action_counts), or null
+// when there is nothing to split; `orderQty` the pieces those rows ask for (in
+// the count's pop-up). The orders' value needs SSM's cost data, so it is "—"
+// (`valueReason`, in its pop-up).
+const ACTION_ROWS = {
+  actNow: { name: 'Act Now', note: 'Below target stock', className: 'is-critical' },
+  reviewLater: { name: 'Review Later', note: 'At or above target stock', className: 'is-later' },
+  noOrder: { name: 'No order needed', note: 'Nothing to order', className: 'is-none' },
+  decided: { name: 'Decided', note: 'Accepted or dismissed', className: 'is-none' },
 };
 
 export const PendingReordersCard = ({
   count = null, reason = null, asOf = null, parts = null, orderQty = null, tooltip = null, to = '/reorder',
-  criticalTo = null, valueReason = 'Waiting for SSM cost data',
+  valueReason = 'Waiting for SSM cost data',
   // Why the plan holds these products of all the top sellers (2026-10-19):
   // { total, evaluated, passed, failed, gate } from GET /dashboard's forecast
-  // block. `criticalNote` says why Critical can exceed the Below safety
-  // stock card's count. Either null leaves its line out.
+  // block. `criticalNote` says how Critical adds up from the Below safety stock
+  // card's count, only when the API's figures show it. Either null leaves its
+  // line out.
   scope = null, criticalNote = null,
 }) => {
   if (count == null) {
@@ -893,11 +893,6 @@ export const PendingReordersCard = ({
       </KpiCard>
     );
   }
-  const value = (key) => parts?.find((p) => p.key === key)?.value ?? 0;
-  const routineSum = parts
-    ? `${n(count)} − ${n(value('critical'))} critical − ${n(value('urgent'))} urgent`
-      + `${value('nodata') > 0 ? ` − ${n(value('nodata'))} no stock data` : ''} = ${n(value('planned'))}`
-    : null;
   return (
     <KpiCard
       tone="purple"
@@ -937,32 +932,19 @@ export const PendingReordersCard = ({
           <SectionHead>Priority</SectionHead>
           <ul className="hero-urgency">
             {parts.map((p) => {
-              const row = URGENCY_ROWS[p.key];
+              const row = ACTION_ROWS[p.key];
               const label = <strong>{n(p.value)} {row.name}</strong>;
               return (
-                <li key={p.key} className={`is-${p.key}`}>
-                  <span aria-label={`${n(p.value)} ${row.name}: ${row.what}; ${row.act}`}>
-                    {p.key === 'critical' && p.value > 0 ? <NumLink to={criticalTo} title="See the critical orders">{label}</NumLink>
-                      : p.key === 'planned' ? (
-                        <HoverValue label="How planned is worked out" subtle what="Pending orders that are not critical, urgent or without stock data." sums={[routineSum]}>
-                          {label}
-                        </HoverValue>
-                      ) : label}
+                <li key={p.key} className={row.className}>
+                  <span aria-label={`${n(p.value)} ${row.name}: ${row.note}`}>
+                    {p.key === 'actNow' && p.value > 0 ? <NumLink to={to} title="See the orders to act on">{label}</NumLink> : label}
                   </span>
-                  <span className="hero-urgency-act">{row.act}</span>
+                  <span className="hero-urgency-act">{row.note}</span>
                 </li>
               );
             })}
           </ul>
-          {/* Why Critical can be more than Below safety stock: one link
-              (2026-10-21, less text on the card), the sentence behind it. */}
-          {criticalNote && (
-            <p className="hero-note">
-              <InfoTip label="How critical is counted" trigger={<>Why counts differ</>} triggerClassName="hero-note-trigger">
-                {criticalNote}
-              </InfoTip>
-            </p>
-          )}
+          {criticalNote && <p className="hero-note">{criticalNote}</p>}
         </div>
       ) : count === 0 ? <p className="hero-note">Nothing is awaiting a decision.</p> : null}
 
@@ -971,16 +953,47 @@ export const PendingReordersCard = ({
           <HoverValue
             label="Why only these products are planned"
             subtle
-            what={`Of the ${n(scope.total)} ${scope.tierLabel ? `products in ${scope.tierLabel}` : 'top sellers'}, ${n(scope.evaluated)} had enough history to test. ${n(scope.passed)} passed `
+            what={`Of the ${n(scope.total)} ${scope.tierLabel || 'top sellers'}, ${n(scope.evaluated)} had enough history to test. ${n(scope.passed)} passed `
               + `the reliability check and are planned; ${n(scope.failed)} did not (their forecast was no better than last `
               + `month's number${scope.gate != null ? `: MASE ${scope.gate} or more` : ''}); ${n(scope.total - scope.evaluated)} `
               + `had too little history. The ${n(scope.total - scope.passed)} not planned stay on SSM's own rule. `
               + 'The team adopted this reliability check; it is not confirmed by SSM or the adviser.'}
           >
-            {n(scope.passed)} of {n(scope.total)} planned · reliability check adopted by the team
+            {n(scope.passed)} of {n(scope.total)} {scope.tierLabel || 'top sellers'} planned · reliability check adopted by the team
           </HoverValue>
         </p>
       )}
     </KpiCard>
+  );
+};
+
+// ── What to do first ──────────────────────────────────────────────────────
+// Three tiles at the top of the page (2026-11-05), each opening where the
+// figure is worked through. `items`: { key, icon, label, value, unit, sub, tone,
+// to | onClick }. Every value is one the page already has from GET /dashboard.
+export const ActionStrip = ({ items = [] }) => {
+  if (items.length === 0) return null;
+  return (
+    <div className="dash-actions" role="group" aria-label="What to do first">
+      {items.map(({ key, icon: Icon, label, value, unit, sub, tone, to, onClick }) => {
+        const body = (
+          <>
+            <span className="icon-tile" aria-hidden="true"><Icon size={20} /></span>
+            <span className="dash-action-text">
+              <span className="dash-action-label">{label}</span>
+              <span className={`dash-action-value${tone ? ` is-${tone}` : ''}`}>
+                {value}
+                {unit && <span className="dash-action-unit">{unit}</span>}
+              </span>
+              {sub && <span className="dash-action-sub">{sub}</span>}
+            </span>
+            <ArrowUpRight className="dash-action-arrow" size={16} aria-hidden="true" />
+          </>
+        );
+        return to
+          ? <Link key={key} to={to} className="dash-action">{body}</Link>
+          : <button key={key} type="button" className="dash-action" onClick={onClick}>{body}</button>;
+      })}
+    </div>
   );
 };

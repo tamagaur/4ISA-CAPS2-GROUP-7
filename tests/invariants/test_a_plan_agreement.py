@@ -6,6 +6,7 @@ Guards against: audit 2026-10-23 finding 2 - the Dashboard's order total and pro
 (it is a stored copy, refreshed by a hook) and the "agreement by coincidence" the audit noted (the sum agreed only
 because case-pack rounding made every q_i an integer).
 """
+import math
 import re
 from pathlib import Path
 
@@ -44,6 +45,17 @@ def test_plan_row_count_and_total_agree_across_every_path(plan, get, sql):
     assert len(set(counts.values())) == 1, f"row count differs by path: {counts}"
     ref = totals["recommendations"]
     assert all(abs(t - ref) < 0.01 for t in totals.values()), f"plan total differs by path: {totals}"
+
+
+def test_dashboard_action_counts_are_the_reorder_pages(plan, get):
+    """The Dashboard and the Reorder page must say the same "Act Now". The Reorder page works these out from
+    GET /recommendations' rows (frontend/src/utils/reorderView.js), the Dashboard reads reorder_preview.action_counts."""
+    orders = lambda i: math.ceil((i["plan_q_i"] if i["plan_q_i"] is not None else i["q_i"]) - 1e-9) > 0
+    waiting = [i for i in plan["items"] if i["status"] == "pending" and orders(i)]
+    act_now = sum(1 for i in waiting if i["urgency"] in ("CRITICAL", "URGENT"))
+    expected = {"act_now": act_now, "review_later": len(waiting) - act_now,
+                "no_order": sum(1 for i in plan["items"] if not orders(i))}
+    assert get("/dashboard?principal=unilever")["reorder_preview"]["action_counts"] == expected
 
 
 def test_state_md_plan_line_matches_the_live_plan(plan):

@@ -248,7 +248,7 @@ const entries = {
       term: 'Pending reorders',
       definition: 'Reorder recommendations that are still waiting for a decision.',
       plain: 'Suggested orders in the current plan that nobody has accepted or dismissed yet.',
-      technical: 'This reflects the current reorder-plan cycle, split by status: CRITICAL, URGENT, PLANNED and NO DATA. It is separate from the number of products below safety stock.',
+      technical: 'This reflects the current reorder-plan cycle, in the Reorder page’s three counts: Act Now (below target stock), Review Later (at or above target stock) and No order needed (a suggested order of 0 pieces). It is separate from the number of products below safety stock.',
     },
   ],
   'sales-stock': [

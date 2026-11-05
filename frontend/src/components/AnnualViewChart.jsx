@@ -359,8 +359,12 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
       <div className="chart-header">
         <div className="chart-title-area">
           <h4>
-            <span>Sales <span className="title-accent">per year</span>{band ? `, against the ${fy(band.year)} target` : ''}</span>
-            <InfoTip label="About Sales per year" size={13}>
+            <InfoTip
+              label="About Sales per year"
+              trigger={<span>Sales <span className="title-accent">per year</span>{band ? `, against the ${fy(band.year)} target` : ''}</span>}
+              triggerClassName="dash-tip-title"
+              className="dash-tip-wrap"
+            >
               <span className="chart-tip-line">
                 Each bar is one year&apos;s total sales (Jan–Dec). Years with missing months show only what&apos;s
                 recorded{ytd?.span ? `, so ${ytd.key} is ${ytd.span} only` : ''}.

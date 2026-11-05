@@ -106,14 +106,6 @@ export const ProductListModal = ({
   );
 };
 
-const Stat = ({ label, value, sub }) => (
-  <div className="range-stat">
-    <span className="range-stat-label">{label}</span>
-    <span className="range-stat-value">{value}</span>
-    {sub && <span className="range-stat-sub">{sub}</span>}
-  </div>
-);
-
 // scope: the principals a figure covers when narrower than the page's filter
 // ("Unilever only" under All principals), from the payload's coverage.
 // leadVisible: the lead states the card's periods or count date, so it stays
@@ -137,9 +129,9 @@ const CardShell = ({ title, lede, lead, leadVisible = false, scope, children, bl
 // that sold nothing in the window before it. Del Monte sells by category, so
 // the backend says why no product can be shown unsold.
 // How many idle products the card names before the full list.
-const IDLE_PREVIEW = 5;
+const IDLE_PREVIEW = 3;
 
-export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
+export const IdleStockCard = ({ idle, scope, onOpenList, prior = null, blockedNote = null }) => {
   if (!idle) return null;
   // Named for what it is, in plain words (2026-10-15).
   const title = idle.window_rule_months
@@ -165,50 +157,48 @@ export const IdleStockCard = ({ idle, scope, onOpenList, prior = null }) => {
   const window = idle.window_start && idle.window_end
     ? `${formatMonth(idle.window_start)} – ${formatMonth(idle.window_end)}`
     : `the last ${idle.window_rule_months} months`;
-  const counted = idle.count_date ? `counted ${formatDate(idle.count_date)}`
-    : idle.count_period ? `${formatMonth(idle.count_period)} count` : null;
   if (idle.blocked_reason) {
     return (
-      <CardShell title={title} lede="Money stuck in stock that isn't moving" blocked className="dash-action-card idle-card">
-        <p className="range-blocked">{idle.blocked_reason}</p>
+      <CardShell title={title} blocked className="dash-action-card idle-card">
+        <p className="range-blocked">{blockedNote || idle.blocked_reason}</p>
       </CardShell>
     );
   }
   return (
     <CardShell
       title={title}
-      lede="Money stuck in stock that isn't moving"
       scope={scope}
-      lead={`Products on hand in the stock ${counted || 'count'} that sold nothing in ${window}.`}
+      lead={`Products on hand that sold nothing in ${window}.`}
       leadVisible
       className="dash-action-card idle-card"
     >
-      {/* Two KPI blocks side by side, stacked when the card is narrow
-          (RangeCards.css .idle-kpis; its own class, so the other range
-          cards' .range-stat-row and its phone rules are untouched). */}
-      <div className="idle-kpis">
-        {/* The finding first (2026-10-19): most of these products have never
-            sold at all, which is the question for SSM (why were they bought?). */}
-        <Stat
-          label="Never sold"
-          value={`${idle.never_sold.toLocaleString()} of ${idle.products.toLocaleString()}`}
-          sub={`products with no sale in the window; the other ${(idle.products - idle.never_sold).toLocaleString()} stopped selling`}
-        />
-        <Stat
-          label="Stock value"
-          value={formatCompactPesos(idle.pesos)}
-          sub={`${idle.pesos_basis}${idle.products_with_value < idle.products
-            ? ` · ${idle.products - idle.products_with_value} without a price, not in the sum` : ''}`}
-        />
-      </div>
-      {priorLead && (
-        <p className="idle-prior"><strong>{priorLead}</strong> {priorRest}</p>
-      )}
+      {/* The finding first (2026-10-19): most of these products have never
+          sold at all, which is the question for SSM (why were they bought?).
+          One line since 2026-11-05. A product without a price is a gap in
+          the sum, so it stays on the line. */}
+      <p className="range-note idle-summary">
+        <strong>{idle.never_sold.toLocaleString()} of {idle.products.toLocaleString()}</strong> never sold ·{' '}
+        <strong>{formatCompactPesos(idle.pesos)}</strong> {idle.pesos_basis}
+        {idle.products_with_value < idle.products
+          ? ` · ${idle.products - idle.products_with_value} without a price, not in the sum` : ''}
+      </p>
+      <details className="dash-more">
+        <summary>Details</summary>
+        <div className="idle-more">
+          <p className="range-note">
+            {idle.never_sold.toLocaleString()} products with no sale in the window; the other{' '}
+            {(idle.products - idle.never_sold).toLocaleString()} stopped selling.
+          </p>
+          {priorLead && (
+            <p className="idle-prior"><strong>{priorLead}</strong> {priorRest}</p>
+          )}
+        </div>
+      </details>
       {/* What to do with it (Technical Adviser, 2 Oct 2026: what to order,
           and what to do with stock that stopped selling). 2026-10-22. */}
       {/* The largest few by value (the payload's items, already sorted
           largest first): which products the money is in, before the list.
-          Ranked 01-05; the name first, then its SKU code and when it last
+          Ranked from 01; the name first, then its SKU code and when it last
           sold on one muted line, the value at the right. */}
       {idle.items?.length > 0 && (
         <>
@@ -392,6 +382,8 @@ const adjustmentVerdict = (adj, bef) => {
 };
 
 export const ForecastErrorSummaryCard = ({
+  // Said instead of the reason when the page already explains it (Dashboard.jsx's one note).
+  blockedNote = null,
   accuracy: served, scope, onOpenList, onOpenCategories,
   // The page's principal, for fetching the unadjusted run; the forecast's
   // calendar_adjustment (signed_off, method), for the card's note.
@@ -419,8 +411,8 @@ export const ForecastErrorSummaryCard = ({
   if (!accuracy) return null;
   if (accuracy.blocked_reason || !accuracy.products) {
     return (
-      <CardShell title={<span>How <span className="title-accent">close</span> the forecasts were</span>} lede="Where the forecast was right, and where it missed" blocked>
-        <p className="range-blocked">{accuracy.blocked_reason || 'No forecasts were checked against sales in this range.'}</p>
+      <CardShell title={<span>How <span className="title-accent">close</span> the forecasts were</span>} blocked>
+        <p className="range-blocked">{blockedNote || accuracy.blocked_reason || 'No forecasts were checked against sales in this range.'}</p>
       </CardShell>
     );
   }
@@ -473,15 +465,23 @@ export const ForecastErrorSummaryCard = ({
       {scope && <p className="chart-placeholder-note">{scope}</p>}
 
       <p className="fc-answer">
-        {company != null && (
-          <>Company-wide miss: <strong>{wholePct(company)}</strong></>
-        )}
-        {typical != null && (
-          <>
-            {' '}· Typical product miss: <strong>{wholePct(typical)}</strong>
-          </>
-        )}
-        <InfoTip label="How these two figures are measured">
+        <InfoTip
+          label="How these two figures are measured"
+          trigger={(
+            <>
+              {company != null && (
+                <>Company-wide miss: <strong>{wholePct(company)}</strong></>
+              )}
+              {typical != null && (
+                <>
+                  {' '}· Typical product miss: <strong>{wholePct(typical)}</strong>
+                </>
+              )}
+            </>
+          )}
+          triggerClassName="dash-tip-title"
+          className="dash-tip-wrap"
+        >
           <span className="fc-tip-line"><strong>Company total ({company != null ? pct(company) : '—'}).</strong>{' '}
             {accuracy.company_total?.label} ({accuracy.company_total?.unit}).</span>
           <span className="fc-tip-line"><strong>Typical product ({typical != null ? pct(typical) : '—'}).</strong>{' '}
@@ -544,7 +544,6 @@ export const ForecastErrorSummaryCard = ({
           <div className="fc-chart-head">
             <div>
               <p className="fc-chart-title">Forecast vs. Actual Sales</p>
-              <SectionLede>The forecast against what really sold</SectionLede>
               <p className="fc-chart-sub">Monthly comparison · pesos at {String(accuracy.pesos_basis || '').split(' (')[0]}</p>
             </div>
             {/* The view switch beside the chart's title, the key on its own
@@ -689,15 +688,13 @@ export const ForecastErrorSummaryCard = ({
       <div className="fc-misses">
         <div className="fc-misses-head">
         <p className="fc-misses-title">
-          Where the misses went
-          <InfoTip label="What these amounts are">
+          <InfoTip label="What these amounts are" trigger="Where the misses went" triggerClassName="dash-tip-title" className="dash-tip-wrap">
             The forecast&apos;s differences from actual sales over {accuracy.label}, valued at{' '}
             {accuracy.pesos_basis}. &ldquo;Forecast too high&rdquo; adds up the months a product&apos;s forecast was
             above what it sold; &ldquo;forecast too low&rdquo; the months it was below. They show the direction the
             forecasts lean, not stock that was counted as excess or sales that were actually lost.
           </InfoTip>
         </p>
-        <SectionLede>Too high, or too low?</SectionLede>
         </div>
         {/* Coral up, teal down (2026-10-21, mockup pass). The bar is the
             total's share of the range's sales, the same figure as the line
@@ -783,6 +780,7 @@ export const OVER_RUN_COLUMNS = [
 // range against the same months a year before, ranked on one revenue rule.
 // How many each side names before "See all" opens the rest, in place.
 const LIST_PREVIEW = 5;
+const COMPACT_PREVIEW = 3;
 
 // One product's class in the comparison period and now, from the payload's
 // own compare_class / class (null = not ranked in that range; the item's
@@ -810,9 +808,9 @@ const ClassMove = ({ before, now, beforeNote, nowNote }) => {
 // the ones that joined, red for the ones that left — then the products in
 // the payload's own order, each with its change in revenue at the right.
 // The full list scrolls inside the panel, so the card keeps its height.
-const ChangeList = ({ title, tone, items, noun, onOpen, showClassMove = false }) => {
+const ChangeList = ({ title, tone, items, noun, onOpen, showClassMove = false, preview = LIST_PREVIEW }) => {
   const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? items : items.slice(0, LIST_PREVIEW);
+  const shown = showAll ? items : items.slice(0, preview);
   return (
     <section className={`pending-change-list is-${tone}`} aria-label={`${title} (${items.length})`}>
       <h5 className="pending-change-head">
@@ -843,7 +841,7 @@ const ChangeList = ({ title, tone, items, noun, onOpen, showClassMove = false })
           ))}
         </ul>
       )}
-      {items.length > LIST_PREVIEW && (
+      {items.length > preview && (
         <button type="button" className="range-card-action pending-change-more" onClick={() => setShowAll((v) => !v)}>
           {showAll ? 'Show fewer' : `See all ${items.length} ${noun}`} <ArrowRight size={13} aria-hidden="true" />
         </button>
@@ -878,18 +876,34 @@ const sideSentence = (who, before, beforeReason, now, nowReason) => {
   return <>The ones that {who} have no sales figure on either side ({whyNone(nowReason)}). </>;
 };
 
+// Both sides' totals and the pesos they are in.
+const changeTotals = (p) => (
+  <>
+    {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
+    {(p.entered || []).length > 0
+      ? sideSentence('joined', p.entered_compare_revenue, p.entered_compare_revenue_reason, p.entered_revenue, p.entered_revenue_reason)
+      : 'None joined. '}
+    {(p.left || []).length > 0
+      ? sideSentence('left', p.left_compare_revenue, p.left_compare_revenue_reason, p.left_revenue, p.left_revenue_reason)
+      : 'None left. '}
+    Pesos at {p.pesos_basis}.
+  </>
+);
+
 // `showClassMove`: each product's class before and now beside its name (the
 // ABC page). The Dashboard leaves it off and keeps its compact rows.
-export const ClassChanges = ({ changes, onOpen, showClassMove = false }) => {
+// `compact` (the Dashboard, 2026-11-05): one summary line and the top 3 rows a
+// side, with the totals under Details and "See all" for the rest of the rows.
+export const ClassChanges = ({ changes, onOpen, showClassMove = false, compact = false }) => {
   if (!changes?.principals?.length) return null;
   const names = { unilever: 'Unilever', delmonte: 'Del Monte' };
   const multi = changes.principals.length > 1;
   return (
     <CardShell
       title="Changes in the top sellers"
-      lede="Where changes happened"
-      lead={`${changes.label}, compared with ${changes.compare_label}. `
-        + 'The amount beside each product is the change in its revenue between the two periods.'}
+      lede={compact ? null : 'Where changes happened'}
+      lead={`${changes.label}, compared with ${changes.compare_label}.`
+        + (compact ? '' : ' The amount beside each product is the change in its revenue between the two periods.')}
       leadVisible
     >
       {changes.principals.map((p) => {
@@ -937,18 +951,20 @@ export const ClassChanges = ({ changes, onOpen, showClassMove = false }) => {
                   Top sellers: <strong>{p.compare_class_a_count.toLocaleString()}</strong> {noun} a year
                   earlier, <strong>{p.class_a_count.toLocaleString()}</strong> now
                   (<strong>{p.stayed_count.toLocaleString()}</strong> stayed).{' '}
-                  {/* A side with nobody in it says so, rather than "sold ₱0 and ₱0". */}
-                  {(p.entered || []).length > 0
-                    ? sideSentence('joined', p.entered_compare_revenue, p.entered_compare_revenue_reason, p.entered_revenue, p.entered_revenue_reason)
-                    : 'None joined. '}
-                  {(p.left || []).length > 0
-                    ? sideSentence('left', p.left_compare_revenue, p.left_compare_revenue_reason, p.left_revenue, p.left_revenue_reason)
-                    : 'None left. '}
-                  Pesos at {p.pesos_basis}.
+                  {!compact && changeTotals(p)}
                 </p>
+                {compact && (
+                  <details className="dash-more">
+                    <summary>Details</summary>
+                    <p className="range-note idle-more">
+                      {changeTotals(p)}
+                      {' '}The amount beside each product is the change in its revenue between the two periods.
+                    </p>
+                  </details>
+                )}
                 <div className="pending-change-grid">
-                  <ChangeList title="Joined the top sellers" tone="up" items={byChange(p.entered || [])} noun={noun} onOpen={openRow} showClassMove={showClassMove} />
-                  <ChangeList title="Left the top sellers" tone="down" items={byChange(p.left || [])} noun={noun} onOpen={openRow} showClassMove={showClassMove} />
+                  <ChangeList title="Joined the top sellers" tone="up" items={byChange(p.entered || [])} noun={noun} onOpen={openRow} showClassMove={showClassMove} preview={compact ? COMPACT_PREVIEW : LIST_PREVIEW} />
+                  <ChangeList title="Left the top sellers" tone="down" items={byChange(p.left || [])} noun={noun} onOpen={openRow} showClassMove={showClassMove} preview={compact ? COMPACT_PREVIEW : LIST_PREVIEW} />
                 </div>
                 <p className="range-source">{p.revenue_rule}</p>
               </>

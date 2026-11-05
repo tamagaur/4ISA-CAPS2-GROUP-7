@@ -305,7 +305,8 @@ zero):
     low_count (urgent_count: the same number under its old name) /
     total_order_qty are computed over the FULL set (not just the
     5 previewed rows): critical/urgent/no_data, total_order_qty and plan_count
-    over the plan, pending_order_qty / pending_count over the pending rows only — a portfolio-wide summary next to a 5-row preview,
+    over the plan, action_counts the Reorder page's act now / review later / no order counts,
+    pending_order_qty / pending_count over the pending rows only — a portfolio-wide summary next to a 5-row preview,
     same relationship ABC's tier_summary has to its own items list.
     Stock is the count that opens the LP's cycle (since 2026-10-03, DEC-32),
     named with its date in reorder_preview.stock_counts; the stock card
@@ -1159,6 +1160,23 @@ def _portfolio_actuals_query(mode: str, keys: list) -> tuple[str, dict]:
                 GROUP BY period
             """
     return actual_sql, {"keys": keys}
+
+
+def _action_counts(items) -> dict:
+    """The Reorder page's three counts for one plan (frontend/src/utils/reorderView.js: awaitsDecision, isBelowTarget,
+    planOrderCounts), so "Act Now" is the same number on both screens. act_now and review_later are undecided rows that
+    order something, split by whether stock is below target; no_order is every plan row that orders 0 pieces."""
+    def orders(item) -> bool:
+        quantity = item.plan_q_i if item.plan_q_i is not None else item.q_i
+        return quantity is not None and whole_units(quantity) > 0
+
+    open_orders = [it for it in items if it.status == "pending" and orders(it)]
+    act_now = sum(1 for it in open_orders if it.urgency in (CRITICAL, URGENT))
+    return {
+        "act_now": act_now,
+        "review_later": len(open_orders) - act_now,
+        "no_order": sum(1 for it in items if not orders(it)),
+    }
 
 
 def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_periods: dict[str, str]) -> tuple[str, dict]:
@@ -2301,6 +2319,7 @@ def get_dashboard(
         "plan_count": len(rp_items),
         "pending_count": len(rp_open),
         "pending_order_qty": sum(whole_units(it.q_i) for it in rp_open),
+        "action_counts": _action_counts(rp_items),
         # The weights the run behind this cycle used (lp_run), else the
         # current constants; lp_weights_source says which.
         "lp_weights": (lp_run["model"]["weights"] if lp_run else {
