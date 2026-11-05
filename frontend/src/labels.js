@@ -47,7 +47,7 @@ export const RELIABILITY_SHORT = {
   reliable: 'Suitable for ordering',
   unreliable: 'Not yet suitable for ordering',
   unchecked: 'Not checked yet',
-  withheld: 'Forecast error withheld on the practice copy',   // the practice copy only (backend/practice_copy.py)
+  withheld: 'Forecast error not shown: this period rests on generated sales',   // while generated sales are loaded (backend/practice_copy.py)
 };
 export const reliabilityLabel = (mase) => (mase == null ? NOT_CHECKED : mase < 1 ? RELIABLE : NOT_RELIABLE);
 // Typical miss (WAPE, or the miss as a share of the forecast).

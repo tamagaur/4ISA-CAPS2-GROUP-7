@@ -149,7 +149,7 @@ def _card(start="2025-04", end="2026-03"):
 def test_a_range_reaching_the_month_loses_its_figures_and_says_why_as_del_montes_card_does():
     out = pc.label_payload({"forecast_accuracy": _card(), "lp": {"rows": 121}}, MARCH, "/dashboard")
     card = out["forecast_accuracy"]
-    assert card["blocked_reason"].startswith("Forecast error withheld") and "2026-03" in card["blocked_reason"]
+    assert card["blocked_reason"].startswith("Forecast error withheld") and "March 2026" in card["blocked_reason"]
     assert card["company_total"]["value"] is None and card.get("wape_pieces") is None and card["by_month"] == [] and card["products"] == 0
     assert card["over_forecast_runs"]["items"] == [] and card["accuracy_withheld"] is True
     assert out["lp"] == {"rows": 121} and accuracy_figure(out) is None
@@ -239,8 +239,8 @@ def test_a_range_before_an_uploaded_month_keeps_its_figures_and_both_kinds_are_n
     out = pc.label_payload({"forecast_accuracy": _card("2025-03", "2026-02")}, [], "/dashboard", MARCH)
     assert out["forecast_accuracy"]["company_total"]["value"] == 0.109
     both = pc.accuracy_withheld_reason(["2026-03"], ["2026-04"])
-    assert "2026-03 on this practice copy are generated" in both and "2026-04 on this practice copy came from an uploaded file" in both
-    assert "before 2026-03" in both
+    assert "March 2026 is generated" in both and "April 2026 came from an uploaded file" in both
+    assert "before March 2026" in both
 
 
 def test_unreadable_uploads_withhold_everything():
@@ -300,9 +300,11 @@ def test_data_keyed_label_leaves_a_database_without_generated_sales_untouched(mo
 def test_data_keyed_label_labels_and_withholds_when_the_data_holds_generated_sales(monkeypatch):
     res = _demo_app(monkeypatch, (["2026-03"], [])).get("/x")
     body = res.json()
-    assert body["practice_copy"]["not_a_result"] is True and "2026-03" in body["practice_copy"]["note"]
-    assert "practice copy" not in body["practice_copy"]["note"].lower()
-    assert res.headers[pc.LABEL_HEADER].startswith("Sales for 2026-03 are generated demonstration data")
+    assert body["practice_copy"]["not_a_result"] is True and "March 2026" in body["practice_copy"]["note"]
+    note = body["practice_copy"]["note"].lower()
+    assert "practice" not in note and "demonstration" not in note
+    assert res.headers[pc.GENERATED_HEADER].startswith("Sales for March 2026 is generated: SSM has not sent that month.")
+    assert pc.LABEL_HEADER not in res.headers
     assert body.get("mase") is None and body.get("mape") is None   # forecast error on generated sales is not presented, wherever they live
 
 
@@ -315,3 +317,17 @@ def test_no_database_named_means_no_generated_sales(monkeypatch):
     monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
     monkeypatch.setitem(pc._demo_labels_cache, "at", -1e9)
     assert pc.demo_labels() == ([], [])
+
+
+def test_a_range_reaching_the_month_keeps_its_real_months_rows_and_the_stock_flags_they_carry():
+    """Found 2026-11-06: withholding the whole range took the shaded 'stock may have run out' months of Aug-Nov 2025 off the product chart as soon as the
+    range reached the loaded month. The summary and every row from the first generated month on go; the real months' rows stay."""
+    rows = [{"month": "2025-08", "sku_code": "1", "possibly_stock_limited": True, "forecast_pieces": 10, "abs_miss_pieces": 2},
+            {"month": "2025-12", "sku_code": "1", "possibly_stock_limited": False, "forecast_pieces": 11, "abs_miss_pieces": 3},
+            {"month": "2026-03", "sku_code": "1", "possibly_stock_limited": False, "forecast_pieces": 12, "abs_miss_pieces": 4}]
+    block = {"start_period": "2025-04", "end_period": "2026-03", "level": "product", "coverage": {}, "rows": rows, "products": 109, "mase": 0.9}
+    out = pc.withhold_accuracy(block, ["2026-03"], "/dashboard/accuracy")
+    assert out["accuracy_withheld"] is True and out["blocked_reason"] and out["products"] in (0, None)
+    assert [r["month"] for r in out["rows"]] == ["2025-08", "2025-12"] and out["rows"][0]["possibly_stock_limited"] is True
+    unreadable = pc.withhold_accuracy({**block, "rows": rows}, None, "/dashboard/accuracy")
+    assert unreadable["rows"] == []                                                      # which month is generated is unknown: nothing is kept

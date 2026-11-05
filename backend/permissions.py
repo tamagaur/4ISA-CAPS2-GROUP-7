@@ -86,7 +86,9 @@ CATALOG = [
     {"key": "audit_log.view", "label": "View the audit log", "group": "Audit Log",
      "description": "Who changed what, and when."},
     {"key": "upload.run", "label": "Use Data Management", "group": "Data Management",
-     "description": "Uploads (Module 07); a mock page for now."},
+     "description": "Upload and process the monthly sales file."},
+    {"key": "data.rollback", "label": "Roll back a loaded month", "group": "Data Management",
+     "description": "Puts the system back to before a month was loaded.", "admin_only": True},
     {"key": "users.manage", "label": "Manage users", "group": "User Management",
      "description": "Invite users, set roles and permissions."},
 ]

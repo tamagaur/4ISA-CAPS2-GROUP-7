@@ -1,13 +1,15 @@
 """
 backend.routers.monthly_batch — /batch, the Data Management page's monthly batch (2026-11-02).
 
-LOCAL ONLY FOR NOW. backend/main.py mounts these routes only when MONTHLY_BATCH_ENABLED is on AND the database is the
-throwaway local one (scripts/local_pg.py), so the deployed API does not have them and the page stays as it was. The routes
-check again per request: GET /batch/status says {"enabled": false} and the rest refuse with 409 batch_local_only. No route passes --target-public, so scripts.run_month could not write to
-live even if this check were wrong. Every step runs on ssm_practice, a copy of the local database (step_env): that is where
-generated sales live, labelled is_demo = true. scripts/local_app.py runs this process on that copy too, so the pages show what a
-closed month did, each answer labelled (backend/practice_copy.py); no other database holds those rows. Turning this on for live is a
-separate decision: it would also have to solve where uploaded files live on the server.
+TWO MODES (2026-11-06). The routes are always mounted, and mode() says which one this server is in; the permissions decide who may use it.
+  "practice": MONTHLY_BATCH_ENABLED is on AND the database is the throwaway local server (scripts/local_pg.py). Every step runs on ssm_practice, a copy of
+     the local database (step_env), generated sales live there labelled is_demo = true, and no route passes --target-public. scripts/local_app.py
+     runs this process on that copy too (backend/practice_copy.py). This is the mode of 2026-11-02 to 2026-11-05, unchanged.
+  "live": any other database with a name, which is the database the pages read. The ONLY way in is this panel. A sales file is read for the month it
+     contains (analytics/month_file.py), loaded labelled is_demo = true through scripts/demo_session.py (a rollback point first, then the rows, then
+     scripts.run_month), and any loaded month can be rolled back (POST /batch/rollback, admin only: permission data.rollback). On a database that is not
+     this machine's, load and rollback run only with an attestation for this exact code (docs/MONTH_LOAD_REHEARSAL.json, scripts/demo_rehearsal.py).
+     There is no month to Close in this mode: a close needs a stock count for the month, and the sales are loaded, not counted.
 
 It runs scripts, it does not reimplement them. A write is one child process of scripts.run_month, whose gates, order and
 refusals all still apply, and the status and feedback are read by scripts.batch_status and scripts.cycle_feedback. This
@@ -44,13 +46,14 @@ import shutil
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from backend import audit, batch_checklist, practice_copy, response_cache
 from backend.api_errors import ApiError
 from backend.auth_utils import TokenPayload
 from backend.deps import get_db
 from backend.practice_copy import PRACTICE_NOTE
-from backend.permissions import require_permission
+from backend.permissions import permissions_for, require_permission
 
 REPO = Path(__file__).resolve().parents[2]
 UPLOADS = REPO / "local" / "monthly_batch" / "uploads"   # git-ignored: raw files hold per-product sales (hard rule 9)
@@ -70,7 +73,7 @@ RUN_KEY = re.compile(r"^[A-Za-z0-9_-]+$")                # the loader's own run 
 _CONNECTION = re.compile(r"\b[a-z]+(?:\+[a-z0-9]+)?://\S+", re.I)
 logger = logging.getLogger(__name__)
 
-LOCAL_ONLY = "The monthly batch only runs on the local practice database for now."
+LOCAL_ONLY = "Monthly processing is not available on this server."
 PRACTICE_MARKER = "PRACTICE RUN ON GENERATED SALES, NOT A RESULT"   # scripts/report_target.PRACTICE_MARKER: every file a practice run writes says it
 
 router = APIRouter(prefix="/batch", tags=["monthly-batch"])
@@ -83,13 +86,60 @@ def enabled() -> bool:
     return (url.hostname, url.port) == THROWAWAY
 
 
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def mode() -> str | None:
+    """"practice", "live", or None (no database is named, or the URL names ssm_practice without the practice switches: that answers 409 elsewhere)."""
+    if enabled():
+        return "practice"
+    url = urlparse(os.environ.get("SUPABASE_DB_URL") or "")
+    if not url.hostname or practice_copy.names_practice_copy():
+        return None
+    return "live"
+
+
+def is_live() -> bool:
+    return mode() == "live"
+
+
+def live_blocked() -> str | None:
+    """Why a load or a rollback may not write to this database, or None. A database on this machine is always allowed; any other needs the attestation."""
+    host = urlparse(os.environ.get("SUPABASE_DB_URL") or "").hostname or ""
+    if host in LOCAL_HOSTS:
+        return None
+    from scripts import demo_rehearsal
+    passed, why = demo_rehearsal.ok()
+    return None if passed else why
+
+
+def require_available() -> str:
+    found = mode()
+    if found is None:
+        raise ApiError(409, LOCAL_ONLY, code="batch_not_available")
+    return found
+
+
 def require_local() -> None:
+    """Kept for the routes that only the practice mode has (generating practice sales, signing off a file by hand)."""
     if not enabled():
-        raise ApiError(409, LOCAL_ONLY, code="batch_local_only")
+        raise ApiError(409, "This step only exists on the local practice database.", code="batch_local_only")
+
+
+def require_live_ready() -> None:
+    why = live_blocked()
+    if why:
+        raise ApiError(409, "Loading and rolling back months are switched off on this server: " + why, code="batch_not_rehearsed")
+
+
+def plain_env() -> dict:
+    return {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
 
 
 def step_env() -> dict:
-    """A step's environment: the practice database, on the throwaway server only."""
+    """A step's environment: the practice database on the throwaway server (practice mode), or this server's own database (live mode)."""
+    if is_live():
+        return plain_env()
     require_local()
     url = urlparse(os.environ["SUPABASE_DB_URL"])._replace(path=f"/{PRACTICE_DB}").geturl()
     return {**os.environ, "SUPABASE_DB_URL": url, "SUPABASE_DIRECT_URL": url, "DATABASE_URL": url, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1",
@@ -307,7 +357,9 @@ def checklist_for(month: str | None = None, replay: dict | None = None) -> tuple
         status["replay"]["refused"] = replay["refused"]
     job = JOB.state()
     checklist = batch_checklist.build_checklist(status, uploaded_files(month), validation, file_hashes(month), job)
-    return {"practice_note": PRACTICE_NOTE, **checklist, "result": batch_checklist.run_result(status, job), "job": job}, status
+    if is_live():
+        checklist = batch_checklist.for_loaded_month(checklist)
+    return {"practice_note": None if is_live() else PRACTICE_NOTE, **checklist, "result": batch_checklist.run_result(status, job), "job": job}, status
 
 
 def audit_event(action: str, details: str, user: TokenPayload) -> None:
@@ -371,6 +423,7 @@ def _approver(user: TokenPayload) -> str:
 class RunBody(BaseModel):
     month: str = Field(pattern=MONTH)
     calendar_factor: Literal["on", "off"]
+    accept_waiting: bool = False          # live mode: accept the plan's waiting orders at the recommended quantity as part of the load
 
 
 class CloseBody(RunBody):
@@ -379,6 +432,11 @@ class CloseBody(RunBody):
 
 class PracticeBody(BaseModel):
     month: str = Field(pattern=MONTH)
+
+
+class RollbackBody(BaseModel):
+    month: str = Field(pattern=MONTH)
+    confirm: bool = False
 
 
 def _month_args(body: RunBody, user: TokenPayload) -> list[str]:
@@ -391,45 +449,121 @@ def _refuse_while_running() -> None:
         raise ApiError(409, "A batch step is already running. Wait for it to finish.", code="batch_busy")
 
 
+# ----------------------------------------------------------------------------------------------------------------- live mode
+
+def read_loaded() -> dict:
+    """Which months are loaded and what each can roll back to (scripts/demo_session.py status). Read-only."""
+    return _script_json("scripts.demo_session", "status", "--json")
+
+
+def live_month(loaded: dict | None = None) -> str:
+    return (loaded or read_loaded())["expected_month"]
+
+
+def _check_path(month: str) -> Path:
+    return VALIDATIONS / f"{month}.file.json"
+
+
+def _live_status(month: str | None) -> dict:
+    loaded = read_loaded()
+    month = month or loaded["expected_month"]
+    current = read_status(month, _waiting_slices(month))
+    job = JOB.state()
+    files = uploaded_files(month)
+    if "sales" in files and _check_path(month).is_file():
+        files["sales"] = {**files["sales"], "period": json.loads(_check_path(month).read_text(encoding="utf-8")).get("period")}
+    return {"enabled": True, "mode": "live", "blocked": live_blocked(), **current, "files": files, "practice_month": None, "practice_note": None,
+            "job": job, "result": batch_checklist.run_result(current, job), "loaded": loaded["loaded"],
+            "loaded_without_rollback_point": loaded.get("loaded_without_rollback_point", []),
+            "max_rollback_points": loaded["max_rollback_points"], "expected_month": loaded["expected_month"]}
+
+
 @router.get("/status")
 def status(month: str | None = Query(default=None, pattern=MONTH),
            _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
-    if not enabled():
+    found = mode()
+    if found is None:
         return {"enabled": False}
+    if found == "live":
+        return _live_status(month)
     current = read_status(month)
     job = JOB.state()
-    return {"enabled": True, "practice_note": PRACTICE_NOTE, **current, "files": uploaded_files(current["month"]), "practice_month": PRACTICE_MONTH,
+    return {"enabled": True, "mode": "practice", "practice_note": PRACTICE_NOTE, **current, "files": uploaded_files(current["month"]), "practice_month": PRACTICE_MONTH,
             "job": job, "result": batch_checklist.run_result(current, job)}
 
 
 @router.get("/checklist")
 def checklist(month: str | None = Query(default=None, pattern=MONTH), _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     """Where the month stands, check by check, read fresh. Reads only: the decisions are carried over by POST /batch/validate."""
-    require_local()
-    return checklist_for(month)[0]
+    found = require_available()
+    return checklist_for(month if month or found != "live" else live_month())[0]
 
 
 @router.get("/job")
 def job(_user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
-    require_local()
+    require_available()
     return JOB.state()
 
 
 @router.get("/feedback")
 def feedback(cycle: str = Query(pattern=MONTH), _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
-    require_local()
-    return {"practice_note": PRACTICE_NOTE, **_script_json("scripts.cycle_feedback", "--cycle", cycle, "--json")}
+    require_available()
+    return {"practice_note": PRACTICE_NOTE if not is_live() else None, **_script_json("scripts.cycle_feedback", "--cycle", cycle, "--json")}
+
+
+def _clean_name(filename: str | None) -> str:
+    # A browser may send a whole path, with either separator. Only the last part is kept.
+    return re.sub(r"[^\w.\- ()]", "_", re.split(r"[\\/]", filename or "")[-1]).strip(". ")
+
+
+def _live_upload(month: str, file: UploadFile) -> dict:
+    """A sales file in live mode: dated by its CONTENTS, checked against the database, kept only if it can load. A refusal leaves the slot as it was."""
+    name = _clean_name(file.filename)
+    if Path(name).suffix.lower() not in ALLOWED_SUFFIXES:
+        raise ApiError(400, "Only .xlsx, .xls and .csv files are accepted.", code="batch_bad_file_type")
+    folder = _month_folder(month, "sales")
+    holding = UPLOADS / month / ".checking-sales"
+    shutil.rmtree(holding, ignore_errors=True)
+    holding.mkdir(parents=True)
+    try:
+        held, written = holding / name, 0
+        with open(held, "wb") as out:
+            while chunk := file.file.read(1024 * 1024):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise ApiError(413, "That file is larger than the 100 MB limit.", code="batch_file_too_large")
+                out.write(chunk)
+        checked = _script_json("scripts.demo_session", "check-file", "--file", str(held), "--json")
+        if not checked["ok"]:
+            raise ApiError(422, checked["message"], code="batch_file_not_usable")
+        if checked["period"] != month:
+            raise ApiError(409, f"This file is for {checked['period']}, but the month to load is {month}.", code="batch_wrong_month")
+        folder.mkdir(parents=True, exist_ok=True)
+        for old in folder.iterdir():
+            old.unlink()
+        held.replace(folder / name)
+        VALIDATIONS.mkdir(parents=True, exist_ok=True)
+        _check_path(month).write_text(json.dumps({k: checked[k] for k in ("period", "basis", "first_day", "last_day", "rows")}), encoding="utf-8")
+        _validation_path(month).unlink(missing_ok=True)
+    finally:
+        shutil.rmtree(holding, ignore_errors=True)
+    return {"kind": "sales", "name": name, "bytes": written, "check": checked}
 
 
 @router.post("/files", status_code=201)
 def upload_file(month: str = Form(pattern=MONTH), kind: str = Form(), file: UploadFile = File(...),
-                _user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
-    require_local()
+                user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
+    found = require_available()
     _refuse_while_running()
+    if found == "live":
+        if kind != "sales":
+            raise ApiError(400, "Only the month's sales file is loaded here.", code="batch_bad_kind")
+        out = _live_upload(month, file)
+        audit_event("Monthly Batch File Accepted", f"{out['name']}: {out['check']['rows']} products, dated {out['check']['period']} by {out['check']['basis']}", user)
+        return out
     if kind not in SLICES:
         raise ApiError(400, "A file is either the month's sales or its stock count.", code="batch_bad_kind")
-    # A browser may send a whole path, with either separator. Only the last part is kept.
-    name = re.sub(r"[^\w.\- ()]", "_", re.split(r"[\\/]", file.filename or "")[-1]).strip(". ")
+    name = _clean_name(file.filename)
     if Path(name).suffix.lower() not in ALLOWED_SUFFIXES:
         raise ApiError(400, "Only .xlsx, .xls and .csv files are accepted.", code="batch_bad_file_type")
     if read_status(month)["checks"].get("abc_run"):
@@ -460,12 +594,34 @@ def upload_file(month: str = Form(pattern=MONTH), kind: str = Form(), file: Uplo
     return {"kind": kind, "name": name, "bytes": written, "check": checked}
 
 
+def _validate_live(month: str, user: TokenPayload) -> dict:
+    """Live mode's validation: the waiting file is read and checked against the database again, now. Loads nothing."""
+    hashes = file_hashes(month)
+    if hashes:
+        path = next(iter(_month_folder(month, "sales").iterdir()))
+        checked = _script_json("scripts.demo_session", "check-file", "--file", str(path), "--json")
+        if not checked["ok"]:
+            audit_event("Monthly Batch Validation Failed", f"Month {month}: {checked['message'][:300]}", user)
+            raise ApiError(422, checked["message"], code="batch_file_not_usable")
+    now = datetime.now(timezone.utc).isoformat()
+    write_validation(month, {"month": month, "validated_at": now, "by": _approver(user), "hashes": hashes, "expects_file_check": bool(hashes), "replay": None})
+    if hashes:
+        _file_check_path(month).write_text(json.dumps({"completed": True, "events": [], "checked_at": now, "run_key": None}), encoding="utf-8")
+    current, _ = checklist_for(month)
+    failing = _failed_names(current)
+    audit_event("Monthly Batch Validation Failed" if failing else "Monthly Batch Validation Passed",
+                f"Month {month}" + (f"; not passed: {failing}" if failing else ""), user)
+    return {"practice_note": None, "started": None, "replay": None}
+
+
 @router.post("/validate", status_code=202)
 def validate(body: PracticeBody, user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
     """Carries the decisions over, and checks any waiting file with the loader's dry run. Loads nothing. The checklist then says
     what it found: started says whether a file check is running first."""
-    require_local()
+    found = require_available()
     _refuse_while_running()
+    if found == "live":
+        return _validate_live(body.month, user)
     replay = replay_decisions(body.month)
     status = read_status(body.month)
     load_args = _load_args(body.month, status["checks"])
@@ -527,12 +683,44 @@ def practice_month(body: PracticeBody, _user: TokenPayload = Depends(require_per
     return {"started": "practice"}
 
 
+def _run_live(body: RunBody, user: TokenPayload, can_decide: bool) -> dict:
+    """Loads the waiting file for the month it contains, then runs the month. The checks are asked again here, whatever the page last saw."""
+    require_live_ready()
+    current, _ = checklist_for(body.month)
+    if not current["can_run"]:
+        failing = _failed_names(current)
+        audit_event("Monthly Batch Run Refused", f"Month {body.month}: {failing}", user)
+        raise ApiError(409, f"This month cannot run yet: {failing}.", code="batch_checks_failed",
+                       checks=[c for c in current["checks"] if c["blocking"] and c["status"] in ("failed", "not_checked")], decisions=current["decisions"])
+    waiting = current["decisions"]["unresolved"]
+    if waiting and not body.accept_waiting:
+        raise ApiError(409, f"{waiting} orders of the {current['decisions']['cycle']} plan still await a decision. Decide them on the Reorder page, "
+                            "or choose to accept them at the recommended quantity as part of this run.", code="batch_checks_failed", decisions=current["decisions"])
+    if waiting and not can_decide:
+        # Accepting an order is a decision, and decisions are an admin's (lp.decide, admin-only): loading a file does not widen who may accept.
+        raise ApiError(403, f"{waiting} orders of the {current['decisions']['cycle']} plan await a decision, and accepting them needs the permission to decide "
+                            "reorders. Ask an admin to decide them or to run this month.", code="missing_permission", permission="lp.decide")
+    folder = _month_folder(body.month, "sales")
+    path = next(iter(sorted(folder.iterdir())), None) if folder.is_dir() else None
+    if path is None:
+        raise ApiError(409, "Upload the month's sales file first.", code="batch_not_validated")
+    cmd = [sys.executable, "-m", "scripts.demo_session", "load", "--file", str(path), "--by", _approver(user), "--calendar-factor", body.calendar_factor, "--target-public"]
+    if waiting:
+        cmd.append("--accept-waiting")
+    JOB.start("plan", cmd, body.month, _finish_run_audit(body.month, user))
+    audit_event("Monthly Batch Run Started", f"Month {body.month}, job {JOB.state()['id']}, calendar factor {body.calendar_factor}"
+                + (f", {waiting} waiting orders accepted at the recommended quantity" if waiting else ""), user)
+    return {"started": "plan"}
+
+
 @router.post("/run", status_code=202)
-def run(body: RunBody, user: TokenPayload = Depends(require_permission("upload.run"))) -> dict:
+def run(body: RunBody, user: TokenPayload = Depends(require_permission("upload.run")), db: Session = Depends(get_db)) -> dict:
     """Asks every check again, whatever the page last saw: a validation on record is not permission. scripts.run_month then applies
     its own refusals when it starts."""
-    require_local()
+    found = require_available()
     _refuse_while_running()
+    if found == "live":
+        return _run_live(body, user, "lp.decide" in permissions_for(db, user))
     replay = replay_decisions(body.month)
     current, status = checklist_for(body.month, replay)
     if not current["can_run"]:
@@ -550,6 +738,26 @@ def run(body: RunBody, user: TokenPayload = Depends(require_permission("upload.r
     JOB.start("plan", cmd, body.month, _finish_run_audit(body.month, user))
     audit_event("Monthly Batch Run Started", f"Month {body.month}, job {JOB.state()['id']}, calendar factor {body.calendar_factor}", user)
     return {"started": "plan"}
+
+
+@router.post("/rollback", status_code=202)
+def rollback(body: RollbackBody, user: TokenPayload = Depends(require_permission("data.rollback"))) -> dict:
+    """Puts the system back to how it was before `month` was loaded, removing every month loaded after it. Admin only. One child process; the page follows it."""
+    if require_available() != "live":
+        raise ApiError(409, "Months are rolled back on the live system only.", code="batch_local_only")
+    _refuse_while_running()
+    require_live_ready()
+    if not body.confirm:
+        raise ApiError(400, "A rollback must be confirmed.", code="batch_unconfirmed")
+    loaded = read_loaded()
+    if body.month not in {entry["month"] for entry in loaded["loaded"]}:
+        raise ApiError(409, f"{body.month} has no rollback point. It was never loaded, or it is older than the {loaded['max_rollback_points']} newest loads.",
+                       code="batch_nothing_to_roll_back")
+    later = [entry["month"] for entry in loaded["loaded"] if entry["month"] > body.month]
+    JOB.start("rollback", [sys.executable, "-m", "scripts.demo_session", "rollback", "--month", body.month, "--by", _approver(user), "--yes", "--target-public"],
+              body.month, _finish_audit("Month Rolled Back", "Month Rollback Failed", body.month, user))
+    audit_event("Month Rollback Started", f"Rolling back {body.month}" + (f", which also removes {', '.join(later)}" if later else ""), user)
+    return {"started": "rollback", "also_removes": later}
 
 
 @router.post("/close", status_code=202)

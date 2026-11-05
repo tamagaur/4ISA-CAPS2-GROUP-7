@@ -1570,7 +1570,11 @@ const SKUForecast = () => {
             <span className="forecast-summary-value is-empty">Not available</span>
           )}
           <span className="forecast-summary-note">
-            {summaryHasRange ? formatPeriod(summaryForecast.period) : 'No range for this forecast'}
+            {summaryHasRange
+              ? formatPeriod(summaryForecast.period)
+              : (storedForecast?.accuracy_withheld
+                ? 'The range comes from forecast error, which is not shown for a month that rests on generated sales.'
+                : 'No range for this forecast')}
           </span>
         </div>
       </div>
@@ -2297,7 +2301,16 @@ const SKUForecast = () => {
                                 <ExactValue value={derivedForecast.confidenceLower} label="Exact low end" /> –{' '}
                                 <ExactValue value={derivedForecast.confidenceUpper} label="Exact high end" /> pcs
                               </>
-                            ) : <span className="forecast-next-none">Not available</span>}
+                            ) : (
+                              <>
+                                <span className="forecast-next-none">Not available</span>
+                                {storedForecast?.accuracy_withheld && (
+                                  <span className="forecast-next-change-sub">
+                                    It comes from forecast error, which is not shown for a month that rests on generated sales.
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </dd>
                         </div>
                         {/* The forecast against the last actual month (the

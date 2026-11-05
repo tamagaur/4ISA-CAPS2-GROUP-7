@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 
 PRACTICE_DB = "ssm_practice"                  # scripts/local_pg.py PRACTICE_DB
 LABEL_HEADER = "X-Practice-Copy"              # on every answer from the copy; frontend/src/practiceCopy.js reads it
+GENERATED_HEADER = "X-Generated-Sales"        # on every answer from any other database while it holds generated sales (DataKeyed label)
 PRACTICE_NOTE = "Read from the practice copy (ssm_practice), whose sales may be generated. Practice, not a result."
 GENERATED_TAG = "qa_synthetic_march"          # scripts/local_pg.py TAG: what `local_pipeline_qa.py synth` writes
 GENERATED_KIND = "generated_practice"
@@ -74,7 +75,7 @@ MODEL_PARAMS_ACCURACY_KEYS = ("wape", "holdout_metrics_served", "holdout_metrics
 _MASE_IN_TEXT = re.compile(r"\s*\(MASE \d+(?:\.\d+)?\)")
 # scripts/run_baseline_forecast.py's printed summary: every line of it that states or rebuilds an error, the win counts per class included.
 _ACCURACY_LOG_LINE = re.compile(r"(?i)((mase|mape|wape|rmse|\bmae\b|\bbias\b|gap rule|outright wins).*\d|oracle_method=|\(\d+\)(\s+\d+){5}\s*$)")
-LOG_LINE_WITHHELD = "[a forecast error figure was printed here: withheld on the practice copy]"
+LOG_LINE_WITHHELD = "[a forecast error figure was printed here: withheld, it rests on generated sales]"
 
 
 def _url() -> str:
@@ -197,17 +198,19 @@ def _label_points(node, months: list[str], delmonte: bool = False) -> None:
 
 
 def accuracy_withheld_reason(months: list[str] | None, uploaded: list[str] | None = ()) -> str:
-    """Worded as the panel words it (scripts/cycle_feedback.score)."""
+    """Worded as the panel words it (scripts/cycle_feedback.score). A fact about the input, in plain words."""
     if months is None or uploaded is None:
         return "Forecast error withheld: which months are generated could not be read, and an error computed on generated sales is not presented."
     said = []
     if months:
-        said.append(f"sales for {', '.join(months)} on this practice copy are generated")
+        names = [month_label(m) for m in months]
+        said.append(f"sales for {_joined(names)} {'is' if len(names) == 1 else 'are'} generated")
     if uploaded:
-        said.append(f"sales for {', '.join(uploaded)} on this practice copy came from an uploaded file that nothing here has checked")
+        names = [month_label(m) for m in uploaded]
+        said.append(f"sales for {_joined(names)} came from an uploaded file that nothing here has checked")
     first = min(*months, *uploaded) if len([*months, *uploaded]) > 1 else [*months, *uploaded][0]
     return (f"Forecast error withheld: {' and '.join(said)}, and an error computed on them is not presented. "
-            f"A date range ending before {first} shows the real months' error.")
+            f"A date range ending before {month_label(first)} shows the real months' error.")
 
 
 def _reaches_generated(block: dict, months: list[str] | None) -> bool:
@@ -215,13 +218,18 @@ def _reaches_generated(block: dict, months: list[str] | None) -> bool:
     return months is None or end is None or end >= months[0]
 
 
-def _withheld_range(block: dict, reason: str) -> dict:
-    """The answer a range with nothing to score gives, so a page reads it the way it reads Del Monte's: blocked_reason and no figures."""
+def _withheld_range(block: dict, reason: str, first_generated: str | None = None) -> dict:
+    """The answer a range with nothing to score gives, so a page reads it the way it reads Del Monte's: blocked_reason and no summary figures.
+    The per-month rows of months BEFORE the first generated month are real forecasts scored on real sales, and they carry facts that are not
+    accuracy figures at all (possibly_stock_limited: the months a product's stock ran out, which the product chart shades). They stay; the summary
+    and every row from the first generated month on go. Found 2026-11-06: withholding the whole range took the shaded 'stock may have run out'
+    months of Aug-Nov 2025 off the product chart as soon as the range reached the loaded month."""
     from analytics.params import REVIEW_OVER_RUN_MONTHS
     from backend.marts import accuracy_summary
     start, end = block.get("start_period"), block.get("end_period")
     keep = {k: block[k] for k in ("coverage", "level") if k in block}
-    return {**accuracy_summary([], start, end, REVIEW_OVER_RUN_MONTHS), **keep, "rows": [], "compare_run": None, "actuals_version": None,
+    kept = [r for r in (block.get("rows") or []) if first_generated and isinstance(r, dict) and isinstance(r.get("month"), str) and r["month"][:7] < first_generated]
+    return {**accuracy_summary([], start, end, REVIEW_OVER_RUN_MONTHS), **keep, "rows": kept, "compare_run": None, "actuals_version": None,
             "blocked_reason": reason, "accuracy_withheld": True}
 
 
@@ -264,7 +272,7 @@ def _withhold_stored(node, months: list[str] | None, reason: str, delmonte: bool
             node["accuracy_withheld"] = reason
     for key, value in list(node.items()):
         if isinstance(value, str):
-            node[key] = _withhold_log(value) if key == "log" else _MASE_IN_TEXT.sub(" (its MASE is withheld on the practice copy)", value)
+            node[key] = _withhold_log(value) if key == "log" else _MASE_IN_TEXT.sub(" (its MASE is withheld: it rests on generated sales)", value)
         else:
             _withhold_stored(value, months, reason, delmonte, stands)
 
@@ -276,11 +284,11 @@ def withhold_accuracy(body, generated: list[str] | None, path: str = "", uploade
         return body
     reason = accuracy_withheld_reason(generated, uploaded)
     if isinstance(body, dict) and path.startswith(ACCURACY_RANGE_ROUTES) and not body.get("blocked_reason") and _reaches_generated(body, months):
-        return _withheld_range(body, reason) if path == "/dashboard/accuracy" else _withheld_decomposition(body, reason)
+        return _withheld_range(body, reason, months[0] if months else None) if path == "/dashboard/accuracy" else _withheld_decomposition(body, reason)
     if isinstance(body, dict) and path == "/dashboard" and isinstance(body.get("forecast_accuracy"), dict):
         block = body["forecast_accuracy"]
         if block.get("coverage") and _reaches_generated(block, months):
-            body["forecast_accuracy"] = _withheld_range(block, reason)
+            body["forecast_accuracy"] = _withheld_range(block, reason, months[0] if months else None)
     _withhold_stored(body, months, reason)
     return body
 
@@ -359,13 +367,32 @@ def demo_labels(now=None) -> tuple[list[str] | None, list[str] | None]:
     return _demo_labels_cache["value"]
 
 
+_MONTH_NAMES = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+
+def month_label(month: str) -> str:
+    """'2026-03' -> 'March 2026'; anything else is left as it came."""
+    found = _MONTH.match(month) if isinstance(month, str) else None
+    return f"{_MONTH_NAMES[int(month[5:7]) - 1]} {month[:4]}" if found and 1 <= int(month[5:7]) <= 12 else str(month)
+
+
+def _joined(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
 def demo_note(months: list[str] | None, uploaded: list[str] | None) -> str:
+    """The sentence every page carries while a loaded month's sales are generated. A fact about the month's input, in plain words."""
     if months is None or uploaded is None:
-        return "Which months hold generated sales could not be read: treat every recent figure here as generated. Demonstration, not a result."
-    said = f"Sales for {', '.join(months)} are generated demonstration data (is_demo)" if months else ""
+        return "Which months hold generated sales could not be read: treat every recent figure here as generated."
+    said = ""
+    if months:
+        names = [month_label(m) for m in months]
+        said = f"Sales for {_joined(names)} {'is' if len(names) == 1 else 'are'} generated: SSM has not sent {'that month' if len(names) == 1 else 'those months'}."
     if uploaded:
-        said += (", and " if said else "") + f"sales for {', '.join(uploaded)} came through the upload slot, which cannot tell a real file from a made-up one"
-    return f"{said}. Forecast error is withheld wherever they are counted, and every forecast and plan after them rests on them. Demonstration, not a result."
+        names = [month_label(m) for m in uploaded]
+        said += (" " if said else "") + f"Sales for {_joined(names)} came from an uploaded file that nothing here can tell from a made-up one."
+    both = len(months) + len(uploaded) != 1
+    return f"{said} Forecast error is not shown for {'them' if both else 'it'}, and every forecast and plan after {'them rest on them' if both else 'it rests on it'}."
 
 
 def _labelled_bytes(raw: bytes, path: str = "", data_keyed: bool = False) -> bytes:
@@ -419,8 +446,8 @@ class PracticeBodyLabel:
                     return
                 body = await run_in_threadpool(_labelled_bytes, b"".join(chunks), scope.get("path", ""), self.data_keyed)
                 headers = [(k, v) for k, v in start["headers"] if k.lower() != b"content-length"]
-                if self.data_keyed:   # the page's banner reads this (frontend/src/practiceCopy.js); the practice URL sets it in main.py instead
-                    headers.append((LABEL_HEADER.lower().encode(), demo_note(generated, uploaded).encode("ascii", "replace")))
+                if self.data_keyed:   # the page's banner reads this (frontend/src/practiceCopy.js); the practice URL sets X-Practice-Copy in main.py instead
+                    headers.append((GENERATED_HEADER.lower().encode(), demo_note(generated, uploaded).encode("ascii", "replace")))
                 await send({**start, "headers": [*headers, (b"content-length", str(len(body)).encode())]})
                 await send({"type": "http.response.body", "body": body})
 

@@ -42,6 +42,12 @@ sys.path.insert(0, str(REPO))
 SCHEMAS = ("app", "public", "mart", "demo")
 EXCLUDED_TABLES = {"app.audit_log", "app.user_session", "app.auth_token"}
 PROOF_FILE = REPO / "local" / "demo_revert_proof.json"
+# Large tables a month of sales never touches. A snapshot FINGERPRINTS them (so a rollback still proves they are as they were) but does not copy
+# them, which halves what a checkpoint costs in storage. Used by scripts/demo_session.py only; the full proof (scripts/demo_revert_proof.py) and
+# `snapshot` copy everything. A table named here that a load DID change makes the rollback refuse (its fingerprint no longer matches), never
+# silently skip: the failure is safe, and the rehearsal (scripts/month_load_rehearsal.py) is what shows the list is right.
+UNCOPIED = frozenset({"public.sales_fact", "public.inventory_fact", "mart.inventory_mart", "public.derived_receipt_fact",
+                      "public.etl_quarantine", "public.customer_dimension"})
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 TAG = re.compile(r"^[a-z0-9_]{1,30}$")
 
@@ -110,7 +116,9 @@ def sequences(cur) -> list[tuple[str, str, int, bool]]:
     return out
 
 
-def take_snapshot(conn, tag: str) -> dict:
+def take_snapshot(conn, tag: str, uncopied: frozenset | set = frozenset(), commit: bool = True) -> dict:
+    """Copies every base table except `uncopied` (those are fingerprinted only). With commit=False the caller commits, so a checkpoint and the
+    rows that describe it appear together or not at all."""
     sch = snap_schema(tag)
     cur = conn.cursor()
     cur.execute("SET LOCAL statement_timeout = 0")
@@ -120,17 +128,20 @@ def take_snapshot(conn, tag: str) -> dict:
     cur.execute(f'CREATE SCHEMA "{sch}"')
     manifest = {}
     for s, t in base_tables(cur):
-        cur.execute(f'CREATE TABLE "{sch}"."{snap_table(s, t)}" AS TABLE "{s}"."{t}"')
         manifest[f"{s}.{t}"] = fingerprint(cur, s, t)
+        if f"{s}.{t}" in uncopied:
+            continue
+        cur.execute(f'CREATE TABLE "{sch}"."{snap_table(s, t)}" AS TABLE "{s}"."{t}"')
         cur.execute(f'SELECT count(*) FROM "{sch}"."{snap_table(s, t)}"')
         if cur.fetchone()[0] != manifest[f"{s}.{t}"][0]:
             raise SystemExit(f"snapshot of {s}.{t} does not hold its rows; nothing was kept")
     seqs = sequences(cur)
-    cur.execute(f'CREATE TABLE "{sch}"._manifest (tbl text PRIMARY KEY, n bigint NOT NULL, md5 text NOT NULL)')
-    cur.executemany(f'INSERT INTO "{sch}"._manifest VALUES (%s, %s, %s)', [(k, n, h) for k, (n, h) in manifest.items()])
+    cur.execute(f'CREATE TABLE "{sch}"._manifest (tbl text PRIMARY KEY, n bigint NOT NULL, md5 text NOT NULL, copied boolean NOT NULL DEFAULT true)')
+    cur.executemany(f'INSERT INTO "{sch}"._manifest VALUES (%s, %s, %s, %s)', [(k, n, h, k not in uncopied) for k, (n, h) in manifest.items()])
     cur.execute(f'CREATE TABLE "{sch}"._sequences (sch text, seq text, last_value bigint, is_called boolean)')
     cur.executemany(f'INSERT INTO "{sch}"._sequences VALUES (%s, %s, %s, %s)', seqs)
-    conn.commit()
+    if commit:
+        conn.commit()
     return manifest
 
 
@@ -141,6 +152,16 @@ def read_manifest(cur, tag: str) -> dict:
         raise SystemExit(f"no snapshot {sch}")
     cur.execute(f'SELECT tbl, n, md5 FROM "{sch}"._manifest')
     return {t: (int(n), h) for t, n, h in cur.fetchall()}
+
+
+def read_copied(cur, tag: str) -> set[str]:
+    """The tables the snapshot holds a copy of. A snapshot written before the column existed copied everything."""
+    sch = snap_schema(tag)
+    cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = %s AND table_name = '_manifest' AND column_name = 'copied')", (sch,))
+    if not cur.fetchone()[0]:
+        return set(read_manifest(cur, tag))
+    cur.execute(f'SELECT tbl FROM "{sch}"._manifest WHERE copied')
+    return {r[0] for r in cur.fetchall()}
 
 
 def compare(cur, manifest: dict) -> list[str]:
@@ -158,7 +179,10 @@ def revert(conn, tag: str, after_tables=None) -> list[str]:
     cur.execute("SET LOCAL statement_timeout = 0")
     cur.execute("SET LOCAL session_replication_role = replica")
     touched = []
+    copied = read_copied(cur, tag)
     for key in manifest:
+        if key not in copied:
+            continue          # fingerprinted only: compare() below fails the whole revert if a load did change it
         s, t = key.split(".")
         snap = f'"{sch}"."{snap_table(s, t)}"'
         cur.execute(f'SELECT count(*) FROM "{s}"."{t}" x WHERE NOT EXISTS (SELECT 1 FROM {snap} y WHERE y::text = x::text)')

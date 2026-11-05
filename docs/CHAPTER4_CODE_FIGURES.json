@@ -5,19 +5,19 @@
   {
    "id": "routes_total",
    "what": "Method/path pairs the API serves",
-   "value": 84,
+   "value": 95,
    "command": "python -m scripts.chapter_figures --measure routes_total  (= tests/backend/test_permissions.py ROUTE_COUNT)"
   },
   {
    "id": "routes_require_sign_in",
    "what": "Routes that need a signed-in user (every route but the public ones)",
-   "value": 74,
+   "value": 85,
    "command": "python -m scripts.chapter_figures --measure routes_require_sign_in"
   },
   {
    "id": "routes_named_permission",
    "what": "...of which gated by a named permission key",
-   "value": 59,
+   "value": 70,
    "command": "python -m scripts.chapter_figures --measure routes_named_permission"
   },
   {
@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2687,
+   "value": 2722,
    "command": "DERIVED, not run: tests_collected_with_real_data minus real_corpus_cases (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2693,
+   "value": 2728,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,13 +83,13 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2666,
+   "value": 2701,
    "command": "DERIVED, not run: tests_collected_clean_clone minus tests_skipped_clean_clone minus tests_failed (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2675,
+   "value": 2710,
    "command": "scripts/check.sh --full there"
   },
   {

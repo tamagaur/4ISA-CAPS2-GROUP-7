@@ -20,6 +20,7 @@ export const P = {
   LP_PROPOSE: 'lp.propose',
   AUDIT_LOG_VIEW: 'audit_log.view',
   UPLOAD_RUN: 'upload.run',
+  DATA_ROLLBACK: 'data.rollback',
   USERS_MANAGE: 'users.manage',
 };
 
@@ -81,7 +82,8 @@ export const LEGACY_CATALOG = {
     { key: P.LP_DECIDE, label: 'Accept or dismiss recommendations', group: 'LP / Reorder', description: 'Changes what SSM orders.', admin_only: true },
     { key: P.LP_PROPOSE, label: 'Propose reorder changes', group: 'LP / Reorder', description: 'Ask for a different quantity or a dismissal, and report stock counted; an admin decides.' },
     { key: P.AUDIT_LOG_VIEW, label: 'View the audit log', group: 'Audit Log', description: 'Who changed what, and when.' },
-    { key: P.UPLOAD_RUN, label: 'Use Data Management', group: 'Data Management', description: 'Uploads (Module 07); a mock page for now.' },
+    { key: P.UPLOAD_RUN, label: 'Use Data Management', group: 'Data Management', description: 'Upload and process the monthly sales file.' },
+    { key: P.DATA_ROLLBACK, label: 'Roll back a loaded month', group: 'Data Management', description: 'Puts the system back to before a month was loaded.', admin_only: true },
     { key: P.USERS_MANAGE, label: 'Manage users', group: 'User Management', description: 'Invite users, set roles and permissions.' },
   ],
   roles: { admin: 'all', staff: LEGACY_STAFF_ACCESS },

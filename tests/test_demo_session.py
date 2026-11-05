@@ -1,8 +1,10 @@
-"""analytics/demo_session.py, scripts/demo_session.py and backend/routers/live_demo.py: the gates of the live demonstration, with no database.
+"""analytics/demo_session.py, scripts/demo_session.py, scripts/demo_revert.py and scripts/demo_rehearsal.py: the gates of loading a month and rolling it back,
+with no database.
 
-What each protects: the window widens exactly one view and one function and refuses a definition it does not know; the forecast's guard
-opens for a session only when the DATABASE says one is open and in force; the loader refuses what it must; the route set is off by default and
-needs a person's switch, a named host and a passing revert proof; and a demonstration never writes a tracked report.
+What each protects: the window widens exactly one view and one function and refuses a definition it does not know; the forecast's guard opens only when
+the DATABASE says the widened view is in force; checkpoints are named by month and found by their schemas, not by anything in memory; the load writes only
+labelled rows, only for the month in the file, in the order the file's month allows; a write off this machine's throwaway server needs an attestation of
+THIS code; a rollback restores the checkpoint, checks every table, view and function against it, and keeps the checkpoints if anything differs.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ import pytest
 
 from analytics import demo_session as ds
 from analytics.forecasting import practice_switch as ps
-from scripts import demo_revert, demo_session as cli, report_target
+from scripts import demo_rehearsal, demo_revert, demo_session as cli, report_target
 
 LIVE_VIEW = ("SELECT demand_key,\n    product_key,\n    sku_code,\n    calendar_month,\n    region,\n    quantity_sold,\n    net_amount,\n"
              "    _src_file,\n    _src_sheet,\n    is_demo,\n    gsv\n   FROM unilever_sku_demand_fact\n  WHERE is_demo = false")
@@ -45,39 +47,33 @@ def test_the_function_counts_only_a_row_with_no_fill_source_and_keeps_the_retire
     assert "WHEN p_fill_source IS NULL THEN 'real' WHEN p_fill_source = 'synthetic_v2' THEN 'generated' ELSE 'filled'" in sql
 
 
-class SessionCursor:
-    """Answers the questions the witness asks."""
+class ViewCursor:
+    """Answers the one question the witness asks: what the demand view's definition is."""
 
-    def __init__(self, state=None, view=LIVE_VIEW):
-        self.state, self.view, self.last = state, view, None
+    def __init__(self, view=LIVE_VIEW):
+        self.view, self.last = view, None
 
     def execute(self, sql, params=None):
         self.last = (sql, params)
 
     def fetchone(self):
         sql = self.last[0]
-        if "to_regclass" in sql:
-            return (self.state is not None,)
-        if sql == ds.SESSION_SQL:
-            return None if self.state is None else (self.state, None, "x", 109, 435988, "2026-03-01", "f")
         if "pg_get_viewdef" in sql:
             return (self.view,)
         raise AssertionError(sql)
 
 
-def test_the_witness_needs_an_open_session_and_the_widened_view_in_force():
+def test_the_witness_is_the_widened_view_in_force_in_the_connections_own_database():
     widened = ds.admitting_view_sql(LIVE_VIEW).split(" AS ", 1)[1]
-    assert ds.permits_labelled_rows(SessionCursor("open", widened)) is True
-    assert ds.permits_labelled_rows(SessionCursor("open", LIVE_VIEW)) is False        # open, but the window is not in force
-    assert ds.permits_labelled_rows(SessionCursor(None, widened)) is False            # the view is wide, but no session is recorded
-    assert ds.permits_labelled_rows(SessionCursor("closing", widened)) is False
+    assert ds.permits_labelled_rows(ViewCursor(widened)) is True
+    assert ds.permits_labelled_rows(ViewCursor(LIVE_VIEW)) is False
 
 
-class ForecastCursor(SessionCursor):
+class ForecastCursor(ViewCursor):
     """A cursor of a database that is not the practice copy, holding generated rows."""
 
-    def __init__(self, state, view, foreign=0):
-        super().__init__(state, view)
+    def __init__(self, view, foreign=0):
+        super().__init__(view)
         self.connection = SimpleNamespace(info=SimpleNamespace(host="aws-0.pooler.supabase.com", port=6543, dbname="postgres"))
         self.foreign = foreign
 
@@ -92,136 +88,148 @@ class ForecastCursor(SessionCursor):
         return super().fetchone()
 
 
-def test_the_forecast_guard_opens_for_a_session_on_a_non_practice_database_only_while_the_database_says_so(caplog):
+def test_the_forecast_guard_opens_on_a_non_practice_database_only_while_the_database_says_so(caplog):
     widened = ds.admitting_view_sql(LIVE_VIEW).split(" AS ", 1)[1]
     with caplog.at_level("WARNING"):
-        assert ps.labelled_rows_permitted(ForecastCursor("open", widened), LABELLED) is True
-    assert "open demonstration session" in caplog.text
-    assert ps.labelled_rows_permitted(ForecastCursor(None, LIVE_VIEW), LABELLED) is False       # no session: refused as it always was
-    assert ps.labelled_rows_permitted(ForecastCursor("open", LIVE_VIEW), LABELLED) is False      # session without the window
-    assert ps.labelled_rows_permitted(ForecastCursor("open", widened, foreign=3), LABELLED) is False   # a generated row with some other tag
+        assert ps.labelled_rows_permitted(ForecastCursor(widened), LABELLED) is True
+    said = " ".join(caplog.messages).lower()
+    assert "loaded month" in said and "demonstration" not in said and "practice" not in said
+    assert ps.labelled_rows_permitted(ForecastCursor(LIVE_VIEW), LABELLED) is False                  # window not in force: refused as it always was
+    assert ps.labelled_rows_permitted(ForecastCursor(widened, foreign=3), LABELLED) is False         # a generated row with some other tag
 
 
-def test_the_forecast_guard_never_asks_a_session_for_a_run_with_no_labelled_row():
-    cur = ForecastCursor("open", LIVE_VIEW)
+def test_the_forecast_guard_never_asks_for_a_run_with_no_labelled_row():
+    cur = ForecastCursor(LIVE_VIEW)
     assert ps.labelled_rows_permitted(cur, pd.DataFrame({"is_demo": [False]})) is False and cur.last is None
 
 
-# ---- the loader's file rules
+# ---- checkpoints are named by month and found by their schemas
 
-def write(tmp_path, text):
-    p = tmp_path / "f.csv"
-    p.write_text(text, encoding="utf-8")
-    return p
-
-
-def test_the_file_needs_its_columns_and_refuses_what_is_wrong_per_line(tmp_path):
-    rows, problems = cli.read_demo_file(write(tmp_path, "sku,qty\n1,2\n"), "2026-03")
-    assert rows == [] and "no column sku_code" in problems[0]
-    text = ("sku_code,calendar_month,quantity_sold,net_amount\n"
-            "A,2026-03,5,10.5\nA,2026-03,6,11\nB,2026-04,1,1\nC,2026-03,x,1\nD,2026-03,-1,1\nE,2026-03,2,3\n,2026-03,1,1\n")
-    rows, problems = cli.read_demo_file(write(tmp_path, text), "2026-03")
-    assert [r["sku_code"] for r in rows] == ["A", "E"]
-    joined = " | ".join(problems)
-    for expected in ("A appears twice", "B is for 2026-04", "C has a quantity", "D has a negative", "no sku_code"):
-        assert expected in joined
+def test_a_checkpoint_is_named_by_its_month():
+    assert ds.month_tag("2026-03") == "m202603"
+    assert ds.checkpoint_schema("2026-03") == "demo_revert_m202603" == demo_revert.snap_schema(ds.month_tag("2026-03"))
+    assert ds.checkpoint_schema("2026-03") not in ds.SCHEMAS           # it lies outside what a snapshot copies
+    with pytest.raises(ValueError):
+        ds.month_tag("March")
 
 
-def test_an_empty_file_is_refused(tmp_path):
-    assert cli.read_demo_file(write(tmp_path, "sku_code,quantity_sold,net_amount\n"), "2026-03")[1] == ["the file has no rows"]
+def test_the_month_after():
+    assert ds.next_month("2026-03") == "2026-04" and ds.next_month("2026-12") == "2027-01"
 
 
-def test_the_loader_writes_only_labelled_rows_and_only_through_an_open_window():
+class RegistryCursor:
+    def __init__(self, schemas, sessions):
+        self.schemas, self.sessions, self.last = schemas, sessions, None
+
+    def execute(self, sql, params=None):
+        self.last = (sql, params)
+
+    def fetchall(self):
+        return [(s,) for s in self.schemas]
+
+    def fetchone(self):
+        sql, params = self.last
+        if "to_regclass" in sql:
+            return (params[0].strip('"').split('"')[0] in self.sessions,)
+        schema = sql.split('FROM "')[1].split('"')[0]
+        row = self.sessions[schema]
+        return tuple(row.get(c) for c in ds.SESSION_COLUMNS)
+
+
+def test_the_registry_is_the_schemas_oldest_month_first_and_an_unreadable_one_is_reported():
+    cur = RegistryCursor(["demo_revert_m202604", "demo_revert_m202603", "demo_revert_m202605"],
+                         {"demo_revert_m202603": {"state": "loaded", "month": "2026-03"}, "demo_revert_m202604": {"state": "taken", "month": "2026-04"}})
+    found = ds.checkpoints(cur)
+    assert [c["month"] for c in found] == ["2026-03", "2026-04", "2026-05"]
+    assert [c["state"] for c in found] == ["loaded", "taken", "unreadable"]
+
+
+def test_the_history_is_bounded_and_the_oldest_goes_only_after_a_new_month_loaded():
+    assert ds.MAX_CHECKPOINTS == 2
     src = Path(cli.__file__).read_text(encoding="utf-8")
-    assert "ds.TAG, ds.TAG, True" in src                       # _src_file, _src_sheet, is_demo = true
-    assert "no demonstration session is open in this database" in src
+    assert "while len(cps) > ds.MAX_CHECKPOINTS" in src and "cps.pop(0)" in src
+    assert src.index("while len(cps) > ds.MAX_CHECKPOINTS") > src.index('mark(conn, month, state="loaded"')      # released AFTER the new month loaded, never before
 
 
-# ---- the gates
+# ---- a snapshot copies what a month can change and fingerprints everything
 
-def test_a_write_off_the_throwaway_server_needs_the_flag_and_a_passing_proof(tmp_path):
-    proof = tmp_path / "proof.json"
-    with pytest.raises(SystemExit, match="--target-public"):
-        demo_revert.require_write_allowed(False, False, proof)
-    with pytest.raises(SystemExit, match="no passing revert proof"):
-        demo_revert.require_write_allowed(False, True, proof)
-    proof.write_text(json.dumps({"passed": False}))
-    with pytest.raises(SystemExit):
-        demo_revert.require_write_allowed(False, True, proof)
-    proof.write_text(json.dumps({"passed": True}))
-    demo_revert.require_write_allowed(False, True, proof)
-
-
-def test_the_routes_are_off_unless_a_person_switches_them_on_and_name_the_host(monkeypatch, tmp_path):
-    from backend.routers import live_demo
-    live = "postgresql://u:p@aws-0-ap.pooler.supabase.com:6543/postgres"
-    proof = tmp_path / "proof.json"
-    monkeypatch.setattr(live_demo, "PROOF_FILE", proof)
-    rehearsed = {"ok": True}
-    monkeypatch.setattr(live_demo.demo_rehearsal, "ok", lambda: (rehearsed["ok"], "" if rehearsed["ok"] else "changed"))
-    for name in ("LIVE_DEMO_ENABLED", "LIVE_DEMO_CONFIRM_HOST", "RENDER"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("SUPABASE_DB_URL", live)
-    assert live_demo.enabled() is False                                   # no switch
-    monkeypatch.setenv("LIVE_DEMO_ENABLED", "true")
-    assert live_demo.enabled() is False                                   # a switch, but no named host and no proof
-    monkeypatch.setenv("LIVE_DEMO_CONFIRM_HOST", "some-other-host")
-    proof.write_text(json.dumps({"passed": True}))
-    assert live_demo.enabled() is False                                   # a host that is not this one's
-    monkeypatch.setenv("LIVE_DEMO_CONFIRM_HOST", "aws-0-ap.pooler.supabase.com")
-    proof.write_text(json.dumps({"passed": False}))
-    assert live_demo.enabled() is False                                   # the proof did not pass
-    proof.write_text(json.dumps({"passed": True}))
-    assert live_demo.enabled() is True
-    rehearsed["ok"] = False
-    assert live_demo.enabled() is False                                   # the code changed after its rehearsal
-    rehearsed["ok"] = True
-    monkeypatch.setenv("RENDER", "true")
-    assert live_demo.enabled() is False                                   # never on the hosted service
-    monkeypatch.delenv("RENDER")
-    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://postgres@127.0.0.1:55432/ssm_rehearsal")
-    assert live_demo.enabled() is True                                    # a database on this machine needs no proof
-
-
-def test_the_deployed_api_does_not_have_the_routes():
-    import os
-    from backend.main import app
-    if os.environ.get("LIVE_DEMO_ENABLED"):
-        pytest.skip("this process switched the demonstration on")
-    assert not [r for r in app.routes if getattr(r, "path", "").startswith("/live-demo")]
-
-
-def test_the_card_shows_only_the_lines_a_person_may_read():
-    from backend.routers.live_demo import SHOWN
-    shown = ["[undo] 1/4 done", "[load] 709 generated sales rows", "[abc] running", "REFUSED: 73 reorder", "  plan 2026-04: 121 rows, 110 ordering",
-             "[marts] refreshed"]
-    hidden = ["INFO: MASE 0.84", "postgresql://u:p@host/db", "Traceback (most recent call last):"]
-    assert all(SHOWN.match(x) for x in shown)
-    assert not any(SHOWN.match(x) for x in hidden)
-
-
-def test_a_demonstration_writes_no_tracked_report(monkeypatch):
-    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:p@aws-0.pooler.supabase.com:6543/postgres")
-    monkeypatch.delenv(report_target.DEMO_SESSION_ENV, raising=False)
-    tracked = report_target.REPO / "docs" / "X.md"
-    assert report_target.report_path(tracked) == tracked.resolve()
-    monkeypatch.setenv(report_target.DEMO_SESSION_ENV, "live_demo")
-    assert report_target.writes_tracked_reports() is False
-    assert report_target.is_practice_target() is True                       # its output is labelled practice
-    assert "nonlive_reports" in str(report_target.report_path(tracked))
-
-
-def test_the_session_snapshot_schema_is_the_one_demo_revert_names_and_lies_outside_what_it_copies():
-    assert demo_revert.snap_schema(ds.SESSION_TAG) == ds.SNAP_SCHEMA
-    assert ds.SNAP_SCHEMA not in ds.SCHEMAS
+def test_the_tables_a_sales_month_never_touches_are_fingerprinted_not_copied():
+    assert {"public.sales_fact", "public.inventory_fact"} <= demo_revert.UNCOPIED
+    assert not {"public.lp_recommendation", "public.unilever_sku_demand_fact", "public.forecast_result", "app.users"} & demo_revert.UNCOPIED
+    src = Path(demo_revert.__file__).read_text(encoding="utf-8")
+    assert "if key not in copied:" in src and "compare(cur, manifest)" in src          # an uncopied table is still compared, so a change refuses the revert
 
 
 def test_revert_never_reassigns_the_hook_it_was_given():
-    """Found in the first browser rehearsal: a loop variable named like the hook shadowed it, so the definitions were never put back while undo said
-    they were. The hook's name must be assigned nowhere inside revert, and undo must check the definitions again after the commit."""
+    """Found in the first browser rehearsal: a loop variable named like the hook shadowed it, so the definitions were never put back while the revert
+    said they were. The hook's name must be assigned nowhere inside revert, and the rollback must check the definitions again after the commit."""
     import ast
     import inspect
     fn = ast.parse(inspect.getsource(demo_revert.revert)).body[0]
     assigned = {t.id for n in ast.walk(fn) if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
     assert "after_tables" not in assigned
-    assert "definitions_fingerprint" in inspect.getsource(cli.undo_session).split("failures = []")[0]
+    assert "definitions_fingerprint" in inspect.getsource(cli.rollback_month).split("failures = []")[0]
+
+
+# ---- the loader
+
+def test_the_loader_writes_only_labelled_rows_and_the_window_opens_with_the_checkpoint():
+    src = Path(cli.__file__).read_text(encoding="utf-8")
+    assert "ds.TAG, ds.TAG, True" in src                       # _src_file, _src_sheet, is_demo = true
+    assert src.index("take_checkpoint(conn, month") < src.index("write_rows(conn, rows, month)")      # a way back exists before any row is written
+    assert src.index("accept_waiting(args.by") < src.index("write_rows(conn, rows, month)")
+
+
+def test_a_month_that_did_not_finish_is_finished_or_rolled_back_before_another_starts():
+    cur = RegistryCursor(["demo_revert_m202603"], {"demo_revert_m202603": {"state": "failed", "month": "2026-03"}})
+    assert cli.expected_month(cur) == "2026-03"
+
+
+# ---- the gate
+
+def test_a_write_off_the_throwaway_server_needs_the_flag_and_an_attestation_of_this_code(monkeypatch):
+    cli.gate(True, False)                                                                  # this machine's server: always
+    with pytest.raises(SystemExit, match="--target-public"):
+        cli.gate(False, False)
+    monkeypatch.setattr(demo_rehearsal, "ok", lambda: (False, "the load and rollback code changed after its rehearsal"))
+    with pytest.raises(SystemExit, match="changed after its rehearsal"):
+        cli.gate(False, True)
+    monkeypatch.setattr(demo_rehearsal, "ok", lambda: (True, ""))
+    cli.gate(False, True)
+
+
+def test_the_attestation_counts_only_for_the_code_it_was_made_on_and_covers_every_step(monkeypatch, tmp_path):
+    proof = tmp_path / "rehearsal.json"
+    monkeypatch.setattr(demo_rehearsal, "PROOF", proof)
+    assert demo_rehearsal.ok()[0] is False and "no rehearsal" in demo_rehearsal.ok()[1]
+    steps = {name: {"exact": True} for name in demo_rehearsal.STEPS}
+    demo_rehearsal.write("127.0.0.1/ssm_rehearsal", steps, (109, 435988), "backup")
+    assert demo_rehearsal.ok() == (True, "")
+    record = json.loads(proof.read_text(encoding="utf-8"))
+    proof.write_text(json.dumps({**record, "code_hash": "0" * 64}), encoding="utf-8")
+    assert "changed after its rehearsal" in demo_rehearsal.ok()[1]
+    proof.write_text(json.dumps({**record, "target": "aws-0.pooler.supabase.com/postgres"}), encoding="utf-8")
+    assert "not made on a restored copy" in demo_rehearsal.ok()[1]
+    proof.write_text(json.dumps({**record, "steps": {**steps, "rollback_first": {"exact": False}}}), encoding="utf-8")
+    assert "every step exact" in demo_rehearsal.ok()[1]
+
+
+def test_the_attestation_is_committed_so_a_hosted_server_has_it_without_a_terminal():
+    assert demo_rehearsal.PROOF == demo_rehearsal.REPO / "docs" / "MONTH_LOAD_REHEARSAL.json"
+    assert "docs/MONTH_LOAD_REHEARSAL.json" not in (demo_rehearsal.REPO / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_the_attested_files_include_everything_that_writes():
+    for name in ("scripts/demo_session.py", "scripts/demo_revert.py", "analytics/demo_session.py", "analytics/month_file.py", "scripts/run_month.py"):
+        assert name in demo_rehearsal.FILES
+
+
+def test_a_load_writes_no_tracked_report(monkeypatch):
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:p@aws-0.pooler.supabase.com:6543/postgres")
+    monkeypatch.delenv(report_target.DEMO_SESSION_ENV, raising=False)
+    tracked = report_target.REPO / "docs" / "X.md"
+    assert report_target.report_path(tracked) == tracked.resolve()
+    monkeypatch.setenv(report_target.DEMO_SESSION_ENV, "month_load")
+    assert report_target.writes_tracked_reports() is False
+    assert "nonlive_reports" in str(report_target.report_path(tracked))
+    assert "SSM_DEMO_SESSION" in Path(cli.__file__).read_text(encoding="utf-8")

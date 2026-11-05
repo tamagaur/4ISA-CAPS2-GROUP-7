@@ -38,12 +38,12 @@ from backend.client_ip import RealClientIPMiddleware
 from backend.error_redaction import validation_error_handler
 from backend.deps import check_db_connection, get_db
 from backend.input_guard import InputGuardMiddleware
-from backend.practice_copy import LABEL_HEADER, PRACTICE_NOTE, PracticeBodyLabel
+from backend.practice_copy import GENERATED_HEADER, LABEL_HEADER, PRACTICE_NOTE, PracticeBodyLabel
 from backend.security_headers import SecurityHeadersMiddleware
 from backend.startup_checks import validate_secrets
 from backend.routers import (
     abc, audit_log, auth, category_trends, dashboard, dashboard_range, data_mode, decomposition, demo, forecast, fsn,
-    inventory, live_demo, monthly_batch, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
+    inventory, monthly_batch, notifications, pareto, permissions, policy_comparison, recommendations, reorder_approval, reorder_requests,
     segment, sku, two_factor, users,
 )
 
@@ -113,7 +113,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=[LABEL_HEADER],   # the page's banner reads it from another origin
+    expose_headers=[LABEL_HEADER, GENERATED_HEADER],   # the page's banner reads it from another origin
 )
 # On Render, request.client becomes the visitor's real IP (Cloudflare's
 # CF-Connecting-IP) instead of a forwarded address the visitor can set; the
@@ -155,10 +155,9 @@ app.include_router(decomposition.router)
 app.include_router(category_trends.router)
 app.include_router(data_mode.router)
 app.include_router(demo.router)
-if monthly_batch.enabled():   # local practice database only: the deployed API does not have these routes (docs/CHAPTER4_CODE_FIGURES.json)
-    app.include_router(monthly_batch.router)
-if live_demo.enabled():   # a person's explicit switch on their own machine, never the hosted API (backend/routers/live_demo.py)
-    app.include_router(live_demo.router)
+# Always mounted (2026-11-06): Data Management is the one way in, and who may load or roll back a month is decided by permissions, not by a startup flag.
+# The practice mode (MONTHLY_BATCH_ENABLED on the local throwaway server) is unchanged; see backend/routers/monthly_batch.py.
+app.include_router(monthly_batch.router)
 
 if monthly_batch.on_practice_copy():   # never the deployed API: it is not connected to ssm_practice
     @app.middleware("http")

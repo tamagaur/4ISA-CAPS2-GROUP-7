@@ -314,6 +314,14 @@ const DashboardLayout = () => {
     invalidateCache();
     setRefreshKey((k) => k + 1);
   };
+  // A month was loaded or rolled back from Data Management (components/MonthlyBatchPanel.jsx): the newest month of sales moved, so "today" is read
+  // again from GET /data-mode and every relative range follows it. The page the person is on is not remounted, so nothing they are doing is lost.
+  const [dataTick, setDataTick] = useState(0);
+  useEffect(() => {
+    const onChanged = () => { invalidateCache(); setDataTick((t) => t + 1); };
+    window.addEventListener('dsd:data-changed', onChanged);
+    return () => window.removeEventListener('dsd:data-changed', onChanged);
+  }, []);
 
   // Asked as the synthetic view on load, on every mode flip and on Refresh, so
   // the switch knows whether there is anything to show before it is used:
@@ -335,7 +343,7 @@ const DashboardLayout = () => {
         setPreviewInfo(null);
       });
     return () => { cancelled = true; };
-  }, [dataMode, refreshKey]);
+  }, [dataMode, refreshKey, dataTick]);
 
   // Evaluates to true only when pending selection differs from applied period
   const isPending =

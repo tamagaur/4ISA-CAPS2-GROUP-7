@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { AlertTriangle, FileCheck2, Play } from 'lucide-react';
+import { AlertTriangle, FileCheck2, Play, RotateCcw } from 'lucide-react';
 import Modal from './Modal';
+import { monthName } from '../utils/monthlyBatchSteps';
 
 const Shell = ({ title, icon: Icon, onClose, closable = true, children, actions }) => (
   <Modal
@@ -56,26 +57,75 @@ export const PendingDecisionsDialog = ({ month, nextMonth, decisions, canReview,
   </Shell>
 );
 
-export const RunConfirmDialog = ({ month, nextMonth, calendarFactor, warnings, onConfirm, onClose }) => (
+export const RunConfirmDialog = ({ month, nextMonth, calendarFactor, warnings, waiting = 0, canDecide = true, live = false, onConfirm, onClose }) => {
+  const [accept, setAccept] = useState(false);
+  return (
+    <Shell
+      title="Run Monthly Data Processing?"
+      icon={Play}
+      onClose={onClose}
+      actions={(
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={waiting > 0 && (!canDecide || !accept)} onClick={() => onConfirm(accept)}>Confirm and Run</button>
+        </>
+      )}
+    >
+      <p>All required validations have passed. The system is ready to process the latest month&apos;s data.</p>
+      <dl className="mb-dialog-facts">
+        <Fact term="Processing month">{month}</Fact>
+        <Fact term="Writes the plan for">{nextMonth}</Fact>
+        <Fact term="Calendar factor">{calendarFactor === 'on' ? 'On (as the live forecast)' : 'Off'}</Fact>
+      </dl>
+      {warnings > 0 && <p className="mb-small">The checklist has {warnings} warning{warnings === 1 ? '' : 's'} you may want to read first.</p>}
+      {waiting > 0 && !canDecide && (
+        <p className="mb-small">{waiting.toLocaleString('en-US')} orders of the {month} plan still wait for a decision. Accepting orders is an admin&apos;s decision, so ask an admin to run this month.</p>
+      )}
+      {waiting > 0 && canDecide && (
+        <label className="mb-confirm">
+          <input type="checkbox" checked={accept} onChange={(e) => setAccept(e.target.checked)} />
+          <span>
+            <span className="mb-confirm-text">Accept the {waiting.toLocaleString('en-US')} orders that still wait for a decision, at the recommended quantity.</span>
+            <span className="mb-small mb-confirm-help">
+              The next plan cannot be made while an order of the {month} plan waits. Accepted orders count as stock on the way in. Rolling this month back puts every one back.
+            </span>
+          </span>
+        </label>
+      )}
+      <p className="mb-small">
+        {live
+          ? `The month is loaded, then the plan for ${nextMonth} is made. Nothing is closed, and the month can be rolled back afterwards.`
+          : 'It stops before anything is closed, so you can review the new plan.'}
+      </p>
+    </Shell>
+  );
+};
+
+// A rollback undoes everything after its rollback point, so it is said in full and needs a deliberate click.
+export const RollbackDialog = ({ month, alsoRemoves, restoresTo, onConfirm, onClose }) => (
   <Shell
-    title="Run Monthly Data Processing?"
-    icon={Play}
+    title={`Roll back ${monthName(month)}?`}
+    icon={RotateCcw}
     onClose={onClose}
     actions={(
       <>
         <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button type="button" className="btn btn-primary" onClick={onConfirm}>Confirm and Run</button>
+        <button type="button" className="btn btn-primary" onClick={onConfirm}>Yes, roll back</button>
       </>
     )}
   >
-    <p>All required validations have passed. The system is ready to process the latest month&apos;s data.</p>
-    <dl className="mb-dialog-facts">
-      <Fact term="Processing month">{month}</Fact>
-      <Fact term="Writes the plan for">{nextMonth}</Fact>
-      <Fact term="Calendar factor">{calendarFactor === 'on' ? 'On (as the live forecast)' : 'Off'}</Fact>
-    </dl>
-    {warnings > 0 && <p className="mb-small">The checklist has {warnings} warning{warnings === 1 ? '' : 's'} you may want to read first.</p>}
-    <p className="mb-small">It stops before anything is closed, so you can review the new plan.</p>
+    <p>
+      This puts the system back to how it was before {monthName(month)} was loaded: its sales, forecasts, classification, plan and dashboard figures.
+      {alsoRemoves.length > 0 && ` ${alsoRemoves.map(monthName).join(' and ')} ${alsoRemoves.length === 1 ? 'was' : 'were'} loaded after it, so ${alsoRemoves.length === 1 ? 'it goes' : 'they go'} too.`}
+    </p>
+    {restoresTo?.rows != null && (
+      <dl className="mb-dialog-facts">
+        <Fact term="The order plan goes back to">
+          {monthName(restoresTo.cycle)}: {restoresTo.rows.toLocaleString('en-US')} products, {Math.round(restoresTo.pieces).toLocaleString('en-US')} pieces
+        </Fact>
+      </dl>
+    )}
+    <p className="mb-small">Anything decided on the Reorder page since then is undone too. Every table is checked against the saved state, and nothing changes unless all of them match.</p>
   </Shell>
 );
 

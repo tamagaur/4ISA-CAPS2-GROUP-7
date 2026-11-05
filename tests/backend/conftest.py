@@ -112,3 +112,12 @@ def _fresh_limiters():
     login_limiter.reset()
     reset_limiter.reset()
     failure_log_budget.reset()
+
+
+@pytest.fixture(autouse=True)
+def no_generated_sales_in_whatever_database_the_environment_names(monkeypatch):
+    """backend/practice_copy.PracticeBodyLabel reads the DATA of the database SUPABASE_DB_URL names to decide whether to label an answer. On a machine
+    whose .env names the live database, and while a month of generated sales is loaded there, every TestClient answer would carry the label and half the
+    suite would fail for a reason that is not in the code under test (found 2026-11-06). A test of the label asks for its own labels (_demo_app)."""
+    from backend import practice_copy
+    monkeypatch.setattr(practice_copy, "demo_labels", lambda now=None: ([], []))
