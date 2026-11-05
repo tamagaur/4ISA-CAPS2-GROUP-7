@@ -258,9 +258,9 @@
   min-width: 0;
   padding: 16px 18px;
   border: 1px solid color-mix(in srgb, var(--rq-accent) 26%, white);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-nested);
   background-color: color-mix(in srgb, var(--rq-accent) 5%, white);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-nested);
   font: inherit;
   text-align: left;
   color: inherit;
@@ -269,7 +269,7 @@
 }
 
 .rq-summary-card:hover {
-  box-shadow: var(--shadow-card), 0 2px 8px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-nested), 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 .rq-summary-card:focus-visible {
@@ -278,7 +278,7 @@
 }
 
 .rq-summary-card[aria-pressed='true'] {
-  box-shadow: var(--shadow-card), inset 0 0 0 1px var(--rq-accent);
+  box-shadow: var(--shadow-nested), inset 0 0 0 1px var(--rq-accent);
 }
 
 .rq-tone-pending {
@@ -368,6 +368,12 @@
   overflow-x: auto;
 }
 
+/* The whole tab is one raised card, so its table sits one depth down. */
+.rq-tab .data-table-card {
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
+}
+
 .rq-table .rq-cell-product {
   min-width: 200px;
 }
@@ -439,9 +445,9 @@
   gap: 0.5rem;
   padding: 2rem 1rem;
   border: var(--card-border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-nested);
   background-color: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-nested);
   color: var(--color-text-subtle);
   text-align: center;
 }
@@ -597,9 +603,9 @@
 .rq-other-obs {
   padding: 16px 18px;
   border: var(--card-border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-nested);
   background-color: var(--color-surface);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-nested);
 }
 
 .rq-other-obs-head {

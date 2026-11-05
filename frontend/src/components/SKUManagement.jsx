@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List, Info, FolderTree } from 'lucide-react';
+import { Plus, Search, Clock, X, RotateCcw, Tag, Layers, Filter, List, ListChecks, Info, FolderTree, Package } from 'lucide-react';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
 import { ClassBadge } from './ui/StatusBadge';
@@ -536,7 +536,11 @@ const SKUManagement = () => {
         {/* The shared KPI card (UI pass): one short line each, the longer
             notes behind the "?". A master-list count has no month: its
             period is "now", said in the first card's line. */}
-        <SectionLede className="is-standalone">Gaps in the product list</SectionLede>
+        <div className="ui-card ui-card-stack">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><ListChecks size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Gaps in the product list</SectionLede></div>
+            </div>
         <div className="kpi-strip sku-summary-grid">
           {loading ? <SkeletonStatCards count={4} cardClassName="kpi-card" /> : (<>
           <KPICard
@@ -583,23 +587,33 @@ const SKUManagement = () => {
           />
           </>)}
         </div>
+        </div>
 
         {loading && (
           <>
             <LoadingStatus>Loading SKUs…</LoadingStatus>
             <SlowLoadNotice />
-            <div className="sku-filters-row" aria-hidden="true">
-              <SkeletonLine width="100%" height="2.25rem" />
-            </div>
-            <div className="data-table-card">
-              <SkeletonTable rows={8} columns={7} />
+            <div className="ui-card is-flush">
+              <div className="ui-card-intro">
+                <div className="sku-filters-row" aria-hidden="true">
+                  <SkeletonLine width="100%" height="2.25rem" />
+                </div>
+              </div>
+              <div className="data-table-card ui-card-table">
+                <SkeletonTable rows={8} columns={7} />
+              </div>
             </div>
           </>
         )}
         {error && !loading && <LoadError what="the product list" message={error} onRetry={loadSKUs} />}
 
         {!loading && !error && (
-          <>
+          <div className="ui-card is-flush">
+            <div className="ui-card-intro">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><Package size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Every product and its details</SectionLede></div>
+            </div>
             {/* Filters Row */}
             <div className="sku-filters-row">
               {/* Searchable Combobox */}
@@ -804,8 +818,6 @@ const SKUManagement = () => {
               </div>
             )}
 
-            {/* Table */}
-            <SectionLede className="is-standalone">Every product and its details</SectionLede>
             {/* What period the stock is, and why some rows are in cases
                 (2026-10-22). Figures and dates come from GET /sku only. */}
             {latestCountText && (
@@ -830,7 +842,9 @@ const SKUManagement = () => {
                 </span>
               </p>
             )}
-            <div className="data-table-card">
+            </div>
+            {/* Table */}
+            <div className="data-table-card ui-card-table">
               <table className="data-table sku-table">
                 <thead>
                   <tr>
@@ -940,7 +954,7 @@ const SKUManagement = () => {
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               idPrefix="sku"
             />
-          </>
+          </div>
         )}
       </div>
 

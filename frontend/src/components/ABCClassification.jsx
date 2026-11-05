@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import SectionLede from './ui/SectionLede';
 import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import AbcRangeView from './AbcRangeView';
-import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers } from 'lucide-react';
+import { Search, Clock, X, RotateCcw, Tag, Filter, AlertTriangle, Activity, CheckCircle2, Info, Layers, ListOrdered } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -1056,7 +1056,11 @@ const ABCClassification = () => {
           {/* Summary Cards */}
           {/* The shared KPI card (UI pass): the count, its measured shares
               on one line, carried-forward rows as a second quiet line. */}
-          <SectionLede className="is-standalone">How the products split by value</SectionLede>
+          <div className="ui-card ui-card-stack">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><Layers size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">How the products split by value</SectionLede></div>
+            </div>
           <div className="kpi-strip abc-summary-grid">
             {['A', 'B', 'C'].map((cat) => (
               <KPICard
@@ -1094,6 +1098,7 @@ const ABCClassification = () => {
               icon={<Layers size={20} />}
               accent="var(--color-nav-bg)"
             />
+          </div>
           </div>
 
           {/* Why this Class A count differs from the Dashboard's ring (the
@@ -1705,8 +1710,14 @@ const ABCClassification = () => {
           )}
 
           {/* Table */}
-          <SectionLede className="is-standalone">Every product, ranked by sales value</SectionLede>
-          <div className="data-table-card">
+          <div className="ui-card is-flush">
+          <div className="ui-card-intro">
+            <div className="ui-card-head is-centered">
+              <span className="icon-tile" aria-hidden="true"><ListOrdered size={20} /></span>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Every product, ranked by sales value</SectionLede></div>
+            </div>
+          </div>
+          <div className="data-table-card ui-card-table">
             <table className="data-table abc-table">
               <thead>
                 <tr>
@@ -1822,6 +1833,7 @@ const ABCClassification = () => {
             pageSizeOptions={PAGE_SIZE_OPTIONS}
             idPrefix="abc"
           />
+          </div>
         </div>
       </div>
     </div>

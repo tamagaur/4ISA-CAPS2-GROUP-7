@@ -1600,6 +1600,8 @@ const ReorderRecommendations = () => {
         <CycleComparison key={`${principal}|${dataMode}`} principal={principal} dataMode={dataMode} />
       )}
 
+      <div className="ui-card is-flush reorder-orders-card">
+      <div className="ui-card-intro">
       <ReorderTableControls
         view={view}
         onViewChange={setView}
@@ -1622,11 +1624,13 @@ const ReorderRecommendations = () => {
         </p>
       )}
 
-      {/* The table scrolls inside its own card on a wide screen, so its header
+      </div>
+
+      {/* The table scrolls inside its own frame on a wide screen, so its header
           stays in view; on a phone each row is a card and the page scrolls. */}
       <div className="reorder-table-section">
       <div ref={setTableArea} className={`reorder-table-area is-${tier}`}>
-        <div className="data-table-card reorder-table-scroll" tabIndex={tier === 'cards' ? undefined : 0} role={tier === 'cards' ? undefined : 'region'} aria-label={tier === 'cards' ? undefined : 'Recommended orders'}>
+        <div className="data-table-card ui-card-table reorder-table-scroll" tabIndex={tier === 'cards' ? undefined : 0} role={tier === 'cards' ? undefined : 'region'} aria-label={tier === 'cards' ? undefined : 'Recommended orders'}>
           <table className="data-table reorder-table">
             {tier !== 'cards' && (
               <thead>
@@ -1789,6 +1793,7 @@ const ReorderRecommendations = () => {
         )}
       </div>
       </div>
+      </div>
 
       {/* The top sellers this plan leaves out. Read-only and beside the plan: never
           in its counts, its total or Accept all. An urgency or flag view asks for
@@ -1813,12 +1818,19 @@ const ReorderRecommendations = () => {
   );
 
   const renderDecisionLogTab = () => (
-    <>
-    <SectionLede className="is-standalone">Who decided what, and when</SectionLede>
-    <p className="reorder-table-note reorder-log-note">
-      Decisions made in this session. The permanent records are each recommendation&apos;s History and the Audit Log.
-    </p>
-    <div className="data-table-card">
+    <div className="ui-card is-flush">
+    <div className="ui-card-intro">
+      <div className="ui-card-head">
+        <span className="icon-tile" aria-hidden="true"><ListChecks size={20} /></span>
+        <div className="ui-card-head-text">
+          <SectionLede className="ui-card-label">Who decided what, and when</SectionLede>
+          <p className="reorder-table-note reorder-log-note">
+            Decisions made in this session. The permanent records are each recommendation&apos;s History and the Audit Log.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div className="data-table-card ui-card-table">
       <table className="data-table reorder-log-table">
         <thead>
           <tr>
@@ -1857,7 +1869,7 @@ const ReorderRecommendations = () => {
         </tbody>
       </table>
     </div>
-    </>
+    </div>
   );
 
   // Counted from the list the dialog holds, the one it submits.

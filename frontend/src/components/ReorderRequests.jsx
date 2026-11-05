@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  X, AlertTriangle, PencilLine, History, CheckCircle2, XOctagon, XCircle, Loader2, ClipboardCheck, Clock3, Inbox, Search,
+  X, AlertTriangle, PencilLine, History, CheckCircle2, XOctagon, XCircle, Loader2, ClipboardCheck, Clock3, Inbox, Search, Users,
 } from 'lucide-react';
 import Modal from './Modal';
 import SaveResult from './SaveResult';
@@ -1194,10 +1194,13 @@ export function StaffRequestsTab({
   }
 
   return (
-    <section className="rq-tab" aria-labelledby="rq-tab-title">
-      <div className="rq-tab-head">
-        <h2 className="rq-subheading" id="rq-tab-title">{heading}</h2>
-        <p className="rq-tab-lede">{lede}</p>
+    <section className="rq-tab ui-card" aria-labelledby="rq-tab-title">
+      <div className="ui-card-head">
+        <span className="icon-tile" aria-hidden="true"><Users size={20} /></span>
+        <div className="ui-card-head-text rq-tab-head">
+          <h2 className="rq-subheading" id="rq-tab-title">{heading}</h2>
+          <p className="rq-tab-lede">{lede}</p>
+        </div>
       </div>
       {linkNotice && (
         <div className="rq-link-notice" role="status">

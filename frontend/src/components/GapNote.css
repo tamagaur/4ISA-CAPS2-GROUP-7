@@ -4,7 +4,8 @@
   padding: 8px 12px;
   border-left: 3px solid var(--color-border-strong, #D0D5DD);
   background: var(--color-surface-sunken, #F8FAFC);
-  border-radius: 0 6px 6px 0;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
   font-size: 12px;
   line-height: 1.45;
   color: var(--color-text-muted);

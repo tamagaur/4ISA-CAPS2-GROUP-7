@@ -327,7 +327,8 @@
   min-height: 0;
   overflow: auto;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 /* A table standing where its card's plot was: it takes the plot's height
@@ -1805,8 +1806,11 @@
   flex-direction: column;
   gap: 14px;
   margin-top: 2px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
+  padding: 14px 16px;
+  background-color: var(--color-surface);
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 .abc-share-row {

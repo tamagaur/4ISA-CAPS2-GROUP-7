@@ -520,6 +520,7 @@ const DataDictionary = () => {
         </div>
       </div>
 
+      <div className="ui-card dict-toolbar-card">
       <div className="dict-toolbar" ref={toolbarRef}>
         <div className="dict-search">
           <Search size={17} aria-hidden="true" />
@@ -570,6 +571,7 @@ const DataDictionary = () => {
             <button type="button" onClick={() => setAll(false)}>Close all</button>
           </span>
         )}
+      </div>
       </div>
 
       <div className="dict-results">

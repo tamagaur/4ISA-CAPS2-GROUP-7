@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { History, LogIn } from 'lucide-react';
 import SectionLede from './ui/SectionLede';
 import { getAuditLog, getAuditUserSummary } from '../api/auditLog';
 import { formatDate, formatDateTime } from '../utils/formatDate';
@@ -167,13 +168,13 @@ const SectionStatus = ({ loading, error, label, columns, rows = 4, onRetry }) =>
       <>
         <LoadingStatus>Loading {label}…</LoadingStatus>
         <SlowLoadNotice />
-        <div className="audit-table-wrapper">
+        <div className="audit-table-wrapper ui-card-table">
           <SkeletonTable rows={rows} columns={columns} />
         </div>
       </>
     );
   }
-  if (error) return <LoadError what={label} message={error} onRetry={onRetry} />;
+  if (error) return <div className="ui-card-foot"><LoadError what={label} message={error} onRetry={onRetry} /></div>;
   return null;
 };
 
@@ -219,27 +220,34 @@ const AuditLog = () => {
       <div className="audit-content">
         <PageHeader title="Audit" accent="log" subtitle="Who signs in, and what they change. Visible to people with Audit Log access." />
 
-        <section className="audit-section" aria-labelledby="audit-users-heading">
-          <div className="audit-section-header">
-            <h3 id="audit-users-heading" className="audit-section-title">Sign-ins by user</h3>
-            {!users.loading && !users.error && (
-              <span className="audit-section-count">
-                {users.items.length.toLocaleString()} user{users.items.length === 1 ? '' : 's'} ·{' '}
-                {totalLogins.toLocaleString()} sign-in{totalLogins === 1 ? '' : 's'}
-                {signInSpan ? `, ${signInSpan}` : ''}
-              </span>
-            )}
+        <section className="audit-section ui-card is-flush" aria-labelledby="audit-users-heading">
+          <div className="ui-card-intro">
+            <div className="ui-card-head">
+              <span className="icon-tile" aria-hidden="true"><LogIn size={20} /></span>
+              <div className="ui-card-head-text">
+                <div className="audit-section-header">
+                  <h3 id="audit-users-heading" className="audit-section-title">Sign-ins by user</h3>
+                  {!users.loading && !users.error && (
+                    <span className="audit-section-count">
+                      {users.items.length.toLocaleString()} user{users.items.length === 1 ? '' : 's'} ·{' '}
+                      {totalLogins.toLocaleString()} sign-in{totalLogins === 1 ? '' : 's'}
+                      {signInSpan ? `, ${signInSpan}` : ''}
+                    </span>
+                  )}
+                </div>
+                <SectionLede>Who uses the system</SectionLede>
+              </div>
+            </div>
+            <p className="audit-section-note">
+              Sign-ins are counted from the first recorded sign-in
+              {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
+              on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
+              4 hours without activity. Older sign-ins have no measured length.
+            </p>
           </div>
-          <SectionLede className="is-standalone">Who uses the system</SectionLede>
-          <p className="audit-section-note">
-            Sign-ins are counted from the first recorded sign-in
-            {users.meta.first_login_at ? ` (${formatDate(users.meta.first_login_at)})` : ''}; nothing earlier is
-            on record. A session lasts from sign-in until the user&apos;s last activity or sign-out, and ends after
-            4 hours without activity. Older sign-ins have no measured length.
-          </p>
           <SectionStatus loading={users.loading} error={users.error} label="sign-ins by user" columns={5} onRetry={users.retry} />
           {!users.loading && !users.error && (
-            <div className="audit-table-wrapper">
+            <div className="audit-table-wrapper ui-card-table">
               <table className="audit-table audit-table-stack">
                 <thead>
                   <tr>
@@ -290,29 +298,36 @@ const AuditLog = () => {
           )}
         </section>
 
-        <section className="audit-section" aria-labelledby="audit-changes-heading">
-          <div className="audit-section-header">
-            <h3 id="audit-changes-heading" className="audit-section-title">Recent changes</h3>
-            {/* Its scope: the newest changes shown, and the days those span —
-                or every change, when nothing older is left. */}
-            {!changes.loading && !changes.error && (
-              <span className="audit-section-count">
-                {hasMoreChanges
-                  ? `Latest ${shownChanges.length.toLocaleString()}`
-                  : `All ${shownChanges.length.toLocaleString()} recorded`}
-                {changesSpan ? `, ${changesSpan}` : ''}
-              </span>
-            )}
+        <section className="audit-section ui-card is-flush" aria-labelledby="audit-changes-heading">
+          <div className="ui-card-intro">
+            <div className="ui-card-head">
+              <span className="icon-tile" aria-hidden="true"><History size={20} /></span>
+              <div className="ui-card-head-text">
+                <div className="audit-section-header">
+                  <h3 id="audit-changes-heading" className="audit-section-title">Recent changes</h3>
+                  {/* Its scope: the newest changes shown, and the days those span —
+                      or every change, when nothing older is left. */}
+                  {!changes.loading && !changes.error && (
+                    <span className="audit-section-count">
+                      {hasMoreChanges
+                        ? `Latest ${shownChanges.length.toLocaleString()}`
+                        : `All ${shownChanges.length.toLocaleString()} recorded`}
+                      {changesSpan ? `, ${changesSpan}` : ''}
+                    </span>
+                  )}
+                </div>
+                <SectionLede>What changed, and who changed it</SectionLede>
+              </div>
+            </div>
+            <p className="audit-section-note">
+              SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
+              {showSkips ? '' : ' Sign-ins on a remembered device (two-step code skipped) are hidden.'}
+            </p>
+            <label className="audit-skip-toggle">
+              <input type="checkbox" checked={showSkips} onChange={toggleSkips} />
+              Show sign-ins on a remembered device (two-step code skipped)
+            </label>
           </div>
-          <SectionLede className="is-standalone">What changed, and who changed it</SectionLede>
-          <p className="audit-section-note">
-            SKU edits, reorder decisions, user account changes and password or sign-in events, newest first.
-            {showSkips ? '' : ' Sign-ins on a remembered device (two-step code skipped) are hidden.'}
-          </p>
-          <label className="audit-skip-toggle">
-            <input type="checkbox" checked={showSkips} onChange={toggleSkips} />
-            Show sign-ins on a remembered device (two-step code skipped)
-          </label>
           <SectionStatus
             loading={changesFirstLoad}
             error={changes.error}
@@ -322,7 +337,7 @@ const AuditLog = () => {
             onRetry={changes.retry}
           />
           {!changesFirstLoad && !changes.error && (
-            <div className="audit-table-wrapper" aria-busy={changes.loading}>
+            <div className="audit-table-wrapper ui-card-table" aria-busy={changes.loading}>
               <table className="audit-table audit-table-stack">
                 <thead>
                   <tr>

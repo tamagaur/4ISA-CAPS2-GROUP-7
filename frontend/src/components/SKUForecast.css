@@ -138,8 +138,9 @@
   min-height: 380px;
   padding: 3rem 2rem;
   background-color: var(--color-surface);
-  border: 1px dashed #dbe2ea;
+  border: var(--card-border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .forecast-empty-icon {
@@ -1134,8 +1135,9 @@
 .forecast-plan-scroll {
   max-height: 560px;
   overflow: auto;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 .forecast-plan-table {
@@ -1463,8 +1465,10 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 16px;
   padding: 16px 8px;
-  border-radius: 12px;
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
   background-color: var(--color-surface-sunken);
+  box-shadow: var(--shadow-nested);
 }
 
 .forecast-summary-item {
@@ -1727,9 +1731,10 @@
 
 .forecast-next-panel {
   padding: 20px 24px;
-  border-radius: 14px;
+  border-radius: var(--radius-nested);
   background-color: rgba(137, 86, 246, 0.06);
   border: 1px solid rgba(137, 86, 246, 0.14);
+  box-shadow: var(--shadow-nested);
 }
 
 .forecast-next-label {

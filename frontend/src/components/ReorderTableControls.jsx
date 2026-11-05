@@ -2,7 +2,7 @@
 // menu and the search box. They only choose which rows are listed
 // (utils/reorderView.js filterRows); the KPI cards and quantities don't move.
 import React from 'react';
-import { AlertTriangle, Filter, Search, X } from 'lucide-react';
+import { AlertTriangle, ClipboardList, Filter, Search, X } from 'lucide-react';
 import ReorderActionMenu from './ReorderActionMenu';
 
 const CHIPS = [
@@ -21,9 +21,12 @@ const ReorderTableControls = ({ view, onViewChange, counts, query, onQueryChange
   const menuActive = MENU_VIEWS.find((m) => m.view === view);
   return (
     <div className="reorder-table-head">
-      <div className="reorder-table-title">
-        <h3>Recommended Orders</h3>
-        <p>Every suggested order, most urgent first.</p>
+      <div className="ui-card-head reorder-table-title">
+        <span className="icon-tile" aria-hidden="true"><ClipboardList size={20} /></span>
+        <div className="ui-card-head-text">
+          <h3>Recommended Orders</h3>
+          <p>Every suggested order, most urgent first.</p>
+        </div>
       </div>
 
       <div className="reorder-chips" role="group" aria-label="Show recommendations">

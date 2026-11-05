@@ -254,23 +254,26 @@
 }
 
 /* The page's three views (Recommendations / Decision log / Staff requests):
-   the shared segmented control (ui/ui.css) stretched into a soft band, with
-   the active view lifted to a white chip in the brand coral so it reads at a
-   glance. The Staff requests tab carries a red badge, the requests waiting
-   for a decision. */
+   the shared segmented control (ui/ui.css) as a raised bar, Data Management's
+   stage bar (.mb-flow), with the active view in its current-step tint so it
+   reads at a glance. The Staff requests tab carries a red badge, the requests
+   waiting for a decision. */
 .segmented.reorder-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   width: 100%;
-  padding: 5px;
-  border-radius: 14px;
-  background-color: rgba(17, 26, 53, 0.055);
+  padding: 8px;
+  border: var(--card-border);
+  border-radius: var(--radius-nested);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .reorder-tabs .segmented-item {
   height: 40px;
   padding: 0 18px;
+  border: 1px solid transparent;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
@@ -279,16 +282,17 @@
 }
 
 .reorder-tabs .segmented-item:hover {
-  background-color: rgba(255, 255, 255, 0.6);
+  background-color: var(--color-surface-raised);
   color: var(--color-text);
 }
 
 .reorder-tabs .segmented-item.is-active,
 .reorder-tabs .segmented-item[aria-selected='true'] {
-  background-color: var(--color-surface);
-  color: var(--color-brand-primary);
+  border-color: rgba(232, 92, 74, 0.28);
+  background-color: var(--badge-brand-bg);
+  color: var(--color-brand-strong-hover);
   font-weight: 700;
-  box-shadow: 0 1px 2px rgba(17, 26, 53, 0.08), 0 6px 14px -8px rgba(17, 26, 53, 0.3);
+  box-shadow: var(--shadow-nested);
 }
 
 .reorder-tabs .segmented-item:focus-visible {
@@ -355,11 +359,9 @@
   gap: 10px;
   padding: 18px;
   border: 1.5px solid color-mix(in srgb, var(--kpi-accent) 45%, white);
-  border-radius: 18px;
+  border-radius: var(--radius-card);
   background-color: color-mix(in srgb, var(--kpi-accent) 8%, white);
-  box-shadow:
-    0 1px 2px rgba(17, 26, 53, 0.06),
-    0 14px 26px -16px color-mix(in srgb, var(--kpi-accent) 55%, transparent);
+  box-shadow: var(--shadow-card);
 }
 
 .reorder-summary-grid .kpi-card:first-child {
@@ -1017,6 +1019,37 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px 16px;
+}
+
+/* The orders card: heading, controls, table and footer in one raised card
+   (2026-11-05), the table flush at the width it had as its own card. */
+.reorder-orders-card .reorder-table-head {
+  margin-top: 0;
+}
+
+.reorder-orders-card .reorder-table-tools {
+  flex: 1 1 400px;
+}
+
+.reorder-orders-card .reorder-table-section {
+  gap: 0;
+  margin-top: 0;
+}
+
+.reorder-orders-card .reorder-table-footer {
+  padding: 12px var(--card-padding) 16px;
+}
+
+/* A phone's width: the rows are tiles inside the card. */
+.reorder-orders-card .is-cards .reorder-table-scroll {
+  padding: 0 16px;
+  border: none;
+  border-radius: 0;
+}
+
+.reorder-orders-card .is-cards .reorder-table tbody tr.reorder-row {
+  border-radius: var(--radius-nested);
+  box-shadow: var(--shadow-nested);
 }
 
 .reorder-table-footer .reorder-table-note {

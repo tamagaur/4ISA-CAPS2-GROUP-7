@@ -36,21 +36,7 @@
 .mb-note-raised.is-warning { color: var(--color-warning-text); }
 .mb-body .badge-brand { color: var(--color-brand-strong-hover); }
 
-/* The icon tile before a heading, the same recipe as the Reorder page's. */
-.mb-tile {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(232, 92, 74, 0.26);
-  border-radius: 11px;
-  background: rgba(232, 92, 74, 0.08);
-  color: var(--color-brand-strong);
-  box-shadow: var(--shadow-nested);
-}
-
+/* The icon tile before a heading: the base is shared (ui/ui.css .icon-tile). */
 .mb-tile.is-small {
   width: 36px;
   height: 36px;
