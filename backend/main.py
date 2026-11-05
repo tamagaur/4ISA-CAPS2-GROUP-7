@@ -102,6 +102,8 @@ app = FastAPI(
 # Innermost of all, inside gzip, so it reads the answer before compression. Never on the deployed API (backend/practice_copy.py).
 if monthly_batch.on_practice_copy():
     app.add_middleware(PracticeBodyLabel)
+else:   # every other database (live included): it acts only while the DATA holds generated sales, and is out of the way otherwise
+    app.add_middleware(PracticeBodyLabel, data_keyed=True)
 # Registered first of the rest, so innermost: CORS and gzip still wrap what it answers. NUL characters and JSON NaN/Infinity
 # are refused with a 400 instead of reaching Postgres, bcrypt or the error encoder (backend/input_guard.py).
 app.add_middleware(InputGuardMiddleware)
@@ -111,7 +113,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=[LABEL_HEADER] if monthly_batch.on_practice_copy() else [],   # the page's banner reads it from another origin
+    expose_headers=[LABEL_HEADER],   # the page's banner reads it from another origin
 )
 # On Render, request.client becomes the visitor's real IP (Cloudflare's
 # CF-Connecting-IP) instead of a forwarded address the visitor can set; the

@@ -131,10 +131,11 @@ def test_gzip_really_wraps_it_in_the_app():
     assert source.index("app.add_middleware(PracticeBodyLabel)") < source.index("app.add_middleware(GZipMiddleware")
 
 
-def test_the_deployed_api_does_not_mount_it():
-    """This test process's URL does not name the copy, which is the deployed API's position."""
+def test_the_deployed_api_mounts_only_the_data_keyed_form():
+    """This test process's URL does not name the copy, which is the deployed API's position: the label there acts on the data, not the connection."""
     from backend.main import app
-    assert not any(m.cls is pc.PracticeBodyLabel for m in app.user_middleware)
+    mounted = [m for m in app.user_middleware if m.cls is pc.PracticeBodyLabel]
+    assert len(mounted) == 1 and mounted[0].kwargs.get("data_keyed") is True
 
 
 # ---- accuracy withheld (hard rule 2) ------------------------------------------------------------------------------------------------
@@ -272,3 +273,45 @@ def test_every_kind_of_error_line_the_forecast_prints_goes():
 
 def test_the_rule_in_words_is_not_read_as_a_figure():
     assert accuracy_figure({"reason_text": "no smaller than the average change (MASE 1 or more), so the plan does not use it"}) is None
+
+
+# --- the data-keyed label (2026-11-05): the same middleware on a database that is not the practice copy -------------------------------
+
+def _demo_app(monkeypatch, labels):
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+    from starlette.testclient import TestClient
+    monkeypatch.setattr(pc, "demo_labels", lambda now=None: labels)
+
+    async def accuracy(request):
+        return JSONResponse({"principal": "unilever", "period": "2026-03", "mase": 0.9, "mape": 11.0})
+    app = Starlette(routes=[Route("/x", accuracy)])
+    app.add_middleware(pc.PracticeBodyLabel, data_keyed=True)
+    return TestClient(app)
+
+
+def test_data_keyed_label_leaves_a_database_without_generated_sales_untouched(monkeypatch):
+    res = _demo_app(monkeypatch, ([], [])).get("/x")
+    assert res.json() == {"principal": "unilever", "period": "2026-03", "mase": 0.9, "mape": 11.0}
+    assert pc.LABEL_HEADER not in res.headers
+
+
+def test_data_keyed_label_labels_and_withholds_when_the_data_holds_generated_sales(monkeypatch):
+    res = _demo_app(monkeypatch, (["2026-03"], [])).get("/x")
+    body = res.json()
+    assert body["practice_copy"]["not_a_result"] is True and "2026-03" in body["practice_copy"]["note"]
+    assert "practice copy" not in body["practice_copy"]["note"].lower()
+    assert res.headers[pc.LABEL_HEADER].startswith("Sales for 2026-03 are generated demonstration data")
+    assert body.get("mase") is None and body.get("mape") is None   # forecast error on generated sales is not presented, wherever they live
+
+
+def test_data_keyed_label_fails_closed_when_the_months_cannot_be_read(monkeypatch):
+    body = _demo_app(monkeypatch, (None, None)).get("/x").json()
+    assert body["practice_copy"]["generated_months"] is None
+
+
+def test_no_database_named_means_no_generated_sales(monkeypatch):
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    monkeypatch.setitem(pc._demo_labels_cache, "at", -1e9)
+    assert pc.demo_labels() == ([], [])

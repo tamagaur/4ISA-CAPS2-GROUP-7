@@ -145,7 +145,9 @@ def uploaded_months(url: str | None = None) -> list[str] | None:
         conn.close()
 
 
-def practice_label(months: list[str] | None) -> dict:
+def practice_label(months: list[str] | None, note: str | None = None) -> dict:
+    if note is not None:   # the data-keyed label (DataKeyedLabel): the sentence is its own, and says nothing about a practice copy
+        return {"not_a_result": True, "generated_months": months, "note": note}
     if months is None:
         said = "Which months are generated could not be read: treat every month here as generated."
     elif months:
@@ -283,13 +285,13 @@ def withhold_accuracy(body, generated: list[str] | None, path: str = "", uploade
     return body
 
 
-def label_payload(body, months: list[str] | None, path: str = "", uploaded: list[str] | None = ()):
+def label_payload(body, months: list[str] | None, path: str = "", uploaded: list[str] | None = (), note: str | None = None):
     """The body with its label and without the accuracy it may not present. Changes the object it is given, except where a whole range goes."""
     body = withhold_accuracy(body, months, path, uploaded)
     if months:
         _label_points(body, months)
     if isinstance(body, dict):
-        body["practice_copy"] = practice_label(months)
+        body["practice_copy"] = practice_label(months, note)
     elif isinstance(body, list):
         for item in body:
             if isinstance(item, dict):
@@ -339,7 +341,38 @@ def plan_state(cycle: str) -> dict | None:
         conn.close()
 
 
-def _labelled_bytes(raw: bytes, path: str = "") -> bytes:
+DEMO_LABEL_TTL_S = 5.0
+_demo_labels_cache: dict = {"at": -1e9, "value": ([], [])}
+
+
+def demo_labels(now=None) -> tuple[list[str] | None, list[str] | None]:
+    """(generated months, uploaded months) read from the database this process answers from, whichever database that is, kept for
+    DEMO_LABEL_TTL_S seconds. This is the DATA deciding, not the connection: a database holding no generated sales answers ([], [])
+    and the middleware stays out of the way; one that holds them is labelled and its accuracy is withheld. None means unreadable."""
+    import time
+    if not _url():   # nothing to read (a test client, a tool): no database is named, so none is holding generated sales
+        return [], []
+    at = time.monotonic() if now is None else now
+    if at - _demo_labels_cache["at"] > DEMO_LABEL_TTL_S:
+        _demo_labels_cache["value"] = (generated_months(), uploaded_months())
+        _demo_labels_cache["at"] = at
+    return _demo_labels_cache["value"]
+
+
+def demo_note(months: list[str] | None, uploaded: list[str] | None) -> str:
+    if months is None or uploaded is None:
+        return "Which months hold generated sales could not be read: treat every recent figure here as generated. Demonstration, not a result."
+    said = f"Sales for {', '.join(months)} are generated demonstration data (is_demo)" if months else ""
+    if uploaded:
+        said += (", and " if said else "") + f"sales for {', '.join(uploaded)} came through the upload slot, which cannot tell a real file from a made-up one"
+    return f"{said}. Forecast error is withheld wherever they are counted, and every forecast and plan after them rests on them. Demonstration, not a result."
+
+
+def _labelled_bytes(raw: bytes, path: str = "", data_keyed: bool = False) -> bytes:
+    note = None
+    if data_keyed:
+        generated, uploaded = demo_labels()
+        note = demo_note(generated, uploaded)
     try:
         body = json.loads(raw)
     except ValueError:
@@ -347,20 +380,28 @@ def _labelled_bytes(raw: bytes, path: str = "") -> bytes:
         return raw
     if path == "/recommendations" and isinstance(body, dict) and isinstance(body.get("planning_cycle_date"), str):
         body["plan_state"] = plan_state(body["planning_cycle_date"])
+    if data_keyed:
+        return json.dumps(label_payload(body, generated, path, uploaded, note), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return json.dumps(label_payload(body, generated_months(), path, uploaded_months()), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 class PracticeBodyLabel:
     """Pure ASGI, and registered innermost in backend/main.py: GZip sits outside it, so it reads the answer before it is compressed."""
 
-    def __init__(self, app):
+    def __init__(self, app, data_keyed: bool = False):
         self.app = app
+        self.data_keyed = data_keyed   # True on every database but the practice copy: acts only while the data holds generated sales
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        start, chunks = None, []
+        start, chunks, generated, uploaded = None, [], [], []
+        if self.data_keyed:
+            generated, uploaded = await run_in_threadpool(demo_labels)
+            if generated == [] and uploaded == []:   # no generated sales in this database: the answer goes out as it is, unread and unbuffered
+                await self.app(scope, receive, send)
+                return
 
         async def relay(message):
             nonlocal start
@@ -376,8 +417,10 @@ class PracticeBodyLabel:
                 chunks.append(message.get("body", b""))
                 if message.get("more_body"):
                     return
-                body = await run_in_threadpool(_labelled_bytes, b"".join(chunks), scope.get("path", ""))
+                body = await run_in_threadpool(_labelled_bytes, b"".join(chunks), scope.get("path", ""), self.data_keyed)
                 headers = [(k, v) for k, v in start["headers"] if k.lower() != b"content-length"]
+                if self.data_keyed:   # the page's banner reads this (frontend/src/practiceCopy.js); the practice URL sets it in main.py instead
+                    headers.append((LABEL_HEADER.lower().encode(), demo_note(generated, uploaded).encode("ascii", "replace")))
                 await send({**start, "headers": [*headers, (b"content-length", str(len(body)).encode())]})
                 await send({"type": "http.response.body", "body": body})
 

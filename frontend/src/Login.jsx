@@ -47,6 +47,14 @@ const Login = () => {
   const [remember, setRemember] = useState(false);
   const [rememberTouched, setRememberTouched] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // The hosted API sleeps when idle and takes up to ~85 s to wake (measured 2026-11-05). Without a word on screen that looks like a
+  // broken sign-in, so after 4 s of waiting the page says what is happening.
+  const [waking, setWaking] = useState(false);
+  useEffect(() => {
+    if (!isSubmitting) { setWaking(false); return undefined; }
+    const timer = setTimeout(() => setWaking(true), 4000);
+    return () => clearTimeout(timer);
+  }, [isSubmitting]);
   const [error, setError] = useState('');
   // Explains an involuntary bounce back to this page. auth.js sets the flag
   // immediately before redirecting on an expired/rejected token; without it
@@ -333,6 +341,12 @@ const Login = () => {
                   )}
                 </button>
               </form>
+
+              {waking && (
+                <p className="auth-notice" role="status" data-testid="login-waking">
+                  The server is waking up after being idle. This can take up to a minute and a half; please keep this page open.
+                </p>
+              )}
 
               <p className="auth-notice">
                 <Lock className="auth-notice-icon" aria-hidden="true" />
