@@ -6,6 +6,8 @@ import { getABCClassification } from '../api/abc';
 import { ParetoCard } from './AbcBreakdowns';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
+import SectionHeading from './ui/SectionHeading';
+import BasisTag from './BasisTag';
 import { ClassBadge } from './ui/StatusBadge';
 import DateFilter from './DateFilter';
 import { formatDate, formatMonth } from '../utils/formatDate';
@@ -30,6 +32,7 @@ import {
   abcMonthViewLabel, tierLabel,
 } from '../labels';
 import { revenueShareBasis } from '../utils/reorderView';
+import { shareBarWidth } from '../utils/stockBarScale';
 import './ABCClassification.css';
 
 // Story #43 / Manuscript §3.5.5: "flags SKUs approaching tier boundaries."
@@ -536,6 +539,22 @@ const ABCClassification = () => {
     stockCountDate && `count ${formatDate(stockCountDate)}`,
     !lpHidden && !isDelMonte && planCycle && `${formatMonth(planCycle)} plan`,
   ].filter(Boolean).join(' · ');
+  // Inside the stock check the count's date is in the section's tag, said
+  // once (2026-11-06), so the card's own header keeps only the plan.
+  const stockPlanText = !lpHidden && !isDelMonte && planCycle ? `${formatMonth(planCycle)} plan` : '';
+  // The stock section's "?": "About these numbers"' stock line without the
+  // date, which its tag already says.
+  const stockTipText = [
+    stockCountDate && 'Stock: the latest count, not the month or range you selected',
+    stockPlanText && `target stock from the ${stockPlanText}`,
+  ].filter(Boolean).join(' · ');
+
+  // The period tags of the section headings (2026-11-06; BasisTag, grey with
+  // a pin: this view ranks the month picked here, not the date filter's
+  // range). "12 months to Feb 2026" / "Dec 2025" / "Latest ranking".
+  const rankTag = isUnilever
+    ? (periodLabel ? `12 months to ${periodLabel}` : null)
+    : isDelMonte ? periodLabel : 'Latest ranking';
 
   // The summary card's figures (2026-11-05): the big number is the class's
   // products ranked in this month; the context line is this run's measured
@@ -637,12 +656,14 @@ const ABCClassification = () => {
         label: bar.key === 'CANT_CHECK' ? CANT_CHECK_YET : statusLabel(bar.key, lpHidden),
         count: rows.length,
         shareText: rows.length > 0 ? shareText : '—',
+        // The bar is this share of sales on a 0-100% scale (2026-11-06; it
+        // was the product count against the largest count, which disagreed
+        // with the share printed beside it).
+        widthPct: shareBarWidth(share),
         hover,
       };
     });
-    // The longest bar fills its column (2026-11-06).
-    const longest = Math.max(1, ...bars.map((b) => b.count));
-    return bars.map((b) => ({ ...b, widthPct: (b.count / longest) * 100 }));
+    return bars;
   }, [stockScope, lpHidden]);
   // Middle / low sellers' stock-count split, for their hover.
   const otherSplitText = (cat) => `${otherClassStock[cat].counted.toLocaleString()} in the stock count · `
@@ -828,6 +849,16 @@ const ABCClassification = () => {
       )}
     </>
   );
+  // How brands and categories are grouped: in "About these numbers" and
+  // behind the brand section's "?" (2026-11-06), one text for both.
+  const groupingText = rules ? (
+    <>
+      &ldquo;What drives sales&rdquo; ranks brands (or categories) by sales the same way as products. The
+      ones that together make up the first {asPct(rules.tier_a_cutoff, 0)} of sales are its top group (the
+      maroon bars, Class A), the next ones up to {asPct(rules.tier_b_cutoff, 0)} are Class B, and the rest
+      Class C. The table view lists each one&apos;s class.
+    </>
+  ) : null;
   const basisSwitch = !canRank ? null : (
     <div className="segmented abc-basis-switch" role="tablist" aria-label="Rank by">
       {[['month', abcMonthViewLabel(principal)], ['range', 'Selected range']].map(([value, text]) => (
@@ -844,21 +875,24 @@ const ABCClassification = () => {
       ))}
     </div>
   );
+  const mostSales = <strong className="title-accent">the most sales</strong>;
   const header = (
     <div className="abc-page-header">
       <PageHeader
+        // The Dashboard's title (ui.css .page-header.is-accented, 2026-11-06).
+        className="is-accented"
         title="ABC"
         accent="Classification"
         // One plain line in both views (2026-11-06). The A/B/C cutoffs and
         // the "Top sellers as of…" line are in "About these numbers", opened
-        // by the small link beside it.
+        // by the small link beside it. Its key phrase in the accent.
         subtitle={(
             <>
               {basis === 'range'
-                ? `Which ${isDelMonte ? 'product categories' : 'products'} bring in the most sales in ${rangeLabel}`
+                ? <>Which {isDelMonte ? 'product categories' : 'products'} bring in {mostSales} in {rangeLabel}</>
                 : isUnilever
-                  ? `Which products brought in the most sales over ${windowText}`
-                  : `Which ${isDelMonte ? 'product categories' : 'products'} bring in the most sales in ${windowText}`}
+                  ? <>Which products brought in {mostSales} over {windowText}</>
+                  : <>Which {isDelMonte ? 'product categories' : 'products'} bring in {mostSales} in {windowText}</>}
               {basis !== 'range' && periodPlaceholderNote}.
               {(basis === 'range' || loadedKey !== null) && (
                 <>
@@ -1056,16 +1090,11 @@ const ABCClassification = () => {
               <li>{tableLegend}</li>
               {/* The brand chart's cutoffs (2026-11-06; its dashed lines
                   are gone): the same rules as the product ranking. */}
-              {rules && (
+              {groupingText && (
                 <li>
                   <details className="abc-about-details">
                     <summary>How brands and categories are grouped</summary>
-                    <span>
-                      &ldquo;What drives sales&rdquo; ranks brands (or categories) by sales the same way as products. The
-                      ones that together make up the first {asPct(rules.tier_a_cutoff, 0)} of sales are its top group (the
-                      maroon bars, Class A), the next ones up to {asPct(rules.tier_b_cutoff, 0)} are Class B, and the rest
-                      Class C. The table view lists each one&apos;s class.
-                    </span>
+                    <span>{groupingText}</span>
                   </details>
                 </li>
               )}
@@ -1168,18 +1197,28 @@ const ABCClassification = () => {
               only, one bar per status on the latest count; a bar opens the
               table on those products. Middle and low sellers get one line
               under it: they have no target stock to check. */}
-          <section className="ui-card abc-stock-check" aria-labelledby="abc-stock-check-title">
-            <h3 id="abc-stock-check-title" className="ui-card-title">Stock check: top sellers</h3>
+          {/* As a Dashboard section (2026-11-06): the question above the
+              card, with the count's date in its grey tag, said once; the
+              card's old title said the same as the question. */}
+          <section className="ui-section" aria-labelledby="abc-stock-check-title">
+            <SectionHeading
+              id="abc-stock-check-title"
+              info={stockTipText ? <>{stockTipText}. The stock check counts every top seller, including those {notSoldPhrase}.</> : null}
+              infoLabel="About the stock check"
+              tags={stockCountDate ? <BasisTag label={`Stock counted ${formatDate(stockCountDate)}`} follows={false} /> : null}
+            >
+              Do the top sellers have <span className="title-accent">enough stock</span>?
+            </SectionHeading>
+          <div className="ui-card abc-stock-check card-accent-top">
             {isDelMonte ? (
               <p className="ui-card-subtitle">
                 Del Monte is grouped by category, which has no stock count, so its stock can&apos;t be checked here.
               </p>
             ) : (
               <>
-                {stockCountDate && (
+                {stockCountDate && !lpHidden && planCycle && (
                   <p className="ui-card-subtitle">
-                    Stock counted {formatDate(stockCountDate)}
-                    {!lpHidden && planCycle ? `, compared with the ${formatMonth(planCycle)} order plan` : ''}.
+                    Compared with the {formatMonth(planCycle)} order plan.
                   </p>
                 )}
                 {hasDelMonteRows && (
@@ -1201,9 +1240,13 @@ const ABCClassification = () => {
                         two lines each, so every label sits on one line. */}
                     <span className="abc-stock-label-head">
                       Stock status
-                      <span className="abc-stock-head-sub">{coverHeaderText || ' '}</span>
+                      <span className="abc-stock-head-sub">{stockPlanText || ' '}</span>
                     </span>
-                    <span className="abc-stock-bar-cell" />
+                    {/* The bars' scale (2026-11-06): share of sales, 0 to 100%. */}
+                    <span className="abc-stock-bar-cell abc-stock-scale">
+                      <span>0%</span>
+                      <span>100% of sales</span>
+                    </span>
                     <span className="abc-stock-num">
                       Products
                       <span className="abc-stock-head-sub">{' '}</span>
@@ -1214,7 +1257,11 @@ const ABCClassification = () => {
                     </span>
                   </div>
                   {stockBars.map((bar) => (
-                    <div key={bar.key} className="abc-stock-row">
+                    // A status with no verdict ("Can't check yet", or "Not in
+                    // the latest stock count" without lp.view) is missing
+                    // stock data, not a stock level: a divider above it and a
+                    // hatched bar, its count and share as they are (2026-11-06).
+                    <div key={bar.key} className={`abc-stock-row${bar.tone === 'neutral' ? ' is-missing' : ''}`}>
                       <button
                         type="button"
                         className="abc-stock-row-hit"
@@ -1233,7 +1280,7 @@ const ABCClassification = () => {
                         )}
                       </span>
                       <span className="abc-stock-bar-cell" aria-hidden="true">
-                        <span className={`abc-stock-bar-fill is-${bar.tone}`} style={{ width: `${bar.widthPct}%` }} />
+                        <span className={`abc-stock-bar-fill chart-grow-x is-${bar.tone}`} style={{ width: `${bar.widthPct}%` }} />
                       </span>
                       <span className="abc-stock-num">{bar.count.toLocaleString()}</span>
                       <span className="abc-stock-num">{bar.shareText}</span>
@@ -1269,14 +1316,31 @@ const ABCClassification = () => {
                 </div>
               </>
             )}
+          </div>
           </section>
 
           {/* Brand / category Pareto (D1), full width: which brands and
-              categories drive revenue, which the SKU table alone can't answer. */}
+              categories drive revenue, which the SKU table alone can't answer.
+              Its section heading is drawn by ParetoCard, which holds the
+              brand / category and window choices its question and tag
+              follow. */}
           <div className="abc-breakdown-row">
-            <ParetoCard principal={principal} period={classificationPeriod} onSelectBrand={showBrandInTable} />
+            <ParetoCard principal={principal} period={classificationPeriod} onSelectBrand={showBrandInTable} headingInfo={groupingText} />
           </div>
 
+
+          {/* The product ranking as one Dashboard section (2026-11-06): the
+              question over the filters, the chips and the table; its tag is
+              the ranking's period, its "?" how to read the table. */}
+          <section className="ui-section" aria-labelledby="abc-products-title">
+          <SectionHeading
+            id="abc-products-title"
+            info={tableLegend}
+            infoLabel="How to read the table"
+            tags={rankTag ? <BasisTag label={rankTag} follows={false} /> : null}
+          >
+            Where does <span className="title-accent">each {rowNoun.one}</span> rank?
+          </SectionHeading>
 
           {/* Searchable Combobox & Filters Bar */}
           <div className="abc-filters-row">
@@ -1498,11 +1562,13 @@ const ABCClassification = () => {
           )}
 
           {/* Table */}
-          <div className="ui-card is-flush">
+          <div className="ui-card is-flush card-accent-top">
           <div className="ui-card-intro">
             <div className="ui-card-head is-centered">
               <span className="icon-tile" aria-hidden="true"><ListOrdered size={20} /></span>
-              <div className="ui-card-head-text"><h3 className="ui-card-title">All {rowNoun.many}, best-selling first</h3></div>
+              <div className="ui-card-head-text">
+                <h4 className="section-card-title">All {rowNoun.many}, <span className="title-accent">best-selling</span> first</h4>
+              </div>
             </div>
           </div>
           <div className="data-table-card ui-card-table">
@@ -1610,6 +1676,7 @@ const ABCClassification = () => {
             idPrefix="abc"
           />
           </div>
+          </section>
         </div>
       </div>
     </div>

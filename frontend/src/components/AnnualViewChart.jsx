@@ -39,6 +39,7 @@ import {
   YAxis,
 } from 'recharts';
 import { CHART_COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { formatCompactPesos } from '../utils/formatters';
 import { GRID_PROPS } from './ChartZoom';
 import InfoTip from './InfoTip';
@@ -475,7 +476,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                 {band && (
                   <ReferenceLine y={band.line} stroke={BAND_INK} strokeDasharray="5 4" />
                 )}
-                <Bar dataKey="value" stackId="year" radius={[6, 6, 0, 0]} maxBarSize={56} isAnimationActive={false}>
+                <Bar dataKey="value" stackId="year" radius={[6, 6, 0, 0]} maxBarSize={56} {...chartAnim()}>
                   {rows.map((r) => (
                     <Cell
                       key={r.key}
@@ -495,7 +496,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                     strokeWidth={1.5}
                     strokeDasharray="5 3"
                     maxBarSize={56}
-                    isAnimationActive={false}
+                    {...chartAnim()}
                   >
                     <LabelList dataKey="toGo" content={<ToGoLabel />} />
                   </Bar>

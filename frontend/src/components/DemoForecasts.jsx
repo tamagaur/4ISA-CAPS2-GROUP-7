@@ -15,6 +15,7 @@ import { FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, lineHoverDot, useLine
 import { getDemoIndex } from '../api/demo';
 import { getDemoCategoryForecast } from '../api/forecast';
 import { COLORS, SEMANTIC } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { originLabel } from '../utils/gapReasons';
 import './DemoForecasts.css';
 import { isMissing, NOT_COLLECTED } from '../utils/formatters';
@@ -260,7 +261,7 @@ export const DemoCategoryForecast = () => {
                   axisLine={false}
                 />
                 <Tooltip content={<DemoTooltip />} />
-                <Area {...SHADE_ONLY} dataKey="quantity" fill={`url(#${shadeId})`} connectNulls={false} />
+                <Area {...SHADE_ONLY} dataKey="quantity" fill={`url(#${shadeId})`} connectNulls={false} {...chartAnim(0)} />
                 <Line
                   {...SOLID_LINE}
                   dataKey="quantity"
@@ -269,7 +270,7 @@ export const DemoCategoryForecast = () => {
                   dot={OriginDot}
                   activeDot={lineHoverDot}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim(0)}
                 />
                 <Line
                   {...FORECAST_LINE}
@@ -279,7 +280,7 @@ export const DemoCategoryForecast = () => {
                   dot={ForecastDot}
                   activeDot={lineHoverDot}
                   connectNulls
-                  isAnimationActive={false}
+                  {...chartAnim(1)}
                 />
               </ComposedChart>
             </ResponsiveContainer>

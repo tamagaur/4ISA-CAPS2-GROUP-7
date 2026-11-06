@@ -12,10 +12,12 @@
 // with the same range and principal, so the two pages show the same list.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SectionLede from './ui/SectionLede';
+import SectionHeading from './ui/SectionHeading';
+import BasisTag from './BasisTag';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
-import { AlertTriangle, ArrowLeftRight, ChartLine, CheckCircle2, Info, Layers, ListOrdered, Search, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Layers, ListOrdered, Search, X } from 'lucide-react';
 import KPICard from './KPICard';
 import ProductName from './ProductName';
 import Pagination from './Pagination';
@@ -200,23 +202,30 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                 </span>
               </p>
             )}
-            <div className="ui-card ui-card-stack">
-            <div className="ui-card-head is-centered">
-              <span className="icon-tile" aria-hidden="true"><ChartLine size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">How few products make most of the sales</SectionLede></div>
-            </div>
+            {/* A Dashboard section (2026-11-06): the card's label is the
+                question now, with the range in its teal tag (this view
+                follows the date filter). */}
+            <section className="ui-section" aria-labelledby={`abc-range-curve-${block.principal}`}>
+            <SectionHeading id={`abc-range-curve-${block.principal}`} tags={<BasisTag label={label} follows />}>
+              How few products make <span className="title-accent">most of the sales</span>?
+            </SectionHeading>
+            <div className="ui-card ui-card-stack card-accent-top">
             <ParetoCurve block={block} cutoffs={pareto?.cutoffs} label={label} />
             </div>
+            </section>
           </React.Fragment>
         );
       })}
 
       {canSeeChanges && (
-        <section className="abc-range-changes ui-card ui-card-stack" aria-busy={changesLoading || undefined}>
-            <div className="ui-card-head is-centered">
-              <span className="icon-tile" aria-hidden="true"><ArrowLeftRight size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Which products joined or left Class A</SectionLede></div>
-            </div>
+        <section className="ui-section" aria-labelledby="abc-range-changes-title" aria-busy={changesLoading || undefined}>
+          <SectionHeading
+            id="abc-range-changes-title"
+            tags={<BasisTag label={changes.data?.label || label} follows />}
+          >
+            Which products <span className="title-accent">joined or left</span> Class A?
+          </SectionHeading>
+        <div className="abc-range-changes ui-card ui-card-stack card-accent-top">
           {changesLoading ? (
             <>
               <LoadingStatus>Loading the products that joined or left Class A…</LoadingStatus>
@@ -238,8 +247,15 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
               <span>No Class A changes to show for {changes.data?.label || label}.</span>
             </p>
           )}
+        </div>
         </section>
       )}
+
+      {/* The ranking table as one section (2026-11-06), as on the month view. */}
+      <section className="ui-section" aria-labelledby="abc-range-products-title">
+      <SectionHeading id="abc-range-products-title" tags={<BasisTag label={label} follows />}>
+        Where does <span className="title-accent">each {allCategories ? 'category' : 'product'}</span> rank?
+      </SectionHeading>
 
       <div className="abc-filters-row abc-range-filters">
         <div className="abc-search-wrapper">
@@ -275,11 +291,13 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         </div>
       </div>
 
-      <div className="ui-card is-flush">
+      <div className="ui-card is-flush card-accent-top">
       <div className="ui-card-intro">
             <div className="ui-card-head is-centered">
               <span className="icon-tile" aria-hidden="true"><ListOrdered size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">All products, from best to least selling</SectionLede></div>
+              <div className="ui-card-head-text">
+                <h4 className="section-card-title">All products, from <span className="title-accent">best</span> to least selling</h4>
+              </div>
             </div>
       </div>
       <div className="data-table-card ui-card-table">
@@ -336,6 +354,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         />
       </div>
       </div>
+      </section>
     </>
   );
 };

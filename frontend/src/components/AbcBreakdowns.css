@@ -176,124 +176,133 @@
   color: var(--color-text-subtle);
 }
 
-/* The simplified bars (2026-11-06): one grid, the bracket on row 1 over
-   the maroon bars, then one column per bar: share on top, the bar, the
-   name under it (horizontal, cut with an ellipsis; the full name is the
-   hover). No axes, gridlines or legend. */
-.abcb-bars {
-  display: grid;
-  grid-template-rows: auto auto;
-  column-gap: 10px;
-  row-gap: 2px;
+/* The bars, horizontal (2026-11-06): one row per brand or category, its
+   name, then its bar with the share right after it. The bars start from one
+   baseline on one linear scale: every bar is a fraction (--abcb-w) of the
+   same length, the bar column less the room the share needs, so the largest
+   bar and its share just fit. A row is the brand's button, so the whole row
+   filters the table. No axes, gridlines or legend: the thin line under the
+   top group carries its share. */
+.abcb-rows {
+  --abcb-name-w: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   margin-top: 4px;
 }
 
-.abcb-bracket {
-  grid-row: 1;
-  position: relative;
-  height: 22px;
-  margin: 0 2px;
-  border: 1.5px solid var(--color-text-muted);
-  border-bottom: 0;
-  border-radius: 4px 4px 0 0;
-  transform: translateY(10px);
-}
-
-.abcb-bracket-label {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0 6px;
-  background-color: var(--color-surface);
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-.abcb-col {
+.abcb-row {
   min-width: 0;
 }
 
-.abcb-col-btn {
+.abcb-row-btn {
+  display: grid;
+  grid-template-columns: var(--abcb-name-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  padding: 4px 2px 2px;
+  min-height: 28px;
+  padding: 2px 6px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.abcb-col-btn.is-static {
+/* "Others" and categories are not clickable: no pointer, no hover. */
+.abcb-row-btn.is-static {
   cursor: default;
 }
 
-.abcb-col-btn:not(.is-static):hover {
+.abcb-row-btn:not(.is-static):hover {
   background-color: var(--color-surface-muted);
 }
 
-.abcb-col-btn:focus-visible {
+.abcb-row-btn:not(.is-static):hover .abcb-row-bar {
+  filter: brightness(1.12);
+}
+
+.abcb-row-btn:focus-visible {
   outline: 2px solid var(--color-nav-bg);
   outline-offset: 1px;
 }
 
-/* The bar sits on the bottom of a fixed-height area, its share just above. */
-/* The bar alone fills this area, from its bottom; the top padding is room
-   for the tallest bar's % label, so no bar is squeezed. */
-.abcb-bar-area {
-  box-sizing: border-box;
-  height: 168px;
-  padding-top: 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
+.abcb-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  color: var(--color-text-body);
 }
 
-.abcb-bar-value {
-  font-size: 0.78rem;
+.abcb-row-name.is-top {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.abcb-row-name.is-others {
+  color: var(--color-text-muted);
+}
+
+.abcb-row-track {
+  --abcb-value-room: 3rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.abcb-row-bar {
+  display: block;
+  flex: none;
+  width: calc((100% - var(--abcb-value-room)) * var(--abcb-w, 0));
+  height: 16px;
+  border-radius: 0 4px 4px 0;
+  background-color: var(--abcb-bar);
+}
+
+/* "Others" is a group of brands, not one: hatched in its own light grey. */
+.abcb-row-bar.is-others {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--abcb-bar) 0 4px,
+    color-mix(in srgb, var(--abcb-bar) 45%, var(--color-surface)) 4px 8px
+  );
+}
+
+.abcb-row-value {
+  flex: none;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
-.abcb-bar {
+/* The line under the top group, labelled with its combined share in the
+   plum of its bars; the arrow points at the rows it adds up. */
+.abcb-cut {
   position: relative;
-  display: block;
-  flex: none;
-  width: min(100%, 44px);
-  border-radius: 4px 4px 0 0;
+  margin: 9px 6px 9px calc(var(--abcb-name-w) + 18px);
+  border-top: 1px dashed #4F1A41;
 }
 
-/* The share, just above the bar's top. */
-.abcb-bar .abcb-bar-value {
+.abcb-cut-label {
   position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding-bottom: 3px;
-  white-space: nowrap;
-}
-
-.abcb-bar-name {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 6px;
+  background-color: var(--color-surface);
+  transform: translateY(-50%);
   font-size: 0.78rem;
-  color: var(--color-text-muted);
-}
-
-.abcb-bar-name.is-top {
-  font-weight: 600;
-  color: var(--color-text);
+  font-weight: 700;
+  color: #4F1A41;
+  white-space: nowrap;
 }
 
 .abcb-hint {
@@ -302,15 +311,21 @@
   color: var(--color-text-subtle, var(--color-text-muted));
 }
 
+/* A phone: a narrower name column; long names end in an ellipsis (the full
+   name is the row's hover) and never run into the bar or its share. */
 @media (max-width: 640px) {
-  .abcb-bars {
-    column-gap: 4px;
+  .abcb-rows {
+    --abcb-name-w: 6.25rem;
   }
-  .abcb-bar-area {
-    height: 120px;
+  .abcb-row-btn {
+    column-gap: 8px;
+    padding: 2px 4px;
   }
-  .abcb-bar-value,
-  .abcb-bar-name {
-    font-size: 0.7rem;
+  .abcb-cut {
+    margin-left: calc(var(--abcb-name-w) + 12px);
+  }
+  .abcb-row-name,
+  .abcb-row-value {
+    font-size: 0.78rem;
   }
 }

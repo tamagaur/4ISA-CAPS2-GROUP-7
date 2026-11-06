@@ -309,6 +309,16 @@
 .abc-summary-grid {
   align-items: stretch;
 }
+
+/* The summary cards' labels in the Dashboard's small-label style
+   (2026-11-06). Scoped to this page's grids: KPICard is shared. */
+.abc-summary-grid .kpi-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-body);
+}
 .abc-summary-grid .kpi-card {
   padding: 14px 16px;
   gap: 6px;
@@ -1089,7 +1099,7 @@
    changing the month leaves the cards in place and lets the Recharts
    series animate the data change instead. */
 .abc-pareto-container {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
 }
 
 .abc-analysis-chart { animation-delay: 60ms; }
@@ -1345,11 +1355,54 @@
   min-width: 0;
 }
 
+/* The bar is the status's share of sales on a 0-100% scale (2026-11-06,
+   utils/stockBarScale.js), drawn on a faint track that is the whole 100%.
+   No minimum width: a small share is never drawn bigger than it is. */
+.abc-stock-row .abc-stock-bar-cell {
+  height: 18px;
+  border-radius: 4px;
+  background: var(--color-surface-sunken);
+}
+
 .abc-stock-bar-fill {
   display: block;
   height: 18px;
-  min-width: 2px;
   border-radius: 4px;
+}
+
+/* The scale over the bar column: 0% at the start, 100% at the end. */
+.abc-stock-head .abc-stock-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.79rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Missing stock data ("Can't check yet"): a divider above the row, and a
+   hatched bar in the same grey, at its full share. */
+.abc-stock-row.is-missing {
+  margin-top: 9px;
+}
+
+.abc-stock-row.is-missing::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 8px;
+  right: 8px;
+  border-top: 1px solid var(--color-border);
+  pointer-events: none;
+}
+
+.abc-stock-bar-fill.is-neutral {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--abc-status-neutral) 0 5px,
+    color-mix(in srgb, var(--abc-status-neutral) 55%, var(--color-surface)) 5px 10px
+  );
 }
 
 .abc-stock-row:hover .abc-stock-bar-fill {
@@ -1448,12 +1501,33 @@
   white-space: nowrap;
 }
 
-/* Narrow screens: no bar column; label and numbers stay. */
+/* Narrow screens: label and numbers on one line, the bar on its own line
+   under them across the row, on the same 0-100% scale (2026-11-06; the bars
+   used to be hidden here). The scale goes under the column headers. */
 @media (max-width: 600px) {
   .abc-stock-table {
     --abc-stock-cols: minmax(0, 1fr) 4.5rem 6rem;
   }
-  .abc-stock-bar-cell {
-    display: none;
+  .abc-stock-head .abc-stock-bar-cell,
+  .abc-stock-row .abc-stock-bar-cell {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .abc-stock-head {
+    row-gap: 4px;
+  }
+  /* The header's period ("last 12 months to Feb 2026") wraps here; on one
+     line it ran past the card's edge. */
+  .abc-stock-head .abc-stock-num {
+    white-space: normal;
+  }
+  .abc-stock-row {
+    row-gap: 4px;
+    padding-top: 6px;
+    padding-bottom: 8px;
+  }
+  .abc-stock-row .abc-stock-bar-cell,
+  .abc-stock-bar-fill {
+    height: 12px;
   }
 }

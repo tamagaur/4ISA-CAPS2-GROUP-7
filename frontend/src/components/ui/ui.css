@@ -933,3 +933,169 @@
     padding: 0.75rem 1rem;
   }
 }
+
+/* ── The Dashboard's heading system, for other pages (2026-11-06) ─────────
+   The same values as Dashboard.css's page title (.dash-page-header), section
+   questions (.dash-kind-row) and graph cards, as opt-in classes: a page uses
+   them by name, so nothing changes where they are not used. First user: ABC
+   Classification. */
+
+/* Page title: navy, the accent word coral in the serif italic, a short coral
+   bar beside it; the subtitle indented to the title's text.
+   <PageHeader className="is-accented" …> */
+.page-header.is-accented .page-header-title {
+  position: relative;
+  padding-left: 16px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--color-nav-bg);
+}
+
+.page-header.is-accented .page-header-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.14em;
+  bottom: 0.1em;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--color-brand-primary), rgba(232, 93, 74, 0.55));
+}
+
+.page-header.is-accented .page-title-accent {
+  font-weight: 500;
+  color: var(--color-brand-primary);
+}
+
+.page-header.is-accented .page-header-subtitle {
+  margin: 6px 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+/* A section: its heading (ui/SectionHeading.jsx), then its cards. The cards
+   keep the page's card gap between them; the heading sits 16px above the
+   first. */
+.ui-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+  min-width: 0;
+}
+
+.section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  min-width: 0;
+  margin: 0 0 16px;
+}
+
+.ui-section > .section-heading {
+  margin-bottom: calc(16px - var(--card-gap));
+}
+
+.section-heading-question {
+  min-width: 0;
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--color-nav-bg);
+}
+
+.section-heading-rule {
+  flex: 1 1 32px;
+  min-width: 24px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-brand-strong) 0%, #E9A23B 35%, rgba(233, 162, 59, 0) 100%);
+}
+
+.section-heading-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A long period wraps rather than cutting the date off. */
+.section-heading-tags .basis-tag {
+  white-space: normal;
+}
+
+/* A graph or table card's title, as the Dashboard's graph titles: one key
+   word in .title-accent. */
+.section-card-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text-heading);
+}
+
+/* The thin accent line along a section card's top, following its corners. */
+.card-accent-top {
+  position: relative;
+}
+
+.card-accent-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: linear-gradient(90deg, var(--color-brand-strong) 0%, #E9A23B 40%, rgba(233, 162, 59, 0) 85%);
+  pointer-events: none;
+}
+
+@media (max-width: 1024px) {
+  .page-header.is-accented .page-header-title {
+    font-size: 27px;
+  }
+
+  .section-heading-question {
+    font-size: 20px;
+  }
+
+  .section-card-title {
+    font-size: 17px;
+  }
+}
+
+/* A phone: no rule, so the question, its "?" and the period tags wrap onto
+   as many lines as they need. */
+@media (max-width: 600px) {
+  .page-header.is-accented .page-header-title {
+    font-size: 24px;
+    padding-left: 12px;
+  }
+
+  .page-header.is-accented .page-header-subtitle {
+    margin-left: 12px;
+  }
+
+  .section-heading {
+    gap: 6px 10px;
+  }
+
+  .section-heading-question {
+    font-size: 18px;
+  }
+
+  .section-heading-rule {
+    display: none;
+  }
+
+  .section-card-title {
+    font-size: 16px;
+  }
+}

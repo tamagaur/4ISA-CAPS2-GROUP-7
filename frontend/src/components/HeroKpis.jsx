@@ -301,10 +301,10 @@ export const AnnualSalesCard = ({
             ]}
           >
             <span className="hero-progress-track">
-              <span className="hero-progress-fill" style={{ width: `${soldAt * 100}%` }} />
+              <span className="hero-progress-fill chart-grow-x" style={{ width: `${soldAt * 100}%` }} />
               {behind && expectedAt != null && (
                 <span
-                  className="hero-progress-short"
+                  className="hero-progress-short chart-grow-x"
                   style={{ left: `${soldAt * 100}%`, width: `${(expectedAt - soldAt) * 100}%` }}
                 />
               )}
@@ -524,7 +524,7 @@ export const InventoryCard = ({
               ]}
             >
               <span className="hero-idle-track">
-                <span className="hero-idle-unsold" style={{ width: `${Math.max(idle.share * 100, 1)}%` }} />
+                <span className="hero-idle-unsold chart-grow-x" style={{ width: `${Math.max(idle.share * 100, 1)}%` }} />
               </span>
             </HoverValue>
           )}
@@ -652,9 +652,9 @@ export const StockCoverCard = ({
             aria-label={`${cover.weeks.toFixed(1)} weeks of stock cover against a ${policyWeeks}-week target, `
               + `on a scale of 0 to ${scale} weeks`}
           >
-            <span className="hero-meter-needed" style={{ width: at(split.needed) }} />
+            <span className="hero-meter-needed chart-grow-x" style={{ width: at(split.needed) }} />
             {split.extra > 0 && (
-              <span className="hero-meter-extra" style={{ left: at(split.needed), width: at(split.extra) }} />
+              <span className="hero-meter-extra chart-grow-x" style={{ left: at(split.needed), width: at(split.extra) }} />
             )}
             <span className="hero-meter-mark" style={{ left: at(policyWeeks) }} />
           </div>
@@ -803,8 +803,8 @@ export const BelowSafetyCard = ({
             role="img"
             aria-label={`${parts.below} could run out, ${parts.ok} OK, ${parts.unchecked} can't be checked, of ${total} ${totalLabel}${tierLabel ? ` (${tierLabel})` : ''}`}
           >
-            {parts.below > 0 && <span className="hero-checks-seg is-low" style={{ width: at(parts.below) }} />}
-            {parts.ok > 0 && <span className="hero-checks-seg is-ok" style={{ width: at(parts.ok) }} />}
+            {parts.below > 0 && <span className="hero-checks-seg chart-grow-x is-low" style={{ width: at(parts.below) }} />}
+            {parts.ok > 0 && <span className="hero-checks-seg chart-grow-x is-ok" style={{ width: at(parts.ok) }} />}
           </div>
           <ul className="hero-legend">
             <li><span className="hero-swatch is-low" aria-hidden="true" />{COULD_RUN_OUT} {n(parts.below)}</li>
@@ -965,36 +965,5 @@ export const PendingReordersCard = ({
         </p>
       )}
     </KpiCard>
-  );
-};
-
-// ── What to do first ──────────────────────────────────────────────────────
-// Three tiles at the top of the page (2026-11-05), each opening where the
-// figure is worked through. `items`: { key, icon, label, value, unit, sub, tone,
-// to | onClick }. Every value is one the page already has from GET /dashboard.
-export const ActionStrip = ({ items = [] }) => {
-  if (items.length === 0) return null;
-  return (
-    <div className="dash-actions" role="group" aria-label="What to do first">
-      {items.map(({ key, icon: Icon, label, value, unit, sub, tone, to, onClick }) => {
-        const body = (
-          <>
-            <span className="icon-tile" aria-hidden="true"><Icon size={20} /></span>
-            <span className="dash-action-text">
-              <span className="dash-action-label">{label}</span>
-              <span className={`dash-action-value${tone ? ` is-${tone}` : ''}`}>
-                {value}
-                {unit && <span className="dash-action-unit">{unit}</span>}
-              </span>
-              {sub && <span className="dash-action-sub">{sub}</span>}
-            </span>
-            <ArrowUpRight className="dash-action-arrow" size={16} aria-hidden="true" />
-          </>
-        );
-        return to
-          ? <Link key={key} to={to} className="dash-action">{body}</Link>
-          : <button key={key} type="button" className="dash-action" onClick={onClick}>{body}</button>;
-      })}
-    </div>
   );
 };

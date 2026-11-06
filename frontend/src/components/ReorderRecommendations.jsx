@@ -1619,7 +1619,7 @@ const ReorderRecommendations = () => {
                 {weightRows.map(([label, value]) => (
                   <div className="reorder-how-weight" key={label}>
                     <dt>{label}<span>{typeof value === 'number' ? `${Math.round(value * 100)}%` : '—'}</span></dt>
-                    <dd><span style={{ width: `${typeof value === 'number' ? Math.round(value * 100) : 0}%` }} /></dd>
+                    <dd><span className="chart-grow-x" style={{ width: `${typeof value === 'number' ? Math.round(value * 100) : 0}%` }} /></dd>
                   </div>
                 ))}
               </dl>

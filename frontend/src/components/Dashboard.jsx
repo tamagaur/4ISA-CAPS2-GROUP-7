@@ -5,11 +5,10 @@ import InfoTip from './InfoTip';
 import AtRiskProductsModal from './AtRiskProductsModal';
 import ClassProductsModal from './ClassProductsModal';
 import {
-  ClassChanges, ForecastErrorSummaryCard, IdleStockCard, ProductListModal,
-  CATEGORY_MISS_COLUMNS, IDLE_COLUMNS, OVER_RUN_COLUMNS, aboveRuleColumns,
+  ClassChanges, IdleStockCard, ProductListModal, IDLE_COLUMNS, aboveRuleColumns,
 } from './RangeCards';
 import RangePicker from './RangePicker';
-import { ActionStrip, AnnualSalesCard, BelowSafetyCard, InventoryCard, PendingReordersCard, StockCoverCard } from './HeroKpis';
+import { AnnualSalesCard, BelowSafetyCard, InventoryCard, PendingReordersCard, StockCoverCard } from './HeroKpis';
 import { formatCompactCount, policyRatio, shareOf, stockChangeTone } from '../utils/kpiMath';
 import {
   SalesVsStockWidget, ABCDonutWidget,
@@ -17,7 +16,7 @@ import {
 } from './Charts';
 import { formatCompactPesos } from '../utils/formatters';
 import {
-  getClassChanges, getDashboardData, getForecastAccuracy, getIdleStock, getStockDetail, peekDashboardData,
+  getClassChanges, getDashboardData, getIdleStock, getStockDetail, peekDashboardData,
 } from '../api/dashboard';
 import { CHART_COLORS } from '../theme/colors';
 import { ALL_PRINCIPALS, DEFAULT_PRINCIPAL, labelForPrincipal } from '../principals';
@@ -38,7 +37,7 @@ import { monthsBetween } from '../utils/timeline';
 import { noSaleNote } from '../utils/aboveRuleNote';
 import { calendarFactorText, calendarSignoffText, calendarYearsText } from '../utils/calendarAdjustment';
 import { LoadingStatus, SkeletonChartCard, SkeletonLine, SkeletonStatCards } from './Skeleton';
-import { ArrowRight, AlertTriangle, CalendarX, Boxes, PackageX, ShoppingCart } from 'lucide-react';
+import { ArrowRight, AlertTriangle, CalendarX } from 'lucide-react';
 import EmptyState from './ui/EmptyState';
 import LoadError, { describeLoadError } from './ui/LoadError';
 import SlowLoadNotice from './ui/SlowLoadNotice';
@@ -408,13 +407,14 @@ const Slot = ({ kind, question, hint, realOnly = false, basis = null, counted = 
 // blank for the whole /dashboard request (measured 5.4–7.1s). Each card sits
 // in a .dash-slot like the real ones (that is where their 360px minimum
 // height comes from) and takes its widget's shape, in page order: sales
-// trend; ABC ring beside the top-seller changes; forecast beside its
-// accuracy; the order list beside idle stock. Row classes repeat (two dash-row-even),
-// so keys come from the index, not the class.
+// trend; ABC ring beside the top-seller changes; the forecast on its own
+// (its accuracy card moved to SKU Forecast, 2026-11-06); the order list
+// beside idle stock. Row classes repeat (two dash-row-trend), so keys come
+// from the index, not the class.
 const DASHBOARD_SKELETON_ROWS = [
   ['dash-row-trend', [{ variant: 'line' }]],
   ['dash-row-abc', [{ variant: 'donut' }, { variant: 'list', rows: 4 }]],
-  ['dash-row-even', [{ variant: 'line' }, { variant: 'line' }]],
+  ['dash-row-trend', [{ variant: 'line' }]],
   ['dash-row-even', [{ variant: 'list', rows: 3 }, { variant: 'list', rows: 4 }]],
 ];
 
@@ -446,7 +446,7 @@ const DASH_SECTIONS = [
   { id: 'dash-summary', label: 'Summary', hint: 'The headline numbers' },
   { id: 'dash-sales', label: 'Sales & stock', hint: 'How sales and the value of stock changed over time' },
   { id: 'dash-abc', label: 'Top products', hint: 'The products that bring in most of the sales, and which joined or left them' },
-  { id: 'dash-forecast', label: 'Forecast', hint: 'How much the top sellers will sell next, and how close past forecasts were' },
+  { id: 'dash-forecast', label: 'Forecast', hint: 'How much the top sellers will sell next' },
   { id: 'dash-order', label: 'What to order', hint: 'What to order now, and the money in stock that is not selling' },
   // The 3-week comparison is named only while its card is shown.
   ...(SHOW_POLICY_CARD ? [{ id: 'dash-policy', label: 'The 3-week rule', hint: "The plan's safety stock against SSM's 3-week rule" }] : []),
@@ -477,10 +477,6 @@ const STORY = {
     name: 'the forecast',
     more: 'Only the top sellers whose forecast test error was below the average month-to-month change in their sales before the test months (a reliability check the team adopted, '
       + 'not confirmed by SSM or the adviser). The shaded band is meant to cover about 9 in 10 months.',
-  },
-  accuracy: {
-    name: 'past forecasts',
-    more: 'Above zero, the forecast was higher than what sold; below zero, lower.',
   },
   order: {
     name: 'suggested orders',
@@ -720,34 +716,28 @@ const Dashboard = () => {
     return () => { cancelled = true; };
   }, [requestKey, period, startPeriod, principal]);
 
-  // Opens a range card's product list, fetched on demand for the same range.
-  // `runId`: the forecast run an error-card list comes from — the card's
-  // "Before the adjustment" view passes the unadjusted twin's (2026-10-19);
-  // null is the default (the run the card shows first).
+  // Opens a range card's product list, fetched on demand for the same range:
+  // 'idle' (stock with no sale) or 'above'.
   // 'above' (2026-10-22): the products behind the Stock cover card's "Above
   // SSM's 3-week rule" (GET /dashboard/stock-detail), most pesos above the
   // rule first; `meta` keeps the response's count date, sales window and
   // totals for the list's header (Technical Adviser, 2 Oct 2026: the list
   // behind a count one click away).
-  const openRangeList = (kind, runId = null) => {
+  // The forecast-miss lists ('over', 'category') moved with their card to
+  // SKU Forecast on 2026-11-06.
+  const openRangeList = (kind) => {
     setRangeList({ kind, rows: [], meta: null, loading: true, error: null });
     let meta = null;
     const request = kind === 'idle'
       ? getIdleStock({ period, principal }).then((res) => res.items || [])
-      : kind === 'above'
-        ? getStockDetail({ period, startPeriod, principal }).then((res) => {
-          const why = res.blocked_reason || res.cover_blocked_reason;
-          if (why) throw new Error(why);
-          meta = res;
-          return (res.items || [])
-            .filter((r) => r.above_rule_pesos > 0)
-            .sort((a, b) => b.above_rule_pesos - a.above_rule_pesos);
-        })
-      : kind === 'category'
-        // Category rows carry no product: the category is the row's name.
-        ? getForecastAccuracy({ level: 'category', period, startPeriod, principal, run_id: runId })
-          .then((res) => (res.rows || []).map((r) => ({ ...r, product_name: r.category_path })))
-        : getForecastAccuracy({ period, startPeriod, principal, run_id: runId }).then((res) => res.over_forecast_runs?.items || []);
+      : getStockDetail({ period, startPeriod, principal }).then((res) => {
+        const why = res.blocked_reason || res.cover_blocked_reason;
+        if (why) throw new Error(why);
+        meta = res;
+        return (res.items || [])
+          .filter((r) => r.above_rule_pesos > 0)
+          .sort((a, b) => b.above_rule_pesos - a.above_rule_pesos);
+      });
     request
       .then((rows) => setRangeList((prev) => (prev?.kind === kind ? { kind, rows, meta, loading: false, error: null } : prev)))
       .catch((err) => setRangeList((prev) => (prev?.kind === kind
@@ -1364,7 +1354,6 @@ const Dashboard = () => {
       detail: `${FOLLOWS_RANGE} The past months follow the range; the forecast month is the one after the latest `
         + 'sales, drawn when the range ends there.',
     },
-    accuracy: { ...rangeBasis, detail: `${FOLLOWS_RANGE} Forecasts are checked against sales in the range's months.` },
     allocation: {
       label: data.allocation?.allocation_year ? `Year ${data.allocation.allocation_year}` : 'Range’s end year',
       follows: true,
@@ -1623,8 +1612,6 @@ const Dashboard = () => {
       ? `no sale ${periodLabel(idle.window_start)} – ${periodLabel(idle.window_end)}` : null,
     idle.pesos_basis ? `value ${idle.pesos_basis}` : null,
   ].filter(Boolean).join(' · ');
-  const overRuns = data.forecast_accuracy?.over_forecast_runs || {};
-  const overRunSubtitle = [data.forecast_accuracy?.label, overRuns.rule].filter(Boolean).join(' · ');
 
   // The list behind the Stock cover card's "Above SSM's 3-week rule"
   // (2026-10-22): GET /dashboard/stock-detail's products holding stock
@@ -1746,43 +1733,12 @@ const Dashboard = () => {
     belowSs.contextLine,
     noPlanNote,
     portfolioForecast.scope_label,
-    data.forecast_accuracy?.blocked_reason,
     DEL_MONTE_NO_ORDERS_REASON,
     idle.blocked_reason,
   ].filter(Boolean))] : [];
   const idleCounted = idle.blocked_reason ? null
     : idle.count_date ? `Stock counted ${dayLabel(idle.count_date)}`
       : idle.count_period ? `${periodLabel(idle.count_period)} count` : null;
-  // The three things to act on, from figures this page already has.
-  const abovePolicy = hasStock ? kpis.above_policy : null;
-  const actionItems = [
-    actions && {
-      key: 'orders',
-      icon: ShoppingCart,
-      label: 'Orders to act on',
-      value: actions.act_now.toLocaleString(),
-      unit: actions.act_now === 1 ? 'product' : 'products',
-      sub: lpCycleLabel ? `${lpCycleLabel} plan` : null,
-      tone: actions.act_now > 0 ? 'danger' : null,
-      to: '/reorder',
-    },
-    abovePolicy?.pesos != null && abovePolicy.products > 0 && {
-      key: 'above',
-      icon: Boxes,
-      label: `Stock value above ${abovePolicy.policy_weeks ?? policyWeeks}-week target`,
-      value: formatCompactPesos(abovePolicy.pesos),
-      sub: `${abovePolicy.products.toLocaleString()} products`,
-      onClick: () => openRangeList('above'),
-    },
-    hasStock && idleCell.value != null && data.idle_stock && {
-      key: 'idle',
-      icon: PackageX,
-      label: `Stock not sold in ${idle.window_rule_months ?? 6} months`,
-      value: formatCompactPesos(idleCell.value),
-      sub: `${(idleCell.products ?? 0).toLocaleString()} products`,
-      onClick: () => jumpTo('idle-stock'),
-    },
-  ].filter(Boolean);
 
   return (
     <div className={`dashboard${SHOW_CHART_DESCRIPTIONS ? '' : ' dashboard-plain'}`}>
@@ -1908,7 +1864,7 @@ const Dashboard = () => {
             <p className="dash-gap-note" role="note">
               <AlertTriangle size={14} aria-hidden="true" />
               <span>
-                {noPlanNote} Below safety stock, Pending reorders, Forecast demand, How close the forecasts were, Suggested
+                {noPlanNote} Below safety stock, Pending reorders, Forecast demand, Suggested
                 orders and Stock with no sale stay empty for that reason.
                 <InfoTip label="Why each of these cards is empty">
                   {categoryOnlyReasons.map((line) => <span key={line} className="chart-tip-line">{line}</span>)}
@@ -1928,8 +1884,6 @@ const Dashboard = () => {
               <span>{syntheticNote}</span>
             </p>
           )}
-          {/* What to do first (2026-11-05), then the figures behind it. */}
-          <ActionStrip items={actionItems} />
           </div>
           {/* Lead with sales and allocation beside inventory value, then
               move through stock cover, below-safety risk and pending orders. */}
@@ -2045,9 +1999,11 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Steps 4 and 5 — what comes next: the forecast for the top sellers,
-              beside how close past forecasts came. */}
-          <div className={`dash-row ${data.forecast_accuracy ? 'dash-row-even' : 'dash-row-trend'} dash-section-anchor`} id="dash-forecast">
+          {/* Step 4 — what comes next: the forecast for the top sellers. How
+              close past forecasts came moved to SKU Forecast (2026-11-06);
+              the card's foot links there, opening the page with no product
+              picked, where that card sits under the product table. */}
+          <div className="dash-row dash-row-trend dash-section-anchor" id="dash-forecast">
             <Slot kind="Predictive" question={<>How much will the top sellers <span className="title-accent">sell next</span>?</>} hint={STORY.forecast} realOnly={portfolioRealOnly && demoForecasts.length === 0} basis={BASIS.forecast}>
               <PortfolioForecastWidget
                 series={portfolioSeries}
@@ -2071,22 +2027,22 @@ const Dashboard = () => {
                 forecastNote={forecastNote}
                 piecesShare={piecesShare}
                 calendar={forecastBeyondRange ? null : calendarAdj}
+                // Del Monte has no product forecasts to check, so no link.
+                footer={hasPermission(P.FORECAST_VIEW) && pagePrincipal !== 'delmonte' ? (
+                  <Link
+                    // In the address, not in navigation state: the layout
+                    // rewrites the address while the page changes, which
+                    // drops state but keeps other parameters (as ?sku=).
+                    to="/forecast?view=overview"
+                    className="band-link"
+                    aria-label="How close past forecasts were, on the SKU Forecast page"
+                  >
+                    How close past forecasts were <ArrowRight size={12} aria-hidden="true" /> SKU Forecast
+                  </Link>
+                ) : null}
               />
               {demoForecasts.length > 0 && <DemoForecastList forecasts={demoForecasts} canOpenForecast={hasPermission(P.FORECAST_VIEW)} />}
             </Slot>
-            {data.forecast_accuracy && (
-              <Slot kind="Predictive" question={<>How <span className="title-accent">close</span> were past forecasts?</>} hint={STORY.accuracy} basis={BASIS.accuracy}>
-                <ForecastErrorSummaryCard
-                  accuracy={data.forecast_accuracy}
-                  scope={coverageNote(data.forecast_accuracy.coverage, pagePrincipal)}
-                  blockedNote={categoryOnly ? CATEGORY_ONLY_EMPTY : null}
-                  onOpenList={(runId) => openRangeList('over', runId)}
-                  onOpenCategories={(runId) => openRangeList('category', runId)}
-                  principal={principal}
-                  calendar={portfolioForecast.calendar_adjustment || null}
-                />
-              </Slot>
-            )}
           </div>
 
           {/* Steps 6 and 7 — what to do: this cycle's order, beside the money in
@@ -2160,30 +2116,12 @@ const Dashboard = () => {
         loading={rangeList?.loading}
         error={rangeList?.error}
         rows={rangeList?.rows || []}
-        {...(rangeList?.kind === 'above' ? aboveListProps : rangeList?.kind === 'idle' ? {
+        {...(rangeList?.kind === 'above' ? aboveListProps : {
           title: data.idle_stock?.window_rule_months ? `Stock with no sale in ${data.idle_stock.window_rule_months} months` : 'Idle stock',
           lede: "Money stuck in stock that isn't moving",
           subtitle: idleSubtitle,
           columns: IDLE_COLUMNS,
           footnote: 'Most stock value first.',
-        } : rangeList?.kind === 'category' ? {
-          title: 'Forecast misses by category',
-          lede: 'Which categories the forecast misses most',
-          subtitle: [data.forecast_accuracy?.label, 'Unilever products with a scored forecast',
-            data.forecast_accuracy?.pesos_basis ? `pesos at ${String(data.forecast_accuracy.pesos_basis).split(' (')[0]}` : null]
-            .filter(Boolean).join(' · '),
-          columns: CATEGORY_MISS_COLUMNS,
-          firstColumnLabel: 'Category',
-          footnote: 'Largest misses in pesos first. A category can be too high in some months and too low in others; '
-            + 'the net miss in pieces says which way it leaned overall.',
-        } : {
-          title: 'Products over-forecast several months in a row',
-          lede: 'Where the forecast keeps overshooting',
-          subtitle: overRunSubtitle,
-          columns: OVER_RUN_COLUMNS,
-          footnote: 'Largest surplus first. Click a product to open its forecast.',
-          onOpenProduct: openForecast,
-          openLabel: 'Open its forecast',
         })}
       />
       <ClassProductsModal

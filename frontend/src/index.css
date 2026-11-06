@@ -540,6 +540,16 @@ table td.table-center {
   --font-accent: 'Newsreader', Georgia, 'Times New Roman', serif;
   --font-serif: var(--font-accent);
 
+  /* Chart motion: the one entrance every graph wears. theme/motion.js holds
+     the same values for the Recharts graphs; theme/motion.test.js fails if
+     the two drift apart. The card frame (chart-card-enter) uses the same
+     curve over its own, shorter time. */
+  --chart-draw-duration: 700ms;
+  --chart-draw-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --chart-draw-delay: 150ms;
+  --chart-draw-stagger: 90ms;
+  --chart-card-duration: 460ms;
+
   /* Data Visualization Color Tokens */
   --color-critical: #D9534F;
   --color-warning: #E9A23B;
@@ -743,39 +753,26 @@ html, body, #root, .App {
 }
 
 /* ── Chart entrance animation ─────────────────────────────────────────
-   Charts previously appeared with no transition at all (every Recharts
-   series carried isAnimationActive={false} — see theme/motion.js). Two
-   layers now work together:
+   One motion for every graph on every tab (2026-11-06; the values are the
+   --chart-draw-* tokens on :root, and theme/motion.js holds the same ones
+   for Recharts). Two layers work together:
 
-     1. This CSS fade+rise, which plays when a chart WIDGET mounts — when
-        the page opens, and again on every applied filter change. ABC
-        Classification gets the replay for free because its loading state
-        unmounts the charts; the Dashboard and SKU Forecast keep theirs
-        mounted, so they drive it through useEntranceReplay() and the
-        data-enter-cycle swap documented further down this file.
-     2. Recharts' own series animation (theme/motion.js's chartAnim),
-        which tweens bars/lines/areas from their old values to the new
-        ones when `data` changes underneath a chart that stays mounted.
-        The two layers stack rather than compete: the frame says the view
-        reloaded, the series says the numbers moved.
+     1. The card frame fades and rises (chart-card-enter) when a chart
+        mounts: when the page opens, and again on every applied filter
+        change. The Dashboard, ABC Classification and SKU Forecast keep
+        their charts mounted, so they drive the replay through
+        useEntranceReplay() and the data-enter-cycle swap further down.
+     2. The marks draw: Recharts series through theme/motion.js's
+        chartAnim(), hand-built bars through the chart-grow-* and
+        chart-sweep classes below. Same duration, same curve, same start
+        (--chart-draw-delay after the frame), so a bar made of HTML spans
+        grows exactly like a bar Recharts draws.
 
-   The widget rises a short distance only; a large travel distance reads
+   The frame rises a short distance only; a large travel distance reads
    as sluggish on a dashboard the user is scanning for numbers. */
-@keyframes chartWidgetEnter {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 .chart-widget,
-.abc-pareto-chart-wrapper,
 .forecast-chart-container {
-  animation: var(--anim-chart-widget, chartWidgetEnter) 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
 }
 
 /* Dashboard shows several widgets at once; a small per-position delay
@@ -794,18 +791,6 @@ html, body, #root, .App {
 .charts-row .chart-widget:nth-child(n + 6),
 .dashboard-grid .chart-widget:nth-child(n + 6) { animation-delay: 0.32s; }
 
-/* Someone who has asked the OS to reduce motion gets the final state
-   immediately — no fade, no rise, no stagger. theme/motion.js disables
-   the Recharts series animation under the same condition, so the two
-   layers stay consistent. */
-@media (prefers-reduced-motion: reduce) {
-  .chart-widget,
-  .abc-pareto-chart-wrapper,
-  .forecast-chart-container {
-    animation: none;
-  }
-}
-
 /* ── Card entrance keyframe (2026-09-18) ─────────────────────────────────
    Defined here, not in Charts.css, because ABCClassification.css and
    SKUForecast.css use it too and those pages never import Charts.css —
@@ -823,6 +808,90 @@ html, body, #root, .App {
   }
 }
 
+/* ── Hand-built graphs: the same draw as Recharts (2026-11-06) ──────────
+   A class on the mark itself (a bar's fill span, a small SVG):
+
+     chart-grow-x    a horizontal bar, growing rightward from its baseline
+     chart-grow-y    a vertical bar, growing up from its baseline
+     chart-grow-mid  bars above and below a zero line, growing outward
+     chart-sweep     a ring, swept counter-clockwise from 3 o'clock (the
+                     way the ABC ring is drawn; --chart-sweep-start moves
+                     the start, as an angle clockwise from 12 o'clock)
+
+   A clip reveal, not a scale: a scale squeezes a bar's rounded ends and
+   any label inside it while it grows; a clip draws the bar exactly as it
+   will end, a little more of it each frame, which is what Recharts does
+   for a bar's height and an area's width.
+
+   Fill mode "backwards", not "both": the clip holds through the start
+   delay and lets go when the draw ends, so a label that sits outside the
+   bar (a share printed above it) is not clipped for good. Stacked
+   segments each grow from their own baseline, as Recharts' stacked bars
+   do. --chart-series (0 by default) staggers a later series of the same
+   chart, like chartAnim(i). */
+.chart-grow-x,
+.chart-grow-y,
+.chart-grow-mid,
+.chart-sweep {
+  animation-duration: var(--chart-draw-duration);
+  animation-timing-function: var(--chart-draw-ease);
+  animation-delay: calc(var(--chart-draw-delay) + min(var(--chart-series, 0), 3) * var(--chart-draw-stagger));
+  animation-fill-mode: backwards;
+}
+
+.chart-grow-x { animation-name: var(--anim-grow-x, chart-grow-x); }
+.chart-grow-y { animation-name: var(--anim-grow-y, chart-grow-y); }
+.chart-grow-mid { animation-name: var(--anim-grow-mid, chart-grow-mid); }
+.chart-sweep {
+  animation-name: var(--anim-sweep, chart-sweep);
+  -webkit-mask-image: conic-gradient(from calc(var(--chart-sweep-start, 90deg) - var(--chart-sweep-angle)), #000 var(--chart-sweep-angle), transparent 0);
+  mask-image: conic-gradient(from calc(var(--chart-sweep-start, 90deg) - var(--chart-sweep-angle)), #000 var(--chart-sweep-angle), transparent 0);
+}
+
+@keyframes chart-grow-x {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes chart-grow-y {
+  from { clip-path: inset(100% 0 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes chart-grow-mid {
+  from { clip-path: inset(50% 0 50% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+/* The ring's swept angle has to be a registered <angle> for the browser to
+   tween it; where @property is unsupported the ring appears whole partway
+   through the draw instead, and carries no mask at rest. Its resting value
+   is the full turn, so the mask hides nothing once the draw ends. */
+@property --chart-sweep-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 360deg;
+}
+
+@keyframes chart-sweep {
+  from { --chart-sweep-angle: 0deg; }
+  to { --chart-sweep-angle: 360deg; }
+}
+
+/* Someone who has asked the OS to reduce motion gets the final state
+   immediately — no fade, no rise, no draw. theme/motion.js switches the
+   Recharts series off under the same condition, so the layers agree. */
+@media (prefers-reduced-motion: reduce) {
+  .chart-widget,
+  .forecast-chart-container,
+  .chart-grow-x,
+  .chart-grow-y,
+  .chart-grow-mid,
+  .chart-sweep {
+    animation: none;
+  }
+}
+
 /* ── Entrance replay on filter change (2026-09-18) ────────────────────────
    Every entrance animation above is named through a custom property with
    the original name as its fallback, so a stylesheet that is loaded on a
@@ -834,28 +903,14 @@ html, body, #root, .App {
    that are byte-identical to the originals — the swap itself is the
    restart, and the visual result is the same build either way. Custom
    properties inherit, so the attribute on one wrapper reaches every card
-   and bar below it.
-
-   Keyframes are global to the document once any loaded stylesheet defines
-   them, but the `-b` twins live beside their originals in each file so a
-   route that never imports Charts.css can't reference a bar keyframe that
-   isn't there — the same trap that sent chart-card-enter to index.css. */
+   and bar below it. All the twins live here, beside their originals,
+   because index.css is on every route. */
 [data-enter-cycle="1"] {
-  --anim-chart-widget: chartWidgetEnter-b;
   --anim-card-enter: chart-card-enter-b;
-  --anim-bar-grow-x: bar-grow-x-b;
-  --anim-tier-bar: tier-bar-grow-b;
-}
-
-@keyframes chartWidgetEnter-b {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  --anim-grow-x: chart-grow-x-b;
+  --anim-grow-y: chart-grow-y-b;
+  --anim-grow-mid: chart-grow-mid-b;
+  --anim-sweep: chart-sweep-b;
 }
 
 @keyframes chart-card-enter-b {
@@ -867,6 +922,26 @@ html, body, #root, .App {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes chart-grow-x-b {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes chart-grow-y-b {
+  from { clip-path: inset(100% 0 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes chart-grow-mid-b {
+  from { clip-path: inset(50% 0 50% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes chart-sweep-b {
+  from { --chart-sweep-angle: 0deg; }
+  to { --chart-sweep-angle: 360deg; }
 }
 
 /* ── Shared loading vocabulary (2026-09-18) ───────────────────────────────

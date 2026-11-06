@@ -78,7 +78,7 @@ export const Sparkline = ({ points, color }) => {
   const [lastX, lastY] = xy[xy.length - 1];
   return (
     <svg
-      className="kpi-sparkline"
+      className="kpi-sparkline chart-grow-x"
       width={SPARK_W}
       height={SPARK_H}
       viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}

@@ -21,6 +21,7 @@ import {
   YAxis,
 } from 'recharts';
 import { CHART_COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { GRID_PROPS } from './ChartZoom';
 import { LineShade, SOLID_LINE, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import './ParetoCurve.css';
@@ -117,7 +118,7 @@ const ParetoCurve = ({ block, cutoffs = null, label = 'the selected range', heig
           {bCut != null && (
             <ReferenceLine y={bCut} stroke={CHART_COLORS.cumulativeCurve} strokeDasharray="2 3" label={{ value: `B ${Math.round(bCut)}%`, position: 'insideTopRight', fill: CHART_COLORS.axisLabel, fontSize: 11 }} />
           )}
-          {TIERS.map((t) => (
+          {TIERS.map((t, i) => (
             <Area
               key={t}
               {...SOLID_LINE}
@@ -126,7 +127,7 @@ const ParetoCurve = ({ block, cutoffs = null, label = 'the selected range', heig
               fill={`url(#${shadeId}-${t})`}
               activeDot={lineHoverDot}
               connectNulls={false}
-              isAnimationActive={false}
+              {...chartAnim(i)}
             />
           ))}
           {aEnd && (

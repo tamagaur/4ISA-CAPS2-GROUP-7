@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowUp } from 'lucide-react';
 import { getPareto } from '../api/analytics';
 import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { LoadingStatus, SkeletonChart } from './Skeleton';
+import BasisTag from './BasisTag';
+import SectionHeading from './ui/SectionHeading';
 import './AbcBreakdowns.css';
 
 // The card under the ABC stock check, for the analytical-mapping question
@@ -14,10 +17,11 @@ import './AbcBreakdowns.css';
 //                 cutoffs as the product-level ABC; the cutoffs are
 //                 explained in the page's "About these numbers").
 //
-// Simplified 2026-11-06: plain bars with their share on top, the top 8 plus
-// one "Others" bar, no axes, gridlines, cumulative line or cutoff lines. The
-// brands that make up the first 80% of sales (Class A of GET /pareto) are
-// the maroon bars, under one bracket with their summed share.
+// Simplified 2026-11-06: plain bars, the top 8 plus one "Others" bar, no
+// axes, gridlines or cumulative line. Horizontal rows since the second pass
+// that day (name | bar | share), so every name can be read. The brands that
+// make up the first 80% of sales (Class A of GET /pareto) are the plum bars,
+// closed by one thin line labelled with their summed share.
 
 // Emphasis, not a colour per class: the Class A bars keep the plum, the rest
 // recede into grey and "Others" into a lighter grey (palette validator,
@@ -47,9 +51,17 @@ const windowOptionsFor = (principal) => (principal === 'unilever'
   : [[1, 'Month'], [12, '12 months']]);
 const defaultMonthsFor = (principal) => (principal === 'unilever' ? 12 : 1);
 
+// Months from one 'YYYY-MM' period to another, both counted.
+const monthSpan = (start, end) => {
+  const [ys, ms] = String(start).split('-').map(Number);
+  const [ye, me] = String(end).split('-').map(Number);
+  return (ye - ys) * 12 + (me - ms) + 1;
+};
+
 // onSelectBrand(name): a brand bar's click; the page filters its product
 // table to that brand. Categories and "Others" are not clickable.
-export const ParetoCard = ({ principal, period, onSelectBrand = null }) => {
+// headingInfo: the section's "?" text (the page's own grouping note).
+export const ParetoCard = ({ principal, period, onSelectBrand = null, headingInfo = null }) => {
   const [grain, setGrain] = useState(principal === 'delmonte' ? 'category' : 'brand');
   const [months, setMonths] = useState(() => defaultMonthsFor(principal));
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
@@ -119,14 +131,31 @@ export const ParetoCard = ({ principal, period, onSelectBrand = null }) => {
     + `${r.sharePct.toFixed(1)}% of sales (${formatCompactPesos(r.revenue)}) in ${periodText} · `
     + `${(r.products || 0).toLocaleString()} ${productUnit(r.products)}`;
 
+  // The section's period tag: the window GET /pareto answered for, never the
+  // months asked ("12 months to Feb 2026", or one month). Grey with a pin:
+  // it follows this card's own window and the month picked on the page, not
+  // the date filter.
+  const windowTag = !section?.period ? null
+    : months === 1 || !section.window_start || section.window_start === section.period
+      ? formatMonth(section.period)
+      : `${monthSpan(section.window_start, section.period)} months to ${formatMonth(section.period)}`;
+
+  // A Dashboard section (2026-11-06): the question the card's subtitle used
+  // to ask, above the card, then the card with its title and controls.
   return (
-    <section className="abcb-card abcb-pareto">
+    <section className="ui-section abcb-section" aria-labelledby="abcb-pareto-title">
+    <SectionHeading
+      id="abcb-pareto-title"
+      info={headingInfo}
+      infoLabel="How brands and categories are grouped"
+      tags={windowTag ? <BasisTag label={windowTag} follows={false} /> : null}
+    >
+      Which {grainPlural} bring in <span className="title-accent">most of the sales</span>?
+    </SectionHeading>
+    <div className="abcb-card abcb-pareto card-accent-top">
       <div className="abcb-card-header">
         <div>
-          <h3 className="ui-card-title">Sales by {grain}</h3>
-          <p className="ui-card-subtitle">
-            {grain === 'brand' ? 'Which brands bring in most of the sales.' : 'Which categories bring in most of the sales.'}
-          </p>
+          <h4 className="section-card-title">Sales by <span className="title-accent">{grain}</span></h4>
         </div>
         <div className="abcb-toggles">
           <div className="abcb-toggle" role="group" aria-label="Group by">
@@ -170,8 +199,8 @@ export const ParetoCard = ({ principal, period, onSelectBrand = null }) => {
           <div className="abcb-headline-row">
             <p className="abcb-headline">
               <strong>{topCount} of {rows.length}</strong> {grainPlural} bring in{' '}
-              <strong>{(aShare * 100).toFixed(0)}%</strong> of {labelForPrincipal(section.principal)} sales
-              {periodText ? ` (${periodText})` : ''}.
+              <strong>{(aShare * 100).toFixed(0)}%</strong> of {labelForPrincipal(section.principal)} sales.
+              {/* The period is the section's tag (2026-11-06), not repeated here. */}
             </p>
             <ChartViewToggle view={view} onChange={setView} label="Pareto: chart or table" />
           </div>
@@ -190,54 +219,60 @@ export const ParetoCard = ({ principal, period, onSelectBrand = null }) => {
             />
           ) : (
             <>
-              {/* One grid: the bracket on the first row over the maroon
-                  bars, then one column per bar (its share on top, the bar,
-                  its name under it). */}
-              <div
-                className="abcb-bars"
-                style={{ gridTemplateColumns: `repeat(${chartRows.length}, minmax(0, 1fr))` }}
-                role="list"
-                aria-label={`Share of sales by ${grain}, ${periodText}`}
-              >
-                {bracketCount > 0 && (
-                  <div className="abcb-bracket" style={{ gridColumn: `1 / span ${bracketCount}` }} aria-hidden="true">
-                    <span className="abcb-bracket-label">{bracketPct.toFixed(0)}% of sales</span>
-                  </div>
-                )}
+              {/* One row per bar (2026-11-06, horizontal, so every name can
+                  be read): name | bar | share. Lengths on one linear scale
+                  from one baseline, the largest share filling the bar
+                  column. The top group's plum rows first, then a thin line
+                  with their combined share, then the grey rows and the
+                  hatched "Others", which is a group, not a brand. */}
+              <div className="abcb-rows" role="list" aria-label={`Share of sales by ${grain}, ${periodText}`}>
                 {chartRows.map((r, i) => {
                   const isTop = !r.isOthers && r.tier === 'A';
                   const color = r.isOthers ? OTHERS_COLOR : isTop ? TOP_COLOR : REST_COLOR;
                   const name = r.isOthers ? r.name : titleCase(r.name);
                   const body = (
                     <>
-                      {/* Height exactly proportional to the share (the
-                          tallest bar fills the area); the % rides on top of
-                          the bar, outside its height (2026-11-06). Whole
-                          numbers, as on the cards. */}
-                      <span className="abcb-bar-area">
-                        <span className="abcb-bar" style={{ height: `${(r.sharePct / tallest) * 100}%`, backgroundColor: color }}>
-                          <span className="abcb-bar-value">{Math.round(r.sharePct)}%</span>
-                        </span>
+                      <span className={`abcb-row-name${isTop ? ' is-top' : ''}${r.isOthers ? ' is-others' : ''}`} title={name}>{name}</span>
+                      {/* The share right after its bar, so a short bar is
+                          never far from its number; whole numbers, as on the
+                          cards. --abcb-w is the bar's length on the scale. */}
+                      <span className="abcb-row-track">
+                        <span
+                          className={`abcb-row-bar chart-grow-x${r.isOthers ? ' is-others' : ''}`}
+                          style={{ '--abcb-w': r.sharePct / tallest, '--abcb-bar': color }}
+                        />
+                        <span className="abcb-row-value">{Math.round(r.sharePct)}%</span>
                       </span>
-                      <span className={`abcb-bar-name${isTop ? ' is-top' : ''}`} title={name}>{name}</span>
                     </>
                   );
+                  // The line under the top group's last row (not after the
+                  // last row of the chart).
+                  const cutAfter = bracketCount > 0 && i === bracketCount - 1 && i < chartRows.length - 1;
                   return (
-                    <div key={r.name} className="abcb-col" role="listitem" style={{ gridRow: 2, gridColumn: i + 1 }}>
-                      {clickable(r) ? (
-                        <button
-                          type="button"
-                          className="abcb-col-btn"
-                          onClick={() => onSelectBrand(r.name)}
-                          title={barTitle(r)}
-                          aria-label={`${barTitle(r)}. Show its products below.`}
-                        >
-                          {body}
-                        </button>
-                      ) : (
-                        <div className="abcb-col-btn is-static" title={barTitle(r)} aria-label={barTitle(r)}>{body}</div>
+                    <React.Fragment key={r.name}>
+                      <div className="abcb-row" role="listitem">
+                        {clickable(r) ? (
+                          <button
+                            type="button"
+                            className="abcb-row-btn"
+                            onClick={() => onSelectBrand(r.name)}
+                            title={barTitle(r)}
+                            aria-label={`${barTitle(r)}. Show its products below.`}
+                          >
+                            {body}
+                          </button>
+                        ) : (
+                          <div className="abcb-row-btn is-static" title={barTitle(r)} aria-label={barTitle(r)}>{body}</div>
+                        )}
+                      </div>
+                      {cutAfter && (
+                        <div className="abcb-cut" aria-hidden="true">
+                          <span className="abcb-cut-label">
+                            <ArrowUp size={12} aria-hidden="true" /> {bracketPct.toFixed(0)}% of sales
+                          </span>
+                        </div>
                       )}
-                    </div>
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -248,6 +283,7 @@ export const ParetoCard = ({ principal, period, onSelectBrand = null }) => {
           )}
         </>
       )}
+    </div>
     </section>
   );
 };

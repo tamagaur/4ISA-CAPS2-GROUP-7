@@ -973,7 +973,7 @@
    theme/useEntranceReplay.js) — every filter on the page rebuilds the
    card, whichever route it takes to get there. */
 .forecast-chart-container {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2033,5 +2033,81 @@
 
   .forecast-order-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Forecast by SKU, then how close past forecasts were (2026-11-06) ──── */
+/* With no product picked the page leads with the product table, now titled
+   "Forecast by SKU" and marked by a coral edge as the page's first section,
+   then the company-wide accuracy card that moved here from the Dashboard. */
+.forecast-plan-card {
+  border-top: 3px solid var(--color-brand-primary);
+}
+
+.forecast-section-title,
+.forecast-accuracy-overview .fc-title {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text-heading);
+}
+
+/* Long product names wrap inside their own column instead of squeezing it. */
+.forecast-plan-table td:nth-child(2) {
+  min-width: 14rem;
+}
+
+.forecast-accuracy-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  scroll-margin-top: 16px;
+}
+
+/* The card's frame comes from Charts.css, which only the Dashboard loads; a
+   direct visit to this page would draw it without one. The same recipe here. */
+.forecast-accuracy-overview .chart-widget {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--card-padding);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* As on the Dashboard (Dashboard.css): a title that opens its own
+   explanation keeps the title's look, and the chart's one-line description
+   stays off the card face. */
+.forecast-accuracy-overview .info-tip.dash-tip-wrap {
+  margin-left: 0;
+  vertical-align: baseline;
+}
+
+.forecast-accuracy-overview .dash-tip-title {
+  font-weight: inherit;
+  text-transform: inherit;
+}
+
+.forecast-accuracy-overview .fc-chart-sub {
+  display: none;
+}
+
+/* The card's two switches (adjusted or not; lines, monthly miss, table) are
+   tapped on a phone: at least 28px tall here (they measured under 24). */
+.forecast-accuracy-overview .chart-view-toggle button {
+  min-height: 28px;
+}
+
+@media (max-width: 600px) {
+  .forecast-section-title,
+  .forecast-accuracy-overview .fc-title {
+    font-size: 16px;
+  }
+
+  .forecast-accuracy-overview .chart-widget {
+    padding: 16px;
   }
 }

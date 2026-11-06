@@ -25,6 +25,7 @@ import { FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, endDot, lineHoverDot,
 import { getForecastAccuracy } from '../api/dashboard';
 import { CALENDAR_HISTORY_NOTE, CALENDAR_METHOD_FALLBACK, calendarSignoffText } from '../utils/calendarAdjustment';
 import { CHART_COLORS, COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { formatCompactPesos, isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { formatUnits } from '../utils/formatNumber';
 import { formatCount, missShare } from '../utils/missTotals';
@@ -388,6 +389,9 @@ export const ForecastErrorSummaryCard = ({
   // The page's principal, for fetching the unadjusted run; the forecast's
   // calendar_adjustment (signed_off, method), for the card's note.
   principal = null, calendar = null,
+  // One line under the title: whose products the figures cover (the SKU Forecast page, where the card
+  // moved on 2026-11-06; utils/forecastAccuracyScope).
+  subtitle = null,
 }) => {
   const shadeId = useLineShadeId();
   const [view, setView] = useState('lines');
@@ -462,6 +466,7 @@ export const ForecastErrorSummaryCard = ({
         <h4 className="fc-title"><span>How <span className="title-accent">close</span> the forecasts were</span></h4>
         <span className="fc-period">{accuracy.label}</span>
       </div>
+      {subtitle && <p className="fc-subtitle">{subtitle}</p>}
       {scope && <p className="chart-placeholder-note">{scope}</p>}
 
       <p className="fc-answer">
@@ -615,7 +620,7 @@ export const ForecastErrorSummaryCard = ({
                   />
                   <Tooltip content={<ForecastVsActualTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }} />
                   <ReferenceLine y={0} stroke="var(--color-slate-400)" />
-                  <Bar dataKey="variance" name="Forecast − actual" radius={3} maxBarSize={28} isAnimationActive={false}>
+                  <Bar dataKey="variance" name="Forecast − actual" radius={3} maxBarSize={28} {...chartAnim()}>
                     {months.map((m) => <Cell key={m.period} fill={m.variance >= 0 ? 'url(#fc-miss-high)' : 'url(#fc-miss-low)'} />)}
                   </Bar>
                 </ComposedChart>
@@ -656,26 +661,26 @@ export const ForecastErrorSummaryCard = ({
                   />
                   <Tooltip content={<ForecastVsActualTooltip />} cursor={{ stroke: CHART_COLORS.gridline }} />
                   {/* The shade under actual sales, first so the miss bands read on top of it. */}
-                  <Area {...SHADE_ONLY} dataKey="actual" fill={`url(#${shadeId})`} />
+                  <Area {...SHADE_ONLY} dataKey="actual" fill={`url(#${shadeId})`} {...chartAnim(0)} />
                   {/* The miss, shaded between the lines: coral where the
                       forecast was too high, teal where too low. Recharts
                       draws an Area under every Line (its layer order). Neither
                       adds to the hover (tooltipType none): the note does. */}
                   <Area
                     type="monotone" dataKey="tooHigh" name="Forecast too high" fill={FC_TOO_HIGH} fillOpacity={0.16}
-                    stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
+                    stroke="none" dot={false} activeDot={false} {...chartAnim(0)} tooltipType="none" legendType="none"
                   />
                   <Area
                     type="monotone" dataKey="tooLow" name="Forecast too low" fill={FC_TOO_LOW} fillOpacity={0.18}
-                    stroke="none" dot={false} activeDot={false} isAnimationActive={false} tooltipType="none" legendType="none"
+                    stroke="none" dot={false} activeDot={false} {...chartAnim(0)} tooltipType="none" legendType="none"
                   />
                   <Line
                     {...SOLID_LINE} dataKey="actual" name="Actual sales" stroke={FC_ACTUAL}
-                    dot={endDot(FC_ACTUAL, lastIndex)} activeDot={lineHoverDot} isAnimationActive={false}
+                    dot={endDot(FC_ACTUAL, lastIndex)} activeDot={lineHoverDot} {...chartAnim(0)}
                   />
                   <Line
                     {...FORECAST_LINE} dataKey="forecast" name="Forecast" stroke={FC_FORECAST}
-                    dot={endDot(FC_FORECAST, lastIndex)} activeDot={lineHoverDot} isAnimationActive={false}
+                    dot={endDot(FC_FORECAST, lastIndex)} activeDot={lineHoverDot} {...chartAnim(1)}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -723,7 +728,7 @@ export const ForecastErrorSummaryCard = ({
                   role="img"
                   aria-label={`${b.label}: ${formatCompactPesos(b.value)}, ${wholePct(b.share)} of sales over ${accuracy.label}`}
                 >
-                  <span style={{ width: `${Math.min(100, b.share * 100)}%` }} />
+                  <span className="chart-grow-x" style={{ width: `${Math.min(100, b.share * 100)}%` }} />
                 </div>
               )}
             </div>

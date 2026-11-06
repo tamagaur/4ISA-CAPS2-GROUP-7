@@ -172,7 +172,7 @@
    which is the point worth marking, since the card itself is on screen
    showing "Loading demand pattern…" well before the numbers arrive. */
 .sku-pattern {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
 }
 
 @keyframes sku-pattern-item-enter {
