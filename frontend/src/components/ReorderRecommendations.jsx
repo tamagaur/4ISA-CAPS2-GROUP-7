@@ -1745,7 +1745,7 @@ const ReorderRecommendations = () => {
                     {principal === 'delmonte'
                       ? 'The order plan does not cover Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
                         + (isPreviewMode(dataMode) && meta?.demoOrderPlan?.reason
-                          ? ` The synthetic data has no order plan either: ${meta.demoOrderPlan.reason}.` : '')
+                          ? ` The sample data has no order plan either: ${meta.demoOrderPlan.reason}.` : '')
                       : meta?.cycleDate
                         ? 'No recommendations for this planning cycle.'
                         : 'No run of the order plan has produced recommendations for this scope yet.'}

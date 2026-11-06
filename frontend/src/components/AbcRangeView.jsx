@@ -3,7 +3,7 @@
 // period). Same ranking as the dashboard's ABC ring and class list
 // (GET /dashboard/pareto), so a count on the dashboard is the count here.
 //
-// Stock status, target stock and the movement (FSN) classes belong to one
+// Stock status and target stock belong to one
 // month's plan and run, so this view leaves them out and says where they
 // are, instead of pairing a range ranking with one month's stock.
 //
@@ -122,8 +122,8 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
     <p className="ui-note is-info">
       <Info size={14} aria-hidden="true" />
       <span>
-        <strong>Ranked on sales over {label}</strong>, the same ranking as the dashboard. Stock status, target stock
-        and fast/slow/non-moving belong to one month&apos;s plan, so they are on the{' '}
+        <strong>Ranked on sales over {label}</strong>, the same ranking as the dashboard. Stock status and target stock
+        belong to one month&apos;s plan, so they are on the{' '}
         <button type="button" className="abc-range-inline-link" onClick={onShowMonth}>one-month view</button>.
       </span>
     </p>
@@ -170,7 +170,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                   title={`Class ${cls.tier}`}
                   value={cls.count.toLocaleString()}
                   unit={many}
-                  contextLine={`${pct(cls.share)} of revenue · ${label}`}
+                  contextLine={`${pct(cls.share)} of sales · ${label}`}
                   note={cls.revenue != null ? `about ${formatCompactPesos(cls.revenue)}` : null}
                   accent={CLASS_ACCENT[cls.tier]}
                   icon={<span className={`abc-kpi-letter abc-kpi-letter-${cls.tier.toLowerCase()}`} aria-hidden="true">{cls.tier}</span>}
@@ -279,7 +279,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
       <div className="ui-card-intro">
             <div className="ui-card-head is-centered">
               <span className="icon-tile" aria-hidden="true"><ListOrdered size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Every product, ranked by sales value</SectionLede></div>
+              <div className="ui-card-head-text"><SectionLede className="ui-card-label">All products, from best to least selling</SectionLede></div>
             </div>
       </div>
       <div className="data-table-card ui-card-table">
@@ -289,9 +289,9 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
               <th className="table-num col-fit">#</th>
               <th className="col-text col-product">{allCategories ? 'Category' : 'Product'}</th>
               <th className="table-center col-fit">Class</th>
-              <th className="table-num">Revenue (₱)<span className="abc-th-sub">{label}</span></th>
+              <th className="table-num">Sales (₱)<span className="abc-th-sub">{label}</span></th>
               <th className="table-num">Sold (pieces)<span className="abc-th-sub">{label}</span></th>
-              <th className="table-num">Share<span className="abc-th-sub">of revenue</span></th>
+              <th className="table-num">Share<span className="abc-th-sub">of sales</span></th>
               <th className="table-num">Running total<span className="abc-th-sub">top seller down</span></th>
               <th className="table-num">Change<span className="abc-th-sub">vs {state.yoy?.prior_label || 'a year earlier'}</span></th>
               <th className="table-num col-fit">Months sold<span className="abc-th-sub">in the range</span></th>

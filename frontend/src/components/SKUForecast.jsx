@@ -1628,8 +1628,8 @@ const SKUForecast = () => {
                 from each response (isDemonstration), not from this toggle. */}
             {syntheticOn && !isDelMonte && (
               <p className="chart-placeholder-note">
-                Synthetic data is on. A product that has a synthetic series is shown with it: its forecast is a
-                labelled synthetic demonstration (a 3-month average of the months shown), not the pipeline&apos;s
+                Sample data is on. A product that has a sample-data series is shown with it: its forecast is a
+                labelled sample-data demonstration (a 3-month average of the months shown), not the pipeline&apos;s
                 forecast and not checked for accuracy. A product without one still shows its real forecast.
                 {realFloor ? `This chart starts no earlier than Jan ${FIRST_DATA_YEAR}.` : ''}
               </p>
@@ -2229,7 +2229,7 @@ const SKUForecast = () => {
                       <SyntheticTag />
                       <p className="demo-forecasts-lead">
                         {forecastResult.demonstration_note
-                          || 'Synthetic demonstration data, generated for visualisation only.'}
+                          || 'Sample demonstration data, generated for visualisation only.'}
                         {' '}The forecast below is the average of this product&apos;s last 3 months in the series shown.
                         It is not the pipeline&apos;s forecast, has not been checked for accuracy, and is never used for
                         SSM&apos;s real orders.

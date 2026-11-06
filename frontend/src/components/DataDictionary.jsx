@@ -16,7 +16,7 @@ import {
   AlertTriangle, ArrowLeft, BarChart3, BookOpen, Calculator, ChartLine, ChevronDown, ClipboardCheck, Database, Info,
   Lightbulb, Search, SearchX, Star, TrendingUp, X,
 } from 'lucide-react';
-import { NOT_CONFIRMED } from '../labels';
+import { NOT_CONFIRMED, TO_BE_CONFIRMED } from '../labels';
 import './DataDictionary.css';
 
 // In alphabetical order (Audrey, 2026-10-18), for the pills and the sections.
@@ -35,7 +35,6 @@ const sections = [
 // model names or acronyms) and `technical` (closed "Technical details": the
 // formulas, model names and figures, for reviewers). `caveat` is a short
 // badge. Page names are the sidebar's. The words follow src/labels.js.
-const TBC = 'To be confirmed';
 const entries = {
   'category-trends': [
     {
@@ -239,7 +238,7 @@ const entries = {
       technical: 'Stock value is compared with average weekly sales over the 12 months up to the stock count. The card compares the result with SSM’s 3-week rule. Stock is valued at purchase price while sales are at selling price, so the bases differ. Unilever’s figure is marked provisional because its stock and sales sources do not yet have a confirmed location match.',
     },
     {
-      term: 'Running low (Below safety stock card)',
+      term: 'Could run out (Below safety stock card)',
       definition: 'Top sellers whose counted stock is below their safety stock.',
       plain: 'Only products with both a stock count and a safety stock can be checked, so the total is not a count of every product.',
       technical: 'The plan’s safety stock against the latest stock count. A planned product missing from the count is left out here; the Reorder Recommendations page reads it as 0 on hand, so its CRITICAL count can be higher.',
@@ -319,15 +318,15 @@ const entries = {
     },
     {
       term: 'Top, middle and low sellers (Class A / B / C)',
-      caveat: TBC,
+      caveat: TO_BE_CONFIRMED,
       definition: 'The three groups of the ABC ranking: top sellers (Class A), middle sellers (Class B) and low sellers (Class C).',
       plain: 'Top sellers bring in most of the revenue, and only they get forecasts and order plans. Middle and low sellers are watched on the Dashboard only.',
       technical: 'Unilever uses Class A over the latest 12 months, plus products first sold within 12 months that are Class A over the latest three months. This basis is to be confirmed. Del Monte remains classified on the single-month basis; its ranked items are categories, not individual products.',
     },
     {
       term: 'Classification period',
-      definition: 'The month for which the ABC classes were calculated.',
-      plain: 'The month the classes were worked out for, which can differ from the Dashboard’s date range.',
+      definition: 'The month the ABC classes were calculated up to: for Unilever, the last of the 12 months ranked; for Del Monte, the one month ranked.',
+      plain: 'The month the classes were worked out up to. Unilever’s are based on the 12 months ending then, Del Monte’s on that month alone. It can differ from the Dashboard’s date range.',
       technical: 'The classification period is shown separately from the dashboard’s selected sales range because a saved ABC run may be for a different period. A product not ranked in the latest run keeps its last class, shown faded with that month.',
     },
     {

@@ -5,6 +5,7 @@ import { DEFAULT_PRINCIPAL, SELECTABLE_PRINCIPALS } from '../principals';
 import { DATA_MODES, isPreviewMode } from '../dataMode';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
+import { INCLUDE_SAMPLE_DATA } from '../labels';
 import NotificationBell from './NotificationBell';
 import './Topbar.css';
 
@@ -121,18 +122,18 @@ const Topbar = ({
             type="button"
             role="switch"
             aria-checked={preview}
-            aria-label="Include synthetic data"
+            aria-label={INCLUDE_SAMPLE_DATA}
             disabled={!preview && syntheticAvailable === false}
             className={`data-mode-toggle${preview ? ' is-on' : ''}`}
             onClick={() => onDataModeChange(preview ? DATA_MODES.REAL : DATA_MODES.PREVIEW)}
             title={preview
-              ? 'On: real data plus synthetic data, marked as synthetic on every chart. Click to go back to real data only.'
+              ? 'On: real data plus sample data, marked as sample data on every chart. Click to go back to real data only.'
               : syntheticAvailable === false
-                ? 'Synthetic data is not switched on for this server.'
-                : "Show SSM's real data plus synthetic (generated) data for the months SSM has no figures for. For viewing only, not for decisions."}
+                ? 'Sample data is not switched on for this server.'
+                : "Show SSM's real data plus sample (generated) data for the months SSM has no figures for. For viewing only, not for decisions."}
           >
             <FlaskConical size={14} aria-hidden="true" />
-            <span className="data-mode-toggle-label">Include synthetic data</span>
+            <span className="data-mode-toggle-label">{INCLUDE_SAMPLE_DATA}</span>
             <span className="data-mode-toggle-track" aria-hidden="true"><span className="data-mode-toggle-thumb" /></span>
           </button>
         )}

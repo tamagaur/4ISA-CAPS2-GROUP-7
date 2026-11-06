@@ -134,9 +134,9 @@ const fadeId = (role) => `annual-view-fade-${role}`;
 // "All 12 months are synthetic" / "3 of 12 months are synthetic".
 const syntheticText = (row) => {
   if (row.synthetic === row.months) {
-    return row.months === 1 ? 'Its one month on record is synthetic' : `All ${row.months} months are synthetic`;
+    return row.months === 1 ? 'Its one month on record is sample data' : `All ${row.months} months are sample data`;
   }
-  return `${row.synthetic} of ${row.months} months ${row.synthetic === 1 ? 'is' : 'are'} synthetic`;
+  return `${row.synthetic} of ${row.months} months ${row.synthetic === 1 ? 'is' : 'are'} sample data`;
 };
 
 // The hover, in the dashboard's shared boxes (ui/ChartParts): one box in
@@ -185,7 +185,7 @@ const AnnualTooltip = ({ active, payload, band }) => {
 // dark green on light green up, dark red on light red down. Plain 11px text
 // in a mid green read as grey beside the axis labels (Audrey, 2026-10-21).
 // Up is the dashboard's success pair (--color-success-text on
-// --color-success-bg-alt, the FSN "Fast" badge), 6.5:1; down is 5.9:1.
+// --color-success-bg-alt), 6.5:1; down is 5.9:1.
 const YOY_STYLE = {
   up: { ink: 'var(--color-success-text)', fill: 'var(--color-success-bg-alt)', arrow: '▲' },
   down: { ink: 'var(--color-danger-ink)', fill: 'var(--color-severity-critical-bg)', arrow: '▼' },
@@ -375,7 +375,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
               <span className="chart-tip-line">
                 SSM&apos;s records start {recordsStart}
                 {hidden.length > 0 ? `, so ${hidden.map((r) => r.key).join(' and ')} ${hidden.length === 1 ? 'has' : 'have'} no data and ${hidden.length === 1 ? 'shows' : 'show'} as an empty slot` : ''};
-                {' '}earlier years appear as hatched bars only with synthetic data on.
+                {' '}earlier years appear as hatched bars only with sample data on.
                 {earlier.length > 0 && <> Also on record, before these years: {earlier.map(fy).join(', ')}.</>}
               </span>
               {note && <span className="chart-tip-line">{note}.</span>}
@@ -410,12 +410,12 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
               <span><i className="annual-view-legend-togo" />To go to the {band.linePct}% target</span>
             )}
             {synthetic.length > 0 && (
-              <span><i className="annual-view-legend-hatch" />Includes synthetic months</span>
+              <span><i className="annual-view-legend-hatch" />Includes sample-data months</span>
             )}
           </div>
           {synthetic.length > 0 && (
             <p className="annual-view-synthetic">
-              Synthetic months, not SSM&apos;s own figures:{' '}
+              Sample-data months, not SSM&apos;s own figures:{' '}
               {synthetic.map((r) => `${r.key} ${r.synthetic} of ${r.months}`).join(' · ')}
             </p>
           )}

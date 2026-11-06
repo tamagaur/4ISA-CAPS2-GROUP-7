@@ -29,15 +29,15 @@ const monthLabel = (period) => {
 
 const COPY = {
   unilever: {
-    title: 'Synthetic order plan: Unilever SKUs',
-    lead: "Demonstration only. This plan uses the synthetic forecast with Unilever's real stock count and cost. "
+    title: 'Sample-data order plan: Unilever SKUs',
+    lead: "Demonstration only. This plan uses the sample-data forecast with Unilever's real stock count and cost. "
       + 'It is separate from the real recommendations above, cannot be accepted or dismissed, and is never used for SSM’s orders.',
     keyHeader: 'SKU',
     key: (it) => it.sku_id,
   },
   delmonte: {
-    title: 'Synthetic order plan: Del Monte categories',
-    lead: 'Demonstration only. Del Monte has no real forecast, so this plan rests on a synthetic forecast and synthetic '
+    title: 'Sample-data order plan: Del Monte categories',
+    lead: 'Demonstration only. Del Monte has no real forecast, so this plan rests on a sample-data forecast and sample-data '
       + 'stock, two generated layers. It cannot be accepted, dismissed or ordered, and is never used for SSM’s orders.',
     keyHeader: 'Category',
     key: (it) => titleCase(it.category),
@@ -68,7 +68,7 @@ export const DemoOrderPlanCard = ({ plan, kind, deadStock = null, id }) => {
 
       {!plan.available ? (
         <p className="demo-plan-empty">
-          <FlaskConical size={13} aria-hidden="true" /> No synthetic order plan has been generated yet
+          <FlaskConical size={13} aria-hidden="true" /> No sample-data order plan has been generated yet
           {plan.reason ? `: ${plan.reason}` : '.'}
         </p>
       ) : (
@@ -76,19 +76,19 @@ export const DemoOrderPlanCard = ({ plan, kind, deadStock = null, id }) => {
           <p className="demo-plan-summary">
             {period ? `${monthLabel(period)} · ` : ''}
             {items.length} {kind === 'delmonte' ? 'categories' : 'SKUs'} planned, {ordering} with an order,{' '}
-            <strong>{qty(totalOrder)}</strong> {kind === 'delmonte' ? 'units' : 'pieces'} in total (synthetic).
+            <strong>{qty(totalOrder)}</strong> {kind === 'delmonte' ? 'units' : 'pieces'} in total (sample data).
           </p>
           <div className="demo-plan-table-wrap">
             <table className="demo-plan-table">
-              <caption className="visually-hidden">{copy.title}: synthetic, for demonstration only</caption>
+              <caption className="visually-hidden">{copy.title}: sample data, for demonstration only</caption>
               <thead>
                 <tr>
                   <th scope="col">{copy.keyHeader}</th>
-                  <th scope="col" className="num">Forecast (synthetic)</th>
-                  <th scope="col" className="num">{kind === 'delmonte' ? 'Stock (synthetic)' : 'Stock on hand (real count)'}</th>
+                  <th scope="col" className="num">Forecast (sample data)</th>
+                  <th scope="col" className="num">{kind === 'delmonte' ? 'Stock (sample data)' : 'Stock on hand (real count)'}</th>
                   <th scope="col" className="num">Safety stock</th>
                   <th scope="col" className="num">Target stock</th>
-                  <th scope="col" className="num">Synthetic order</th>
+                  <th scope="col" className="num">Sample-data order</th>
                 </tr>
               </thead>
               <tbody>
@@ -113,7 +113,7 @@ export const DemoOrderPlanCard = ({ plan, kind, deadStock = null, id }) => {
           {kind === 'delmonte' && <p className="demo-plan-note">{DM_UNIT_NOTE}</p>}
           {plan.demonstration_note && (
             <details className="demo-plan-details">
-              <summary>How this synthetic plan was made</summary>
+              <summary>How this sample-data plan was made</summary>
               <p>{plan.demonstration_note}</p>
             </details>
           )}
@@ -122,7 +122,7 @@ export const DemoOrderPlanCard = ({ plan, kind, deadStock = null, id }) => {
 
       {kind === 'delmonte' && deadStock && (
         <div className="demo-plan-dead">
-          <h5>Dead stock (synthetic)</h5>
+          <h5>Dead stock (sample data)</h5>
           {deadStock.available ? (
             <>
               <p>
