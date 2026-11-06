@@ -1,0 +1,167 @@
+{
+  "passed": true,
+  "code_hash": "c9f017302008bf68a90219747d73a22c7e6fa81185a3978db08b64d71bef7559",
+  "target": "127.0.0.1/ssm_rehearsal",
+  "backup": "full_backup_20261104T175951Z",
+  "when": "2026-11-05T20:00:09.190889+00:00",
+  "plan_start": [
+    109,
+    435988
+  ],
+  "steps": {
+    "load_first": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 135,
+      "tables_changed": 15,
+      "loaded": [
+        "2026-03"
+      ],
+      "plan": {
+        "rows": 121,
+        "pieces": 920486
+      },
+      "newest_cycle": "2026-04"
+    },
+    "load_second": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 128,
+      "tables_changed": 14,
+      "loaded": [
+        "2026-03",
+        "2026-04"
+      ],
+      "plan": {
+        "rows": 133,
+        "pieces": 1021568
+      },
+      "newest_cycle": "2026-05"
+    },
+    "rollback_second": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 36,
+      "differences": [],
+      "plan": {
+        "rows": 121,
+        "pieces": 920486
+      },
+      "newest_cycle": "2026-04",
+      "loaded_after": [
+        "2026-03"
+      ]
+    },
+    "rollback_first": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 38,
+      "differences": [],
+      "plan": {
+        "rows": 109,
+        "pieces": 435988
+      },
+      "newest_cycle": "2026-03",
+      "loaded_after": []
+    },
+    "load_first_again": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 137,
+      "tables_changed": 15,
+      "loaded": [
+        "2026-03"
+      ],
+      "plan": {
+        "rows": 121,
+        "pieces": 920486
+      },
+      "newest_cycle": "2026-04"
+    },
+    "load_second_again": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 204,
+      "tables_changed": 14,
+      "loaded": [
+        "2026-03",
+        "2026-04"
+      ],
+      "plan": {
+        "rows": 133,
+        "pieces": 1021568
+      },
+      "newest_cycle": "2026-05"
+    },
+    "rollback_first_with_second_loaded": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 38,
+      "differences": [],
+      "plan": {
+        "rows": 109,
+        "pieces": 435988
+      },
+      "newest_cycle": "2026-03",
+      "loaded_after": []
+    },
+    "load_first_third": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 141,
+      "tables_changed": 15,
+      "loaded": [
+        "2026-03"
+      ],
+      "plan": {
+        "rows": 121,
+        "pieces": 920486
+      },
+      "newest_cycle": "2026-04"
+    },
+    "load_second_third": {
+      "exact": true,
+      "exit": 0,
+      "seconds": 202,
+      "tables_changed": 14,
+      "loaded": [
+        "2026-03",
+        "2026-04"
+      ],
+      "plan": {
+        "rows": 133,
+        "pieces": 1021568
+      },
+      "newest_cycle": "2026-05"
+    },
+    "third_month_refused_before_anything_changes": {
+      "exact": true,
+      "load_exit": 1,
+      "differences": [],
+      "loaded_after": [
+        "2026-03",
+        "2026-04"
+      ],
+      "said": "the 2026-06 plan opens from the stock count of 2026-05 (or, projected from it, of 2026-04) and neither is in the system, so 2026-05 cannot be planned. Load that month's stock count first",
+      "seconds": 0
+    },
+    "crash_mid_run_then_rollback": {
+      "exact": true,
+      "reached_abc": true,
+      "state_after_crash": [
+        [
+          "2026-03",
+          "taken"
+        ]
+      ],
+      "next_month_said": "2026-03 was started and has not finished: run it again with its own file, or roll it back, before another month",
+      "rollback_exit": 0,
+      "differences": [],
+      "plan": {
+        "rows": 109,
+        "pieces": 435988
+      },
+      "seconds": 27
+    }
+  }
+}

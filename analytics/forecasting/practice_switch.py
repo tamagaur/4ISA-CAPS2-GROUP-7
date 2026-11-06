@@ -58,16 +58,25 @@ class _LabelledOutput(io.TextIOBase):
 def labelled_rows_permitted(cur, demand) -> bool:
     """The value for the forecast's allow_placeholder. False without asking the database when `demand` holds no labelled
     row, which is every run on a database whose _Real view excludes them, so a real run is untouched. False too when the
-    database is not the practice copy: the guard then refuses the rows as it always has."""
+    database is neither the practice copy nor one with a loaded month's window in force: the guard then refuses the rows as it always has."""
     if "is_demo" not in demand.columns or not demand["is_demo"].eq(True).any():
         return False
-    if not is_practice_database(cur):
-        return False
+    practice = is_practice_database(cur)
+    if not practice:
+        # The other witness: the loaded-month window in force in THIS database (analytics/demo_session.py).
+        # Asked of the connection's own database, never of the environment. Every labelled row must carry the session's tag.
+        from analytics import demo_session
+        if not demo_session.permits_labelled_rows(cur):
+            return False
+        cur.execute("SELECT COUNT(*) FROM Unilever_SKU_Demand_Fact_Real WHERE is_demo AND _src_file IS DISTINCT FROM %s", (demo_session.TAG,))
+        if cur.fetchone()[0]:
+            return False
     cur.execute(LABELLED_ROWS_SQL)
     count = cur.fetchone()[0]
     host, port, database = PRACTICE_DATABASE
-    logger.warning(f"PRACTICE SWITCH ON: the forecast is accepting {count} labelled generated sales rows (is_demo = true) "
-                   f"on database {database} at {host}:{port}. This run is practice, not a result.")
+    where = (f"database {database} at {host}:{port}" if practice else "a database with a loaded month's window in force")
+    logger.warning(f"LABELLED SALES ON: the forecast is accepting {count} labelled generated sales rows (is_demo = true) "
+                   f"on {where}. This run rests on generated sales; its output is not a result.")
     if not isinstance(sys.stdout, _LabelledOutput):
         sys.stdout = _LabelledOutput(sys.stdout)
     return True

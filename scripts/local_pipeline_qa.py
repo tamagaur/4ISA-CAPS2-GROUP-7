@@ -10,7 +10,7 @@ The month is March 2026: its per-SKU sales do not exist in the real sources, so 
 product's own February (the same rule as scripts/rollover_scratch_test.py), tagged _src_file = 'qa_synthetic_march' and
 is_demo = true.
 
-`synth` runs only on ssm_practice, a copy of the local database that no page reads (python -m scripts.local_pg practice), so
+`synth` runs only on ssm_practice, a copy of the local database that only scripts/local_app.py serves, labelled (python -m scripts.local_pg practice), so
 the database behind the pages never holds one. Rows flagged is_demo never pass a _Real view except there: that copy's demand
 view admits this tag and no other (local_pg.PRACTICE_VIEW_SQL), and the forecast accepts them only because
 analytics/forecasting/practice_switch recognises that connection. Everywhere else scripts/run_month.py and the forecast refuse them.

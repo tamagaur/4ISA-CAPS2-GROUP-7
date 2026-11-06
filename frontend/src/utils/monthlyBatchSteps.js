@@ -230,5 +230,32 @@ export function formatWhen(iso) {
   return Number.isNaN(when.getTime()) ? null : when.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+// '2026-03' -> 'March 2026'. Anything that is not a month stays as it came.
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export function monthName(month) {
+  const found = /^(\d{4})-(0[1-9]|1[0-2])/.exec(month || '');
+  return found ? `${MONTH_NAMES[Number(found[2]) - 1]} ${found[1]}` : (month || '');
+}
+
+// How long a finished job took, from the backend's own start and end times. Null if either is missing.
+export function durationText(startedAt, finishedAt) {
+  const start = Date.parse(startedAt ?? '');
+  const end = Date.parse(finishedAt ?? '');
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null;
+  const seconds = Math.round((end - start) / 1000);
+  const minutes = Math.floor(seconds / 60);
+  return minutes > 0 ? `${minutes} min ${String(seconds % 60).padStart(2, '0')} s` : `${seconds} s`;
+}
+
+// A loaded month's state, in words for a reader.
+export function loadedStateWord(state) {
+  return { loaded: 'Loaded', taken: 'Started, not finished', failed: 'Did not finish' }[state] ?? 'Unreadable';
+}
+
+// What a rollback of `month` would also take with it: every month loaded after it.
+export function removedWith(loaded, month) {
+  return (loaded || []).map((entry) => entry.month).filter((m) => m > month);
+}
+
 // What each stage of a run is doing, in words. No percentage: nothing reports one.
-export const STEP_STATE = { running: 'Running', done: 'Done', skipped: 'Already done', stopped: 'Stopped' };
+export const STEP_STATE ={ running: 'Running', done: 'Done', skipped: 'Already done', stopped: 'Stopped' };

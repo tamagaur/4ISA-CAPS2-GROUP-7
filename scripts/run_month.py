@@ -51,6 +51,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from analytics import demo_session  # noqa: E402
 from analytics.params import abc_method  # noqa: E402
 from scripts import close_cycle  # noqa: E402
 from scripts.close_cycle import PRINCIPAL, cycle_params, parse_cycle, transaction  # noqa: E402
@@ -130,6 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--approved-by", metavar="NAME")
     ap.add_argument("--expect-month", type=parse_cycle, metavar="YYYY-MM", help="must equal --month")
     ap.add_argument("--target-public", action="store_true", help="explicit-only: allow a write to the live database")
+    ap.add_argument("--practice-auto-sign", action="store_true", help="passed to the load step, which refuses it off the practice copy (scripts/practice_signed_load.py)")
     ap.add_argument("--check-files", action="store_true", help="the loader's dry run on these --slice and --file inputs: nothing is loaded")
     ap.add_argument("--check-files-report", metavar="PATH", help="with --check-files: write what it found to this JSON file")
     return ap
@@ -197,7 +199,7 @@ def preflight_items(month: datetime.date, facts: dict, checks: dict, slices: lis
     items = []
     if facts["latest_sales_month"] and facts["latest_sales_month"] > period:
         items.append(("not_latest_month", f"sales for {facts['latest_sales_month']} are already loaded: {period} is not the latest month"))
-    if live and facts["synthetic_rows"]:
+    if live and facts["synthetic_rows"] and not facts.get("demo_session"):
         items.append(("synthetic_on_live", f"{facts['synthetic_rows']} synthetic sales rows are in {period} on the live database"))
     if not checks["sales_loaded"] and not slices:
         if facts["synthetic_rows"]:
@@ -228,6 +230,8 @@ def plan_steps(args, py: str = sys.executable) -> list[Step]:
             load += ["--slice", spec]
         for path in args.file:
             load += ["--file", path]
+        if getattr(args, "practice_auto_sign", False):
+            load.append("--practice-auto-sign")
         steps.append(Step("load", load, "sales_loaded", always=True))
     forecast = [py, "scripts/run_baseline_forecast.py", "--write"] + (["--calendar-factor"] if args.calendar_factor == "on" else [])
     steps += [Step("abc", [py, "-m", "analytics.classification.orchestrate_abc", "--period", period, "--schema", "public",
@@ -353,7 +357,8 @@ def _facts(params: dict) -> dict:
         cur.execute(GENERATED_IN_SCORE_SQL, params)
         generated = max(int(cur.fetchone()[0]), synthetic)
         return {"latest_sales_month": latest, "synthetic_rows": synthetic, "generated_rows": generated,
-                "decisions": read_decisions(cur, params)}
+                "decisions": read_decisions(cur, params),
+                "demo_session": demo_session.permits_labelled_rows(cur)}   # asked of the database: an open session with its window in force
     return _read(read)
 
 

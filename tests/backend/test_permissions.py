@@ -227,7 +227,7 @@ def test_the_presets_are_the_proposals_design_table():
     staff = {"dashboard.view", "abc.view", "forecast.view", "category_trends.view", "sku.view", "lp.view", "lp.propose"}
     assert set(PRESETS["staff"]) == staff
     assert set(PRESETS) == {"staff"}  # admin has everything; there is no Manager
-    assert len(ALL_KEYS) == len(set(ALL_KEYS)) == 12  # lp.propose, 2026-10-28
+    assert len(ALL_KEYS) == len(set(ALL_KEYS)) == 13  # lp.propose, 2026-10-28; data.rollback, 2026-11-06
 
 
 # ═══ THE FRONTEND'S COPY MATCHES ═════════════════════════════════════════════
@@ -336,7 +336,7 @@ def _routes():
 # /dashboard/error-decomposition/{product,aggregate,concentration} reads (2026-10-23); 72 when the two branches met (2026-10-24), this branch adding
 # GET /dashboard/stock-detail (the lists behind the stock cards, 2026-10-19) and POST /auth/change-password
 # (My profile's Change password, 2026-10-20). Change it when a route is added or removed.
-ROUTE_COUNT = 84  # 2026-10-28: +8, backend/routers/reorder_requests.py; +3, backend/routers/notifications.py; 2026-11-02: +1 GET /inventory/receipt-signals (Main-BE) when Main-FE was merged
+ROUTE_COUNT = 95  # 2026-11-06: +11, backend/routers/monthly_batch.py is always mounted (Data Management is the one way in); was 84; 2026-10-28: +8, backend/routers/reorder_requests.py; +3, backend/routers/notifications.py; 2026-11-02: +1 GET /inventory/receipt-signals (Main-BE) when Main-FE was merged
 
 
 def test_the_walk_finds_every_route():
@@ -389,7 +389,12 @@ NEW_ROUTES = {
               ("POST", "/recommendations/dismissal-requests/{request_key}/reject"),
               ("GET", "/recommendations/stock-observations"),
               ("POST", "/recommendations/stock-observations/{observation_key}/verify"),
-              ("GET", "/recommendations/open-requests"), ("GET", "/recommendations/{recommendation_key}/history")}
+              ("GET", "/recommendations/open-requests"), ("GET", "/recommendations/{recommendation_key}/history"),
+              # 2026-11-06, backend/routers/monthly_batch.py, always mounted now: upload.run (off for staff) on every route but the rollback,
+              # which is data.rollback (admin only). A staff preset opens none of them.
+              ("GET", "/batch/status"), ("GET", "/batch/checklist"), ("GET", "/batch/job"), ("GET", "/batch/feedback"), ("POST", "/batch/files"),
+              ("POST", "/batch/validate"), ("POST", "/batch/signoff"), ("POST", "/batch/practice-month"), ("POST", "/batch/run"),
+              ("POST", "/batch/rollback"), ("POST", "/batch/close")}
 
 
 def test_the_staff_preset_opens_exactly_what_staff_could_open_before():
@@ -590,7 +595,7 @@ def test_an_unknown_permission_is_422_and_nothing_is_written():
 def test_staff_never_hold_an_admin_only_permission():
     """lp.decide is admin-only (Yuan, 2026-10-28): staff propose (lp.propose), an admin decides. Saving it for a
     staff account is refused with nothing written, and a stored grant (from before the rule) counts for nothing."""
-    assert permissions.ADMIN_ONLY_KEYS == {"lp.decide"}
+    assert permissions.ADMIN_ONLY_KEYS == {"lp.decide", "data.rollback"}      # data.rollback, 2026-11-06: rolling a loaded month back
     store = FakeStore(team())
     with client_for(store) as c:
         resp = c.put("/admin/users/2/permissions", json={"role": "staff", "overrides": {"lp.decide": True}},
@@ -602,6 +607,7 @@ def test_staff_never_hold_an_admin_only_permission():
     assert "lp.propose" in permissions.effective("staff", {})
     assert permissions.normalize("staff", {"lp.decide": True}) == {}
     assert "lp.decide" in permissions.effective("admin", {})
+    assert "data.rollback" not in permissions.effective("staff", {"data.rollback": True}) and "data.rollback" in permissions.effective("admin", {})
 
 
 @pytest.mark.real_permission_store
@@ -985,7 +991,7 @@ PAGE_ENDPOINTS = {
     "lp.view": [("GET", "/recommendations"), ("GET", "/segment?sku=12345678"),
                 ("GET", "/decomposition?sku=12345678"), ("GET", "/sku")],  # + the review drawer's panel, useBrandLookup
     "audit_log.view": [("GET", "/audit-log"), ("GET", "/audit-log/users")],
-    "upload.run": [],  # Data Management is a mock page on the deployed API: /batch is mounted only on the local database
+    "upload.run": [],  # Data Management: /batch/status runs read-only child processes against the database, so the smoke map leaves it out (tests/backend/test_monthly_batch.py covers it)
     "users.manage": [("GET", "/users"), ("GET", "/admin/permissions/catalog"), ("GET", "/admin/users/3/permissions")],
 }
 # Buttons: each needs its own permission, whatever page it sits on.
@@ -993,6 +999,8 @@ ACTIONS = {
     "sku.edit": [("POST", "/sku", {"sku_code": "X-1", "product_name": "X", "principal": "delmonte"}),
                  ("PATCH", "/sku/1", {"status": "NOT-A-STATUS"})],
     "lp.decide": [("PATCH", "/recommendations/1", {"status": "maybe"})],
+    # 2026-11-06: rolling a loaded month back is an admin's alone. confirm is false, so an admin's call stops at "must be confirmed" and starts nothing.
+    "data.rollback": [("POST", "/batch/rollback", {"month": "2026-03", "confirm": False})],
     # 2026-10-28: asking for a dismissal is lp.propose's alone (lp.decide dismisses directly instead).
     "lp.propose": [("POST", "/recommendations/1/dismissal-request", {"reason": ""})],
     "users.manage": [("POST", "/auth/register", {"email": "n@ssmcapstone.com", "full_name": "N", "role": "staff"}),

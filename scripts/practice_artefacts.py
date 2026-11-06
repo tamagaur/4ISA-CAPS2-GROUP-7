@@ -13,8 +13,11 @@ docs say (generated sales, the plan's decisions, plan, close), fingerprints agai
     file    PRACTICE_MARKER near its start
     row     practice_run filled (scripts/local_pg PRACTICE_ROW_LABEL_SQL), for every row ssm_local does not hold identically.
             A deleted row leaves nothing to mark, so deletions are counted and printed.
-    route   every GET route of the real app, on ssm_practice: 409 practice_copy_not_served, or a /batch answer with practice_note,
-            or /health
+    route   every GET route of the real app, on ssm_practice, called with a real product where it takes one: an answer carrying the
+            X-Practice-Copy label AND the label in its body (backend/practice_copy.py), naming the generated month, with no object
+            dated that month reading data_kind real or estimated false, and no accuracy figure on or after that month; a /batch answer
+            with practice_note too; a refusal (it holds no figure); or /health. A 422 fails: it means this check could not read the route,
+            not that the route is clean.
 
 Exit 1 names what fails. Writes to ssm_practice and to the files the run itself writes, and nothing else: never live
 (local_pg.local_url refuses any other server). Not part of scripts/check.sh: it needs the local Postgres and takes minutes.
@@ -30,6 +33,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
+from backend.practice_copy import LABEL_HEADER, MONTH_KEYS  # noqa: E402
 from scripts import local_pg  # noqa: E402
 from scripts.report_target import PRACTICE_MARKER, is_practice_target  # noqa: E402
 
@@ -39,6 +43,10 @@ MARKER_WINDOW = 400                 # bytes: a reader sees it first
 MONTH = "2026-03"
 OUR_SCHEMAS = "('public', 'mart', 'demo', 'app')"
 ROW_HASH = "md5((to_jsonb(x) - 'practice_run')::text)"
+ROUTE_QUERY = {"/batch/feedback": "?cycle={month}", "/dashboard/product-sales": "?principal=unilever", "/decomposition": "?sku={sku}",
+               "/segment": "?sku={sku}", "/forecast/{sku_id}": "?principal=unilever", "/demo/series": "?principal=unilever&key={sku}",
+               "/demo/index": "?principal=unilever"}
+EXTRA_ACCURACY_URLS = ("/dashboard/accuracy?level=product", "/dashboard/accuracy?level=category")     # the same path, other answers
 
 
 def file_state() -> dict[str, tuple[int, int]]:
@@ -110,17 +118,86 @@ def row_report(table: str) -> dict:
             "deleted": len(started - {h for h, _ in rows})}
 
 
-def route_verdict(path: str, status, body) -> str | None:
+def reads_as_real(node, month: str, delmonte: bool = False) -> bool:
+    """An object dated the generated month that still calls itself real. Written apart from the labeller, which it checks."""
+    if isinstance(node, list):
+        return any(reads_as_real(item, month, delmonte) for item in node)
+    if not isinstance(node, dict):
+        return False
+    if isinstance(node.get("principal"), str):
+        delmonte = node["principal"].lower().replace(" ", "") == "delmonte"
+    dated = any(isinstance(node.get(k), str) and node[k].startswith(month) for k in MONTH_KEYS)
+    if dated and not delmonte and (node.get("data_kind") == "real" or node.get("estimated") is False):
+        return True
+    return any(reads_as_real(value, month, delmonte) for value in node.values())
+
+
+def accuracy_figure(node, month: str = MONTH, delmonte: bool = False, stands: bool = False) -> str | None:
+    """The name of an accuracy figure that could rest on the generated month, or None. Written apart from the withholding, which it checks,
+    and with a longer list of names: a range counts by its end, and a date on or after the month clears nothing."""
+    if isinstance(node, list):
+        for item in node:
+            found = accuracy_figure(item, month, delmonte, stands)
+            if found:
+                return found
+        return None
+    if isinstance(node, str):
+        return "MASE in a sentence" if re.search(r"MASE \d+\.\d", node) else None
+    if not isinstance(node, dict):
+        return None
+    if isinstance(node.get("principal"), str):
+        delmonte = node["principal"].lower().replace(" ", "") == "delmonte"
+    dates = [node[k][:7] for k in (*MONTH_KEYS, "end_period", "period_end") if isinstance(node.get(k), str) and re.match(r"20\d\d-\d\d", node[k])]
+    if dates:
+        stands = all(d < month for d in dates)
+    if not (delmonte or stands):
+        for key in ("mase", "mape", "wape", "wape_pieces", "total_wape_pesos", "median_product_wape", "abs_miss_pieces", "abs_miss_pesos", "net_miss_pieces",
+                    "error_pieces", "error_pesos", "confidence_lower", "confidence_upper", "evaluated_count", "unreliable_count", "beyond_pesos",
+                    "holdout_metrics_served", "holdout_metrics_all_methods", "miss_pieces"):
+            if node.get(key) not in (None, 0, 0.0, {}, []):
+                return key
+        for key in ("company_total", "typical_product_weighted"):
+            if isinstance(node.get(key), dict) and node[key].get("value") is not None:
+                return key
+    if isinstance(node.get("log"), str) and re.search(r"(?i)^(?!.*withheld).*(mase|mape|wape|rmse).*\d", node["log"], re.M):
+        return "a forecast error figure in the job log"
+    for value in node.values():
+        found = accuracy_figure(value, month, delmonte, stands)
+        if found:
+            return found
+    return None
+
+
+def body_label_problem(body, month: str = MONTH) -> str | None:
+    """None when the body alone says what it is."""
+    labels = [body.get("practice_copy")] if isinstance(body, dict) else [x.get("practice_copy") if isinstance(x, dict) else None for x in body] if isinstance(body, list) else [None]
+    if not all(isinstance(x, dict) and x.get("not_a_result") is True for x in labels):
+        return "no practice_copy label in the body"
+    if any(month not in (x.get("generated_months") or []) for x in labels):
+        return f"the body label does not name {month}"
+    if reads_as_real(body, month):
+        return f"an object dated {month} reads as real"
+    figure = accuracy_figure(body, month)
+    return f"an accuracy figure on or after {month} is presented: {figure}" if figure else None
+
+
+def route_verdict(path: str, status, body, headers=None) -> str | None:
     """None when this answer says what it is, else why not."""
-    if path == "/health":
+    if status == 422:
+        return "422: this check could not read the route"
+    if path == "/health" or status != 200:   # a refusal holds no figure
         return None
-    if path.startswith("/batch"):
-        if status != 200:   # a request this check cannot fill in holds no figure
-            return None
-        return None if isinstance(body, dict) and body.get("practice_note") else "a /batch answer with no practice_note"
-    if status == 409 and isinstance(body, dict) and body.get("code") == "practice_copy_not_served":
-        return None
-    return f"answered {status} on the practice copy"
+    if path.startswith("/batch") and not (isinstance(body, dict) and body.get("practice_note")):
+        return "a /batch answer with no practice_note"
+    if not (headers or {}).get(LABEL_HEADER):
+        return f"answered {status} on the practice copy with no {LABEL_HEADER} label"
+    return body_label_problem(body)
+
+
+def route_url(path: str, sku: str, user_id: int) -> str:
+    """The route with real identifiers, so that it answers with its figures rather than a 404 or a 422."""
+    url = path.replace("{sku_id}", sku).replace("{sku_code}", sku).replace("{user_id}", str(user_id))
+    return re.sub(r"\{\w+(:[^}]*)?\}", "1", url) + ROUTE_QUERY.get(path, "").format(sku=sku, month=MONTH)
 
 
 def api_check() -> int:
@@ -140,19 +217,33 @@ def api_check() -> int:
     for route in app.routes:
         contexts = route.effective_route_contexts() if hasattr(route, "effective_route_contexts") else [route] if isinstance(route, APIRoute) else []
         paths |= {c.path for c in contexts if "GET" in c.methods and not c.path.startswith(("/docs", "/redoc", "/openapi"))}
-    failures = []
+    conn = _connect(True)
+    cur = conn.cursor()
+    cur.execute("SELECT pd.sku_code FROM lp_recommendation l JOIN product_dimension pd USING (product_key) WHERE l.planning_cycle_date = '2026-04-01' ORDER BY 1 LIMIT 1")
+    sku = cur.fetchone()[0]
+    cur.execute("SELECT MIN(user_id) FROM users")
+    user_id = cur.fetchone()[0]
+    conn.close()
+    failures, answered = [], 0
     for path in sorted(paths):
-        url = re.sub(r"\{\w+(:[^}]*)?\}", "1", path) + (f"?cycle={MONTH}" if path == "/batch/feedback" else "")
+        url = route_url(path, sku, user_id)
         res = client.get(url, headers={"Authorization": f"Bearer {token}"})
         try:
             body = res.json()
         except ValueError:
             body = None
-        why = route_verdict(path, res.status_code, body)
+        why = route_verdict(path, res.status_code, body, res.headers)
+        answered += res.status_code == 200
         print(f"  {path}: {res.status_code}{'  ' + why if why else ''}")
         if why:
             failures.append(path)
-    print(f"routes: {len(paths)} GET, {len(failures)} unlabelled")
+    for url in EXTRA_ACCURACY_URLS:
+        res = client.get(url, headers={"Authorization": f"Bearer {token}"})
+        why = route_verdict(url.split("?")[0], res.status_code, res.json(), res.headers)
+        print(f"  {url}: {res.status_code}{'  ' + why if why else ''}")
+        if why:
+            failures.append(url)
+    print(f"routes: {len(paths)} GET, {answered} answered with figures and were read, {len(paths) - answered} refused, {len(failures)} failed")
     return 1 if failures else 0
 
 

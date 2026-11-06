@@ -11,6 +11,7 @@
 import { invalidateCache } from './api/cache';
 import { MOCK_PERMISSIONS, mockDeniedPermission } from './api/mocks/permissionsMock';
 import { dataModeHeaders } from './dataMode';
+import { GENERATED_HEADER, PRACTICE_HEADER, clearGeneratedNote, notePracticeCopy } from './practiceCopy';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'dsd_access_token';
@@ -379,6 +380,10 @@ export async function apiFetch(path, options = {}) {
       ...options.headers,
     }),
   });
+  notePracticeCopy(res.headers?.get?.(PRACTICE_HEADER));
+  const generatedNote = res.headers?.get?.(GENERATED_HEADER);
+  notePracticeCopy(generatedNote, 'generated');
+  if (!generatedNote && res.ok && /json/.test(res.headers?.get?.('content-type') || '')) clearGeneratedNote();
   if (res.status === 401) {
     clearSession();
     redirectToLogin();

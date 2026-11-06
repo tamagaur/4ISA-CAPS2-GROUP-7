@@ -6,18 +6,29 @@ import {
 import SectionLede from './ui/SectionLede';
 import EmptyState from './ui/EmptyState';
 import MonthlyChecklist from './MonthlyChecklist';
-import { ApproveFileDialog, PendingDecisionsDialog, RunConfirmDialog } from './MonthlyBatchDialogs';
+import LoadedMonths from './LoadedMonths';
+import { ApproveFileDialog, PendingDecisionsDialog, RollbackDialog, RunConfirmDialog } from './MonthlyBatchDialogs';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
+import { invalidateCache } from '../api/cache';
 import {
-  closeBatch, generatePracticeMonth, getBatchChecklist, getBatchFeedback, getBatchJob, getBatchStatus, runBatch, signoffBatch, uploadBatchFile, validateBatch,
+  closeBatch, generatePracticeMonth, getBatchChecklist, getBatchFeedback, getBatchJob, getBatchStatus, rollbackMonth, runBatch, signoffBatch, uploadBatchFile, validateBatch,
 } from '../api/monthlyBatch';
 import {
-  batchStage, canRun, decisionsBlocked, elapsedText, fileRefusals, formatBytes, formatWhen, planChange, processingFacts, reorderPath, runHint, runningStage, runTracker, STEP_STATE, WORKFLOW, workflowStages,
+  batchStage, canRun, decisionsBlocked, durationText, elapsedText, fileRefusals, formatBytes, formatWhen, monthName, planChange, processingFacts, removedWith, reorderPath, runHint, runningStage, runTracker, STEP_STATE, WORKFLOW, workflowStages,
 } from '../utils/monthlyBatchSteps';
+
+// Told to the layout when a job that changed the data has ended, so the date range, the caches and the figures on every page are read again.
+export const DATA_CHANGED_EVENT = 'dsd:data-changed';
 import './MonthlyBatchPanel.css';
 
 const POLL_MS = 2000;
+// One moment, two months, named so the panel and the Reorder page agree: the batch is still closing this month while the Reorder page already
+// shows the plan the Run made (backend/lp_cycle.current_cycle moves at Run; this panel's month moves at Close).
+const planNote = (label, reorderPage, closed) => {
+  if (label === reorderPage) return 'On the Reorder page now, not closed';
+  return label < reorderPage ? `Last month's plan, ${closed ? 'closed' : 'not closed yet'}` : 'Not made yet';
+};
 const pieces = (n) => Math.round(n).toLocaleString('en-US');
 const pct = (n) => (n == null ? 'n/a' : `${(n * 100).toFixed(1)}%`);
 
@@ -50,7 +61,12 @@ const FileSlot = ({ label, optional, hint, file, loaded, disabled, onPick, rejec
             <span className={`badge ${state.badge}`}>{state.label}</span>
           </span>
           {file
-            ? <span className="mb-file-name">{file.name}{size && <span className="mb-file-size"> · {size}</span>}</span>
+            ? (
+              <span className="mb-file-name">
+                {file.name}{size && <span className="mb-file-size"> · {size}</span>}
+                {file.period && <span className="mb-file-size"> · for {monthName(file.period)}, read from inside the file</span>}
+              </span>
+            )
             : <span className="mb-file-hint">{hint}</span>}
           <span className="mb-file-formats">{FILE_FORMATS}</span>
         </div>
@@ -223,8 +239,35 @@ const Elapsed = ({ since }) => {
   return text ? <span aria-hidden="true"> {text} so far.</span> : null;
 };
 
-const OUTPUT_KIND = { plan: 'Run the month', validate: 'Validation', practice: 'Practice sales', close: 'Close the month' };
+const OUTPUT_KIND = { plan: 'Run the month', validate: 'Validation', practice: 'Practice sales', close: 'Close the month', rollback: 'Roll back a month' };
 const OUTPUT_STATUS = { running: 'Running', done: 'Finished', failed: 'Stopped' };
+
+// How the last load or rollback ended, once the month has moved on and the result banner of the month no longer applies. Times are the job's own.
+const LiveJobBanner = ({ job }) => {
+  if (!job?.id || !['plan', 'rollback'].includes(job.kind) || job.status === 'running' || job.status === 'idle') return null;
+  const took = durationText(job.started_at, job.finished_at);
+  const label = monthName(job.month);
+  if (job.status === 'failed') {
+    return (
+      <div className="mb-result is-failed" role="alert">
+        <h5><XCircle size={16} aria-hidden="true" /> {job.kind === 'rollback' ? `Rolling back ${label} did not finish` : `${label} did not finish loading`}</h5>
+        <p>{job.kind === 'rollback'
+          ? 'Nothing was changed: the rollback only completes when every table matches the saved state. The reason is in the saved log.'
+          : 'Run it again to continue where it stopped, or roll the month back to return to how things were.'}
+        {took ? ` It ran for ${took}.` : ''}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-result is-completed" role="status">
+      <h5><CheckCircle2 size={16} aria-hidden="true" /> {job.kind === 'rollback' ? `${label} rolled back` : `${label} loaded`}</h5>
+      <p>{job.kind === 'rollback'
+        ? `The system is back to how it was before ${label} was loaded. Every table was checked against the saved state.`
+        : 'The sales are in, and the forecast, classification and order plan have been updated. Every page now reads the new month.'}
+      {took ? ` Total time ${took}.` : ''}</p>
+    </div>
+  );
+};
 
 // The last job: how it ended and the stages it reached. The raw lines are not here on
 // purpose: GET /batch/job stopped returning them because they can carry internals
@@ -238,6 +281,7 @@ const JobOutput = ({ job }) => {
         <span className="mb-output-title">Output of the last step</span>
         <span className="mb-small">
           {OUTPUT_KIND[job.kind] ?? job.kind}: {OUTPUT_STATUS[job.status] ?? job.status}{failed && job.exit_code != null ? ` (exit ${job.exit_code})` : ''}
+          {job.status === 'running' ? <Elapsed since={job.started_at} /> : (durationText(job.started_at, job.finished_at) && ` in ${durationText(job.started_at, job.finished_at)}`)}
         </span>
       </summary>
       {job.steps?.length > 0 && <RunStages steps={job.steps} />}
@@ -282,6 +326,7 @@ const RunResult = ({ result, job }) => {
         <dl className="mb-result-facts">
           <div><dt>Processing month</dt><dd>{result.month}</dd></div>
           {when && <div><dt>Completed</dt><dd>{when}</dd></div>}
+          {durationText(result.started_at, result.finished_at) && <div><dt>Total time</dt><dd>{durationText(result.started_at, result.finished_at)}</dd></div>}
           {result.run_id != null && <div><dt>Plan run</dt><dd>{result.run_id}</dd></div>}
         </dl>
       </div>
@@ -314,21 +359,26 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState(null);     // 'decisions' | 'run' | 'approve'
+  const [dialog, setDialog] = useState(null);     // 'decisions' | 'run' | 'approve' | 'rollback'
   const [rejected, setRejected] = useState({});   // { sales | count: { name, message } }
+  const [rollbackTarget, setRollbackTarget] = useState(null);
   const uploadStep = useRef(null);
+  const live = status.mode === 'live';             // the database the pages read: months are loaded and rolled back, not closed
+  const canRollback = live && hasPermission(P.DATA_ROLLBACK);
   const month = status.month;
   const running = job?.status === 'running';
   const stage = running ? 'running' : batchStage({ ...status, job });
 
-  // Both answers are read fresh, so the page never acts on what it saw earlier.
+  // Both answers are read fresh, so the page never acts on what it saw earlier. A live month moves on once it is loaded or rolled back, so the
+  // server is asked for the month in play instead of the one this page last showed.
   const refresh = useCallback(async (forMonth) => {
-    const [next, list] = await Promise.all([getBatchStatus(forMonth), getBatchChecklist(forMonth)]);
+    const ask = initialStatus.mode === 'live' ? undefined : forMonth;
+    const [next, list] = await Promise.all([getBatchStatus(ask), getBatchChecklist(ask)]);
     setStatus(next);
     setJob(next.job);
     setChecklist(list);
     return list;
-  }, []);
+  }, [initialStatus.mode]);
 
   useEffect(() => {
     let current = true;
@@ -370,20 +420,25 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           setFeedback(null);
           const list = await refresh(month);
           if (next.kind === 'validate' && decisionsBlocked(list)) setDialog('decisions');
+          if (live && ['plan', 'rollback'].includes(next.kind)) {
+            // The data changed under every page: forget what they fetched, and let the layout read the newest month again.
+            invalidateCache();
+            window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
+          }
         }
       } catch (e) {
         setError(e.message);
       }
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [job?.status, month, refresh]);
+  }, [job?.status, month, refresh, live]);
 
   useEffect(() => {
-    if (stage !== 'review' && stage !== 'closed') return undefined;
+    if (live || (stage !== 'review' && stage !== 'closed')) return undefined;
     let current = true;
     getBatchFeedback(month).then((r) => { if (current) setFeedback(r); }).catch((e) => { if (current) setError(e.message); });
     return () => { current = false; };
-  }, [stage, month]);
+  }, [stage, month, live]);
 
   // A refusal is said in the file's own slot. The file on record may have changed
   // either way, so the month is read again.
@@ -405,11 +460,18 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
     }
   });
 
-  const run = () => {
+  const rollback = () => {
+    const target = rollbackTarget;
+    setDialog(null);
+    setRollbackTarget(null);
+    act(async () => { await rollbackMonth(target); });
+  };
+
+  const run = (acceptWaiting = false) => {
     setDialog(null);
     act(async () => {
       try {
-        await runBatch(month, calendarFactor);
+        await runBatch(month, calendarFactor, acceptWaiting);
       } catch (e) {
         // Something changed since the last look. The backend's answer stands.
         if (e.code === 'batch_checks_failed') {
@@ -437,30 +499,53 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
 
   const expectedTotal = Math.round(status.next_plan.pieces);
   const change = planChange(status.plan.pieces, status.next_plan.pieces);
-  const practiceAvailable = month === status.practice_month && !status.checks.sales_loaded;
+  const practiceAvailable = !live && month === status.practice_month && !status.checks.sales_loaded;
   const workflow = WORKFLOW[checklist?.workflow];
   const facts = processingFacts({ ...status, job }, checklist);
   const result = checklist?.result ?? status.result;
-  const shownResult = running && job.kind !== 'validate' ? { state: 'processing', kind: job.kind, month } : result;
+  const shownResult = running && job.kind !== 'validate' ? { state: 'processing', kind: job.kind, month: live ? job.month : month } : result;
+  const generatedMonths = (status.loaded || []).map((entry) => entry.month);
+  const waitingOrders = checklist?.decisions?.unresolved || 0;
   const hint = runHint(checklist, calendarFactor);
   const inputsLocked = running || busy;
-  const finished = stage === 'review' || stage === 'closed';
+  const finished = !live && (stage === 'review' || stage === 'closed');
   const closeMissing = status.close_missing || [];
   const validating = running && job.kind === 'validate';
   const runningPlan = running && job.kind === 'plan';
   const stages = workflowStages(checklist?.workflow, job, facts);
   const planWritten = finished && checklist?.workflow !== 'failed';
-  const nodes = runTracker(checklist, job);
+  // A loaded month has no stock count of its own to load, so that node is left out of its progress.
+  const nodes = runTracker(checklist, job).filter((node) => !(live && node.id === 'count_loaded'));
 
   return (
     <section className="mb-panel" aria-label="Monthly Data Processing">
-      <p className="ui-note is-info mb-note-raised" role="note">
-        <Info size={16} aria-hidden="true" />
-        <span>
-          <strong>Local practice database.</strong> This runs the real monthly steps on its own copy, not on the live system. The Dashboard and Reorder pages do not read that copy, so nothing done here appears on them.
-          {status.synthetic_rows > 0 && ` ${pieces(status.synthetic_rows)} sales rows this month are generated practice data, so nothing here is a real result.`}
-        </span>
-      </p>
+      {live ? (
+        <>
+          {status.blocked && (
+            <p className="ui-note is-warning mb-note-raised" role="note">
+              <AlertTriangle size={16} aria-hidden="true" />
+              <span><strong>Loading is switched off on this server.</strong> {status.blocked}</span>
+            </p>
+          )}
+          {generatedMonths.length > 0 && (
+            <p className="ui-note is-info mb-note-raised" role="note">
+              <Info size={16} aria-hidden="true" />
+              <span>
+                Sales for {generatedMonths.map(monthName).join(' and ')} {generatedMonths.length === 1 ? 'is' : 'are'} generated: SSM has not sent {generatedMonths.length === 1 ? 'that month’s' : 'those months’'} file.
+                The plan and the forecasts after {generatedMonths.length === 1 ? 'it' : 'them'} rest on {generatedMonths.length === 1 ? 'it' : 'them'}, and forecast error is not shown for {generatedMonths.length === 1 ? 'it' : 'them'}.
+              </span>
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="ui-note is-info mb-note-raised" role="note">
+          <Info size={16} aria-hidden="true" />
+          <span>
+            <strong>Local practice database.</strong> This runs the real monthly steps on its own copy, not on the live system. The Dashboard and Reorder pages read this copy too and say so, so what a run does appears on them.
+            {status.synthetic_rows > 0 && ` ${pieces(status.synthetic_rows)} sales rows this month are generated practice data, so nothing here is a real result.`}
+          </span>
+        </p>
+      )}
 
       <div className="mb-body">
         <div className="mb-overview">
@@ -482,24 +567,31 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           </div>
         </div>
 
-        <WorkflowStages stages={stages} />
+        <WorkflowStages stages={live ? stages.slice(0, 3) : stages} />
 
         {error && <p className="ui-note is-warning mb-note-raised" role="alert"><AlertTriangle size={16} aria-hidden="true" /><span>{error}</span></p>}
         {notice && <p className="ui-note is-success mb-note-raised" role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span></p>}
         <RunResult result={shownResult} job={job} />
+        {live && !running && <LiveJobBanner job={job} />}
         {stage === 'closed' && (
           <ClosedBanner month={month} nextMonth={status.next_month} nextPlan={status.next_plan} closedAt={job?.kind === 'close' ? formatWhen(job.finished_at) : null} />
         )}
 
         <ol className="mb-steps">
           <li className="mb-step mb-step-upload" ref={uploadStep}>
-            <StepHead icon={Upload} title="1. Upload monthly data" lede="Unilever only: sales per product and stock count for the processing month. Del Monte has no per-product sales, so it has no file here." />
+            <StepHead
+              icon={Upload}
+              title="1. Upload monthly data"
+              lede={live
+                ? 'Unilever sales per product for one month. The month is read from inside the file, never from its name. Del Monte has no per-product sales, so it has no file here.'
+                : 'Unilever only: sales per product and stock count for the processing month. Del Monte has no per-product sales, so it has no file here.'}
+            />
             {status.checks.sales_loaded ? (
               <p className="mb-done"><CheckCircle2 size={16} aria-hidden="true" /> {month} sales are in the database.</p>
             ) : (
               <div className="mb-files">
-                <FileSlot label="Sales per product" hint="The Unilever sales-per-SKU file" file={status.files.sales} disabled={inputsLocked} onPick={pick('sales')} rejected={rejected.sales} refusals={fileRefusals(checklist, 'Sales per product')} />
-                <FileSlot label="Stock count" optional hint="The month's stock count" file={status.files.count} loaded={status.checks.count_loaded} disabled={inputsLocked} onPick={pick('count')} rejected={rejected.count} refusals={fileRefusals(checklist, 'Stock count')} />
+                <FileSlot label="Sales per product" hint={live ? `The sales file for ${monthName(month)}` : 'The Unilever sales-per-SKU file'} file={status.files.sales} disabled={inputsLocked} onPick={pick('sales')} rejected={rejected.sales} refusals={fileRefusals(checklist, 'Sales per product')} />
+                {!live && <FileSlot label="Stock count" optional hint="The month's stock count" file={status.files.count} loaded={status.checks.count_loaded} disabled={inputsLocked} onPick={pick('count')} rejected={rejected.count} refusals={fileRefusals(checklist, 'Stock count')} />}
                 {practiceAvailable && (
                   <div className="mb-practice">
                     <span className="mb-tile is-small is-info" aria-hidden="true"><Sparkles size={18} /></span>
@@ -523,7 +615,11 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           </li>
 
           <li className="mb-step mb-step-validate">
-            <StepHead icon={ClipboardCheck} title="2. Validate" lede="Carries over the Reorder page's decisions and checks any waiting file. It loads nothing.">
+            <StepHead
+              icon={ClipboardCheck}
+              title="2. Validate"
+              lede={live ? 'Reads the file again, dates it from its contents and checks it against the system and the Reorder page’s decisions. It loads nothing.' : "Carries over the Reorder page's decisions and checks any waiting file. It loads nothing."}
+            >
               <button
                 type="button"
                 className={`btn mb-step-action ${checklist?.workflow === 'ready_for_validation' ? 'btn-primary' : 'btn-secondary'}`}
@@ -538,7 +634,13 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           </li>
 
           <li className="mb-step mb-step-run">
-            <StepHead icon={Play} title="3. Run the month" lede={`Loads any files, then updates ABC, the forecast and the order plan for ${status.next_month}. It stops before anything is closed.`} />
+            <StepHead
+              icon={Play}
+              title="3. Run the month"
+              lede={live
+                ? `Saves a way back, loads the file, then updates ABC, the forecast and the order plan for ${status.next_month}.`
+                : `Loads any files, then updates ABC, the forecast and the order plan for ${status.next_month}. It stops before anything is closed.`}
+            />
             <div className="mb-run">
               <div className="mb-run-controls">
                 {planWritten ? (
@@ -575,6 +677,21 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
             <JobOutput job={job} />
           </li>
 
+          {live && (
+            <li className="mb-step mb-step-loaded">
+              <StepHead icon={ClipboardList} title="4. Loaded months" lede="Each month loaded, the plan it produced, and the way back." />
+              <LoadedMonths
+                loaded={status.loaded}
+                released={status.loaded_without_rollback_point}
+                max={status.max_rollback_points}
+                canRollback={canRollback}
+                busy={inputsLocked}
+                onRollback={(m) => { setRollbackTarget(m); setDialog('rollback'); }}
+              />
+            </li>
+          )}
+
+          {!live && (
           <li className="mb-step mb-step-review">
             <StepHead icon={ClipboardList} title="4. Review the new plan" lede={finished ? 'The current plan beside the new one.' : 'The old and new plans appear here after the run.'} />
             {finished ? (
@@ -583,8 +700,8 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
                   <table className="mb-table">
                     <thead><tr><th scope="col">Plan</th><th scope="col">Products</th><th scope="col">Ordering</th><th scope="col">Pieces</th><th scope="col">Note</th></tr></thead>
                     <tbody>
-                      <PlanRow label={month} plan={status.plan} note="Current" />
-                      <PlanRow label={status.next_month} plan={status.next_plan} note={change ? `${change} the current plan` : 'New'} isNew />
+                      <PlanRow label={month} plan={status.plan} note={planNote(month, status.reorder_page_month, status.cycle_state === 'closed')} />
+                      <PlanRow label={status.next_month} plan={status.next_plan} note={[planNote(status.next_month, status.reorder_page_month, false), change && `${change} the ${month} plan`].filter(Boolean).join('. ')} isNew />
                     </tbody>
                   </table>
                 </div>
@@ -603,7 +720,9 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
               </>
             )}
           </li>
+          )}
 
+          {!live && (
           <li className="mb-step mb-step-close">
             <StepHead icon={Lock} title={`5. Close ${month}`} lede="Completes the month after you have reviewed the plan. It settles accepted orders against the stock count and marks this month's plan closed. Nothing is deleted." />
             {stage === 'closed' ? (
@@ -632,6 +751,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
               </>
             )}
           </li>
+          )}
         </ol>
       </div>
 
@@ -651,8 +771,20 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
           nextMonth={status.next_month}
           calendarFactor={calendarFactor}
           warnings={checklist.summary.warning}
+          waiting={live ? waitingOrders : 0}
+          canDecide={hasPermission(P.LP_DECIDE)}
+          live={live}
           onConfirm={run}
           onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'rollback' && rollbackTarget && (
+        <RollbackDialog
+          month={rollbackTarget}
+          alsoRemoves={removedWith(status.loaded, rollbackTarget)}
+          restoresTo={(status.loaded || []).find((entry) => entry.month === rollbackTarget)?.restores_to}
+          onConfirm={rollback}
+          onClose={() => { setDialog(null); setRollbackTarget(null); }}
         />
       )}
       {dialog === 'approve' && checklist && (

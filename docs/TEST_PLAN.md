@@ -92,7 +92,7 @@ two pages outside it. Definitions only.
 | ABC Classification | Class A/B/C per product for a period, with revenue shares, the Tier A basis per principal and stock status. Opens with `abc.view`. |
 | Reorder Recs | The current cycle's plan: forecast, safety stock, target, stock, order, urgency; accept, dismiss, quantity change, approval, reversal. Opens with `lp.view`. Deciding needs `lp.decide`. Approving, rejecting, reversing and granting need the admin role. |
 | Audit Log | Who changed what and when, and session lengths. Opens with `audit_log.view`. |
-| Data Management | Uploads (Module 07). Opens with `upload.run`. A mock page: no backend route. |
+| Data Management | Monthly Data Processing (backend/routers/monthly_batch.py): load a month's sales file, check it, run the month; admin-only rollback (`data.rollback`). Opens with `upload.run`. Runbook: docs/MONTH_LOAD_RUNBOOK.md. |
 | User Management | Invite, edit, delete users; roles and per-user permissions. Opens with `users.manage`. |
 | Profile (outside the navigation) | The user's own name, picture and password. Any signed-in user. |
 | Card preview (outside the navigation) | Section B cards on sample data. Admin only (`users.manage` route guard). |

@@ -82,8 +82,9 @@ def long_read_db_url() -> str:
     ("SSL SYSCALL error: EOF detected": 2026-10-15, twice in a row on
     fetch_demand; the direct URL ran the same reads clean, and had been
     breaking runs for over a week). Use this for reads that take more than a
-    few seconds. SUPABASE_DIRECT_URL does not resolve from every network, so a
-    script that must run anywhere keeps the pooler as the fallback. Never use
+    few seconds. Despite its name, SUPABASE_DIRECT_URL holds the session pooler
+    (port 5432) since 2026-11-04: db.<ref>.supabase.co is IPv6-only and does
+    not resolve from every network. Never use
     it to change how a connection is configured: the rules on session-level
     SET (CLAUDE.md hard rule 7) apply to both URLs."""
     _load_env_file()

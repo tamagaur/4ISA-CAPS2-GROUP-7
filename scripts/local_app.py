@@ -11,6 +11,9 @@ WHY THIS CANNOT REACH LIVE. No login code changed: the deployed app has no bypas
 local database and signs a token for it with a secret it makes up on each run, so the token means nothing to the live
 backend. It refuses to start unless the database is 127.0.0.1:55432, and both child processes get the local URL and that
 secret in place of the ones in .env. It also switches on the Data Management batch (backend/routers/monthly_batch.py).
+
+The pages read ssm_practice, the copy the batch writes to, so closing a practice month visibly changes them; every answer is labelled
+(backend/practice_copy.py). ssm_local stays what the copy is made from.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ import argparse
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
 import uuid
@@ -28,7 +32,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 LOCAL_URL = "postgresql://postgres@127.0.0.1:55432/ssm_local"     # scripts/local_pg.py
+PRACTICE_DB = "ssm_practice"                                      # scripts/local_pg.py
 SESSION_FILE = REPO / "local" / "local_app_session.json"          # git-ignored
+UPLOADS = REPO / "local" / "monthly_batch" / "uploads"            # git-ignored; backend/routers/monthly_batch.py UPLOADS
 
 ADMIN_SQL = "SELECT user_id, email, full_name, role FROM users WHERE role = 'admin' ORDER BY user_id LIMIT 1"
 START_SESSION_SQL = """
@@ -41,6 +47,10 @@ def require_throwaway(url: str) -> None:
     parsed = urlparse(url or "")
     if (parsed.hostname, parsed.port) != ("127.0.0.1", 55432):
         sys.exit(f"REFUSED: not the throwaway database ({parsed.hostname}:{parsed.port})")
+
+
+def practice_url(url: str) -> str:
+    return urlparse(url)._replace(path=f"/{PRACTICE_DB}").geturl()
 
 
 def new_secret() -> str:
@@ -79,7 +89,13 @@ def start_session(url: str) -> dict:
     return {"user_id": user_id, "email": email, "role": role, "full_name": full_name or "", "session_id": session_id}
 
 
+def clear_uploads() -> None:
+    """A Run reads what is in the slots, so a file left from before a reset would change the next Run without anyone choosing it."""
+    shutil.rmtree(UPLOADS, ignore_errors=True)
+
+
 def reset(backup: str, env: dict) -> None:
+    clear_uploads()
     subprocess.run([sys.executable, "-m", "scripts.local_pg", "restore", backup], cwd=REPO, check=True)
     subprocess.run([sys.executable, "-m", "scripts.run_canonical_load", "--schema", "public", "--target-public", "--schema-only"],
                    cwd=REPO, env=env, check=True)
@@ -115,7 +131,10 @@ def main() -> int:
         reset(args.reset, env)
     elif not practice_copy_exists(url):
         make_practice_copy()
-    session = start_session(url)
+    served = practice_url(url)          # what the pages read from here on: the migrations and the copy above work on ssm_local
+    env = child_env(env, served, secret)
+    os.environ.update(env)
+    session = start_session(served)
     token = mint_token(session["user_id"], session["email"], session["role"], session["full_name"], session["session_id"])
     SESSION_FILE.parent.mkdir(exist_ok=True)
     SESSION_FILE.write_text(json.dumps({"token": token, "role": session["role"], "email": session["email"]}), encoding="utf-8")

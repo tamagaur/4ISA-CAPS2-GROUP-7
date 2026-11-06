@@ -264,7 +264,14 @@
   .mb-step-run { grid-column: 1; grid-row: 3; }
   .mb-step-review { grid-column: 2; grid-row: 3 / span 2; }
   .mb-step-close { grid-column: 1; grid-row: 4; }
+
+  /* Loaded months (the live mode has no review or close): a table, so it takes the whole width under the run. */
+  .mb-step-run:has(~ .mb-step-loaded) { grid-column: 1 / -1; }
+  .mb-step-loaded { grid-column: 1 / -1; grid-row: 4; }
 }
+
+.mb-loaded { display: grid; gap: 12px; }
+.mb-rollback-btn { margin-top: 6px; }
 
 .mb-step-head {
   display: flex;

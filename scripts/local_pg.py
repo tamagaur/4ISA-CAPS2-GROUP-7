@@ -3,7 +3,7 @@ scripts/local_pg.py - a throwaway local Postgres for destructive QA (never live)
 
     python -m scripts.local_pg start                  # initdb (once) + start on 127.0.0.1:55432
     python -m scripts.local_pg restore BACKUP_DIR     # create db, load structure/*.sql and data/**/*.parquet
-    python -m scripts.local_pg practice               # (re)make ssm_practice, a copy of the local DB that no page reads
+    python -m scripts.local_pg practice               # (re)make ssm_practice, a copy of the local DB; scripts/local_app.py serves the pages from it
     python -m scripts.local_pg run -- CMD ARGS...     # run CMD with the local DB as its database
     python -m scripts.local_pg run --practice -- CMD  # the same, on ssm_practice (generated sales live only there)
     python -m scripts.local_pg stop
@@ -63,6 +63,20 @@ PRACTICE_ROW_LABEL_SQL = f"""
                        t.nspname, t.relname);
       END LOOP;
     END $d$;
+"""
+
+# Its third difference: the marts count the generated month, so the Dashboard and Reorder pages show a closed practice month. Only those
+# rows: is_demo with no fill_source, which is what `synth` writes and no row of ssm_local is (0 in all six fact tables, 2026-11-04); the
+# retired synthetic_v2 family stays 'generated'. The label stays in sight on the mart row (source_tag = 'demo_untagged') and on the fact
+# row (is_demo), and the API labels every answer (backend/practice_copy.py). Only in this copy: never a migration.
+PRACTICE_KIND_SQL = """
+    CREATE OR REPLACE FUNCTION mart.data_kind(p_is_demo boolean, p_fill_source text) RETURNS text LANGUAGE sql IMMUTABLE AS $f$
+        SELECT CASE
+            WHEN p_is_demo IS NOT TRUE OR p_fill_source IS NULL THEN 'real'
+            WHEN p_fill_source = 'synthetic_v2' THEN 'generated'
+            ELSE 'filled'
+        END
+    $f$;
 """
 
 
@@ -128,6 +142,9 @@ def make_practice() -> None:
     r = _psql(PRACTICE_DB, PRACTICE_ROW_LABEL_SQL)
     if r.returncode != 0:
         sys.exit(f"could not give {PRACTICE_DB}'s tables their practice_run label: {r.stderr.strip()}")
+    r = _psql(PRACTICE_DB, PRACTICE_KIND_SQL)
+    if r.returncode != 0:
+        sys.exit(f"could not make {PRACTICE_DB}'s marts count its generated month: {r.stderr.strip()}")
     print(f"{PRACTICE_DB} is a fresh copy of {DB}; its demand view also admits rows tagged {TAG}; every row written to it is stamped practice_run")
 
 

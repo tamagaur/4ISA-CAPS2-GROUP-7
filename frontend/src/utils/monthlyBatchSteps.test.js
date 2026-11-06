@@ -303,3 +303,34 @@ test('a refusal lands on the slot it belongs to; a warning is not a refusal', ()
   assert.deepEqual(fileRefusals(list({ checks: [{ id: 'files_valid', status: 'warning', details }] }), 'Sales per product'), []);
   assert.deepEqual(fileRefusals(null, 'Stock count'), []);
 });
+
+// ---- loaded months (live mode)
+import { durationText, loadedStateWord, monthName, removedWith } from './monthlyBatchSteps.js';
+
+test('a month is named in words, and anything else stays as it came', () => {
+  assert.equal(monthName('2026-03'), 'March 2026');
+  assert.equal(monthName('2026-12-01'), 'December 2026');
+  assert.equal(monthName('soon'), 'soon');
+  assert.equal(monthName(null), '');
+});
+
+test('how long a job took comes from its own start and end, and is absent when either is', () => {
+  assert.equal(durationText('2026-11-06T10:00:00Z', '2026-11-06T10:02:05Z'), '2 min 05 s');
+  assert.equal(durationText('2026-11-06T10:00:00Z', '2026-11-06T10:00:36Z'), '36 s');
+  assert.equal(durationText('2026-11-06T10:00:00Z', null), null);
+  assert.equal(durationText('2026-11-06T10:05:00Z', '2026-11-06T10:00:00Z'), null);
+});
+
+test('rolling a month back also removes every month loaded after it', () => {
+  const loaded = [{ month: '2026-03' }, { month: '2026-04' }];
+  assert.deepEqual(removedWith(loaded, '2026-03'), ['2026-04']);
+  assert.deepEqual(removedWith(loaded, '2026-04'), []);
+  assert.deepEqual(removedWith(undefined, '2026-03'), []);
+});
+
+test('a loaded month states its state in words', () => {
+  assert.equal(loadedStateWord('loaded'), 'Loaded');
+  assert.equal(loadedStateWord('taken'), 'Started, not finished');
+  assert.equal(loadedStateWord('failed'), 'Did not finish');
+  assert.equal(loadedStateWord('unreadable'), 'Unreadable');
+});

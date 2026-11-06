@@ -6,7 +6,7 @@ Written for: the team members who will run the month, or defend it.
 
 ## Changed later on 2026-11-02: read this first
 
-Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy no page reads except the batch panel. Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup. The current run is this one.
+Generated sales are now `is_demo = true` and exist only in `ssm_practice`, a local copy. When this was written no page read it except the batch panel; since 2026-11-04 `scripts.local_app` serves every page from it, each answer labelled (`backend/practice_copy.py`), with forecast error withheld on the generated month. Everything below that ran on generated sales ran with them stored `is_demo = false`, on the 16 Oct backup. The current run is this one.
 
 **The practice month, labelled, end to end (run across midnight 2026-11-02/03).** Rule 2, path 2 in `CLAUDE.md`. Nothing here is a result.
 
@@ -125,7 +125,7 @@ Clicked through in a real browser (Chrome, driven by Playwright) on a clean copy
 |---|---|
 | A real new file stops at the loader's sign-off (`fingerprint_unsigned`) | Since 2026-11-04 the panel has an **Approve the file** action that runs the same `transform_signoff` command (docs/MONTHLY_BATCH_REVIEW.md). Tested with stand-ins only, because there is no real new file to test it with. |
 | `LATEST_DATA_PERIOD` in `frontend/src/dataCoverage.js` is hand-set | After a run, the Dashboard's default range stays at Feb 2026 and it shows a banner saying so. The frontend's own file, left alone. |
-| The Dashboard and Reorder pages never show the batch | They read `ssm_local`; every batch step runs on `ssm_practice`. Results appear only in the panel. |
+| ~~The Dashboard and Reorder pages never show the batch~~ (no longer true since 2026-11-04) | Under `scripts.local_app` the pages read `ssm_practice`, labelled; they move at Run, not at Close (STATE.md). On any other server they show nothing of the batch, which never runs there. |
 | A second month can't be practised | `local_pipeline_qa synth` only generates 2026-03. |
 | The job log is held in memory | A backend restart forgets the log, not the work. |
 

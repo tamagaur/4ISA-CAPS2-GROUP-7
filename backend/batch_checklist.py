@@ -291,6 +291,36 @@ def build_checklist(status: dict, files: dict, validation: dict | None, hashes: 
     }
 
 
+# Months loaded onto the live system (backend/routers/monthly_batch.py, mode "live") are not closed and not counted, and a person does not approve a file by
+# hand: the checks that belong to those steps are left out, and orders that wait for a decision are offered for acceptance as part of the run.
+LOADED_MONTH_LEAVES_OUT = {"file_approved", "stock_count", "generated_sales"}
+
+
+def for_loaded_month(checklist: dict) -> dict:
+    """The checklist of a month that is loaded rather than closed. Waiting orders no longer block (the run accepts them when the person says so); a staff
+    request still does, because nothing here can settle it."""
+    decisions = checklist["decisions"]
+    checks = []
+    for check in checklist["checks"]:
+        if check["id"] in LOADED_MONTH_LEAVES_OUT:
+            continue
+        if check["id"] == "decisions_settled" and check["status"] == FAILED and decisions["unresolved"] and not decisions["staff_requests"]:
+            check = _check("decisions_settled", check["name"], WARNING,
+                           f"{_count(decisions['unresolved'], 'order', 'orders')} of the {decisions['cycle']} plan {'has' if decisions['unresolved'] == 1 else 'have'} no decision yet. "
+                           "Decide them on the Reorder page, or accept them at the recommended quantity when you run the month.",
+                           blocking=False, action="Review Recommendations", action_id="review_recommendations")
+        checks.append(check)
+    blockers = [c for c in checks if c["blocking"] and c["status"] in (FAILED, NOT_CHECKED)]
+    workflow = checklist["workflow"]
+    if workflow == "action_required" and not blockers:
+        workflow = "ready_to_run"
+    elif workflow == "ready_to_run" and blockers:
+        workflow = "action_required"
+    return {**checklist, "checks": checks, "can_run": not blockers, "workflow": workflow,
+            "status": "running" if checklist["status"] == "running" else "blocked" if blockers else "ready",
+            "summary": {key: sum(1 for c in checks if c["status"] == key) for key in (PASSED, FAILED, WARNING, NOT_CHECKED)}}
+
+
 def _file_summary(validation: dict | None, hashes: dict) -> dict | None:
     """What the approval dialog shows: the files and what loading them would do, from the loader's dry run."""
     report = (validation or {}).get("file_check")

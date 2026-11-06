@@ -346,3 +346,32 @@ def test_a_failed_close_or_practice_job_says_so_and_a_good_one_says_nothing(kind
 
 def test_no_job_says_nothing():
     assert bc.run_result(_status(), {"status": "idle"}) is None
+
+
+# ---- a month that is loaded, not closed (live mode) ----------------------------------------------------------------------
+
+def _loaded(**over):
+    return bc.for_loaded_month(_build(**over))
+
+
+def test_a_loaded_month_leaves_out_the_checks_of_the_steps_it_does_not_have():
+    ids = [c["id"] for c in _loaded()["checks"]]
+    assert ids == ["sales_available", "latest_month", "not_already_run", "decisions_settled", "files_valid", "no_other_job"]
+
+
+def test_orders_waiting_for_a_decision_no_longer_block_a_loaded_month_but_a_staff_request_does():
+    waiting = _status(decisions={"cycle": "2026-03", "actionable_pending": 73, "open_requests": 0})
+    checklist = _loaded(status=waiting)
+    check = _by_id(checklist, "decisions_settled")
+    assert check["status"] == "warning" and check["blocking"] is False and "73 orders" in check["message"] and "accept them" in check["message"]
+    assert checklist["can_run"] is True and checklist["summary"]["warning"] >= 1
+    request = _status(decisions={"cycle": "2026-03", "actionable_pending": 0, "open_requests": 2})
+    blocked = _loaded(status=request)
+    assert _by_id(blocked, "decisions_settled")["status"] == "failed" and blocked["can_run"] is False and blocked["status"] == "blocked"
+
+
+def test_a_loaded_month_that_was_ready_to_run_with_orders_waiting_stays_ready():
+    waiting = _status(decisions={"cycle": "2026-03", "actionable_pending": 1, "open_requests": 0})
+    plain = _build(status=waiting, files=FILES, validation=_clean_check(), hashes=HASHES)
+    assert plain["workflow"] == "action_required"
+    assert bc.for_loaded_month(plain)["workflow"] == "ready_to_run"
