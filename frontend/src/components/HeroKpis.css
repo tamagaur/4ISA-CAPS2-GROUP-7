@@ -303,7 +303,7 @@
 .hero-progress-short,
 .hero-meter-needed,
 .hero-meter-extra,
-.hero-idle-slow {
+.hero-idle-unsold {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -636,14 +636,14 @@
   white-space: nowrap;
 }
 
-/* All the stock in a light tint; the slow part at the right end. */
+/* All the stock in a light tint; the part not sold in 6 months at the right end. */
 .hero-idle-track {
   height: 8px;
   overflow: hidden;
   background: #A9B8EE;
 }
 
-.hero-idle-slow {
+.hero-idle-unsold {
   right: 0;
   background: #C8453A;
 }
@@ -933,7 +933,7 @@
 
 /* The row is as tall as its tallest card, so the tall one is tightened
    (2026-10-18) rather than the short ones stretched: Inventory value (two
-   comparison boxes and the slow-stock bar) set the height, leaving room
+   comparison boxes and the not-sold bar) set the height, leaving room
    above the footers of Below safety stock and Pending reorders. */
 .hero-kpis > .hero-card:not(.hero-card-wide) .hero-block {
   margin-top: 10px;

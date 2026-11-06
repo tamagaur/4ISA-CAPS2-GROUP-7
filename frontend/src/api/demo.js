@@ -11,7 +11,7 @@ export function getDemoIndex(principal) {
   return cachedRequest(path, async () => {
     const res = await apiFetch(path);
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error('Failed to fetch the synthetic data index');
+    if (!res.ok) throw new Error('Failed to fetch the sample data index');
     return res.json();
   });
 }

@@ -672,7 +672,7 @@ table td.table-center {
   --color-success-deep: #2f855a;
   --color-success-bg: #f0fff4;
   --color-success-bg-alt: #dcfce7;
-  --color-success-text: #166534; /* ink on --color-success-bg-alt, same pair as the FSN "Fast" badge */
+  --color-success-text: #166534; /* ink on --color-success-bg-alt */
 
   /* Feedback — warning */
   --color-warning-deep: #d69e2e;

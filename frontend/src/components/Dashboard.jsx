@@ -392,7 +392,7 @@ const Slot = ({ kind, question, hint, realOnly = false, basis = null, counted = 
         {counted && <span className="dash-basis"><BasisTag label={counted} follows={false} /></span>}
         {!hideKind && <span className="dash-kind">{KIND_LABEL[kind] || kind}</span>}
         {realOnly && (
-          <span className="dash-real-only" title="Synthetic data reaches the charts that show history only. This card reads real data.">
+          <span className="dash-real-only" title="Sample data reaches the charts that show history only. This card reads real data.">
             Real data only
           </span>
         )}
@@ -1410,12 +1410,12 @@ const Dashboard = () => {
   const syntheticSet = new Set(syntheticInRange);
   const monthsText = (list) => list.map(periodLabel).join(', ');
   const rangeSyntheticMark = syntheticInRange.length > 0
-    ? `Includes ${syntheticInRange.length} synthetic month${syntheticInRange.length === 1 ? '' : 's'}`
+    ? `Includes ${syntheticInRange.length} sample-data month${syntheticInRange.length === 1 ? '' : 's'}`
     : null;
   const latestPrev = allocation.trend?.prev_period;
   const latestSyntheticMark = syntheticSet.has(allocation.latest_month)
-    ? `${annualLatestMonth} is a synthetic month`
-    : latestPrev && syntheticSet.has(latestPrev) ? `${periodLabel(latestPrev)} is a synthetic month` : null;
+    ? `${annualLatestMonth} is a sample-data month`
+    : latestPrev && syntheticSet.has(latestPrev) ? `${periodLabel(latestPrev)} is a sample-data month` : null;
   const basisSynthetic = allocation.basis_year
     ? syntheticInRange.filter((m) => m.startsWith(`${allocation.basis_year}-`))
     : [];
@@ -1428,15 +1428,15 @@ const Dashboard = () => {
       .filter((m) => syntheticSet.has(m))
     : [];
   const ytdSyntheticMark = ytdSynthetic.length > 0
-    ? `FY ${allocation.allocation_year} sales so far include synthetic months: ${monthsText(ytdSynthetic)}`
+    ? `FY ${allocation.allocation_year} sales so far include sample-data months: ${monthsText(ytdSynthetic)}`
     : null;
   const allocSyntheticMark = basisSynthetic.length > 0
-    ? `FY ${allocation.basis_year} sales include synthetic months: ${monthsText(basisSynthetic)}`
+    ? `FY ${allocation.basis_year} sales include sample-data months: ${monthsText(basisSynthetic)}`
     : null;
   // The chart's sentence quotes two months; say so when either is synthetic.
   const insightSynthetic = syntheticInRange.filter((m) => (data.sales_vs_stock_insight?.text || '').includes(periodLabel(m)));
   const chartSyntheticNote = insightSynthetic.length > 0
-    ? `${monthsText(insightSynthetic)} ${insightSynthetic.length === 1 ? 'is a synthetic month' : 'are synthetic months'}, `
+    ? `${monthsText(insightSynthetic)} ${insightSynthetic.length === 1 ? 'is a sample-data month' : 'are sample-data months'}, `
       + 'not SSM\u2019s own figures.'
     : null;
   const annualCard = {
@@ -1604,7 +1604,7 @@ const Dashboard = () => {
       // With synthetic data on, Del Monte's charts fill those months from the
       // demonstration, so the list gives way to what is real and what is not.
       + (preview && data.demonstration?.demonstration
-        ? `Totals and comparisons count those months only; the charts draw the other ${gapMonths.length} as synthetic.`
+        ? `Totals and comparisons count those months only; the charts draw the other ${gapMonths.length} as sample data.`
         : `No sales on record in ${gapMonths.map(periodLabel).join(', ')}: totals and comparisons cover the other months only.`)
     : null;
   // Months whose sales are generated or filled, not SSM's files (counted
@@ -1612,7 +1612,7 @@ const Dashboard = () => {
   // total on the page passes as SSM's own figure.
   const syntheticMonths = salesTotal?.synthetic_months || [];
   const syntheticNote = syntheticMonths.length > 0
-    ? `${syntheticMonths.length} of the ${salesTotal.months_with_data} months of sales in this range are synthetic `
+    ? `${syntheticMonths.length} of the ${salesTotal.months_with_data} months of sales in this range are sample data `
       + `(generated to complete the months, not from SSM's files): ${syntheticMonths.map(periodLabel).join(', ')}. `
       + 'Sales totals and comparisons on this page include them.'
     : null;
@@ -2028,7 +2028,7 @@ const Dashboard = () => {
                 rules={data.abc_rules}
                 note={placeholderNote(data.abc_revenue?.period)}
                 syntheticNote={rangeSyntheticMark
-                  ? `The revenue ranked here includes ${syntheticInRange.length} synthetic month${syntheticInRange.length === 1 ? '' : 's'}: ${monthsText(syntheticInRange)}.`
+                  ? `The revenue ranked here includes ${syntheticInRange.length} sample-data month${syntheticInRange.length === 1 ? '' : 's'}: ${monthsText(syntheticInRange)}.`
                   : null}
                 coverage={abcCoverage}
                 units={abcUnits}

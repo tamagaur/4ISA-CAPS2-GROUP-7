@@ -12,8 +12,8 @@ test('only an explicit demonstration: true response gets the synthetic labels', 
 test('the synthetic series never shares a name, legend, end label or stat label with the real one', () => {
   for (const key of ['name', 'legend', 'endLabel', 'statLabel']) {
     assert.notEqual(SYNTHETIC_FORECAST_LABELS[key], REAL_FORECAST_LABELS[key]);
-    assert.match(SYNTHETIC_FORECAST_LABELS[key], /synthetic/i);
+    assert.match(SYNTHETIC_FORECAST_LABELS[key], /sample/i);
   }
   assert.equal(REAL_FORECAST_LABELS.watermark, null);
-  assert.match(SYNTHETIC_FORECAST_LABELS.watermark, /SYNTHETIC/);
+  assert.match(SYNTHETIC_FORECAST_LABELS.watermark, /SAMPLE/);
 });

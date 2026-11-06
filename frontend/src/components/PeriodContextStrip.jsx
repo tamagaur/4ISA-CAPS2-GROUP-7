@@ -13,6 +13,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarRange, Pin } from 'lucide-react';
 import { labelForPrincipal } from '../principals';
+import { abcMonthViewLabel } from '../labels';
 import { COMPARE_MODES, comparisonRange, rangeText } from '../periodFilter';
 import './PeriodContextStrip.css';
 
@@ -20,7 +21,13 @@ import './PeriodContextStrip.css';
 const PAGE_RULES = {
   '/abc': {
     follows: 'partly',
-    text: 'The "Selected range" view follows the date range. The "One month" view ranks the month you pick on the page.',
+    // Per principal (2026-11-06): Unilever's month view ranks the 12 months
+    // up to the month picked, Del Monte's that one month (labels.js).
+    text: (principal) => (principal === 'unilever'
+      ? `The "Selected range" view follows the date range. The "${abcMonthViewLabel('unilever')}" view ranks the 12 months up to the month you pick on the page.`
+      : principal === 'delmonte'
+        ? `The "Selected range" view follows the date range. The "${abcMonthViewLabel('delmonte')}" view ranks the month you pick on the page.`
+        : `The "Selected range" view follows the date range. The "${abcMonthViewLabel('all')}" view ranks Unilever over the 12 months up to the month you pick on the page, and Del Monte on that month alone.`),
   },
   '/forecast': {
     follows: true,
@@ -53,7 +60,7 @@ const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
       </span>
       <span className="period-strip-rule">
         {tone !== 'is-follows' && <Pin size={12} aria-hidden="true" />}
-        {rule.text}
+        {typeof rule.text === 'function' ? rule.text(principal) : rule.text}
       </span>
       <Link to={{ pathname: '/', search: window.location.search }} className="period-strip-link">
         Change filters

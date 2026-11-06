@@ -1,8 +1,8 @@
-/* Pareto (brand/category) and ABC × FSN cards on the ABC page — the same
-   white-card language as the class chart above them (.abc-pareto-container). */
+/* Pareto (brand/category) card on the ABC page, full width — the same
+   white-card language as the class chart above it (.abc-pareto-container). */
 .abc-breakdown-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
 }
 
@@ -167,102 +167,6 @@
   color: var(--color-text-body);
 }
 
-/* ABC × FSN: counts, with the empty cells visibly quieter. */
-.abcb-matrix-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.92rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.abcb-matrix-table {
-  border-collapse: separate;
-  border-spacing: 3px;
-}
-
-.abcb-matrix-table th,
-.abcb-matrix-table td {
-  padding: 10px 12px;
-  text-align: right;
-  border-bottom: none;
-}
-
-.abcb-matrix-table td {
-  border-radius: 6px;
-}
-
-.abcb-matrix-table thead th {
-  font-size: 0.79rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
-}
-
-.abcb-matrix-table tbody th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--color-text-body);
-  white-space: nowrap;
-}
-
-.abcb-matrix-table td {
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.abcb-matrix-table td.is-zero {
-  color: var(--color-text-subtle);
-  font-weight: 400;
-}
-
-.abcb-matrix-table td.fsn-cell-N {
-  color: #B4392B;
-}
-
-.abcb-matrix-total th,
-.abcb-matrix-total td {
-  border-bottom: none;
-  color: var(--color-text-muted);
-  font-weight: 600;
-}
-
-.abcb-class-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 0.4rem;
-  border-radius: 50%;
-}
-
-.abcb-class-A { background-color: var(--color-abc-a); }
-.abcb-class-B { background-color: var(--color-abc-b); }
-.abcb-class-C { background-color: var(--color-abc-c); }
-
-/* FSN badge in the SKU table (ABCClassification.jsx). */
-.fsn-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.6rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 5px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.fsn-badge.fsn-F { background-color: #DCFCE7; color: #166534; }
-.fsn-badge.fsn-S { background-color: #FEF3C7; color: #92400E; }
-.fsn-badge.fsn-N { background-color: #FEE2E2; color: #991B1B; }
-.fsn-badge.fsn-pending { background-color: var(--color-surface-sunken); color: var(--color-text-subtle); }
-
-@media (max-width: 1100px) {
-  .abc-breakdown-row {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* The Pareto's X axis title, under the chart (see AbcBreakdowns.jsx for
    why it isn't an in-chart label). */
 .abcb-axis-title {
@@ -272,10 +176,141 @@
   color: var(--color-text-subtle);
 }
 
-/* The matrix's corner cell names what its counts count ("SKUs"). */
-.abcb-matrix-table thead th.abcb-matrix-unit {
-  text-align: left;
-  text-transform: none;
-  letter-spacing: 0;
+/* The simplified bars (2026-11-06): one grid, the bracket on row 1 over
+   the maroon bars, then one column per bar: share on top, the bar, the
+   name under it (horizontal, cut with an ellipsis; the full name is the
+   hover). No axes, gridlines or legend. */
+.abcb-bars {
+  display: grid;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  margin-top: 4px;
+}
+
+.abcb-bracket {
+  grid-row: 1;
+  position: relative;
+  height: 22px;
+  margin: 0 2px;
+  border: 1.5px solid var(--color-text-muted);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  transform: translateY(10px);
+}
+
+.abcb-bracket-label {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  background-color: var(--color-surface);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.abcb-col {
+  min-width: 0;
+}
+
+.abcb-col-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 4px 2px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.abcb-col-btn.is-static {
+  cursor: default;
+}
+
+.abcb-col-btn:not(.is-static):hover {
+  background-color: var(--color-surface-muted);
+}
+
+.abcb-col-btn:focus-visible {
+  outline: 2px solid var(--color-nav-bg);
+  outline-offset: 1px;
+}
+
+/* The bar sits on the bottom of a fixed-height area, its share just above. */
+/* The bar alone fills this area, from its bottom; the top padding is room
+   for the tallest bar's % label, so no bar is squeezed. */
+.abcb-bar-area {
+  box-sizing: border-box;
+  height: 168px;
+  padding-top: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.abcb-bar-value {
+  font-size: 0.78rem;
   font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.abcb-bar {
+  position: relative;
+  display: block;
+  flex: none;
+  width: min(100%, 44px);
+  border-radius: 4px 4px 0 0;
+}
+
+/* The share, just above the bar's top. */
+.abcb-bar .abcb-bar-value {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-bottom: 3px;
+  white-space: nowrap;
+}
+
+.abcb-bar-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.abcb-bar-name.is-top {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.abcb-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle, var(--color-text-muted));
+}
+
+@media (max-width: 640px) {
+  .abcb-bars {
+    column-gap: 4px;
+  }
+  .abcb-bar-area {
+    height: 120px;
+  }
+  .abcb-bar-value,
+  .abcb-bar-name {
+    font-size: 0.7rem;
+  }
 }

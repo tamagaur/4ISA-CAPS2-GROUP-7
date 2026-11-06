@@ -13,11 +13,11 @@ export const REAL_FORECAST_LABELS = Object.freeze({
 
 export const SYNTHETIC_FORECAST_LABELS = Object.freeze({
   isDemo: true,
-  name: 'Synthetic forecast',
-  legend: 'Synthetic forecast (demonstration, not SSM’s)',
-  endLabel: 'SYNTHETIC forecast',
-  statLabel: 'Synthetic forecast',
-  watermark: 'SYNTHETIC DEMONSTRATION',
+  name: 'Sample-data forecast',
+  legend: 'Sample-data forecast (demonstration, not SSM’s)',
+  endLabel: 'SAMPLE-DATA forecast',
+  statLabel: 'Sample-data forecast',
+  watermark: 'SAMPLE DATA DEMONSTRATION',
 });
 
 export const forecastLabels = (result) => (result?.demonstration === true ? SYNTHETIC_FORECAST_LABELS : REAL_FORECAST_LABELS);

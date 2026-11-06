@@ -372,10 +372,10 @@ const ESTIMATED_OPACITY = 0.75;
 // Drawn like the purchases estimate, in the chart and its table only.
 const ESTIMATE_KIND_TEXT = {
   filled: 'estimated (filled gap)',
-  generated: 'Synthetic — SSM data not received',
+  generated: 'Sample data — SSM data not received',
   // Del Monte's synthetic demonstration months (GET /dashboard's
   // demonstration block, schema demo), drawn only with synthetic data on.
-  demonstration: 'synthetic',
+  demonstration: 'sample data',
 };
 // Returns get a view of their own: they run at a few percent of sales, so on
 // the sales axis they would lie flat along zero.
@@ -529,8 +529,8 @@ const SvsSwatch = ({ kind, color }) => {
 // rests on, why a month has no figure. Change figures stay in a neutral ink: a
 // rise in stock is not good, and a fall is not bad, by itself.
 const estimateKind = (metric, pt) => ({
-  sales: pt.salesSynthetic ? 'synthetic' : pt.salesEstimatedKind === 'demonstration'
-    ? `synthetic, ${(pt.salesOrigin || []).map(originLabel).join(' and ') || 'generated'}`
+  sales: pt.salesSynthetic ? 'sample data' : pt.salesEstimatedKind === 'demonstration'
+    ? `sample data, ${(pt.salesOrigin || []).map(originLabel).join(' and ') || 'generated'}`
     : ESTIMATE_KIND_TEXT[pt.salesEstimatedKind] || 'estimated',
   stock: ESTIMATE_KIND_TEXT[pt.stockEstimatedKind] || 'estimated',
   returns: ESTIMATE_KIND_TEXT[pt.returnsEstimatedKind] || 'estimated',
@@ -1046,7 +1046,7 @@ export const SalesVsStockWidget = ({
     ));
     if (flaggedOnShow) notes.push(entry(weeks ? 'outline' : 'dot', weeks ? '#475467' : UNUSUAL_INK, 'Stock count needs checking'));
     if (visibleRows.some((r) => isSyntheticMonth(r.pt) || isSyntheticMonth(r.cpt))) {
-      notes.push(entry('hatch', bars ? SVS_COLOR.sales : UNUSUAL_INK, 'Synthetic data'));
+      notes.push(entry('hatch', bars ? SVS_COLOR.sales : UNUSUAL_INK, 'Sample data'));
     }
     if (filledEstimate) notes.push(entry('dotted', UNUSUAL_INK, ESTIMATE_KIND_TEXT.filled));
     if (notes.length) out.push({ label: null, items: notes });
@@ -1266,7 +1266,7 @@ export const SalesVsStockWidget = ({
         }]
       : []),
     ...(tableRows.some((r) => r.syntheticStatus)
-      ? [{ key: 'syntheticStatus', label: 'Synthetic data', align: 'left' }]
+      ? [{ key: 'syntheticStatus', label: 'Sample data', align: 'left' }]
       : []),
   ];
 
@@ -1689,8 +1689,8 @@ export const SalesVsStockWidget = ({
           <div className="svs-note-slot">
             {synthetic && (
               <p className={`gap-note${purchasesView ? ' svs-spacer' : ''}`} role="note">
-                <strong>Synthetic.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
-                dotted lines), because synthetic data is on. The solid bars and lines are SSM&apos;s own data, and the notes
+                <strong>Sample data.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
+                dotted lines), because sample data is on. The solid bars and lines are SSM&apos;s own data, and the notes
                 below are about them.
               </p>
             )}
