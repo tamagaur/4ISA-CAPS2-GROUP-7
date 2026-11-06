@@ -2,8 +2,15 @@
   display: flex;
   align-items: center;
   padding: 1rem 2rem;
-  /* Frosted over the warm page (ui.css --app-canvas-bar, 2026-10-28). */
-  background-color: var(--app-canvas-bar);
+  /* The page's own canvas (ui.css --app-canvas, as on .dashboard-layout),
+     pinned to the window so it lines up with the shell's pixel for pixel
+     (2026-11-06, Audrey). The canvas glows brightest at the very top, which
+     is where this bar sits: the flat frosted cream it had before
+     (--app-canvas-bar) hid that glow and left a hard line under the bar,
+     behind every page title. Pages that scroll under it are still covered. */
+  background-color: #FFF6EF;
+  background-image: var(--app-canvas);
+  background-attachment: fixed;
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   position: sticky;
