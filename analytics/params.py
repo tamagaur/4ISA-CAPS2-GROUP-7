@@ -191,6 +191,17 @@ REVIEW_COLLAPSE_RATIO = 0.5
 REVIEW_COLLAPSE_RECENT_MONTHS = 3
 REVIEW_COLLAPSE_BASE_MONTHS = 12
 
+# TEAM (Kelvin, 2026-11-10: "switch on succession and fading"): the two forecastability treatments served inside
+# router.route() (analytics/forecasting/treatments.py). Rules and thresholds as committed before scoring in
+# reports/experiments/forecastability_2026-11-10/classify.py (f3ffe47); both held in both backtest windows (8a4f78d).
+# FADING reuses REVIEW_COLLAPSE_RATIO above. False switches a treatment off (then re-run the forecast and the plan).
+SERVE_SUCCESSION = True
+SERVE_FADING = True
+SUCCESSION_DROP = 0.5            # last month below this share of the 12-month mean
+SUCCESSION_NEW_CODE_MONTHS = 3   # a related code's first sale within this many months before the forecast month
+SUCCESSION_CONTENT_TOL = 0.10    # "same content per piece": within 10%, same unit
+LOW_PIECES_6M = 500              # PROMO/LOW: under 500 pieces in the last 6 months is left on the served forecast
+
 # TEAM: option D of the surplus-bias experiment (kelvin/surplus-bias-
 # experiment 3226cc4, README "Candidate fixes"; chosen 2026-10-03 because no
 # forecast change met the recorded 5% threshold): flag a product when it is in

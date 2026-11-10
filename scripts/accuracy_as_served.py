@@ -50,7 +50,7 @@ from analytics.forecasting.router import route  # noqa: E402
 from analytics.params import DEAD_SKU_MONTHS, abc_method  # noqa: E402
 from psycopg2.extras import execute_values  # noqa: E402
 from scripts.backtest_forecast_run import WINDOW, headline, read_tier_a, ym  # noqa: E402
-from scripts.run_baseline_forecast import build_series, fetch_demand  # noqa: E402
+from scripts.run_baseline_forecast import build_series, fetch_contexts, fetch_demand  # noqa: E402
 from scripts.report_target import report_path  # noqa: E402
 
 CODE_PATHS = ["analytics", "scripts/run_baseline_forecast.py", "scripts/backtest_forecast_run.py",
@@ -65,6 +65,7 @@ def read_inputs(db_url: str):
         cur = conn.cursor()
         cur.execute("SET TRANSACTION READ ONLY")
         demand = fetch_demand(cur)
+        contexts = fetch_contexts(cur, demand)   # the served succession / fading treatments (router.route)
         cur.execute("SELECT MAX(calendar_month) FROM Unilever_SKU_Demand_Fact_Real")
         latest = cur.fetchone()[0]
         cur.execute("""SELECT product_key, calendar_month, SUM(net_amount), SUM(quantity_sold)
@@ -75,10 +76,11 @@ def read_inputs(db_url: str):
         conn.close()
     money["net_amount"] = pd.to_numeric(money.net_amount, errors="coerce").astype(float)
     money["quantity_raw"] = pd.to_numeric(money.quantity_raw, errors="coerce").astype(float)
-    return demand, latest, money
+    return demand, latest, money, contexts
 
 
-def served_backtest(series: dict, tier_by: dict, calendar_totals=None, pool_by: dict | None = None) -> tuple[pd.DataFrame, dict]:
+def served_backtest(series: dict, tier_by: dict, calendar_totals=None, pool_by: dict | None = None,
+                    contexts: dict | None = None) -> tuple[pd.DataFrame, dict]:
     """route() per product of the cohort `tier_by` x test month, then the live dead-SKU rule. Columns: value
     (as served), value_before_dead (the router's own number), dead (the rule fired), actual (floored series;
     NaN = blank, not scored). `pool_by` is the XGBoost pool by period; it defaults to the cohort itself (Tier A),
@@ -95,7 +97,8 @@ def served_backtest(series: dict, tier_by: dict, calendar_totals=None, pool_by: 
             if t not in s.index or not t > s.index[0]:
                 continue
             try:
-                r = route(s, t, fc, calendar_totals=calendar_totals)
+                r = route(s, t, fc, calendar_totals=calendar_totals,
+                          context=None if contexts is None else contexts.get(k))
             except ValueError:  # no history before the month at all
                 skipped["no_history"] = skipped.get("no_history", 0) + 1
                 continue
@@ -157,7 +160,7 @@ def with_raw_actual(bt: pd.DataFrame, money: pd.DataFrame) -> pd.DataFrame:
     return m.drop(columns="quantity_raw").dropna(subset=["actual"])
 
 
-def mase_pass_rate(db_url: str, demand: pd.DataFrame, latest: str, calendar_totals) -> dict:
+def mase_pass_rate(db_url: str, demand: pd.DataFrame, latest: str, calendar_totals, contexts: dict | None = None) -> dict:
     """The MASE < MASE_GATE count the system reports, recomputed from the live code (the gate is not touched).
 
     Definition = run_baseline_forecast.served_forecasts (the call that writes Forecast_Result.mase):
@@ -199,7 +202,7 @@ def mase_pass_rate(db_url: str, demand: pd.DataFrame, latest: str, calendar_tota
         ok.append(int(k))
     df = pd.DataFrame({"product_key": ok, "status": "ok"})
     planning = pd.Timestamp(f"{latest}-01") + pd.offsets.MonthBegin(1)
-    served = served_forecasts(df, by_key, planning, calendar_totals)
+    served = served_forecasts(df, by_key, planning, calendar_totals, contexts=contexts)
     m = pd.Series({k: v["holdout_mase"] for k, v in served.items()}, dtype=float)
     scored = m.dropna()
     products = pd.DataFrame([{"product_key": k, "route": v["bin"], "model": v["method"], "months": v["holdout_months"],
@@ -504,7 +507,7 @@ def main() -> int:
     from analytics.config import long_read_db_url
     db_url = long_read_db_url()
     t0 = time.time()
-    demand, latest, money = read_inputs(db_url)
+    demand, latest, money, contexts = read_inputs(db_url)
     assert latest == ym(WINDOW[-1]), f"latest demand month {latest} is not the window end {ym(WINDOW[-1])}"
     series = {int(k): build_series(g, latest) for k, g in demand.groupby("product_key")}
     tier_by = read_tier_a(db_url, abc_method("unilever"))
@@ -517,7 +520,7 @@ def main() -> int:
         runs, checks = {}, {}
         for tier in ("B", "C"):
             cohort = read_tier_cohort(db_url, abc_method("unilever"), tier)
-            btt, sk = served_backtest(series, cohort, calendar_totals=cal, pool_by=tier_by)
+            btt, sk = served_backtest(series, cohort, calendar_totals=cal, pool_by=tier_by, contexts=contexts)
             name = f"as_served_calendar_{tier}"
             runs[name] = btt
             checks[name] = {"rows": len(btt), "products": int(btt.product_key.nunique()), "skipped": sk}
@@ -526,9 +529,9 @@ def main() -> int:
         print(f"[write-tier-runs] run ids {write_runs(db_url, runs, checks)}")
         return 0
 
-    bt, skipped = served_backtest(series, tier_by)
+    bt, skipped = served_backtest(series, tier_by, contexts=contexts)
     print(f"[as served] {len(bt)} rows in {time.time() - t0:.0f}s")
-    btc, skipped_c = served_backtest(series, tier_by, calendar_totals=company_totals(demand))
+    btc, skipped_c = served_backtest(series, tier_by, calendar_totals=company_totals(demand), contexts=contexts)
     print(f"[as served, calendar] {len(btc)} rows in {time.time() - t0:.0f}s")
 
     res = {
@@ -540,7 +543,7 @@ def main() -> int:
         "stored5": {**stored_run_headline(db_url, 5, money), "surplus_share_of_miss_pieces": float("nan")},
         "stored7": {**stored_run_headline(db_url, 7, money), "surplus_share_of_miss_pieces": float("nan")},
         "dead_n": int(bt.dead.sum()), "dead_n_cal": int(btc.dead.sum()),
-        "mase": mase_pass_rate(db_url, demand, latest, company_totals(demand)),
+        "mase": mase_pass_rate(db_url, demand, latest, company_totals(demand), contexts),
     }
     print(f"[mase] {res['mase']['passes']} of {res['mase']['scored']} < {res['mase']['gate']:g} ({time.time() - t0:.0f}s)")
     # the stored runs' pieces-based surplus share, on the same rows their headline used

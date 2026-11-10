@@ -1,0 +1,44 @@
+{
+ "planned_in_window": 106,
+ "high_mape": 14,
+ "high_mape_with_a_month_below_quarter_of_forecast": 14,
+ "others_with_such_a_month": 5,
+ "abs_err_share_of_planned_served": 0.2154601247777374,
+ "high_mape_still_over_100_with_S1": 14,
+ "rules": {
+  "R_PROMO": {
+   "catches_high": 7,
+   "flags_others": 14,
+   "precision": 0.333
+  },
+  "R_S1": {
+   "catches_high": 4,
+   "flags_others": 8,
+   "precision": 0.333
+  },
+  "R_SMALL": {
+   "catches_high": 9,
+   "flags_others": 48,
+   "precision": 0.158
+  },
+  "R_ANY": {
+   "catches_high": 13,
+   "flags_others": 61,
+   "precision": 0.176
+  },
+  "R_ONOFF (post hoc)": {
+   "catches_high": 4,
+   "flags_others": 11,
+   "precision": 0.267
+  },
+  "R_PROMO or R_ONOFF (post hoc)": {
+   "catches_high": 8,
+   "flags_others": 18,
+   "precision": 0.308
+  }
+ },
+ "promo_high_median_mape": {
+  "served": 21.97497303098171,
+  "promo_med": 16.253374545486416
+ }
+}

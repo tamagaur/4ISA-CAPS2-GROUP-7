@@ -1,0 +1,8 @@
+{
+ "all | LEVEL_NOISE->mapa12346": "NOT HOLDING (one window only)",
+ "all | MASE>=1->mapa12346": "lower in both, inside the noise or MASE higher",
+ "all | MASE>=1->mean(S1,mapa12346)": "lower in both, inside the noise or MASE higher",
+ "planned | LEVEL_NOISE->mapa12346": "lower in both, inside the noise or MASE higher",
+ "planned | MASE>=1->mapa12346": "NOT HOLDING (one window only)",
+ "planned | MASE>=1->mean(S1,mapa12346)": "NOT HOLDING (one window only)"
+}

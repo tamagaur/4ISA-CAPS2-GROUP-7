@@ -1,0 +1,11 @@
+{
+ "main_window_abs_error_served": 4520004.162199999,
+ "n_for_50pct": 13,
+ "n_for_80pct": 42,
+ "top13_share": 0.5117553521176712,
+ "top13_S1_abs_error": 2144673.1582666663,
+ "top13_served_abs_error": 2313136.3216,
+ "top13_planned": 6,
+ "high_mape_planned": 14,
+ "high_mape_overlap_top13": 2
+}

@@ -1,0 +1,100 @@
+{
+ "verdicts": {
+  "all | SOFTFADE_0.6": "worse in both",
+  "all | SOFTFADE_0.7": "worse in both",
+  "all | SOFTFADE_0.8": "worse in both",
+  "all | FADE_LAST": "HOLDS",
+  "all | RISING": "worse in both",
+  "all | POST_SPIKE": "lower in both, inside the noise or MASE higher",
+  "all | LEVEL_NOISE": "NOT HOLDING (one window only)",
+  "all | PROMO_MED": "HOLDS",
+  "planned | SOFTFADE_0.6": "worse in both",
+  "planned | SOFTFADE_0.7": "worse in both",
+  "planned | SOFTFADE_0.8": "worse in both",
+  "planned | FADE_LAST": "lower in both, inside the noise or MASE higher",
+  "planned | RISING": "worse in both",
+  "planned | POST_SPIKE": "NOT HOLDING (one window only)",
+  "planned | LEVEL_NOISE": "NOT HOLDING (one window only)",
+  "planned | PROMO_MED": "NOT HOLDING (one window only)"
+ },
+ "hits": {
+  "main 2025-09..2026-02": {
+   "SOFTFADE_0.6": {
+    "product_months": 21,
+    "products": 10
+   },
+   "SOFTFADE_0.7": {
+    "product_months": 63,
+    "products": 33
+   },
+   "SOFTFADE_0.8": {
+    "product_months": 139,
+    "products": 61
+   },
+   "FADE_LAST": {
+    "product_months": 38,
+    "products": 20
+   },
+   "RISING": {
+    "product_months": 64,
+    "products": 37
+   },
+   "POST_SPIKE": {
+    "product_months": 25,
+    "products": 20
+   },
+   "LEVEL_NOISE": {
+    "product_months": 47,
+    "products": 24
+   },
+   "PROMO_MED": {
+    "product_months": 264,
+    "products": 61
+   }
+  },
+  "earlier 2024-01..2025-08": {
+   "SOFTFADE_0.6": {
+    "product_months": 27,
+    "products": 20
+   },
+   "SOFTFADE_0.7": {
+    "product_months": 86,
+    "products": 46
+   },
+   "SOFTFADE_0.8": {
+    "product_months": 237,
+    "products": 100
+   },
+   "FADE_LAST": {
+    "product_months": 111,
+    "products": 38
+   },
+   "RISING": {
+    "product_months": 210,
+    "products": 77
+   },
+   "POST_SPIKE": {
+    "product_months": 34,
+    "products": 23
+   },
+   "LEVEL_NOISE": {
+    "product_months": 197,
+    "products": 69
+   },
+   "PROMO_MED": {
+    "product_months": 698,
+    "products": 97
+   }
+  }
+ },
+ "held": [
+  "FADE_LAST",
+  "PROMO_MED"
+ ],
+ "S2": {
+  "all | S2 (FADE_LAST+PROMO_MED)": "HOLDS",
+  "planned | S2 (FADE_LAST+PROMO_MED)": "NOT HOLDING (one window only)",
+  "all | S2 vs served": "HOLDS (strict: both intervals below 0)",
+  "planned | S2 vs served": "lower in both, inside the noise or MASE higher"
+ }
+}

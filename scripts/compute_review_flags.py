@@ -47,7 +47,7 @@ from analytics.forecasting.calendar import company_totals
 from analytics.forecasting.global_model import GlobalForecaster
 from analytics.forecasting.review_flag import review_flag
 from analytics.forecasting.router import assert_real_rows, route
-from scripts.run_baseline_forecast import build_series, fetch_demand
+from scripts.run_baseline_forecast import build_series, fetch_contexts, fetch_demand
 
 PRINCIPAL = "unilever"
 # route() re-run for the cycle must match the stored forecast once rounded the
@@ -93,11 +93,12 @@ def read_inputs(conn, cycle: str | None):
         fr = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_code", "product_name", "status",
                                                    "forecast_value", "served_bin", "generated_at"])
         demand = fetch_demand(cur)
+        contexts = fetch_contexts(cur, demand)   # the served succession / fading treatments (router.route)
     conn.rollback()
-    return cycle_date, fr, demand
+    return cycle_date, fr, demand, contexts
 
 
-def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool = False) -> pd.DataFrame:
+def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool = False, contexts: dict | None = None) -> pd.DataFrame:
     assert_real_rows(demand)
     cycle = pd.Timestamp(cycle_date)
     wanted = set(int(k) for k in fr.product_key)
@@ -108,7 +109,8 @@ def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool =
 
     gaps = []
     for r in fr[fr.status == "ok"].itertuples():
-        got = route(series[int(r.product_key)], cycle, forecaster, calendar_totals=calendar_totals)["value"]
+        got = route(series[int(r.product_key)], cycle, forecaster, calendar_totals=calendar_totals,
+                    context=None if contexts is None else contexts.get(int(r.product_key)))["value"]
         gaps.append(abs(round(float(got), STORED_DECIMALS) - float(r.forecast_value)))
     worst = max(gaps, default=0.0)
     print(f"reproduce check: route() for {cycle:%Y-%m}, rounded to {STORED_DECIMALS} decimals, vs stored "
@@ -122,7 +124,8 @@ def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool =
         k = int(r.product_key)
         s = series.get(k)
         served_bin = r.served_bin if r.status == "ok" else None
-        f = review_flag(s, cycle, served_bin, forecaster, calendar_totals) if s is not None else {
+        f = review_flag(s, cycle, served_bin, forecaster, calendar_totals,
+                        None if contexts is None else contexts.get(k)) if s is not None else {
             "needs_review": None, "reasons": [], "collapse": None, "collapse_ratio": None, "over_run_months": None}
         rows.append({"product_key": k, "sku_code": r.sku_code, "product_name": r.product_name,
                      "served_bin": served_bin, "forecast_generated_at": r.generated_at, **f})
@@ -165,10 +168,10 @@ def main():
     args = ap.parse_args()
 
     conn = connect()
-    cycle_date, fr, demand = read_inputs(conn, args.cycle)
+    cycle_date, fr, demand, contexts = read_inputs(conn, args.cycle)
     if fr.empty:
         sys.exit(f"no Forecast_Result rows for {cycle_date}")
-    flags = compute(cycle_date, fr, demand, args.calendar_factor)
+    flags = compute(cycle_date, fr, demand, args.calendar_factor, contexts)
 
     flagged = flags[flags.needs_review.eq(True)]
     summary = {

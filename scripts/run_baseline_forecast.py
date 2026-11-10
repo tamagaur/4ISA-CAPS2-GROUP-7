@@ -43,7 +43,8 @@ from scripts.report_target import PRACTICE_MARKER, report_path
 from scripts.run_guards import stale_abc_refusal
 from analytics.forecasting.split import train_holdout_split
 from analytics.classification.fsn import no_sale_in_last_months
-from analytics.params import DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION, abc_method
+from analytics.params import (DEAD_SKU_MONTHS, FORECAST_INTERVAL_Z, HOLDOUT_FRACTION, SERVE_FADING, SERVE_SUCCESSION,
+                             abc_method)
 from analytics.forecasting.baseline import (
     MIN_MONTHS_WITH_SALES,
     MASE_GATE,
@@ -1010,7 +1011,20 @@ def _confidence_band(forecast_value: float, rmse) -> tuple[float | None, float |
     )
 
 
-def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None, allow_placeholder=False) -> dict:
+def fetch_contexts(cur, demand: pd.DataFrame) -> dict:
+    """{product_key: treatments.ProductContext} for every Unilever code: its name (promo/bundle) and the first-sale months
+    of related codes (succession). Read-only. The first sale is read from the same demand frame the forecast reads."""
+    from analytics.forecasting.treatments import build_contexts, first_sales
+    cur.execute("""SELECT product_key, product_name, brand, category_path FROM product_dimension
+                   WHERE principal = 'unilever'""")
+    meta = pd.DataFrame(cur.fetchall(), columns=["product_key", "product_name", "brand", "category_path"])
+    latest = demand["calendar_month"].max()
+    series = {int(k): build_series(g, latest) for k, g in demand.groupby("product_key")}
+    return build_contexts(meta, first_sales(series))
+
+
+def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None, contexts=None,
+                     allow_placeholder=False) -> dict:
     """{product_key: {...}} for every status='ok' SKU: the routed one-step
     forecast for `planning_month`, plus the SERVED model's holdout error.
 
@@ -1029,6 +1043,10 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None, al
     `allow_placeholder`: labelled rows pass the guards. Only ever the value of
     practice_switch.labelled_rows_permitted (tests/forecasting/test_practice_switch.py).
 
+    `contexts` ({product_key: treatments.ProductContext}, fetch_contexts): the succession and fading treatments,
+    applied by route() to the served value AND to every holdout month, so the stored error (and the plan's MASE < 1
+    entry test) describes what is served. None = untreated (the forecast before 2026-11-10).
+
     No DB access. Metrics come from analytics.forecasting.diagnostic_metrics.
     """
     wanted = {int(k) for k in df["product_key"]}
@@ -1039,10 +1057,12 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None, al
     for _, r in df[df["status"] == "ok"].iterrows():
         p_key = int(r["product_key"])
         series = series_by_key[p_key]
-        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals, allow_placeholder=allow_placeholder)
+        ctx = None if contexts is None else contexts.get(p_key)
+        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals, allow_placeholder=allow_placeholder,
+                       context=ctx)
         train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
         scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"],
-                                  calendar_totals=calendar_totals, allow_placeholder=allow_placeholder)
+                                  calendar_totals=calendar_totals, allow_placeholder=allow_placeholder, context=ctx)
         a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()     # missing months are not scored
         out[p_key] = {
             **routed,
@@ -1182,7 +1202,10 @@ def _write_forecast_result(cur, df, calendar: bool = False):
     if calendar:
         logger.warning("--calendar-factor: served values and their holdout are calendar-adjusted "
                        "(analytics/forecasting/calendar.py; team decision, DEC-41; not confirmed by SSM or the adviser).")
-    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals, allow_placeholder=labelled)
+    contexts = fetch_contexts(cur, demand)   # succession + fading (analytics/forecasting/treatments.py)
+    run_meta["treatments"] = {"succession": bool(SERVE_SUCCESSION), "fading": bool(SERVE_FADING)}
+    served = served_forecasts(df, demand_by_key, pd.Timestamp(planning_date), calendar_totals, allow_placeholder=labelled,
+                              contexts=contexts)
 
     target_keys = [int(k) for k in df["product_key"]]
     conn = cur.connection
@@ -1238,6 +1261,10 @@ def _write_forecast_result(cur, df, calendar: bool = False):
                         "value_before_calendar": round(sv["value_before_calendar"], 3)}
                        if "calendar_factor" in sv else {}),
                     "training_rows": sv["training_rows"],
+                    # succession / fading (analytics/forecasting/treatments.py): None = served value untreated
+                    "treatment": sv.get("treatment"),
+                    **({"value_before_treatment": round(sv["value_before_treatment"], 3)}
+                       if sv.get("treatment") else {}),
                     "wape": _f(sv["holdout_wape"]),
                     "holdout_protocol": "rolling one-step over the 20% holdout months, served model held fixed",
                     "holdout_metrics_served": {

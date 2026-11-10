@@ -68,7 +68,7 @@ def ma3_value(history: pd.Series) -> float:
 
 def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForecaster | None = None,
           force_bin: str | None = None, allow_placeholder: bool = False,
-          calendar_totals: pd.Series | None = None) -> dict:
+          calendar_totals: pd.Series | None = None, context=None) -> dict:
     """One-step-ahead forecast for `target_month`, reading only months before
     it. `force_bin` scores a fixed model over past months (holdout error of
     the model served today); leave it None to bin from the history.
@@ -86,6 +86,11 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
       2. the final value is above the SKU's own historical maximum;
       3. the final value is below zero.
     A served MA3 is floored at zero, as the runner has always done.
+
+    `context` (treatments.ProductContext): the succession and fading treatments
+    (analytics/forecasting/treatments.py, served from 2026-11-10) act on the
+    final value, after the calendar factor; `value_before_treatment` and
+    `treatment` record it. None = not treated.
     """
     assert_real_history(series, allow_placeholder)
     # A missing (blank-quantity) month is unknown, not zero: every model reads observed months only.
@@ -137,6 +142,11 @@ def route(series: pd.Series, target_month: pd.Timestamp, forecaster: GlobalForec
         factor, years = calendar_factor(calendar_totals, target_month)
         out.update(value_before_calendar=value, calendar_factor=factor, calendar_years=years)
         value = max(0.0, value * factor)
+    if context is not None:
+        from analytics.forecasting.treatments import apply as apply_treatment   # lazy: treatments -> review_flag -> router
+        treated, name = apply_treatment(series, target_month, value, context)
+        out.update(value_before_treatment=value, treatment=name)
+        value = treated
     return {**out, "method": method, "value": value}
 
 
@@ -151,7 +161,7 @@ def _safe_xgb(forecaster: GlobalForecaster, series: pd.Series, target_month: pd.
 
 def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | None = None,
                      force_bin: str | None = None, allow_placeholder: bool = False,
-                     calendar_totals: pd.Series | None = None) -> pd.DataFrame:
+                     calendar_totals: pd.Series | None = None, context=None) -> pd.DataFrame:
     """route() at each of `months`, one step ahead, refit at every origin.
     `calendar_totals` as in route(): the holdout scores what would be served.
     Columns: month, actual, value (as served, guards applied), ma3 (the
@@ -163,7 +173,7 @@ def rolling_one_step(series: pd.Series, months, forecaster: GlobalForecaster | N
         if pd.isna(series.loc[month]):
             continue
         r = route(series, month, forecaster, force_bin=force_bin, allow_placeholder=allow_placeholder,
-                  calendar_totals=calendar_totals)
+                  calendar_totals=calendar_totals, context=context)
         if r["value"] is None:
             continue
         rows.append({"month": month, "actual": float(series.loc[month]), "value": r["value"],
