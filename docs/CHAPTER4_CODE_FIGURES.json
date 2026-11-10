@@ -47,13 +47,13 @@
   {
    "id": "tests_collected_clean_clone",
    "what": "Tests in the whole run on a clean clone (invariants plus suite)",
-   "value": 2722,
+   "value": 2751,
    "command": "DERIVED, not run: tests_collected_with_real_data minus real_corpus_cases (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"
   },
   {
    "id": "tests_collected_with_real_data",
    "what": "Tests in the whole run where data/raw exists (adds the real_corpus cases)",
-   "value": 2728,
+   "value": 2757,
    "command": "python -m pytest --collect-only -q tests | tail -1  (where data/raw exists)"
   },
   {
@@ -83,60 +83,60 @@
   {
    "id": "tests_passed_clean_clone",
    "what": "Passed tests on a clean clone (collected minus skipped)",
-   "value": 2701,
+   "value": 2730,
    "command": "DERIVED, not run: tests_collected_clean_clone minus tests_skipped_clean_clone minus tests_failed (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"
   },
   {
    "id": "tests_passed_with_real_data",
    "what": "Passed tests with SSM's real files present (collected minus skipped)",
-   "value": 2710,
+   "value": 2739,
    "command": "scripts/check.sh --full there"
   },
   {
    "id": "count_2mar_over_3feb",
-   "what": "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 3 February count, times",
+   "what": "The 110 planned products (lp_run 7): stock at the 2 March 2026 count over the 3 February count, times",
    "value": 3.7,
    "command": "python -m scripts.chapter_figures --measure count_2mar_over_3feb",
-   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
   },
   {
    "id": "count_2mar_over_6apr",
-   "what": "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 6 April count, times",
+   "what": "The 110 planned products (lp_run 7): stock at the 2 March 2026 count over the 6 April count, times",
    "value": 3.0,
    "command": "python -m scripts.chapter_figures --measure count_2mar_over_6apr",
-   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
   },
   {
    "id": "requirement_at_3feb_million_pieces",
    "what": "Requirement for those products at the 3 February stock level, million pieces",
-   "value": 1.67,
+   "value": 1.63,
    "command": "python -m scripts.chapter_figures --measure requirement_at_3feb_million_pieces",
-   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
   },
   {
    "id": "requirement_at_6apr_million_pieces",
    "what": "Requirement for those products at the 6 April stock level, million pieces",
-   "value": 1.54,
+   "value": 1.52,
    "command": "python -m scripts.chapter_figures --measure requirement_at_6apr_million_pieces",
-   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
+   "query": "WITH plan AS ( SELECT lr.product_key, lr.rop_i, fr.forecast_value FROM lp_recommendation lr JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 ), stock AS ( SELECT inv._period, inv.product_key, SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces FROM inventory_fact_real inv JOIN plan ON plan.product_key = inv.product_key JOIN product_dimension pd ON pd.product_key = inv.product_key WHERE inv._period IN ('2026-01', '2026-02', '2026-03') GROUP BY inv._period, inv.product_key, pd.pack_size ), counts(period) AS (VALUES ('2026-01'), ('2026-02'), ('2026-03')) SELECT counts.period, COUNT(*) AS products, SUM(COALESCE(stock.pieces, 0)) AS stock_pieces, SUM(GREATEST(0, plan.forecast_value + plan.rop_i - COALESCE(stock.pieces, 0))) AS requirement_pieces FROM counts CROSS JOIN plan LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key GROUP BY counts.period ORDER BY counts.period"
   },
   {
    "id": "single_delivery_requirement_pieces",
-   "what": "Sensitivity: requirement under one delivery a month, whole case packs, against the live plan's 435,988 (not adopted)",
-   "value": 292268,
+   "what": "Sensitivity: requirement under one delivery a month, whole case packs, against the live plan's 419,344 (not adopted)",
+   "value": 280856,
    "command": "python -m scripts.chapter_figures --measure single_delivery_requirement_pieces",
-   "query": "WITH inp AS ( SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f, COALESCE(so.opening_pieces, 0) AS s, fr.forecast_value / (365.25 / 12 / 7) AS w, (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks FROM lp_recommendation lr JOIN lp_run run ON run.run_key = lr.lp_run_key JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), need AS ( SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp ) SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded, SUM(one_delivery) AS one_delivery_raw, SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded FROM need",
-   "formula": "need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 6: 3 days), SS the stored safety stock, S the opening stock; the figure sums it over the 109 products of lp_run 6, each rounded up to whole case packs",
-   "note": "An alternative, not adopted and not written anywhere: the plan stays 109 rows and 435,988 pieces. SS is kept as stored, sized on the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes weekly deliveries or one a month, which only SSM can answer."
+   "query": "WITH inp AS ( SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f, COALESCE(so.opening_pieces, 0) AS s, fr.forecast_value / (365.25 / 12 / 7) AS w, (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks FROM lp_recommendation lr JOIN lp_run run ON run.run_key = lr.lp_run_key JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 ), need AS ( SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp ) SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded, SUM(one_delivery) AS one_delivery_raw, SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded FROM need",
+   "formula": "need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 7: 3 days), SS the stored safety stock, S the opening stock; the figure sums it over the 110 products of lp_run 7, each rounded up to whole case packs",
+   "note": "An alternative, not adopted and not written anywhere: the plan stays 110 rows and 419,344 pieces. SS is kept as stored, sized on the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes weekly deliveries or one a month, which only SSM can answer."
   },
   {
    "id": "single_delivery_requirement_before_case_rounding_pieces",
-   "what": "The same before case-pack rounding, against the live plan's 431,443 (not adopted)",
-   "value": 289068,
+   "what": "The same before case-pack rounding, against the live plan's 414,820 (not adopted)",
+   "value": 277387,
    "command": "python -m scripts.chapter_figures --measure single_delivery_requirement_before_case_rounding_pieces",
-   "query": "WITH inp AS ( SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f, COALESCE(so.opening_pieces, 0) AS s, fr.forecast_value / (365.25 / 12 / 7) AS w, (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks FROM lp_recommendation lr JOIN lp_run run ON run.run_key = lr.lp_run_key JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 ), need AS ( SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp ) SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded, SUM(one_delivery) AS one_delivery_raw, SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded FROM need",
-   "formula": "need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 6: 3 days), SS the stored safety stock, S the opening stock; the figure sums it over the 109 products of lp_run 6, each rounded up to whole case packs",
-   "note": "An alternative, not adopted and not written anywhere: the plan stays 109 rows and 435,988 pieces. SS is kept as stored, sized on the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes weekly deliveries or one a month, which only SSM can answer."
+   "query": "WITH inp AS ( SELECT lr.q_i, lr.rop_i, lr.ss_i, lr.pack_size::numeric AS pack, fr.forecast_value AS f, COALESCE(so.opening_pieces, 0) AS s, fr.forecast_value / (365.25 / 12 / 7) AS w, (run.inputs ->> 'lead_days')::numeric / 5 AS l_weeks FROM lp_recommendation lr JOIN lp_run run ON run.run_key = lr.lp_run_key JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 ), need AS ( SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp ) SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(CASE WHEN pack > 1 AND live > 0 THEN CEIL(live / pack - 1e-9) * pack ELSE live END) AS live_rounded, SUM(one_delivery) AS one_delivery_raw, SUM(CASE WHEN pack > 1 AND one_delivery > 0 THEN CEIL(one_delivery / pack - 1e-9) * pack ELSE one_delivery END) AS one_delivery_rounded FROM need",
+   "formula": "need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 7: 3 days), SS the stored safety stock, S the opening stock; the figure sums it over the 110 products of lp_run 7, each rounded up to whole case packs",
+   "note": "An alternative, not adopted and not written anywhere: the plan stays 110 rows and 419,344 pieces. SS is kept as stored, sized on the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes weekly deliveries or one a month, which only SSM can answer."
   },
   {
    "id": "seasonality_132_products",
@@ -234,45 +234,45 @@
   },
   {
    "id": "critical_counted_products",
-   "what": "Critical (lp_run 6, count of 2 March 2026): products in the count below safety stock",
-   "value": 10,
+   "what": "Critical (lp_run 7, count of 2 March 2026): products in the count below safety stock",
+   "value": 12,
    "command": "python -m scripts.chapter_figures --measure critical_counted_products",
-   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
   },
   {
    "id": "critical_counted_stock_pieces",
    "what": "...the stock they hold, pieces",
-   "value": 3189,
+   "value": 3197,
    "command": "python -m scripts.chapter_figures --measure critical_counted_stock_pieces",
-   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
   },
   {
    "id": "critical_counted_order_pieces",
    "what": "...the order they carry, pieces",
-   "value": 45600,
+   "value": 53988,
    "command": "python -m scripts.chapter_figures --measure critical_counted_order_pieces",
-   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
   },
   {
    "id": "critical_absent_products",
    "what": "Critical: products absent from the count, read as 0",
    "value": 8,
    "command": "python -m scripts.chapter_figures --measure critical_absent_products",
-   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
   },
   {
    "id": "critical_absent_order_pieces",
    "what": "...the order they carry, pieces",
-   "value": 73044,
+   "value": 49284,
    "command": "python -m scripts.chapter_figures --measure critical_absent_order_pieces",
-   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
   },
   {
    "id": "critical_total_order_pieces",
    "what": "Critical: total order, pieces",
-   "value": 118644,
+   "value": 103272,
    "command": "python -m scripts.chapter_figures --measure critical_total_order_pieces",
-   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
+   "query": "SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products, SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces FROM lp_recommendation lr LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7 AND COALESCE(so.opening_pieces, 0) < lr.ss_i GROUP BY 1 ORDER BY 1 DESC"
   },
   {
    "id": "category_sum_pesos",

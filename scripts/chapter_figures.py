@@ -19,7 +19,7 @@ per-product policy table runs REAL_DATA_TESTS and skips that many fewer. The che
 skip is still a failure (scripts/check_helpers.py already fails it).
 
 The dependence figures (2026-11-03) read the live database, inside a READ ONLY transaction, for the plan they describe:
-how far the 109 planned products of lp_run 6 lean on the count of 2 March 2026. They are fixed to that run, so a later
+how far the 110 planned products of lp_run 7 (re-planned 2026-11-10 with succession + fading served; lp_run 6 held 109) lean on the count of 2 March 2026. They are fixed to that run, so a later
 plan does not move them; DEPENDENCE_SQL is written into the pin beside them.
 
 The manuscript figures of 2026-11-03 read the same way, each query pinned beside its value, each fixed to a run, a period or
@@ -121,14 +121,14 @@ def measure_static() -> dict:
     return {**route_split(), "cached_get_routes": cached_get_routes(), "opt_in_list_size": opt_in_list_size()}
 
 
-# For the 109 planned products: stock in pieces at each count (a product the count omits is 0, as the LP reads it) and the
+# For the 110 planned products (lp_run 7): stock in pieces at each count (a product the count omits is 0, as the LP reads it) and the
 # requirement at that stock level, need = forecast + target stock - stock, floored at 0 (scripts/run_lp.py, before the allocation).
 DEPENDENCE_SQL = """
 WITH plan AS (
   SELECT lr.product_key, lr.rop_i, fr.forecast_value
   FROM lp_recommendation lr
   JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
-  WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6
+  WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7
 ), stock AS (
   SELECT inv._period, inv.product_key,
          SUM(inv.quantity_on_hand) * pd.pack_size::numeric + COALESCE(SUM(inv.quantity_pieces), 0) AS pieces
@@ -144,7 +144,7 @@ FROM counts CROSS JOIN plan
 LEFT JOIN stock ON stock._period = counts.period AND stock.product_key = plan.product_key
 GROUP BY counts.period ORDER BY counts.period
 """
-DEPENDENCE_PRODUCTS = 109
+DEPENDENCE_PRODUCTS = 110
 
 
 def dependence_figures(rows) -> dict:
@@ -184,7 +184,7 @@ WITH inp AS (
   JOIN lp_run run ON run.run_key = lr.lp_run_key
   JOIN forecast_result fr ON fr.product_key = lr.product_key AND fr.forecast_date = lr.planning_cycle_date
   LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date
-  WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6
+  WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7
 ), need AS (
   SELECT q_i, pack, GREATEST(0, f + rop_i - s) AS live, GREATEST(0, f + w * l_weeks + ss_i - s) AS one_delivery FROM inp
 )
@@ -195,9 +195,9 @@ SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces,
 FROM need
 """
 SINGLE_DELIVERY_FORMULA = ("need_i = max(0, F + w*L + SS - S), the live F + T - S with T's review period dropped: F the month's forecast, "
-                           "w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 6: 3 days), SS the stored safety stock, "
-                           "S the opening stock; the figure sums it over the 109 products of lp_run 6, each rounded up to whole case packs")
-SINGLE_DELIVERY_NOTE = ("An alternative, not adopted and not written anywhere: the plan stays 109 rows and 435,988 pieces. SS is kept as stored, sized on "
+                           "w = F / (365.25 / 12 / 7) the weekly rate, L = lead_days / 5 weeks (lp_run 7: 3 days), SS the stored safety stock, "
+                           "S the opening stock; the figure sums it over the 110 products of lp_run 7, each rounded up to whole case packs")
+SINGLE_DELIVERY_NOTE = ("An alternative, not adopted and not written anywhere: the plan stays 110 rows and 419,344 pieces. SS is kept as stored, sized on "
                         "the 8-business-day window, although a monthly review period would widen it; so the figure is the formula's, not a re-derived "
                         "monthly policy. Supplier allocation and warehouse ceilings are not applied. Which formula applies depends on whether SSM takes "
                         "weekly deliveries or one a month, which only SSM can answer.")
@@ -272,7 +272,7 @@ SELECT COALESCE(so.in_stock_file, FALSE) AS in_the_count, COUNT(*) AS products,
        SUM(COALESCE(so.opening_pieces, 0)) AS stock_pieces, SUM(lr.q_i) AS order_pieces
 FROM lp_recommendation lr
 LEFT JOIN stock_opening_v so ON so.product_key = lr.product_key AND so.cycle = lr.planning_cycle_date
-WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 6
+WHERE lr.planning_cycle_date = DATE '2026-03-01' AND lr.lp_run_key = 7
   AND COALESCE(so.opening_pieces, 0) < lr.ss_i
 GROUP BY 1 ORDER BY 1 DESC
 """
@@ -348,12 +348,12 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
     ("tests_skipped_with_real_data", "Skipped tests on a machine with SSM's data/raw and the per-product policy table", "scripts/check.sh --full there"),
     ("tests_passed_clean_clone", "Passed tests on a clean clone (collected minus skipped)", "DERIVED, not run: tests_collected_clean_clone minus tests_skipped_clean_clone minus tests_failed (scripts/chapter_figures.derived). Confirmed by a run of scripts/check.sh --full on a clean clone at fb2ff86 (STATE.md); no step of check.sh re-confirms it"),
     ("tests_passed_with_real_data", "Passed tests with SSM's real files present (collected minus skipped)", "scripts/check.sh --full there"),
-    ("count_2mar_over_3feb", "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 3 February count, times", "python -m scripts.chapter_figures --measure count_2mar_over_3feb"),
-    ("count_2mar_over_6apr", "The 109 planned products (lp_run 6): stock at the 2 March 2026 count over the 6 April count, times", "python -m scripts.chapter_figures --measure count_2mar_over_6apr"),
+    ("count_2mar_over_3feb", "The 110 planned products (lp_run 7): stock at the 2 March 2026 count over the 3 February count, times", "python -m scripts.chapter_figures --measure count_2mar_over_3feb"),
+    ("count_2mar_over_6apr", "The 110 planned products (lp_run 7): stock at the 2 March 2026 count over the 6 April count, times", "python -m scripts.chapter_figures --measure count_2mar_over_6apr"),
     ("requirement_at_3feb_million_pieces", "Requirement for those products at the 3 February stock level, million pieces", "python -m scripts.chapter_figures --measure requirement_at_3feb_million_pieces"),
     ("requirement_at_6apr_million_pieces", "Requirement for those products at the 6 April stock level, million pieces", "python -m scripts.chapter_figures --measure requirement_at_6apr_million_pieces"),
-    ("single_delivery_requirement_pieces", "Sensitivity: requirement under one delivery a month, whole case packs, against the live plan's 435,988 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_pieces"),
-    ("single_delivery_requirement_before_case_rounding_pieces", "The same before case-pack rounding, against the live plan's 431,443 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_before_case_rounding_pieces"),
+    ("single_delivery_requirement_pieces", "Sensitivity: requirement under one delivery a month, whole case packs, against the live plan's 419,344 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_pieces"),
+    ("single_delivery_requirement_before_case_rounding_pieces", "The same before case-pack rounding, against the live plan's 414,820 (not adopted)", "python -m scripts.chapter_figures --measure single_delivery_requirement_before_case_rounding_pieces"),
     ("seasonality_132_products", "Seasonality: the 132-product cohort (Tier A as of 2026-02, method single)", "python -m scripts.chapter_figures --measure seasonality_132_products"),
     ("seasonality_132_testable", "...with 24 or more months, so testable", "python -m scripts.chapter_figures --measure seasonality_132_testable"),
     ("seasonality_132_significant", "...above the bound at lag 12, what the 'Repeats yearly' label counts", "python -m scripts.chapter_figures --measure seasonality_132_significant"),
@@ -366,7 +366,7 @@ FIGURES = [  # id, what the chapter says, equivalent plain command
     ("seasonality_189_negative_hits", "...below the negative bound (the pin fails if this is not 0)", "python -m scripts.chapter_figures --measure seasonality_189_negative_hits"),
     ("seasonality_189_expected_by_chance_one_sided", "...expected by chance on the label's own test, one-sided, 2.5%", "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance_one_sided"),
     ("seasonality_189_expected_by_chance_two_sided", "...expected by chance on a two-sided 5% test, which is NOT the label's", "python -m scripts.chapter_figures --measure seasonality_189_expected_by_chance_two_sided"),
-    ("critical_counted_products", "Critical (lp_run 6, count of 2 March 2026): products in the count below safety stock", "python -m scripts.chapter_figures --measure critical_counted_products"),
+    ("critical_counted_products", "Critical (lp_run 7, count of 2 March 2026): products in the count below safety stock", "python -m scripts.chapter_figures --measure critical_counted_products"),
     ("critical_counted_stock_pieces", "...the stock they hold, pieces", "python -m scripts.chapter_figures --measure critical_counted_stock_pieces"),
     ("critical_counted_order_pieces", "...the order they carry, pieces", "python -m scripts.chapter_figures --measure critical_counted_order_pieces"),
     ("critical_absent_products", "Critical: products absent from the count, read as 0", "python -m scripts.chapter_figures --measure critical_absent_products"),

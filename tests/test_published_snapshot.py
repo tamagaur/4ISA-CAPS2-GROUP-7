@@ -11,7 +11,7 @@ def test_snapshot_json_names_its_actuals_version_and_inputs():
     assert set(snap["inputs_sha256"]) == {"accuracy_as_served_rows.csv", "demand_money.csv", "mase_rows.csv",
                                           "error_decomposition_row.csv"}
     f = snap["figures"]
-    assert (f["mase"]["mase_below_1"], f["mase"]["products_scored"]) == (109, 175)
+    assert (f["mase"]["mase_below_1"], f["mase"]["products_scored"]) == (110, 175)
     assert f["error_decomposition"]["A"]["exceeds_safety_stock_months"] == 749
 
 
