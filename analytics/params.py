@@ -202,6 +202,16 @@ SUCCESSION_NEW_CODE_MONTHS = 3   # a related code's first sale within this many 
 SUCCESSION_CONTENT_TOL = 0.10    # "same content per piece": within 10%, same unit
 LOW_PIECES_6M = 500              # PROMO/LOW: under 500 pieces in the last 6 months is left on the served forecast
 
+# Safety stock follows the level (Kelvin's brief 2026-11-10: "Surf Fabcon SOL is forecast at zero and the plan still orders
+# 23,400 pieces of it, all safety stock sized on pre-collapse sales"). run_lp multiplies sigma_d by
+# min(1, forecast / mean monthly quantity of the months sigma is taken over) (scripts/run_lp.level_factor), Unilever only:
+#   "treated"  only for products whose latest forecast succession or fading changed (Forecast_Result.model_params)
+#   "all"      for every product
+#   False      never (the plan as it stands)
+# Backtest: reports/experiments/error_hunt_2026-11-10/README.md (sscurve.py, P_level_treated / P_level). OFF until Kelvin
+# decides what is served: switching it on moves the plan (re-run run_lp; the plan invariant in STATE.md moves with it).
+SAFETY_STOCK_FOLLOWS_LEVEL: str | bool = False
+
 # TEAM: option D of the surplus-bias experiment (kelvin/surplus-bias-
 # experiment 3226cc4, README "Candidate fixes"; chosen 2026-10-03 because no
 # forecast change met the recorded 5% threshold): flag a product when it is in

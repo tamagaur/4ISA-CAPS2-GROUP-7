@@ -1,0 +1,39 @@
+{
+ "unit": {
+  "main 2025-09..2026-02 served": {
+   "pooled_pieces": 0.40180803021251316,
+   "pooled_pesos": 0.41890724225220693,
+   "median_product_pieces": 0.3625399199510251,
+   "total_monthly_pieces": 0.13687614768378645,
+   "total_monthly_pesos": 0.13048093911462988
+  },
+  "main 2025-09..2026-02 S1": {
+   "pooled_pieces": 0.3791972616072234,
+   "pooled_pesos": 0.40780035856492924,
+   "median_product_pieces": 0.36299334994799576,
+   "total_monthly_pieces": 0.11681718255683864,
+   "total_monthly_pesos": 0.11989663188432512
+  },
+  "earlier 2024-01..2025-08 served": {
+   "pooled_pieces": 0.2954650435169358,
+   "pooled_pesos": 0.3605423369557267,
+   "median_product_pieces": 0.33661046975773823,
+   "total_monthly_pieces": 0.13255963348568442,
+   "total_monthly_pesos": 0.11990991759819175
+  },
+  "earlier 2024-01..2025-08 S1": {
+   "pooled_pieces": 0.27615321140939014,
+   "pooled_pesos": 0.34326913851152036,
+   "median_product_pieces": 0.32033634704539704,
+   "total_monthly_pieces": 0.11801390310546352,
+   "total_monthly_pesos": 0.10751079126964365
+  }
+ },
+ "promo": {
+  "rows_with_sibling_now": 936,
+  "rows_with_sibling_prev": 909,
+  "median_log_ratio_now_vs_not": -0.0029854538739937098,
+  "median_log_ratio_start_vs_not": -0.03385227722045624,
+  "base_codes_with_a_promo_sibling": 263
+ }
+}

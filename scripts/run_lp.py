@@ -152,8 +152,8 @@ from analytics.optimization.lp import (
     weekly_demand,
 )
 from analytics.params import (
-    COVER_RULES, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION, SERVICE_LEVEL_PCT, SERVICE_Z,
-    abc_method_sql,
+    COVER_RULES, LP_WEIGHTS, MASE_GATE, PLACEHOLDERS, SAFETY_STOCK_ASSUMPTION, SAFETY_STOCK_FOLLOWS_LEVEL,
+    SERVICE_LEVEL_PCT, SERVICE_Z, abc_method_sql,
 )
 from backend.data_notes import PLANNING_NOTES, opening_count_ruling
 from backend.stock_units import (
@@ -277,6 +277,14 @@ CANDIDATE_QUERY = """
       AND {ac_basis}
       AND ac.tier = 'A'
 """.format(basis=abc_method_sql(), ac_basis=abc_method_sql("ac"))
+
+# Products whose latest forecast was changed by succession or fading (analytics/forecasting/treatments.py), for
+# analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL = "treated".
+TREATMENT_QUERY = """
+    SELECT product_key FROM Forecast_Result
+    WHERE forecast_date = (SELECT MAX(forecast_date) FROM Forecast_Result) AND status = 'ok'
+      AND model_params->>'treatment' IN ('succession', 'fading')
+"""
 
 # Monthly sales per product (pieces and pesos): sigma_d, and last year's
 # totals for the allocation and the priority.
@@ -443,6 +451,22 @@ def safety_stock_for(sigma_d: float, protection_days: float) -> float:
     plan_cycle() passes the review period + lead time, the window a weekly
     order-up-to policy is exposed for."""
     return compute_safety_stock(sigma_d * math.sqrt(protection_days))
+
+
+def level_factor(demand_df: pd.DataFrame, forecast: float, end_period: str | None = None) -> float:
+    """min(1, forecast / mean monthly quantity) over the months _sigma_d_for_product reads (first row to end_period;
+    a month with no row = 0, a blank month left out). analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL multiplies sigma_d by
+    it, so a product whose forecast has fallen far below its history (fading, succession: Surf Fabcon SOL is forecast 0)
+    is not buffered against the variability of a level it no longer sells at. Never above 1: a rising product keeps its
+    sigma. Evidence: reports/experiments/error_hunt_2026-11-10/ (sscurve.py, P_level)."""
+    q = demand_df.dropna(subset=["total_quantity"])
+    if q.empty:
+        return 1.0
+    months = set(demand_df["period"])
+    last = max([max(months)] + ([end_period] if end_period else []))
+    n = len(pd.period_range(min(months), last, freq="M"))
+    mean = float(q["total_quantity"].clip(lower=0).sum()) / max(n - int(demand_df["total_quantity"].isna().sum()), 1)
+    return 1.0 if mean <= 0 else max(0.0, min(1.0, float(forecast) / mean))
 
 
 def _positive_float(raw: str) -> float:
@@ -1488,6 +1512,13 @@ def main():
     columns = ["product_key", "sku_id", "principal", "forecast_date", "forecast_value", "mase"]
     candidates_df = pd.DataFrame(cur.fetchall(), columns=columns)
 
+    treated_keys: set[int] = set()
+    if SAFETY_STOCK_FOLLOWS_LEVEL == "treated":
+        cur.execute(TREATMENT_QUERY)
+        treated_keys = {int(k) for (k,) in cur.fetchall()}
+        logger.info(f"Safety stock follows the level for {len(treated_keys)} product(s) whose forecast was treated "
+                    "(succession / fading).")
+
     considered = len(candidates_df)
     logger.info(f"{considered} product(s) considered (Category A, status='ok', mase < {MASE_GATE}, at the latest forecast_date).")
 
@@ -1587,6 +1618,12 @@ def main():
             if sigma_d is None:
                 gate_out(row.sku_id, row.principal, reason)
                 continue
+            if row.principal == "unilever" and (SAFETY_STOCK_FOLLOWS_LEVEL == "all" or (
+                    SAFETY_STOCK_FOLLOWS_LEVEL == "treated" and int(row.product_key) in treated_keys)):
+                lf = level_factor(product_demand, float(row.forecast_value), opening_period(planning_cycle_date))
+                if lf < 1.0:
+                    logger.info(f"    {row.sku_id}: sigma_d x {lf:.3f} (forecast below its history's mean level)")
+                sigma_d *= lf
             product, reason = product_input(
                 row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
                 stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date),

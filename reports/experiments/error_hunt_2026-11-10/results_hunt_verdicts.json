@@ -1,0 +1,158 @@
+{
+ "naive": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ma3": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ma6": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ma12": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "med3": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "med6": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ses2": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ses4": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "holtd": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "croston": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "sba": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "tsb": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "wboot": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ma3_clip": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "S1_clip": {
+  "all": "HOLDS",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "S1_clip2": {
+  "all": "lower in both, inside the noise or MASE higher",
+  "planned": "worse in both"
+ },
+ "peso_ma3": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "grp_ma3": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "grp_ses": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "grp_S1mix": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "S1_td_pcs": {
+  "all": "worse in both",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "S1_td_peso": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "S1_td_peso_half": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "S1_seas": {
+  "all": "worse in both",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "ma3_seas": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "S1_bias_p": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "S1_bias_c": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "S1_nocal": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "mint_struct": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "mint_wls": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ens_inv": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ens_best": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "ens_eq": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "mapa": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "S1_mapa_gate": {
+  "all": "worse in both",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "S1_mapa_gate_mix": {
+  "all": "worse in both",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "ORACLE_c3": {
+  "all": "HOLDS (strict: both intervals below 0)",
+  "planned": "HOLDS (strict: both intervals below 0)"
+ },
+ "ORACLE_lvl": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "served": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ }
+}

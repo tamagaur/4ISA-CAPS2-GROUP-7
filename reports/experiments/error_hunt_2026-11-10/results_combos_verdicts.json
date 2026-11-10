@@ -1,0 +1,26 @@
+{
+ "S1_clip": {
+  "all": "HOLDS",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "gbm_mix": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "c_clip_gbm": {
+  "all": "lower in both, inside the noise or MASE higher",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "c_clip_td": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "c_clip_bias": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "c_all4": {
+  "all": "HOLDS",
+  "planned": "lower in both, inside the noise or MASE higher"
+ }
+}

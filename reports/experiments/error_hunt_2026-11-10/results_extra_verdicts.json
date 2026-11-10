@@ -1,0 +1,30 @@
+{
+ "ORACLE_prodlevel": {
+  "all": "HOLDS (strict: both intervals below 0)",
+  "planned": "HOLDS (strict: both intervals below 0)"
+ },
+ "ORACLE_colevel": {
+  "all": "HOLDS (strict: both intervals below 0)",
+  "planned": "HOLDS (strict: both intervals below 0)"
+ },
+ "promo_lag": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "promo_cal": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "gbm": {
+  "all": "worse in both",
+  "planned": "worse in both"
+ },
+ "gbm_layer": {
+  "all": "worse in both",
+  "planned": "NOT HOLDING (one window only)"
+ },
+ "gbm_mix": {
+  "all": "NOT HOLDING (one window only)",
+  "planned": "NOT HOLDING (one window only)"
+ }
+}
