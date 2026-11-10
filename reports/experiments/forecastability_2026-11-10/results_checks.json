@@ -1,0 +1,592 @@
+{
+ "pack_mix": {
+  "base_price": "each SKU's median monthly peso per piece over its real history",
+  "families": {
+   "coarse": 55,
+   "fine": 667
+  },
+  "yoy Sep24-Feb25 -> Sep25-Feb26": {
+   "months": [
+    6,
+    6
+   ],
+   "pieces_per_month": [
+    2652929,
+    2030026
+   ],
+   "pesos_per_month": [
+    32606825,
+    31436984
+   ],
+   "constant_price_value_per_month": [
+    32654433,
+    31325326
+   ],
+   "pct_change": {
+    "pieces": -23.5,
+    "pesos": -3.6,
+    "constant_price_value": -4.1
+   },
+   "price_inside_sku": {
+    "matched_skus": 586,
+    "value_weighted_price_ratio": 1.0053,
+    "median": 1.003,
+    "p05": 0.9808,
+    "p95": 1.0874
+   },
+   "log_points": {
+    "pieces": -0.2676,
+    "real_value": -0.0416,
+    "mix_total": -0.2261
+   },
+   "decomposition_coarse": {
+    "real_value_decline_share": 0.155,
+    "between_family_mix_share": 0.072,
+    "within_family_pack_mix_share": 0.772
+   },
+   "decomposition_fine": {
+    "real_value_decline_share": 0.155,
+    "between_family_mix_share": 0.446,
+    "within_family_pack_mix_share": 0.398
+   },
+   "content_in_parsed_multi_pack_families": {
+    "families": 205,
+    "share_of_period_A_pieces": 0.479,
+    "pieces_pct": -14.0,
+    "content_pct": -14.9,
+    "constant_price_value_pct": -8.8
+   }
+  },
+  "step Mar-Jun25 -> Jul25-Feb26": {
+   "months": [
+    4,
+    8
+   ],
+   "pieces_per_month": [
+    2821434,
+    2099524
+   ],
+   "pesos_per_month": [
+    35336031,
+    31223306
+   ],
+   "constant_price_value_per_month": [
+    35299241,
+    31111615
+   ],
+   "pct_change": {
+    "pieces": -25.6,
+    "pesos": -11.6,
+    "constant_price_value": -11.9
+   },
+   "price_inside_sku": {
+    "matched_skus": 698,
+    "value_weighted_price_ratio": 1.0031,
+    "median": 1.0014,
+    "p05": 0.985,
+    "p95": 1.0775
+   },
+   "log_points": {
+    "pieces": -0.2955,
+    "real_value": -0.1263,
+    "mix_total": -0.1693
+   },
+   "decomposition_coarse": {
+    "real_value_decline_share": 0.427,
+    "between_family_mix_share": 0.087,
+    "within_family_pack_mix_share": 0.485
+   },
+   "decomposition_fine": {
+    "real_value_decline_share": 0.427,
+    "between_family_mix_share": 0.229,
+    "within_family_pack_mix_share": 0.343
+   },
+   "content_in_parsed_multi_pack_families": {
+    "families": 205,
+    "share_of_period_A_pieces": 0.454,
+    "pieces_pct": -11.2,
+    "content_pct": -12.0,
+    "constant_price_value_pct": -7.5
+   }
+  },
+  "FY2024 -> FY2025": {
+   "months": [
+    12,
+    12
+   ],
+   "pieces_per_month": [
+    2813532,
+    2460336
+   ],
+   "pesos_per_month": [
+    32285313,
+    32786635
+   ],
+   "constant_price_value_per_month": [
+    32303398,
+    32723224
+   ],
+   "pct_change": {
+    "pieces": -12.6,
+    "pesos": 1.6,
+    "constant_price_value": 1.3
+   },
+   "price_inside_sku": {
+    "matched_skus": 700,
+    "value_weighted_price_ratio": 1.0028,
+    "median": 1.0022,
+    "p05": 0.9787,
+    "p95": 1.067
+   },
+   "log_points": {
+    "pieces": -0.1341,
+    "real_value": 0.0129,
+    "mix_total": -0.1471
+   },
+   "decomposition_coarse": {
+    "real_value_decline_share": -0.096,
+    "between_family_mix_share": -0.015,
+    "within_family_pack_mix_share": 1.111
+   },
+   "decomposition_fine": {
+    "real_value_decline_share": -0.096,
+    "between_family_mix_share": 0.511,
+    "within_family_pack_mix_share": 0.585
+   },
+   "content_in_parsed_multi_pack_families": {
+    "families": 205,
+    "share_of_period_A_pieces": 0.438,
+    "pieces_pct": 0.5,
+    "content_pct": -2.4,
+    "constant_price_value_pct": 2.9
+   }
+  },
+  "named_families_yoy": {
+   "Knorr Sinigang (67749041, 67749043, 67749045)": {
+    "codes_selling": 3,
+    "pieces_pct": 34.3,
+    "constant_price_value_pct": 31.3,
+    "content_pct_parsed_codes": 31.5
+   },
+   "Knorr cubes (KNORR, name has CUBE)": {
+    "codes_selling": 14,
+    "pieces_pct": -25.4,
+    "constant_price_value_pct": -22.8,
+    "content_pct_parsed_codes": -22.7
+   },
+   "Surf powder (SURF, name has POWDER)": {
+    "codes_selling": 41,
+    "pieces_pct": -42.2,
+    "constant_price_value_pct": -12.5,
+    "content_pct_parsed_codes": -44.4
+   },
+   "Surf fabcon Blossom Fresh": {
+    "codes_selling": 12,
+    "pieces_pct": -25.2,
+    "constant_price_value_pct": -29.2,
+    "content_pct_parsed_codes": -29.3
+   }
+  },
+  "monthly": {
+   "2023-01": {
+    "pieces": 2888598,
+    "pesos": 31746248,
+    "constant_price_value": 32693890,
+    "constant_value_per_piece": 11.32
+   },
+   "2023-02": {
+    "pieces": 2654054,
+    "pesos": 29579760,
+    "constant_price_value": 30336193,
+    "constant_value_per_piece": 11.43
+   },
+   "2023-03": {
+    "pieces": 3098249,
+    "pesos": 35759282,
+    "constant_price_value": 36397773,
+    "constant_value_per_piece": 11.75
+   },
+   "2023-04": {
+    "pieces": 2259569,
+    "pesos": 25636050,
+    "constant_price_value": 25940856,
+    "constant_value_per_piece": 11.48
+   },
+   "2023-05": {
+    "pieces": 3250892,
+    "pesos": 35368724,
+    "constant_price_value": 35817963,
+    "constant_value_per_piece": 11.02
+   },
+   "2023-06": {
+    "pieces": 3060924,
+    "pesos": 34804573,
+    "constant_price_value": 34974141,
+    "constant_value_per_piece": 11.43
+   },
+   "2023-07": {
+    "pieces": 2498453,
+    "pesos": 29344095,
+    "constant_price_value": 29473534,
+    "constant_value_per_piece": 11.8
+   },
+   "2023-08": {
+    "pieces": 2614072,
+    "pesos": 30565851,
+    "constant_price_value": 30690286,
+    "constant_value_per_piece": 11.74
+   },
+   "2023-09": {
+    "pieces": 3249765,
+    "pesos": 35477812,
+    "constant_price_value": 35673968,
+    "constant_value_per_piece": 10.98
+   },
+   "2023-10": {
+    "pieces": 2355215,
+    "pesos": 33410839,
+    "constant_price_value": 33206131,
+    "constant_value_per_piece": 14.1
+   },
+   "2023-11": {
+    "pieces": 2235545,
+    "pesos": 28076863,
+    "constant_price_value": 28080163,
+    "constant_value_per_piece": 12.56
+   },
+   "2023-12": {
+    "pieces": 3122393,
+    "pesos": 35182128,
+    "constant_price_value": 35154277,
+    "constant_value_per_piece": 11.26
+   },
+   "2024-01": {
+    "pieces": 3441417,
+    "pesos": 35514366,
+    "constant_price_value": 35494517,
+    "constant_value_per_piece": 10.31
+   },
+   "2024-02": {
+    "pieces": 2924630,
+    "pesos": 31246131,
+    "constant_price_value": 31390140,
+    "constant_value_per_piece": 10.73
+   },
+   "2024-03": {
+    "pieces": 3588802,
+    "pesos": 33543529,
+    "constant_price_value": 33618394,
+    "constant_value_per_piece": 9.37
+   },
+   "2024-04": {
+    "pieces": 2530836,
+    "pesos": 31399284,
+    "constant_price_value": 31214648,
+    "constant_value_per_piece": 12.33
+   },
+   "2024-05": {
+    "pieces": 2801183,
+    "pesos": 31301881,
+    "constant_price_value": 31161092,
+    "constant_value_per_piece": 11.12
+   },
+   "2024-06": {
+    "pieces": 3199227,
+    "pesos": 35538086,
+    "constant_price_value": 35531596,
+    "constant_value_per_piece": 11.11
+   },
+   "2024-07": {
+    "pieces": 2350675,
+    "pesos": 28563248,
+    "constant_price_value": 28512211,
+    "constant_value_per_piece": 12.13
+   },
+   "2024-08": {
+    "pieces": 2782427,
+    "pesos": 32065573,
+    "constant_price_value": 32070330,
+    "constant_value_per_piece": 11.53
+   },
+   "2024-09": {
+    "pieces": 2761143,
+    "pesos": 33034250,
+    "constant_price_value": 33091318,
+    "constant_value_per_piece": 11.98
+   },
+   "2024-10": {
+    "pieces": 2575673,
+    "pesos": 34134330,
+    "constant_price_value": 34226517,
+    "constant_value_per_piece": 13.29
+   },
+   "2024-11": {
+    "pieces": 2930103,
+    "pesos": 36932571,
+    "constant_price_value": 37064015,
+    "constant_value_per_piece": 12.65
+   },
+   "2024-12": {
+    "pieces": 1876267,
+    "pesos": 24150506,
+    "constant_price_value": 24265998,
+    "constant_value_per_piece": 12.93
+   },
+   "2025-01": {
+    "pieces": 3167027,
+    "pesos": 37309891,
+    "constant_price_value": 37196254,
+    "constant_value_per_piece": 11.74
+   },
+   "2025-02": {
+    "pieces": 2607363,
+    "pesos": 30079400,
+    "constant_price_value": 30082494,
+    "constant_value_per_piece": 11.54
+   },
+   "2025-03": {
+    "pieces": 2980897,
+    "pesos": 33915435,
+    "constant_price_value": 33787336,
+    "constant_value_per_piece": 11.33
+   },
+   "2025-04": {
+    "pieces": 2604458,
+    "pesos": 33848674,
+    "constant_price_value": 33702629,
+    "constant_value_per_piece": 12.94
+   },
+   "2025-05": {
+    "pieces": 2950503,
+    "pesos": 36755722,
+    "constant_price_value": 36974100,
+    "constant_value_per_piece": 12.53
+   },
+   "2025-06": {
+    "pieces": 2749880,
+    "pesos": 36824293,
+    "constant_price_value": 36732899,
+    "constant_value_per_piece": 13.36
+   },
+   "2025-07": {
+    "pieces": 2175984,
+    "pesos": 28495928,
+    "constant_price_value": 28458353,
+    "constant_value_per_piece": 13.08
+   },
+   "2025-08": {
+    "pieces": 2440051,
+    "pesos": 32668616,
+    "constant_price_value": 32482612,
+    "constant_value_per_piece": 13.31
+   },
+   "2025-09": {
+    "pieces": 2164655,
+    "pesos": 35393542,
+    "constant_price_value": 35194404,
+    "constant_value_per_piece": 16.26
+   },
+   "2025-10": {
+    "pieces": 2216989,
+    "pesos": 35791215,
+    "constant_price_value": 35624906,
+    "constant_value_per_piece": 16.07
+   },
+   "2025-11": {
+    "pieces": 2115715,
+    "pesos": 33184867,
+    "constant_price_value": 33066023,
+    "constant_value_per_piece": 15.63
+   },
+   "2025-12": {
+    "pieces": 1350514,
+    "pesos": 19172042,
+    "constant_price_value": 19376683,
+    "constant_value_per_piece": 14.35
+   },
+   "2026-01": {
+    "pieces": 2565570,
+    "pesos": 37165964,
+    "constant_price_value": 37072010,
+    "constant_value_per_piece": 14.45
+   },
+   "2026-02": {
+    "pieces": 1766710,
+    "pesos": 27914272,
+    "constant_price_value": 27617931,
+    "constant_value_per_piece": 15.63
+   }
+  }
+ },
+ "stockouts": {
+  "run": "as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted",
+  "flag": "possibly_stock_limited (0043): opening or closing count 0 or under 1 week of average sales",
+  "caveat": "stock counts and SKU sales may not cover the same branch (Ilocos Sur counts vs La Union sales, UNVERIFIED, memory lp-logic-check)",
+  "main 2025-09..2026-02": {
+   "all": {
+    "product_months": 1078,
+    "over": 673,
+    "over_flagged": 342,
+    "over_flagged_pct": 50.8,
+    "over_closing_count_zero": 111,
+    "over_excess_pieces": 3026994,
+    "over_excess_pieces_in_flagged_months": 1118929,
+    "over_excess_pieces_closing_zero": 294763,
+    "under_flagged_pct": 43.5
+   },
+   "planned": {
+    "product_months": 586,
+    "over": 356,
+    "over_flagged": 154,
+    "over_flagged_pct": 43.3,
+    "over_closing_count_zero": 38,
+    "over_excess_pieces": 1335353,
+    "over_excess_pieces_in_flagged_months": 606627,
+    "over_excess_pieces_closing_zero": 135750,
+    "under_flagged_pct": 38.0
+   }
+  },
+  "earlier 2024-01..2025-08": {
+   "all": {
+    "product_months": 3292,
+    "over": 1828,
+    "over_flagged": 1199,
+    "over_flagged_pct": 65.6,
+    "over_closing_count_zero": 416,
+    "over_excess_pieces": 9236379,
+    "over_excess_pieces_in_flagged_months": 5857584,
+    "over_excess_pieces_closing_zero": 1263438,
+    "under_flagged_pct": 56.0
+   },
+   "planned": {
+    "product_months": 1408,
+    "over": 728,
+    "over_flagged": 393,
+    "over_flagged_pct": 54.0,
+    "over_closing_count_zero": 71,
+    "over_excess_pieces": 4693676,
+    "over_excess_pieces_in_flagged_months": 2562840,
+    "over_excess_pieces_closing_zero": 111820,
+    "under_flagged_pct": 54.0
+   }
+  }
+ },
+ "working_days": {
+  "source": "holidays 0.108, holidays.PH(categories=('public',)): regular + special non-working days",
+  "months": {
+   "2023-09": {
+    "mon_sat": 26,
+    "mon_fri": 21,
+    "holidays_on_mon_sat": []
+   },
+   "2023-10": {
+    "mon_sat": 25,
+    "mon_fri": 21,
+    "holidays_on_mon_sat": [
+     "2023-10-30"
+    ]
+   },
+   "2023-11": {
+    "mon_sat": 23,
+    "mon_fri": 19,
+    "holidays_on_mon_sat": [
+     "2023-11-01",
+     "2023-11-02",
+     "2023-11-27"
+    ]
+   },
+   "2023-12": {
+    "mon_sat": 22,
+    "mon_fri": 18,
+    "holidays_on_mon_sat": [
+     "2023-12-08",
+     "2023-12-25",
+     "2023-12-26",
+     "2023-12-30"
+    ]
+   },
+   "2024-09": {
+    "mon_sat": 25,
+    "mon_fri": 21,
+    "holidays_on_mon_sat": []
+   },
+   "2024-10": {
+    "mon_sat": 27,
+    "mon_fri": 23,
+    "holidays_on_mon_sat": []
+   },
+   "2024-11": {
+    "mon_sat": 23,
+    "mon_fri": 20,
+    "holidays_on_mon_sat": [
+     "2024-11-01",
+     "2024-11-02",
+     "2024-11-30"
+    ]
+   },
+   "2024-12": {
+    "mon_sat": 22,
+    "mon_fri": 18,
+    "holidays_on_mon_sat": [
+     "2024-12-24",
+     "2024-12-25",
+     "2024-12-30",
+     "2024-12-31"
+    ]
+   },
+   "2025-09": {
+    "mon_sat": 26,
+    "mon_fri": 22,
+    "holidays_on_mon_sat": []
+   },
+   "2025-10": {
+    "mon_sat": 26,
+    "mon_fri": 22,
+    "holidays_on_mon_sat": [
+     "2025-10-31"
+    ]
+   },
+   "2025-11": {
+    "mon_sat": 24,
+    "mon_fri": 20,
+    "holidays_on_mon_sat": [
+     "2025-11-01"
+    ]
+   },
+   "2025-12": {
+    "mon_sat": 22,
+    "mon_fri": 18,
+    "holidays_on_mon_sat": [
+     "2025-12-08",
+     "2025-12-24",
+     "2025-12-25",
+     "2025-12-30",
+     "2025-12-31"
+    ]
+   }
+  },
+  "december_vs_prior3": {
+   "2023": {
+    "working_days_ratio_mon_sat": 0.892,
+    "working_days_ratio_mon_fri": 0.885,
+    "pieces_ratio": 1.195,
+    "pieces_per_working_day_ratio_mon_sat": 1.339,
+    "pieces_per_working_day_ratio_mon_fri": 1.35
+   },
+   "2024": {
+    "working_days_ratio_mon_sat": 0.88,
+    "working_days_ratio_mon_fri": 0.844,
+    "pieces_ratio": 0.681,
+    "pieces_per_working_day_ratio_mon_sat": 0.774,
+    "pieces_per_working_day_ratio_mon_fri": 0.807
+   },
+   "2025": {
+    "working_days_ratio_mon_sat": 0.868,
+    "working_days_ratio_mon_fri": 0.844,
+    "pieces_ratio": 0.624,
+    "pieces_per_working_day_ratio_mon_sat": 0.718,
+    "pieces_per_working_day_ratio_mon_fri": 0.739
+   }
+  }
+ }
+}
