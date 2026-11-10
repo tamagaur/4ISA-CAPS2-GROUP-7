@@ -51,6 +51,15 @@ Lines: all months, December, January.
   95% interval of pooled WAPE(treatment) - pooled WAPE(served) by product bootstrap, 2,000 draws, seed 20261110.
   HOLDS = pooled WAPE lower in BOTH windows with the main-window interval below 0 or the earlier one below 0, and MASE
   not higher in either. Anything lower in one window only is reported as NOT HOLDING.
+
+ADDED AFTER THE FIRST RUN (post hoc, labelled so in every output):
+  BURST2      the pre-registered BURST rule caught 1 product-month in the main window and none of the Knorr items (their
+              CV is 0.2-0.4: smooth series with sudden spikes, not high-CV demand). BURST2 is the LP's own entry test
+              applied month by month: among rows that would be STABLE, the served forecast's own errors on the
+              product's frame rows in the 6 months before t (>= 4 of them) give mean |e| / naive scale of the history
+              before t >= 1, with errors two-sided (|sum e| / sum |e| < 0.5: right on average, wrong every month).
+              Treatments as BURST: (a) t_family, control t_ma12, (b) the inventory policy.
+  system_nopromo  SYSTEM with the PROMO/LOW treatment dropped (served kept there), because that treatment failed.
 """
 from __future__ import annotations
 
@@ -82,7 +91,7 @@ PROMO_RE = r"\(\d+\+\d+\)|\+|PROMO|PRMO|PRM |DUO|DUA"
 LOW_PIECES_6M = 500
 SBC_CV2, SBC_ADI = 0.49, 1.32
 Z95 = 1.645
-CLASSES = ["DEAD", "PROMO/LOW", "SUCCESSION", "FADING", "NEW", "BURST", "STABLE"]
+CLASSES = ["DEAD", "PROMO/LOW", "SUCCESSION", "FADING", "NEW", "BURST", "BURST2", "STABLE"]
 
 
 def url() -> str:
@@ -233,7 +242,34 @@ def build(demand, meta, fc, cycle):
     df = pd.DataFrame(out)
     prim = {"PROMO/LOW": "t_promo", "SUCCESSION": "t_succession", "FADING": "t_fading", "BURST": "t_family"}
     df["system"] = [getattr(r, prim[r.cls]) if r.cls in prim else r.served for r in df.itertuples()]
+    df["system_nopromo"] = [r.served if r.cls == "PROMO/LOW" else r.system for r in df.itertuples()]
+    df = burst_v2(df, series)
     return df, series, fam, members, W
+
+
+def burst_v2(df: pd.DataFrame, series: dict) -> pd.DataFrame:
+    """Post hoc (see header): STABLE rows whose served forecast's own trailing record says MASE >= 1, errors two-sided."""
+    df = df.sort_values(["product_key", "month"]).reset_index(drop=True)
+    df["trail_mase"] = np.nan
+    for k, g in df.groupby("product_key"):
+        s = series[k].fillna(0.0)
+        for i, r in g.iterrows():
+            t = pd.Timestamp(f"{r.month}-01")
+            lo = (t - pd.DateOffset(months=6)).strftime("%Y-%m")
+            prev = g[(g.month >= lo) & (g.month < r.month)].dropna(subset=["actual"])
+            if len(prev) < 4:
+                continue
+            h = s[s.index < t]
+            nz = np.flatnonzero(h.to_numpy() > 0)
+            h = h.iloc[nz[0]:] if len(nz) else h.iloc[:0]
+            scale = naive_scale(h.to_numpy(float)) if len(h) >= 2 else 0.0
+            e = prev.served - prev.actual
+            if scale > 0 and e.abs().sum() > 0:
+                df.at[i, "trail_mase"] = float(e.abs().mean() / scale)
+                df.at[i, "trail_onesided"] = float(abs(e.sum()) / e.abs().sum())
+    hit = (df.cls == "STABLE") & (df.trail_mase >= 1) & (df.trail_onesided < 0.5)
+    df.loc[hit, "cls"] = "BURST2"
+    return df
 
 
 def scales(series: dict, keys) -> dict:
@@ -308,9 +344,10 @@ TREATMENTS = {
     "FADING": ["served", "t_fading", "t_fading_last"],
     "NEW": ["served"],
     "BURST": ["served", "t_family", "t_ma12"],
+    "BURST2": ["served", "t_family", "t_ma12"],
     "STABLE": ["served", "t_family", "t_ma12"],
     "DEAD": ["served"],
-    "ALL (system)": ["served", "system"],
+    "ALL (system)": ["served", "system", "system_nopromo"],
 }
 
 
@@ -328,7 +365,8 @@ def main() -> int:
                              "actual_share": round(float(w[w.cls == c].actual.sum() / w.actual.sum()), 3),
                              "served_abs_error_share": round(float((w[w.cls == c].served - w[w.cls == c].actual).abs().sum()
                                                                    / (w.served - w.actual).abs().sum()), 3),
-                             "served_over_pieces": round(float((w[w.cls == c].served - w[w.cls == c].actual).sum()))}
+                             "served_over_pieces": (round(float((w[w.cls == c].served - w[w.cls == c].actual).sum()))
+                                                    if w[w.cls == c].product_key.nunique() >= 3 else None)}
                          for c in CLASSES}
         for sname, sdf in {"all": w, "planned": w[w.product_key.isin(planned)]}.items():
             for cname, methods in TREATMENTS.items():
@@ -344,11 +382,16 @@ def main() -> int:
                         table.append({"window": wname, "set": sname, "class": cname, "line": lname, "method": m, **s_,
                                       "d_wape": s_["pooled_wape"] - base["pooled_wape"], "d_mase": s_["mase"] - base["mase"],
                                       "ci_lo": lo, "ci_hi": hi})
-            b_ = sdf[sdf.cls == "BURST"]
-            if len(b_):
-                inv[f"{wname} | {sname}"] = {"product_months": int(len(b_)), **inventory(b_, df)}
+            for bc in ("BURST", "BURST2"):
+                b_ = sdf[sdf.cls == bc]
+                if len(b_) and b_.actual.sum() > 0:
+                    inv[f"{bc} | {wname} | {sname}"] = {"product_months": int(len(b_)), "products": int(b_.product_key.nunique()),
+                                                        **inventory(b_, df)}
     t = pd.DataFrame(table)
-    t.to_csv(OUT / "results_classes.csv", index=False)   # aggregates only
+    # Aggregates only: a piece total over fewer than 3 products is one product's sales (hard rule 9), so it is blanked.
+    t_out = t.copy()
+    t_out.loc[t_out.products < 3, "actual_pieces"] = np.nan
+    t_out.to_csv(OUT / "results_classes.csv", index=False)
     # Verdicts: all products and planned, 'all months' line.
     verdict = {}
     for sname in ("all", "planned"):
@@ -373,11 +416,19 @@ def main() -> int:
     t_mar = pd.Timestamp("2026-03-01")
     cr_mar = collapse_ratio(s, t_mar)
     h = s[s.index < t_mar]
-    surf = {"product_key": k, "rows": sf.round(1).to_dict("records"),
+    flag_by_month = {m.strftime("%Y-%m"): collapse_ratio(s, m) for m in pd.date_range("2025-08-01", "2026-03-01", freq="MS")}
+    surf = {"product_key": k, "rows": sf.round(1).to_dict("records"), "collapse_ratio_by_forecast_month": flag_by_month,
             "march_2026_cycle": {"served": cycle.get(k, (None,))[0], "plan_q_i": plan.get(k),
                                  "collapse_ratio": cr_mar, "fading_treatment": min(cycle.get(k, (0,))[0] or 0, float(h.tail(3).mean())),
                                  "succession_treatment_last_month": float(h.iloc[-1])}}
-    res = {"counts_by_class": counts, "verdicts": verdict, "inventory_burst_b": inv, "surf_fabcon_sol": surf,
+    # The per-month rows are per-product sales: local/ only (hard rule 9). The committed file keeps when each rule fires.
+    (REPO / "local" / "forecastability_surf_fabcon_2026-11-10.json").write_text(json.dumps(surf, indent=1, default=str),
+                                                                               encoding="utf-8")
+    fires = {"succession_first_forecast_month": next((r["month"] for r in surf["rows"] if r["cls"] == "SUCCESSION"), None),
+             "collapse_first_forecast_month": next((m for m, v in flag_by_month.items() if v is not None and v < 0.5), None),
+             "served_forecast_zero_by_2026-03": bool((cycle.get(k, (1,))[0] or 0) == 0),
+             "in_march_2026_plan": k in plan}
+    res = {"counts_by_class": counts, "verdicts": verdict, "inventory_burst_b": inv, "surf_fabcon_sol": fires,
            "mase_scale_window": SCALE_WINDOW, "mase_missing_scale": int(sum(1 for v in sc.values() if not v > 0)),
            "families": {"codes": int(len(fam)), "families": int(fam.nunique()),
                         "frame_products_in_multi_code_families": int(sum(len(members[fam[k]]) > 1 for k in df.product_key.unique()))}}

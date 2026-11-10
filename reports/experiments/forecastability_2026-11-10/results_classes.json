@@ -1,0 +1,293 @@
+{
+ "counts_by_class": {
+  "main 2025-09..2026-02": {
+   "DEAD": {
+    "product_months": 19,
+    "products": 8,
+    "actual_share": 0.0,
+    "served_abs_error_share": 0.0,
+    "served_over_pieces": 0
+   },
+   "PROMO/LOW": {
+    "product_months": 264,
+    "products": 61,
+    "actual_share": 0.109,
+    "served_abs_error_share": 0.119,
+    "served_over_pieces": 45888
+   },
+   "SUCCESSION": {
+    "product_months": 59,
+    "products": 25,
+    "actual_share": 0.019,
+    "served_abs_error_share": 0.087,
+    "served_over_pieces": 387922
+   },
+   "FADING": {
+    "product_months": 38,
+    "products": 20,
+    "actual_share": 0.058,
+    "served_abs_error_share": 0.091,
+    "served_over_pieces": 119460
+   },
+   "NEW": {
+    "product_months": 45,
+    "products": 20,
+    "actual_share": 0.048,
+    "served_abs_error_share": 0.046,
+    "served_over_pieces": 115039
+   },
+   "BURST": {
+    "product_months": 1,
+    "products": 1,
+    "actual_share": 0.0,
+    "served_abs_error_share": 0.0,
+    "served_over_pieces": null
+   },
+   "BURST2": {
+    "product_months": 90,
+    "products": 38,
+    "actual_share": 0.213,
+    "served_abs_error_share": 0.162,
+    "served_over_pieces": 264611
+   },
+   "STABLE": {
+    "product_months": 562,
+    "products": 126,
+    "actual_share": 0.553,
+    "served_abs_error_share": 0.495,
+    "served_over_pieces": 569138
+   }
+  },
+  "earlier 2024-01..2025-08": {
+   "DEAD": {
+    "product_months": 71,
+    "products": 24,
+    "actual_share": 0.0,
+    "served_abs_error_share": 0.0,
+    "served_over_pieces": -2532
+   },
+   "PROMO/LOW": {
+    "product_months": 698,
+    "products": 97,
+    "actual_share": 0.048,
+    "served_abs_error_share": 0.078,
+    "served_over_pieces": 147575
+   },
+   "SUCCESSION": {
+    "product_months": 93,
+    "products": 43,
+    "actual_share": 0.009,
+    "served_abs_error_share": 0.07,
+    "served_over_pieces": 1045200
+   },
+   "FADING": {
+    "product_months": 111,
+    "products": 38,
+    "actual_share": 0.001,
+    "served_abs_error_share": 0.032,
+    "served_over_pieces": 455457
+   },
+   "NEW": {
+    "product_months": 107,
+    "products": 45,
+    "actual_share": 0.027,
+    "served_abs_error_share": 0.027,
+    "served_over_pieces": -31524
+   },
+   "BURST": {
+    "product_months": 18,
+    "products": 3,
+    "actual_share": 0.002,
+    "served_abs_error_share": 0.003,
+    "served_over_pieces": -1397
+   },
+   "BURST2": {
+    "product_months": 330,
+    "products": 80,
+    "actual_share": 0.13,
+    "served_abs_error_share": 0.104,
+    "served_over_pieces": 522065
+   },
+   "STABLE": {
+    "product_months": 1864,
+    "products": 177,
+    "actual_share": 0.785,
+    "served_abs_error_share": 0.686,
+    "served_over_pieces": 1088254
+   }
+  }
+ },
+ "verdicts": {
+  "all | PROMO/LOW | t_promo": "NOT HOLDING (one window only)",
+  "all | PROMO/LOW | naive": "NOT HOLDING (one window only)",
+  "all | SUCCESSION | t_succession": "HOLDS",
+  "all | SUCCESSION | t_fading": "HOLDS",
+  "all | FADING | t_fading": "HOLDS",
+  "all | FADING | t_fading_last": "HOLDS",
+  "all | BURST | t_family": "NOT HOLDING (one window only)",
+  "all | BURST | t_ma12": "NOT HOLDING (one window only)",
+  "all | BURST2 | t_family": "NOT HOLDING (one window only)",
+  "all | BURST2 | t_ma12": "NOT HOLDING (one window only)",
+  "all | STABLE | t_family": "worse in both",
+  "all | STABLE | t_ma12": "worse in both",
+  "all | ALL (system) | system": "HOLDS",
+  "all | ALL (system) | system_nopromo": "HOLDS",
+  "planned | PROMO/LOW | t_promo": "worse in both",
+  "planned | PROMO/LOW | naive": "worse in both",
+  "planned | SUCCESSION | t_succession": "lower in both windows, inside the noise or MASE higher",
+  "planned | SUCCESSION | t_fading": "lower in both windows, inside the noise or MASE higher",
+  "planned | FADING | t_fading": "NOT HOLDING (one window only)",
+  "planned | FADING | t_fading_last": "NOT HOLDING (one window only)",
+  "planned | BURST | t_family": "not scored in both windows",
+  "planned | BURST | t_ma12": "not scored in both windows",
+  "planned | BURST2 | t_family": "lower in both windows, inside the noise or MASE higher",
+  "planned | BURST2 | t_ma12": "NOT HOLDING (one window only)",
+  "planned | STABLE | t_family": "worse in both",
+  "planned | STABLE | t_ma12": "worse in both",
+  "planned | ALL (system) | system": "lower in both windows, inside the noise or MASE higher",
+  "planned | ALL (system) | system_nopromo": "lower in both windows, inside the noise or MASE higher"
+ },
+ "inventory_burst_b": {
+  "BURST2 | main 2025-09..2026-02 | all": {
+   "product_months": 90,
+   "products": 38,
+   "forecast served + 1.645 sigma": {
+    "fill_rate": 0.9892,
+    "months_short_pct": 5.6,
+    "leftover_pieces_per_month": 17138,
+    "leftover_months_of_sales": 0.666,
+    "mean_target_pieces": 42588
+   },
+   "forecast t_family + 1.645 sigma": {
+    "fill_rate": 0.9865,
+    "months_short_pct": 5.6,
+    "leftover_pieces_per_month": 17872,
+    "leftover_months_of_sales": 0.695,
+    "mean_target_pieces": 43251
+   },
+   "no forecast: cover target = p95 of last 12 months": {
+    "fill_rate": 0.9739,
+    "months_short_pct": 10.0,
+    "leftover_pieces_per_month": 14508,
+    "leftover_months_of_sales": 0.564,
+    "mean_target_pieces": 39564
+   }
+  },
+  "BURST2 | main 2025-09..2026-02 | planned": {
+   "product_months": 21,
+   "products": 12,
+   "forecast served + 1.645 sigma": {
+    "fill_rate": 1.0,
+    "months_short_pct": 0.0,
+    "leftover_pieces_per_month": 3373,
+    "leftover_months_of_sales": 1.107,
+    "mean_target_pieces": 6421
+   },
+   "forecast t_family + 1.645 sigma": {
+    "fill_rate": 1.0,
+    "months_short_pct": 0.0,
+    "leftover_pieces_per_month": 2380,
+    "leftover_months_of_sales": 0.781,
+    "mean_target_pieces": 5427
+   },
+   "no forecast: cover target = p95 of last 12 months": {
+    "fill_rate": 0.9968,
+    "months_short_pct": 4.8,
+    "leftover_pieces_per_month": 3449,
+    "leftover_months_of_sales": 1.132,
+    "mean_target_pieces": 6487
+   }
+  },
+  "BURST | earlier 2024-01..2025-08 | all": {
+   "product_months": 18,
+   "products": 3,
+   "forecast served + 1.645 sigma": {
+    "fill_rate": 0.9868,
+    "months_short_pct": 5.6,
+    "leftover_pieces_per_month": 5320,
+    "leftover_months_of_sales": 1.249,
+    "mean_target_pieces": 9522
+   },
+   "forecast t_family + 1.645 sigma": {
+    "fill_rate": 0.9883,
+    "months_short_pct": 5.6,
+    "leftover_pieces_per_month": 5271,
+    "leftover_months_of_sales": 1.238,
+    "mean_target_pieces": 9480
+   },
+   "no forecast: cover target = p95 of last 12 months": {
+    "fill_rate": 1.0,
+    "months_short_pct": 0.0,
+    "leftover_pieces_per_month": 6350,
+    "leftover_months_of_sales": 1.491,
+    "mean_target_pieces": 10608
+   }
+  },
+  "BURST2 | earlier 2024-01..2025-08 | all": {
+   "product_months": 330,
+   "products": 80,
+   "forecast served + 1.645 sigma": {
+    "fill_rate": 0.9961,
+    "months_short_pct": 3.3,
+    "leftover_pieces_per_month": 11940,
+    "leftover_months_of_sales": 0.608,
+    "mean_target_pieces": 31503
+   },
+   "forecast t_family + 1.645 sigma": {
+    "fill_rate": 0.9979,
+    "months_short_pct": 3.6,
+    "leftover_pieces_per_month": 12226,
+    "leftover_months_of_sales": 0.623,
+    "mean_target_pieces": 31824
+   },
+   "no forecast: cover target = p95 of last 12 months": {
+    "fill_rate": 0.9848,
+    "months_short_pct": 10.9,
+    "leftover_pieces_per_month": 8263,
+    "leftover_months_of_sales": 0.421,
+    "mean_target_pieces": 27604
+   }
+  },
+  "BURST2 | earlier 2024-01..2025-08 | planned": {
+   "product_months": 168,
+   "products": 39,
+   "forecast served + 1.645 sigma": {
+    "fill_rate": 0.9988,
+    "months_short_pct": 3.0,
+    "leftover_pieces_per_month": 10301,
+    "leftover_months_of_sales": 0.945,
+    "mean_target_pieces": 21193
+   },
+   "forecast t_family + 1.645 sigma": {
+    "fill_rate": 0.9989,
+    "months_short_pct": 3.0,
+    "leftover_pieces_per_month": 9552,
+    "leftover_months_of_sales": 0.876,
+    "mean_target_pieces": 20444
+   },
+   "no forecast: cover target = p95 of last 12 months": {
+    "fill_rate": 0.9966,
+    "months_short_pct": 7.7,
+    "leftover_pieces_per_month": 7198,
+    "leftover_months_of_sales": 0.66,
+    "mean_target_pieces": 18066
+   }
+  }
+ },
+ "surf_fabcon_sol": {
+  "succession_first_forecast_month": "2025-09",
+  "collapse_first_forecast_month": "2025-10",
+  "served_forecast_zero_by_2026-03": false,
+  "in_march_2026_plan": true
+ },
+ "mase_scale_window": [
+  "2023-01-01",
+  "2025-08-01"
+ ],
+ "mase_missing_scale": 16,
+ "families": {
+  "codes": 2098,
+  "families": 392,
+  "frame_products_in_multi_code_families": 301
+ }
+}

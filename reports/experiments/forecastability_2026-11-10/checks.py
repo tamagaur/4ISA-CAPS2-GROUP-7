@@ -157,7 +157,7 @@ def pack_mix(sku: pd.DataFrame) -> dict:
         PA, PB = a.q.sum() / months_a, b.q.sum() / months_b
         QA, QB = a.Q.sum() / months_a, b.Q.sum() / months_b
         VA, VB = a.v.sum() / months_a, b.v.sum() / months_b
-        dlnP, dlnQ, dlnV = np.log(PB / PA), np.log(QB / QA), np.log(VB / VA)
+        dlnP, dlnQ = np.log(PB / PA), np.log(QB / QA)
         dlnu = dlnQ - dlnP
         res = {"months": [int(months_a), int(months_b)],
                "pieces_per_month": [round(PA), round(PB)], "pesos_per_month": [round(VA), round(VB)],
