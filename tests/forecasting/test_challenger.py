@@ -161,3 +161,20 @@ def test_rows_missing_either_forecast_or_the_actual_are_not_scored():
 def test_decision_is_deterministic():
     r = _rows(M2024, challenger_err=0.28)
     assert sr.decide(r, 2024)["bootstrap_95"] == sr.decide(r, 2024)["bootstrap_95"]
+
+
+def test_challenger_script_writes_only_its_own_table():
+    """scripts/challenger_forecast.py may write forecast_challenger and nothing else (never Forecast_Result, the LP or
+    the marts), and only behind --write, with --target-public off the throwaway server."""
+    src = (REPO / "scripts/challenger_forecast.py").read_text(encoding="utf-8")
+    written = set(re.findall(r"(?:INSERT\s+INTO|DELETE\s+FROM|UPDATE)\s+([\w.]+)", src, flags=re.I))
+    assert written == {"forecast_challenger"}
+    assert "--target-public" in src and "is_throwaway" in src
+
+
+def test_migration_0076_is_additive_and_locked():
+    sql = (REPO / "analytics/db/migrations/0076_forecast_challenger.sql").read_text(encoding="utf-8")
+    body = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert re.search(r"ENABLE ROW LEVEL SECURITY", body)
+    assert not re.search(r"\b(DROP|TRUNCATE|DELETE|UPDATE|ALTER\s+TABLE\s+(?!forecast_challenger))\b", body, flags=re.I)
+    assert ";" not in "\n".join(line for line in sql.splitlines() if line.lstrip().startswith("--"))
