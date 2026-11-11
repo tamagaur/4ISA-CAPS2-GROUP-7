@@ -10,7 +10,7 @@ then drives scripts/demo_session.py as a child process, the way the page does:
     load_first     load March                                                -> F1
     load_second    load April on top                                         -> F2
     rollback_second   roll April back          the system must equal F1 exactly
-    rollback_first    roll March back          the system must equal F0 exactly; plan 109 rows / 435,988 pieces; the pinned figures reproduce
+    rollback_first    roll March back          the system must equal F0 exactly; plan = STATE.md's plan line; the pinned figures reproduce
     load_first_again, load_second_again                                      -> F1', F2' (the same cycle works a second time)
     rollback_first_with_second_loaded   roll March back while April is also loaded: the system must equal F0 exactly
     load_first_third, load_second_third, third_month_refused_before_anything_changes
@@ -44,7 +44,18 @@ from scripts import demo_rehearsal, demo_revert, local_pg  # noqa: E402
 DB = "ssm_rehearsal"
 MARCH, APRIL, MAY = "2026-03", "2026-04", "2026-05"
 MUST_HAVE_CHANGED = ("public.unilever_sku_demand_fact", "public.forecast_result", "public.lp_recommendation", "public.lp_run", "mart.planning_mart", "mart.sales_mart")
-START_PLAN = (109, 435988)
+
+
+def state_plan() -> tuple[int, int]:
+    """(rows, pieces) from STATE.md's `plan:` line, which tests/invariants/test_a_plan_agreement.py holds equal to the live plan.
+    Was a literal (109, 435988) until 2026-11-10: a re-plan left the rehearsal expecting a plan live no longer had."""
+    import re
+    line = next(ln for ln in (REPO / "STATE.md").read_text(encoding="utf-8").splitlines() if ln.startswith("plan:"))
+    got = dict(re.findall(r"(\w+)=(\S+)", line))
+    return int(got["rows"]), int(got["pieces"])
+
+
+START_PLAN = state_plan()
 
 
 def say(text: str) -> None:

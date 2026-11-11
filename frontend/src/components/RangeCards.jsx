@@ -282,8 +282,9 @@ export const UNCHECKABLE_COLUMNS = [
 // for a client reader (2026-10-08): one plain answer, the monthly chart as
 // its evidence, where the misses went, and the products to review. Every
 // figure is the payload's; the definitions sit behind the "?".
-//   company_total.value            the miss on the company's monthly totals
-//   typical_product_weighted.value the miss product by product
+//   company_total.value            company-total WAPE: the miss on the company's monthly totals, pesos
+//   typical_product_weighted.value pooled product WAPE: the miss product by product, pieces
+//   entry_test                     MASE, the plan's entry test, on the latest forecast (not the range)
 //   by_month[].actual_pesos        actual sales, pesos at selling price
 //   by_month[].net_miss_pesos      forecast − actual (backend/marts.py), so
 //                                  the forecast in pesos is actual + net miss
@@ -419,6 +420,8 @@ export const ForecastErrorSummaryCard = ({
   const runs = accuracy.over_forecast_runs || {};
   const company = accuracy.company_total?.value;
   const typical = accuracy.typical_product_weighted?.value;
+  // The plan's entry test on the latest forecast (GET /dashboard forecast_accuracy.entry_test): not this range's months.
+  const entry = showingBefore ? null : served?.entry_test;
   const months = [...(accuracy.by_month || [])]
     .filter((m) => m.actual_pesos != null && m.net_miss_pesos != null)
     .sort((a, b) => (a.period < b.period ? -1 : 1))
@@ -466,15 +469,21 @@ export const ForecastErrorSummaryCard = ({
 
       <p className="fc-answer">
         <InfoTip
-          label="How these two figures are measured"
+          label="How these figures are measured"
           trigger={(
             <>
               {company != null && (
-                <>Company-wide miss: <strong>{wholePct(company)}</strong></>
+                <>Company-total WAPE (pesos): <strong>{wholePct(company)}</strong></>
               )}
               {typical != null && (
                 <>
-                  {' '}· Typical product miss: <strong>{wholePct(typical)}</strong>
+                  {' '}· Pooled product WAPE (pieces): <strong>{wholePct(typical)}</strong>
+                </>
+              )}
+              {entry && (
+                <>
+                  {' '}· MASE: <strong>{entry.mase_passed} of {entry.mase_scored}</strong> under {entry.mase_gate}
+                  {' '}(median {entry.median_mase.toFixed(2)})
                 </>
               )}
             </>
@@ -482,12 +491,17 @@ export const ForecastErrorSummaryCard = ({
           triggerClassName="dash-tip-title"
           className="dash-tip-wrap"
         >
-          <span className="fc-tip-line"><strong>Company total ({company != null ? pct(company) : '—'}).</strong>{' '}
+          <span className="fc-tip-line"><strong>Company-total WAPE ({company != null ? pct(company) : '—'}).</strong>{' '}
             {accuracy.company_total?.label} ({accuracy.company_total?.unit}).</span>
-          <span className="fc-tip-line"><strong>Typical product ({typical != null ? pct(typical) : '—'}).</strong>{' '}
+          <span className="fc-tip-line"><strong>Pooled product WAPE ({typical != null ? pct(typical) : '—'}).</strong>{' '}
             {accuracy.typical_product_weighted?.label} ({accuracy.typical_product_weighted?.unit}).</span>
+          {entry && (
+            <span className="fc-tip-line"><strong>MASE ({entry.mase_passed} of {entry.mase_scored} under {entry.mase_gate},
+              median {entry.median_mase.toFixed(3)}).</strong>{' '}{entry.measure} On the forecast of {formatMonth(entry.forecast_date.slice(0, 7))},
+              not on the months of this range.</span>
+          )}
           <span className="fc-tip-line">
-            Both are a weighted absolute percentage error (WAPE): the size of the misses as a share of what actually sold.
+            The two WAPEs (weighted absolute percentage error) are the size of the misses as a share of what actually sold.
             {' '}{accuracy.products.toLocaleString()} products, {accuracy.product_months.toLocaleString()} product-months;
             {' '}{accuracy.forecast_source === 'backtest_recreated' ? 'forecasts as made at the time (backtest)' : 'stored forecast runs'}
             {accuracy.run_labels?.length ? `: ${accuracy.run_labels.join('; ')}` : ''}.
@@ -522,7 +536,7 @@ export const ForecastErrorSummaryCard = ({
               <summary>Method details</summary>
               {twinData && (
                 <p className="fc-basis-compare">
-                  Same months, company total · typical product: calendar-adjusted <strong>{pct(served.company_total?.value)}</strong> ·{' '}
+                  Same months, company-total WAPE · pooled product WAPE: calendar-adjusted <strong>{pct(served.company_total?.value)}</strong> ·{' '}
                   <strong>{pct(served.typical_product_weighted?.value)}</strong>; before the adjustment{' '}
                   <strong>{pct(twinData.company_total?.value)}</strong> · <strong>{pct(twinData.typical_product_weighted?.value)}</strong>.
                   {' '}{adjustmentVerdict(served, twinData)}

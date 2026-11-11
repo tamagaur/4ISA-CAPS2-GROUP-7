@@ -2,20 +2,25 @@
 
 Why: `mart.accuracy_mart` and `mart.error_decomposition` read real sales at every mart refresh, so loading March 2026 would have moved every figure the manuscript quotes, with no trace. These are pinned to the data they used. Machine-readable copy: `PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json` (aggregates only, with the sha256 of every input). Per-product input rows are in `docs/published_snapshot_2026-10-24/`, tracked and trimmed to the columns the check reads (hard rule 9 exception of 2026-10-23: these figures are published). Product keys, months and quantities only; no prices, names or safety-stock values.
 
-**Actuals version: `actuals-2026-02-b31bf58d9b5e`** (Unilever per-SKU sales through 2026-02, 24,906 rows; the md5 of one month:rows:pieces:pesos line per calendar month, `analytics/actuals_version.py`). Mart refresh 41 (2026-10-22 14:25 UTC). Unilever sales have no `etl_load_event` rows, so a content fingerprint is the version key.
+**Actuals version: `actuals-2026-02-b31bf58d9b5e`** (Unilever per-SKU sales through 2026-02, 24,906 rows; the md5 of one month:rows:pieces:pesos line per calendar month, `analytics/actuals_version.py`). Mart refresh 61 (2026-11-10 13:18 UTC; re-pinned 2026-11-10, see below). Unilever sales have no `etl_load_event` rows, so a content fingerprint is the version key.
 
 ## Figures pinned
 
+Re-pinned 2026-11-10 (twice that day, each with its own change): first for succession + fading served (the MASE and headline
+rows); then for the error decomposition, which now reads the treated backtest (runs 16, 17, 18, label "... succession + fading,
+calendar-adjusted") instead of the untreated runs 11, 12, 13 (27 decomposition figures moved). The March-impact table below is
+of 2026-10-24 and still describes run 11; rerun `--march-impact` for today's.
+
 | Figure | Value | Source |
 |---|---|---|
-| MASE < 1, Tier A (2026-02, `t12m_new`) | 109 of 175 (62.3%) | `Forecast_Result` for 2026-03, status ok |
-| Median MASE | 0.827 | same |
-| Median product WAPE, as served / calendar-adjusted | 40.22% / 42.56% | frozen as-served rows (`ACCURACY_AS_SERVED.md`, headline) |
-| Pooled WAPE (pieces) | 32.92% / 32.46% | same |
-| Total WAPE (pesos) | 11.17% / 12.09% | same |
-| Error split, Tier A, pieces (over / absorbed by safety stock / beyond) | 12,242,746 / 4,847,983 / 2,669,295 | `mart.error_decomposition_row`, 4,370 product-months |
-| Exceedance: product-months where demand beat the forecast by more than safety stock | **17.14%** (749 of 4,370) | same |
-| Pesos beyond safety stock, Tier A | **₱38,187,551** | same |
+| MASE < 1, Tier A (2026-02, `t12m_new`) | 110 of 175 (62.9%) | `Forecast_Result` for 2026-03, status ok |
+| Median MASE | 0.823 | same |
+| Median product WAPE, as served / calendar-adjusted | 38.55% / 37.88% | frozen as-served rows (`ACCURACY_AS_SERVED.md`, headline) |
+| Pooled WAPE (pieces) | 30.12% / 29.69% | same |
+| Total WAPE (pesos) | 10.02% / 10.77% | same |
+| Error split, Tier A, pieces (over / absorbed by safety stock / beyond) | 10,397,753 / 4,966,558 / 2,705,595 | `mart.error_decomposition_row`, 4,370 product-months (run 16) |
+| Exceedance: product-months where demand beat the forecast by more than safety stock | **17.44%** (762 of 4,370) | same |
+| Pesos beyond safety stock, Tier A | **₱38,724,995** | same |
 
 The verbatim headline, MASE and per-route tables of `ACCURACY_AS_SERVED.md` are stored in the JSON with the document's hash.
 

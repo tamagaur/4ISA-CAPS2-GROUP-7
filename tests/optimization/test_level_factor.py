@@ -42,7 +42,6 @@ def test_no_quantity_or_zero_history_leaves_sigma_alone():
     assert level_factor(_hist({"2025-01": 0.0, "2025-02": 0.0}), 10.0) == 1.0
 
 
-def test_switch_is_off_until_decided_and_query_reads_the_treatment():
-    assert SAFETY_STOCK_FOLLOWS_LEVEL in (False, "treated", "all")
-    assert SAFETY_STOCK_FOLLOWS_LEVEL is False      # the plan is unchanged until Kelvin decides
+def test_switch_is_the_decided_mode_and_query_reads_the_treatment():
+    assert SAFETY_STOCK_FOLLOWS_LEVEL == "treated"   # decided 2026-11-10: treated products only, not every product
     assert "model_params->>'treatment'" in TREATMENT_QUERY

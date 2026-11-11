@@ -1034,12 +1034,37 @@ def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
             SELECT
                 COUNT(*) AS total_count,
                 COUNT(fr.mase) AS evaluated_count,
-                COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count
+                COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count,
+                -- The plan's entry test on Unilever's latest forecast (scripts/run_lp.py CANDIDATE_QUERY: status 'ok'
+                -- AND mase < MASE_GATE), for the error card: products with a holdout MASE, how many pass, the median.
+                COUNT(fr.mase) FILTER (WHERE pd.principal = 'unilever' AND fr.status = 'ok') AS entry_scored,
+                COUNT(*) FILTER (WHERE pd.principal = 'unilever' AND fr.status = 'ok' AND fr.mase < :mase_gate)
+                    AS entry_passed,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY fr.mase)
+                    FILTER (WHERE pd.principal = 'unilever' AND fr.status = 'ok' AND fr.mase IS NOT NULL) AS entry_median,
+                MAX(fr.forecast_date) AS entry_forecast_date
             FROM {fc_src} fr
             JOIN Product_Dimension pd ON pd.product_key = fr.product_key
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {_principal_filter(scope)}
         """, {"mase_gate": MASE_GATE, **fc_params}
+
+
+ENTRY_TEST_MEASURE = ("MASE: the served model's mean absolute one-step error over its holdout months (the last 20% of the "
+                      "product's history) divided by the mean absolute month-to-month change of its earlier months "
+                      "(Hyndman & Koehler 2006). Under 1 = better than repeating last month. A product is planned only "
+                      "when it is under 1: the plan's entry test.")
+
+
+def _entry_test(row) -> dict | None:
+    """The plan's entry test on Unilever's latest forecast, for the error card, or None with no scored forecast."""
+    scored = int(row.get("entry_scored") or 0)
+    if not scored:
+        return None
+    # Key names are in backend/practice_copy.STORED_ACCURACY_KEYS, so a copy holding generated sales withholds them.
+    return {"forecast_date": str(row["entry_forecast_date"]), "mase_scored": scored,
+            "mase_passed": int(row["entry_passed"]), "mase_gate": MASE_GATE,
+            "median_mase": round(float(row["entry_median"]), 3), "measure": ENTRY_TEST_MEASURE}
 
 
 def _plan_rows_query(scope: str, mode: str, lp_cycle, abc_periods: dict[str, str]) -> tuple[str, dict]:
@@ -1362,6 +1387,7 @@ def get_dashboard(
     total_count = int(forecast_row["total_count"])
     evaluated_count = int(forecast_row["evaluated_count"])
     unreliable_count = int(forecast_row["unreliable_count"]) if total_count > 0 else None
+    entry_test = _entry_test(forecast_row)
 
     # latest_data_period(_by_principal): the most recent real sales month per
     # principal, whatever scope was asked for — the date picker spans both.
@@ -2428,6 +2454,8 @@ def get_dashboard(
     # adjusted run's: the card shows both, so the adjustment's effect on THIS range is
     # on screen (better on 2025-03..2026-02, worse before 2025: Kelvin, 2026-10-19).
     forecast_accuracy["compare_run"] = marts.accuracy_comparison(db, forecast_accuracy)
+    # MASE beside the two WAPEs: the plan's own entry test, on the latest forecast (not on this range's months).
+    forecast_accuracy["entry_test"] = None if scope == "delmonte" else entry_test
 
     # ---- idle_stock ---------------------------------------------------------
     # Unilever only: Del Monte has no product-level real sales to show a product

@@ -19,7 +19,7 @@ SCOPE FENCE. Only what the prompt names is in scope. Never touch the forecast,
 the LP objective, migrations or frontend files unless told to. Log a side
 finding in one line; do not investigate it.
 
-NUMERIC GATE. Plan invariant: 110 rows, 419,344 pieces, nothing decided (lp_run 7, re-planned 2026-11-10 with succession + fading served; was 109 / 435,988). If a
+NUMERIC GATE. Plan invariant: 110 rows, 381,484 pieces, nothing decided (lp_run 8, re-planned 2026-11-10 with safety stock following the level for treated products; lp_run 7 was 110 / 419,344, lp_run 6 109 / 435,988). If a
 change moves either, STOP and report. Pinned manuscript figures are verified,
 never recomputed into new values.
 

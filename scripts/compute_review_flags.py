@@ -58,16 +58,15 @@ STORED_DECIMALS = 2
 
 
 def connect():
+    """SUPABASE_DB_URL only, as run_lp and run_baseline_forecast connect, and no fallback. Until 2026-11-10 this tried
+    DATABASE_URL and SUPABASE_DIRECT_URL first and fell through on a failed connection: .env holds SUPABASE_DIRECT_URL
+    (live), so a shell that pointed SUPABASE_DB_URL at a local copy still read live (it stopped at its reproduce check
+    on 2026-11-10, nothing written). A URL that fails now stops the run instead of trying another database."""
     load_dotenv(override=False)
-    for var in ("DATABASE_URL", "SUPABASE_DIRECT_URL", "SUPABASE_DB_URL"):
-        url = os.environ.get(var)
-        if not url:
-            continue
-        try:
-            return psycopg2.connect(url)
-        except psycopg2.OperationalError:
-            continue
-    sys.exit("no database URL in .env worked (DATABASE_URL, SUPABASE_DIRECT_URL, SUPABASE_DB_URL)")
+    url = os.environ.get("SUPABASE_DB_URL")
+    if not url:
+        sys.exit("SUPABASE_DB_URL is not set (in the environment or .env)")
+    return psycopg2.connect(url)
 
 
 def read_inputs(conn, cycle: str | None):

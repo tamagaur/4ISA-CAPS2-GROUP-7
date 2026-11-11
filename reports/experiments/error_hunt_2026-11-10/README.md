@@ -123,8 +123,9 @@ The order value uses the plan's cost inputs, DEC-44, not confirmed by SSM.
 - 68395711: 204 to 0.
 - The other three were already ordering 0.
 
-Code: `scripts/run_lp.level_factor`, switch in `analytics/params.py`, **default False**: the plan is unchanged until
-Kelvin decides. Test: `tests/optimization/test_level_factor.py`.
+Code: `scripts/run_lp.level_factor`, switch in `analytics/params.py`. Test: `tests/optimization/test_level_factor.py`.
+**Decided "treated" and live, 2026-11-10** (Kelvin): lp_run 8, 110 rows, 381,484 pieces, as the dry run above. "all" was not
+chosen. The four-way combination (c_all4) is not served.
 
 ## Files
 

@@ -78,6 +78,15 @@ PINNED = {
         "default_procurement_cost_per_unit": 33.48,
         "storage_cost_per_unit": 0.50,
     },
+    # Succession + fading, served 2026-11-10 (analytics/forecasting/treatments.py; rules committed at f3ffe47).
+    "SERVE_SUCCESSION": True,
+    "SERVE_FADING": True,
+    "SUCCESSION_DROP": 0.5,
+    "SUCCESSION_NEW_CODE_MONTHS": 3,
+    "SUCCESSION_CONTENT_TOL": 0.10,
+    "LOW_PIECES_6M": 500,
+    # Safety stock follows the level for treated products, decided 2026-11-10 (scripts/run_lp.level_factor).
+    "SAFETY_STOCK_FOLLOWS_LEVEL": "treated",
 }
 
 

@@ -422,21 +422,31 @@ def render(res: dict, ver: dict, today: str) -> str:
 # The two stored runs the dashboard's forecast-error card can read, scored as served. NEW labels: the
 # older runs (5, 7) stay as they are, selectable by run_id. The calendar one is the card's default
 # (backend/marts.DEFAULT_BACKTEST_LABEL), since the live forecast is calendar-adjusted.
+# Labels carry ", succession + fading" since 2026-11-10 (Kelvin's brief: the card shows the forecast as served now, with the
+# treatments of analytics/forecasting/treatments.py; read_inputs passes their contexts to served_backtest). The untreated runs
+# (11, 12, 13 and twin 10) stay stored and selectable by run_id; scripts/challenger_forecast.py still reads run 11 by its label.
+# The label still matches 0064's pattern (as-served backtest .*calendar-adjusted), and the error decomposition takes the
+# newest matching run per product-month, so the new runs supersede the old ones there with no migration.
+TREATED = ", succession + fading"
 AS_SERVED_RUNS = {
-    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month",
+    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED,
                   "Tier A (current basis) the month before each test month; months after a product's last sale "
-                  "scored; dead-SKU rule applied as the live forecast applies it"),
-    "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted",
+                  "scored; dead-SKU rule applied as the live forecast applies it; succession and fading applied as served"),
+    "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + ", calendar-adjusted",
                            "as above; served value x the company calendar factor"),
     # Tier B and C cohorts (the error decomposition, migration 0063, scores every tier). Calendar-adjusted only,
     # the form the live forecast is served in; XGBoost pool = Tier A, as the live runner trains it.
-    "as_served_calendar_B": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier B the month before each month, calendar-adjusted",
+    "as_served_calendar_B": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier B the month before each month" + TREATED + ", calendar-adjusted",
                              "COUNTERFACTUAL, NOT SERVED - Tier B (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
-                             "served value x the company calendar factor"),
-    "as_served_calendar_C": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier C the month before each month, calendar-adjusted",
+                             "succession and fading applied; served value x the company calendar factor"),
+    "as_served_calendar_C": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier C the month before each month" + TREATED + ", calendar-adjusted",
                              "COUNTERFACTUAL, NOT SERVED - Tier C (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
-                             "served value x the company calendar factor"),
+                             "succession and fading applied; served value x the company calendar factor"),
 }
+# Migration 0064's notes for the counterfactual tiers, set at write time on a new run (0064 updated the runs of its day).
+COUNTERFACTUAL_NOTES = {"counterfactual": True,
+                        "reason": "Tier B/C forecasts are not produced by the live runner (Tier A only); this backtest exists to score "
+                                  "the error decomposition by tier and is not deployed accuracy"}
 
 
 def read_tier_cohort(db_url: str, method: str, tier: str) -> dict[str, set[int]]:
@@ -474,7 +484,8 @@ def write_runs(db_url: str, runs: dict[str, pd.DataFrame], checks: dict[str, dic
             cur.execute("""INSERT INTO mart.forecast_run (kind, label, cohort, window_start, window_end, code_version, created_by, notes)
                            VALUES ('backtest_recreated', %s, %s, %s, %s, %s, %s, %s) RETURNING run_id""",
                         (label, cohort, ym(WINDOW[0]), ym(WINDOW[-1]), code, getpass.getuser(),
-                         json.dumps({"variant": name, "script": "scripts/accuracy_as_served.py", "check": checks[name]}, default=str)))
+                         json.dumps({"variant": name, "script": "scripts/accuracy_as_served.py", "check": checks[name],
+                                     **(COUNTERFACTUAL_NOTES if name.endswith(("_B", "_C")) else {})}, default=str)))
             ids[name] = cur.fetchone()[0]
             execute_values(cur, """INSERT INTO mart.forecast_run_value (run_id, product_key, month, forecast_pieces, status, method, bin,
                                                                        ma3_pieces, backup_fired) VALUES %s""",

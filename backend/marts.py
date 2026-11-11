@@ -981,7 +981,10 @@ def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, 
 # months after a product's last sale are scored and the dead-SKU rule is applied as the live
 # forecast applies it. The older runs (backtest_forecast_run.py: 5 unadjusted, 7 calendar-adjusted)
 # never scored a month with no sales row; they stay stored and selectable under their own labels.
-DEFAULT_BACKTEST_LABEL = "as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted"
+# Since 2026-11-10 the run with succession + fading applied, as the forecast is served (scripts/accuracy_as_served.py
+# AS_SERVED_RUNS); the untreated run of that window stays selectable by run_id.
+DEFAULT_BACKTEST_LABEL = ("as-served backtest 2023-10..2026-02, Tier A the month before each month, succession + fading, "
+                          "calendar-adjusted")
 # A calendar-adjusted run is the at-the-time run with this suffix on its label
 # (scripts/backtest_forecast_run.py's at_the_time_calendar); its unadjusted twin is
 # the same label without it, so the card can show both from the run list alone.

@@ -70,7 +70,8 @@ MONTH_KEYS = ("period", "month", "calendar_month", "sales_period", "last_sale_pe
               "planning_cycle_date", "forecast_date", "forecast_period", "cycle", "cycle_date", "tier_period", "last_month")
 _MONTH = re.compile(r"^(20\d{2}-\d{2})(-\d{2})?")
 ACCURACY_RANGE_ROUTES = ("/dashboard/accuracy", "/dashboard/error-decomposition")   # the whole answer is a range's scored figures
-STORED_ACCURACY_KEYS = ("mase", "mape", "wape", "confidence_lower", "confidence_upper", "evaluated_count", "unreliable_count")
+STORED_ACCURACY_KEYS = ("mase", "mape", "wape", "confidence_lower", "confidence_upper", "evaluated_count", "unreliable_count",
+                        "median_mase", "mase_passed", "mase_scored")   # the last three: GET /dashboard forecast_accuracy.entry_test
 MODEL_PARAMS_ACCURACY_KEYS = ("wape", "holdout_metrics_served", "holdout_metrics_all_methods", "oracle_method")
 _MASE_IN_TEXT = re.compile(r"\s*\(MASE \d+(?:\.\d+)?\)")
 # scripts/run_baseline_forecast.py's printed summary: every line of it that states or rebuilds an error, the win counts per class included.

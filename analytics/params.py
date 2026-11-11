@@ -208,9 +208,10 @@ LOW_PIECES_6M = 500              # PROMO/LOW: under 500 pieces in the last 6 mon
 #   "treated"  only for products whose latest forecast succession or fading changed (Forecast_Result.model_params)
 #   "all"      for every product
 #   False      never (the plan as it stands)
-# Backtest: reports/experiments/error_hunt_2026-11-10/README.md (sscurve.py, P_level_treated / P_level). OFF until Kelvin
-# decides what is served: switching it on moves the plan (re-run run_lp; the plan invariant in STATE.md moves with it).
-SAFETY_STOCK_FOLLOWS_LEVEL: str | bool = False
+# Backtest: reports/experiments/error_hunt_2026-11-10/README.md (sscurve.py, P_level_treated / P_level).
+# DECIDED "treated" (Kelvin, 2026-11-10): not "all", which cuts more stock but holds more for planned products at matched
+# pieces short in the main window. Changing it moves the plan (re-run run_lp; the plan invariant in STATE.md moves with it).
+SAFETY_STOCK_FOLLOWS_LEVEL: str | bool = "treated"
 
 # TEAM: option D of the surplus-bias experiment (kelvin/surplus-bias-
 # experiment 3226cc4, README "Candidate fixes"; chosen 2026-10-03 because no
