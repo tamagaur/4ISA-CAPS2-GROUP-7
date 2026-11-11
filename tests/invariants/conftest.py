@@ -63,6 +63,10 @@ def get(db):
     scripts/smoke_api.py). Memoised: each path is requested once per run."""
     from fastapi.testclient import TestClient
 
+    # The token below is signed and checked inside this process only, so it needs a secret but not the real one: a
+    # throwaway when none is set, so these checks never fail on a missing JWT_SECRET_KEY (scripts/check_helpers.py no
+    # longer requires it, 2026-11-11).
+    os.environ.setdefault("JWT_SECRET_KEY", "invariants-in-process-only")
     from backend.auth_utils import create_access_token
     from backend.deps import get_current_user, get_db, get_token_payload
     from backend.main import app

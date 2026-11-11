@@ -45,3 +45,20 @@ def test_no_quantity_or_zero_history_leaves_sigma_alone():
 def test_switch_is_the_decided_mode_and_query_reads_the_treatment():
     assert SAFETY_STOCK_FOLLOWS_LEVEL == "treated"   # decided 2026-11-10: treated products only, not every product
     assert "model_params->>'treatment'" in TREATMENT_QUERY
+
+
+def test_planned_sigma_d_scales_only_treated_products():
+    from scripts.run_lp import _sigma_d_for_product, planned_sigma_d
+    h = _hist({"2025-01": 1000, "2025-02": 1200, "2025-03": 800, "2025-04": 100})
+    base, _ = _sigma_d_for_product(h, "unilever", "2025-04")
+    treated, _ = planned_sigma_d(h, "unilever", 1, 0.0, "2025-04", {1})
+    untreated, _ = planned_sigma_d(h, "unilever", 1, 0.0, "2025-04", set())
+    assert untreated == base and treated == 0.0       # a faded product forecast 0 carries no safety stock
+
+
+def test_every_plan_reproducer_calls_the_one_sigma_function():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    for f in ("scripts/evidence/lp_charts.py", "scripts/build_preview_outputs.py"):
+        src = (root / f).read_text(encoding="utf-8")
+        assert "planned_sigma_d(" in src and "_sigma_d_for_product(d" not in src, f

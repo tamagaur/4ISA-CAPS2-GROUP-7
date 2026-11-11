@@ -33,8 +33,9 @@ PROPOSED_AT = datetime.datetime(2026, 10, 23, 9, 0, tzinfo=datetime.timezone.utc
 
 
 def _user(user_id: int, email: str, role: str = "staff"):
-    return auth_utils.decode_access_token(
-        auth_utils.create_access_token(user_id=user_id, email=email, role=role, full_name=email.split("@")[0]))
+    # The payload decode_access_token would return, built directly: signing a token here ran at import, needed
+    # JWT_SECRET_KEY before any fixture could supply one, and stopped collection on a clean clone (KNOWN_ISSUES B1).
+    return auth_utils.TokenPayload(user_id=user_id, email=email, role=role, full_name=email.split("@")[0])
 
 
 PLANNER = _user(1, "planner@ssmcapstone.com")

@@ -56,7 +56,7 @@ from scripts.preview_router_synth import load_series, preview  # noqa: E402
 from scripts.run_baseline_forecast import _clean_metric, _confidence_band  # noqa: E402
 from backend.stock_units import opening_period  # noqa: E402
 from scripts.run_lp import (  # noqa: E402
-    _sigma_d_for_product, build_parser, fetch_demand_history, fetch_stock_and_cost, fetch_stock_counts,
+    build_parser, fetch_treated_keys, planned_sigma_d, fetch_demand_history, fetch_stock_and_cost, fetch_stock_counts,
     opening_counts, plan_cycle, product_input, recorded_counts,
 )
 
@@ -180,10 +180,13 @@ def lp_rows(conn, forecasts: pd.DataFrame, abc_period: str) -> tuple[pd.DataFram
             raise SystemExit(f"LP refused ({'; '.join(refused.values())}); nothing written.")
     stock_and_cost = fetch_stock_and_cost(cur, keys, stock_period) if cycle is not None else {}
     history = fetch_demand_history(cur, keys)  # real sales: last year's allocation and priority
+    treated = fetch_treated_keys(cur)
     args = build_parser().parse_args([])  # run_lp.py's defaults, i.e. the placeholders
     products = []
     for r in cand.itertuples():
-        sigma_d, reason = _sigma_d_for_product(demand[demand["product_key"] == r.product_key], r.principal)
+        # run_lp.planned_sigma_d: the plan's own sigma, treated scaling included (2026-11-11)
+        sigma_d, reason = planned_sigma_d(demand[demand["product_key"] == r.product_key], r.principal, r.product_key,
+                                          float(r.forecast_value), stock_period, treated)
         if sigma_d is None:
             logging.warning("LP: %s gated out — %s", r.sku_id, reason)
             continue

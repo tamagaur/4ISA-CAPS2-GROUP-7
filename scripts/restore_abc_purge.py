@@ -29,12 +29,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import psycopg2
 from psycopg2.extras import execute_values
 from dotenv import load_dotenv
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # the repo root, so `analytics` imports when run as a file
 
 BACKUP_PATH = Path(__file__).resolve().parents[1] / "reports" / "abc_purge_backup_2026-08.json"
 
@@ -75,7 +76,8 @@ def restore(dry_run: bool) -> None:
 
     tuples = _rows_to_tuples(rows)
 
-    dsn = os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]
+    from analytics.config import long_read_db_url
+    dsn = long_read_db_url()  # analytics.config.long_read_db_url: SUPABASE_DIRECT_URL only when it is the same database (2026-11-11)
     conn = psycopg2.connect(dsn, options="-c statement_timeout=0")
     conn.autocommit = False
     try:

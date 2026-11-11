@@ -469,6 +469,33 @@ def level_factor(demand_df: pd.DataFrame, forecast: float, end_period: str | Non
     return 1.0 if mean <= 0 else max(0.0, min(1.0, float(forecast) / mean))
 
 
+def fetch_treated_keys(cur) -> set[int]:
+    """Products whose latest forecast succession or fading changed (TREATMENT_QUERY), when
+    analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL is "treated"; empty otherwise."""
+    if SAFETY_STOCK_FOLLOWS_LEVEL != "treated":
+        return set()
+    cur.execute(TREATMENT_QUERY)
+    return {int(k) for (k,) in cur.fetchall()}
+
+
+def planned_sigma_d(product_demand: pd.DataFrame, principal: str, product_key: int, forecast: float,
+                    end_period: str | None, treated_keys: set[int]) -> tuple[float | None, str | None]:
+    """THE sigma_d the plan's safety stock is sized on: _sigma_d_for_product, times level_factor where
+    SAFETY_STOCK_FOLLOWS_LEVEL applies. main() and every script that reproduces the plan call this one function
+    (scripts/evidence/lp_charts.py, scripts/build_preview_outputs.py), so the safety stock cannot be computed two ways
+    (until 2026-11-11 both scripts called _sigma_d_for_product alone and missed the treated scaling)."""
+    sigma_d, reason = _sigma_d_for_product(product_demand, principal, end_period)
+    if sigma_d is None:
+        return None, reason
+    if principal == "unilever" and (SAFETY_STOCK_FOLLOWS_LEVEL == "all" or (
+            SAFETY_STOCK_FOLLOWS_LEVEL == "treated" and int(product_key) in treated_keys)):
+        lf = level_factor(product_demand, float(forecast), end_period)
+        if lf < 1.0:
+            logger.info(f"    product {product_key}: sigma_d x {lf:.3f} (forecast below its history's mean level)")
+        sigma_d *= lf
+    return sigma_d, None
+
+
 def _positive_float(raw: str) -> float:
     value = float(raw)
     if value <= 0:
@@ -1512,10 +1539,8 @@ def main():
     columns = ["product_key", "sku_id", "principal", "forecast_date", "forecast_value", "mase"]
     candidates_df = pd.DataFrame(cur.fetchall(), columns=columns)
 
-    treated_keys: set[int] = set()
+    treated_keys = fetch_treated_keys(cur)
     if SAFETY_STOCK_FOLLOWS_LEVEL == "treated":
-        cur.execute(TREATMENT_QUERY)
-        treated_keys = {int(k) for (k,) in cur.fetchall()}
         logger.info(f"Safety stock follows the level for {len(treated_keys)} product(s) whose forecast was treated "
                     "(succession / fading).")
 
@@ -1614,16 +1639,11 @@ def main():
             if product_demand.empty:
                 gate_out(row.sku_id, row.principal, "no demand history at all")
                 continue
-            sigma_d, reason = _sigma_d_for_product(product_demand, row.principal, opening_period(planning_cycle_date))
+            sigma_d, reason = planned_sigma_d(product_demand, row.principal, row.product_key, float(row.forecast_value),
+                                              opening_period(planning_cycle_date), treated_keys)
             if sigma_d is None:
                 gate_out(row.sku_id, row.principal, reason)
                 continue
-            if row.principal == "unilever" and (SAFETY_STOCK_FOLLOWS_LEVEL == "all" or (
-                    SAFETY_STOCK_FOLLOWS_LEVEL == "treated" and int(row.product_key) in treated_keys)):
-                lf = level_factor(product_demand, float(row.forecast_value), opening_period(planning_cycle_date))
-                if lf < 1.0:
-                    logger.info(f"    {row.sku_id}: sigma_d x {lf:.3f} (forecast below its history's mean level)")
-                sigma_d *= lf
             product, reason = product_input(
                 row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
                 stock_and_cost, demand_df, prior_year=basis_year(row.forecast_date),

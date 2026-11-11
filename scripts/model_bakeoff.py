@@ -83,7 +83,8 @@ REPORTS = os.path.join(os.path.dirname(__file__), os.pardir, "reports")
 # --------------------------------------------------------------------------- #
 def connect():
     load_dotenv()
-    dsn = os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"]
+    from analytics.config import long_read_db_url
+    dsn = long_read_db_url()  # analytics.config.long_read_db_url: SUPABASE_DIRECT_URL only when it is the same database (2026-11-11)
     conn = psycopg2.connect(dsn, options="-c statement_timeout=0")
     # transaction-scoped READ ONLY, never session-level (pooler leak): autocommit
     # stays off, so every read in fetch() runs in this one transaction; close() ends it.

@@ -88,6 +88,28 @@ def long_read_db_url() -> str:
     it to change how a connection is configured: the rules on session-level
     SET (CLAUDE.md hard rule 7) apply to both URLs."""
     _load_env_file()
+    db = os.environ.get("SUPABASE_DB_URL", "").strip()
     direct = os.environ.get("SUPABASE_DIRECT_URL", "").strip()
-    return direct or get_settings().supabase_db_url
+    if not db:
+        return get_settings().supabase_db_url        # raises MissingConfigError, naming the variable
+    # SUPABASE_DIRECT_URL is only a better ROUTE to the database SUPABASE_DB_URL names (same host, user and database,
+    # another port). Until 2026-11-11 it won whenever it was set: .env holds it pointing at live, so a process told
+    # SUPABASE_DB_URL=<a local copy> still read live (the compute_review_flags trap of 2026-11-10, here in every backup,
+    # rehearsal script and long read). A direct URL naming a different database is now ignored, and said so.
+    if direct and same_database(direct, db):
+        return direct
+    if direct:
+        import sys
+        print("long_read_db_url: SUPABASE_DIRECT_URL names a different database than SUPABASE_DB_URL; using SUPABASE_DB_URL",
+              file=sys.stderr)
+    return db
+
+
+def same_database(a: str, b: str) -> bool:
+    """True when two connection URLs name the same server host, user and database (the port may differ: the
+    Supabase session and transaction poolers are one database on two ports)."""
+    from urllib.parse import urlparse
+    pa, pb = urlparse(a), urlparse(b)
+    return ((pa.hostname or "").lower(), pa.username or "", pa.path.lstrip("/") or "postgres") == \
+           ((pb.hostname or "").lower(), pb.username or "", pb.path.lstrip("/") or "postgres")
 

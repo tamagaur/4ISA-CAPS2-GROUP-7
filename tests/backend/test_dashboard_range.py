@@ -66,7 +66,11 @@ class FakeSession:
                   "latest_load_event_key": 7, "mart_refresh_id": 3, "mart_refreshed_at": "2026-10-22T14:25:29+00:00"}]
         self.routes = [("'sales' AS src", default if snapshot is None else snapshot),
                        ("to_regclass('mart.refresh_log')", [{"present": False}]),
-                       ("AS fingerprint", stamp)] + routes
+                       ("AS fingerprint", stamp),
+                       # the plan's entry test beside the error card's WAPEs (dashboard_range._range_entry_test)
+                       ("AS entry_scored", [{"total_count": 175, "evaluated_count": 175, "unreliable_count": 65,
+                                             "entry_scored": 175, "entry_passed": 110, "entry_median": 0.823,
+                                             "entry_forecast_date": "2026-03-01"}])] + routes
         self.calls: list[tuple[str, dict]] = []
         self.info: dict = {}
 

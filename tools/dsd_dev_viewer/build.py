@@ -368,32 +368,24 @@ def _num(v, nd=4):
 
 
 def _connect():
-    """Read-only connection, SUPABASE_DIRECT_URL first then SUPABASE_DB_URL.
+    """Read-only connection to the one database SUPABASE_DB_URL names.
 
-    It used to be `DIRECT or DB_URL`, which fails outright when only the direct
-    host is unreachable (2026-09-23: its DNS name no longer resolves from this
-    machine while the pooled host does). Both are tried, the one that connected
-    is reported, and every failure is printed - a build must not be able to
-    silently read a different database than the banner claims."""
+    analytics.config.long_read_db_url: SUPABASE_DIRECT_URL is used only when it names the same database (another
+    port), and a failure never falls through to another database (2026-11-11). The old loop tried
+    SUPABASE_DIRECT_URL first, so a build told SUPABASE_DB_URL=<a copy> read live from .env's direct URL."""
     load_dotenv(os.path.join(REPO, ".env"))
-    errors = []
-    for name in ("SUPABASE_DIRECT_URL", "SUPABASE_DB_URL"):
-        url = os.environ.get(name)
-        if not url:
-            errors.append(f"{name}: unset")
-            continue
-        try:
-            conn = psycopg2.connect(url, connect_timeout=20)
-        except psycopg2.OperationalError as exc:
-            errors.append(f"{name}: {str(exc).strip().splitlines()[0]}")
-            continue
-        # Read-only is transaction-scoped (fetch()'s first statement), never
-        # set_session: that sets default_transaction_read_only on the server
-        # session, which through the :6543 pooler outlives this connection and
-        # leaves the next client unable to write.
-        return conn, name
-    raise SystemExit("no database reachable:\n  " + "\n  ".join(errors)
-                     + f"\nrebuild the page from the last snapshot with: --offline ({SNAPSHOT})")
+    sys.path.insert(0, REPO)
+    from analytics.config import long_read_db_url
+    url = long_read_db_url()
+    name = "SUPABASE_DIRECT_URL" if url != os.environ.get("SUPABASE_DB_URL") else "SUPABASE_DB_URL"
+    try:
+        conn = psycopg2.connect(url, connect_timeout=20)
+    except psycopg2.OperationalError as exc:
+        raise SystemExit(f"no database reachable: {name}: {str(exc).strip().splitlines()[0]}"
+                         f"\nrebuild the page from the last snapshot with: --offline ({SNAPSHOT})")
+    # Read-only is transaction-scoped (fetch()'s first statement), never set_session: that sets
+    # default_transaction_read_only on the server session, which through the :6543 pooler outlives this connection.
+    return conn, name
 
 
 def fetch() -> tuple[dict, dict, str]:

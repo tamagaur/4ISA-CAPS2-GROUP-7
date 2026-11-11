@@ -27,8 +27,8 @@ statement that would end the transaction early (BEGIN, COMMIT, ...) or change a
 session setting (SET without LOCAL, RESET, set_config) is refused: it would
 escape the read-only transaction or leak onto a shared connection.
 
-Connects with the first of DATABASE_URL, SUPABASE_DIRECT_URL, SUPABASE_DB_URL
-that works (SUPABASE_DIRECT_URL does not resolve from every network). Prints
+Connects with SUPABASE_DB_URL (by SUPABASE_DIRECT_URL only when that names the same database:
+analytics.config.long_read_db_url), and never tries another database when that one fails. Prints
 each statement's row count, and the rows a query returns (up to MAX_ROWS_SHOWN).
 Exit status: 0 done, 2 refused, anything else an error (rolled back).
 """
@@ -43,8 +43,8 @@ from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv
 from psycopg2.extensions import TRANSACTION_STATUS_IDLE, TRANSACTION_STATUS_INTRANS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # the repo root, so `analytics` imports when run as a file
 
-URL_VARS = ("DATABASE_URL", "SUPABASE_DIRECT_URL", "SUPABASE_DB_URL")
 MAX_ROWS_SHOWN = 200
 
 # A --scratch run may never target the live schema, Postgres's own or Supabase's.
@@ -202,19 +202,19 @@ def run(conn, statements: list[str], scratch: str | None = None, out=print) -> b
 
 
 def connect():
+    """analytics.config.long_read_db_url, one URL, no fall-through. Until 2026-11-11 this took the first of DATABASE_URL,
+    SUPABASE_DIRECT_URL, SUPABASE_DB_URL that answered: .env's SUPABASE_DIRECT_URL is live, so a --scratch run told
+    SUPABASE_DB_URL=<a local copy> wrote its scratch schema on live, and a local copy that did not answer fell through
+    to live as well."""
     load_dotenv()
-    for var in URL_VARS:
-        url = os.environ.get(var)
-        if not url:
-            continue
-        try:
-            conn = psycopg2.connect(url, connect_timeout=10)
-        except psycopg2.OperationalError as exc:
-            print(f"{var}: could not connect ({str(exc).strip().splitlines()[0]}); trying the next one")
-            continue
-        print(f"connected with {var}")
-        return conn
-    raise SystemExit(f"None of {', '.join(URL_VARS)} is set to a database that answers.")
+    from analytics.config import long_read_db_url
+    url = long_read_db_url()
+    try:
+        conn = psycopg2.connect(url, connect_timeout=10)
+    except psycopg2.OperationalError as exc:
+        raise SystemExit(f"could not connect: {str(exc).strip().splitlines()[0]}")
+    print("connected with SUPABASE_DB_URL" + (" (by SUPABASE_DIRECT_URL, the same database)" if url != os.environ.get("SUPABASE_DB_URL") else ""))
+    return conn
 
 
 def main(argv: list[str] | None = None) -> int:

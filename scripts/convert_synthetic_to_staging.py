@@ -436,11 +436,11 @@ def load_real_evidence_skus() -> set:
     one Inventory_Fact_Real row - 597 as of 2026-09-21, the set scripts/apply_dm_fix_to_public.py step 3
     upserted from the real inventory_sign_off files. Read-only. data/delmonte_real_skus.txt is NOT used: it
     lists 269 codes and predates that fix."""
-    import os
     import psycopg2
     from dotenv import load_dotenv
     load_dotenv(REPO_ROOT / ".env")
-    conn = psycopg2.connect(os.environ.get("SUPABASE_DIRECT_URL") or os.environ["SUPABASE_DB_URL"])
+    from analytics.config import long_read_db_url
+    conn = psycopg2.connect(long_read_db_url())  # analytics.config.long_read_db_url: SUPABASE_DIRECT_URL only when it is the same database (2026-11-11)
     try:
         with conn.cursor() as cur:
             cur.execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)

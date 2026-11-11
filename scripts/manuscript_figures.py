@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import warnings
 from dataclasses import dataclass, field
@@ -840,12 +841,23 @@ def fig_l(plt, d) -> Fig:
 # --------------------------------------------------------------------------------------------------------------
 # Prescriptive
 # --------------------------------------------------------------------------------------------------------------
-TIER_B_URGENCY = {"CRITICAL": (18, 18, 118644, 53537.52, 49489.42), "URGENT": (5, 5, 67276, 18649.23, 62997.03),
-                  "PLANNED": (86, 50, 250068, 485424.95, 1105147.30)}
-TIER_B_CATEGORY = {"HAIR CARE": (28, 21, 145692), "FABRIC ENHANCERS": (8, 8, 97200), "FABRIC CLEANING": (25, 12, 86122),
-                   "DEODORANTS & FRAGRANCES": (14, 12, 58368), "COOKING AIDS": (19, 15, 37974),
+# The plan the manuscript's Tables 4.2.19 / 4.2.20 print: lp_run 8, cycle 2026-03 (re-planned 2026-11-10 with safety stock
+# following the level for treated products). Measured 2026-11-11 from GET /recommendations with this file's own plan_items,
+# urgency_table and category_plan, read-only. Were lp_run 6's (109 / 73 / 435,988 / 557,612 / 1,217,634) until then, so
+# this script flagged the correct tables as wrong. PLAN_TOTALS[0] and [2] must equal STATE.md's plan line (checked below).
+TIER_B_URGENCY = {"CRITICAL": (16, 16, 65388, 24747.12, 31801.07), "URGENT": (6, 6, 67300, 18652.56, 63011.03),
+                  "PLANNED": (88, 47, 248796, 418733.73, 1089501.29)}
+TIER_B_CATEGORY = {"HAIR CARE": (29, 19, 138516), "FABRIC CLEANING": (25, 12, 86122), "DEODORANTS & FRAGRANCES": (13, 11, 58248),
+                   "FABRIC ENHANCERS": (8, 7, 50040), "COOKING AIDS": (20, 15, 37926),
                    "CONDIMENTS": (7, 3, 9288), "ORAL CARE": (4, 1, 912), "SKIN CLEANSING": (4, 1, 432)}
-PLAN_TOTALS = (109, 73, 435988, 557612, 1217634)
+PLAN_TOTALS = (110, 69, 381484, 462133, 1184313)
+
+
+def _state_plan() -> tuple[int, int]:
+    """(rows, pieces) from STATE.md's plan line, which tests/invariants/test_a_plan_agreement.py holds equal to live."""
+    line = next(ln for ln in (REPO / "STATE.md").read_text(encoding="utf-8").splitlines() if ln.startswith("plan:"))
+    got = dict(re.findall(r"(\w+)=(\S+)", line))
+    return int(got["rows"]), int(got["pieces"])
 
 
 def plan_items(d) -> pd.DataFrame:

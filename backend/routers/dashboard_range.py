@@ -42,7 +42,9 @@ from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 from analytics.params import COVER_KPI_HISTORY_MONTHS, POLICY_COVER_WEEKS, WEEKS_PER_MONTH
 from backend.response_cache import cached
-from backend.routers.dashboard import _last_12_periods, _latest_sales_period, _month_range, _resolve_sales_anchor
+from backend.routers.dashboard import (
+    _entry_test, _forecast_counts_query, _last_12_periods, _latest_sales_period, _month_range, _resolve_sales_anchor,
+)
 from backend.series_gaps import gap_note
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -228,6 +230,13 @@ def _stamped(db: Session, body: dict) -> dict:
     return {**body, "actuals_version": marts.actuals_version(db)}
 
 
+def _range_entry_test(db: Session) -> dict | None:
+    """MASE beside the two WAPEs (backend/routers/dashboard._entry_test): the plan's entry test on Unilever's latest
+    real forecast. The error card reads this route since it moved to SKU Forecast (thea-dashboardedits ba0396d), so
+    GET /dashboard's copy alone no longer reached the screen (2026-11-11)."""
+    return _entry_test(batch.first(db, *_forecast_counts_query("unilever", "real")))
+
+
 @router.get("/accuracy")
 @cached("GET /dashboard/accuracy")
 def get_range_accuracy(
@@ -261,12 +270,14 @@ def get_range_accuracy(
         agg = marts.accuracy_aggregates_from_query(batch.rows(db, *marts.accuracy_summary_query(start, end, run_id)))
         summary = marts.accuracy_summary_from(agg, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
         summary["compare_run"] = marts.accuracy_comparison(db, summary)
+        summary["entry_test"] = _range_entry_test(db)
         return _flag_counterfactual({**summary, "level": level, "rows": [], "coverage": ["unilever"]})
     rows = marts.accuracy_rows(db, start, end, run_id)
     summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
     # The unadjusted twin of a calendar-adjusted run (GET /dashboard's forecast_accuracy
     # carries the same), so a caller can fetch the same months before the adjustment.
     summary["compare_run"] = marts.accuracy_comparison(db, summary)
+    summary["entry_test"] = _range_entry_test(db)
     detail: list[dict] = []
     if level == "category":
         detail = marts.accuracy_by_category(rows)

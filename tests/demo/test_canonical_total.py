@@ -46,7 +46,8 @@ def _live_conn():
     import psycopg2
     from dotenv import load_dotenv
     load_dotenv()
-    url = os.environ.get("SUPABASE_DIRECT_URL") or os.environ.get("SUPABASE_DB_URL")
+    from analytics.config import long_read_db_url
+    url = long_read_db_url() if os.environ.get("SUPABASE_DB_URL") else None  # analytics.config.long_read_db_url: SUPABASE_DIRECT_URL only when it is the same database (2026-11-11)
     if not url:
         pytest.skip("no database URL")
     try:

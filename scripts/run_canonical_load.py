@@ -1619,12 +1619,44 @@ def live_schema_references(files: list[Path]) -> list[tuple[str, str]]:
         sql = _strip_sql_file(f.read_text(encoding="utf-8"))
         for schema, obj in sorted({(a.lower(), b) for a, b in _LIVE_SCHEMA_REF_RE.findall(sql)}):
             found.append((f.name, f"{schema}.{obj}"))
+        found.extend((f.name, w) for w in database_wide_statements(sql))
     return found
+
+
+# Statements that reach beyond the scratch schema without naming public., app. or mart. (KNOWN_ISSUES B3, 2026-11-11):
+# they act on the role, the database or a live schema by bare name, so a scratch build would change live with them.
+_DB_WIDE_RE = re.compile(
+    r"\b(?:ALTER|CREATE|DROP)\s+(?:ROLE|USER|DATABASE|SYSTEM|EXTENSION|EVENT\s+TRIGGER|PUBLICATION|SUBSCRIPTION)\b"
+    r"|\bSCHEMA\s+(?:public|app|mart)\b(?!\.)", re.IGNORECASE)
+_LIVE_SCHEMA_NAMES = {"public", "app", "mart"}
+
+
+def database_wide_statements(sql: str) -> list[str]:
+    """The first words of every statement in `sql` that is not confined to a scratch schema: ALTER DEFAULT PRIVILEGES
+    without IN SCHEMA <a non-live schema> (it is database-wide for the role), role/database/system/extension changes, a
+    live schema named bare (ON SCHEMA app, IN SCHEMA public), and role membership GRANT/REVOKE (no ON clause)."""
+    out = []
+    for stmt in (s.strip() for s in sql.split(";")):
+        if not stmt:
+            continue
+        head = " ".join(stmt.split())[:60]
+        adp = re.search(r"\bALTER\s+DEFAULT\s+PRIVILEGES\b", stmt, re.IGNORECASE)
+        if adp:
+            m = re.search(r"\bIN\s+SCHEMA\s+\"?(\w+)", stmt, re.IGNORECASE)
+            if not m or m.group(1).lower() in _LIVE_SCHEMA_NAMES:
+                out.append(head)
+            continue
+        if _DB_WIDE_RE.search(stmt):
+            out.append(head)
+        elif re.match(r"(?is)\s*(GRANT|REVOKE)\b", stmt) and not re.search(r"\bON\b", stmt, re.IGNORECASE):
+            out.append(head)
+    return out
 
 
 def assert_scratch_migrations_safe(files: list[Path], schema: str) -> None:
     """Raises SystemExit, naming the file and the reference, when any migration about to be applied to scratch schema
-    `schema` names app., public. or mart. explicitly. Nothing has been applied when this runs."""
+    `schema` names app., public. or mart. explicitly, or holds a statement not confined to a schema
+    (database_wide_statements). Nothing has been applied when this runs."""
     offenders = live_schema_references(files)
     if offenders:
         first = {}

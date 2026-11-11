@@ -2,8 +2,9 @@
 
     python scripts/check_helpers.py env [--full]
         The live database must be configured AND reachable (read-only probe), and every variable the checks import
-        must be set: SUPABASE_DB_URL and SUPABASE_KEY always (analytics/config.py), plus JWT_SECRET_KEY with --full
-        (two test modules build a signed token at import, KNOWN_ISSUES B1). Names every missing variable.
+        must be set: SUPABASE_DB_URL and SUPABASE_KEY (analytics/config.py). Names every missing variable. JWT_SECRET_KEY
+        is not required since 2026-11-11: no test signs a token at import any more (KNOWN_ISSUES B1, fixed), and the
+        tests that sign one in-process supply a throwaway secret (tests/backend/conftest.py, tests/invariants/conftest.py).
     python scripts/check_helpers.py junit <junit.xml> [--allow-listed]
         Fails if any test was skipped that is not on scripts/known_opt_in_skips.txt (exact id and reason), or none ran.
         Skipped is not passed: a suite where tests vanish when an environment variable is unset looks healthy
@@ -20,7 +21,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 REQUIRED = ("SUPABASE_DB_URL", "SUPABASE_KEY")
-REQUIRED_FULL = ("JWT_SECRET_KEY",)   # read at import by tests/backend/test_reorder_approval.py and test_reorder_requests.py
+REQUIRED_FULL: tuple[str, ...] = ()   # was JWT_SECRET_KEY, for the import-time tokens of KNOWN_ISSUES B1 (fixed 2026-11-11)
 
 
 def cmd_env(full: bool = False) -> int:
@@ -97,7 +98,7 @@ def cmd_junit(path: str, allowed: dict[str, str] | None = None) -> int:
         by_reason = Counter(msg for _, msg in unknown)
         print(f"FAIL: {len(unknown)} skipped test(s) not on the allow-list. Skipped is not passed. Reasons:")
         for msg, k in by_reason.most_common():
-            names = sorted(set(re.findall(r"[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+", msg)))
+            names = sorted(set(re.findall(r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b", msg)))
             print(f"  {k:3d} x {msg}" + (f"   [variable: {', '.join(names)}]" if names else ""))
         for name, _ in unknown[:5]:
             print(f"      e.g. {name}")

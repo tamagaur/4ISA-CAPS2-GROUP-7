@@ -49,14 +49,12 @@ LABEL = {"naive": "Naive", "sba_a3": "SBA (a=0.3)", "sba": "SBA (a=0.1)", "ma3":
          "mean": "Mean", "drift": "Drift", "sarima_plain": "SARIMA(1,1,1)", "sarima_seasonal": "SARIMA seasonal"}
 
 # ---- data ----
-last = None
-for d in (os.environ.get("SUPABASE_DB_URL"), os.environ.get("SUPABASE_DIRECT_URL")):
-    try:
-        # transaction-scoped READ ONLY, never session-level (pooler leak)
-        c = psycopg2.connect(d, connect_timeout=15); c.cursor().execute("SET TRANSACTION READ ONLY"); break
-    except Exception as e:
-        last = e; c = None
-if c is None: raise last
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # the repo root, so `analytics` imports when run as a file
+from analytics.config import long_read_db_url  # noqa: E402
+# One URL, no fall-through to another database on a failed connection (2026-11-11).
+c = psycopg2.connect(long_read_db_url(), connect_timeout=15)
+c.cursor().execute("SET TRANSACTION READ ONLY")  # transaction-scoped READ ONLY, never session-level (pooler leak)
 cur = c.cursor()
 cur.execute("SELECT product_key, calendar_month, COALESCE(quantity_sold,0) FROM unilever_sku_demand_fact_real ORDER BY 1,2")
 raw = pd.DataFrame(cur.fetchall(), columns=["pk", "m", "q"]); raw["q"] = raw["q"].astype(float)

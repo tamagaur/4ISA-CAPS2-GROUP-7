@@ -55,19 +55,27 @@ def fetch_products():
         cand = pd.DataFrame(cur.fetchall(), columns=["product_key", "sku_id", "principal", "forecast_date", "forecast_value", "mase"])
         pks = [int(k) for k in cand.product_key.unique()]
         demand = r.fetch_demand_history(cur, pks)
-        stock = r.fetch_stock_and_cost(cur, pks)
+        # As run_lp.main(), 2026-11-11: stock at the count that opens each cycle (DEC-32), sigma over the months to that
+        # count, and the treated scaling, through run_lp's own functions so this harness cannot drift from the plan.
+        treated = r.fetch_treated_keys(cur)
+        stock = {}
+        for cyc in sorted(set(cand.forecast_date)):
+            ks = [int(k) for k in cand[cand.forecast_date == cyc].product_key.unique()]
+            stock[cyc] = r.fetch_stock_and_cost(cur, ks, r.opening_period(cyc), cycle=cyc)
     by_cycle, gated = {}, {}
     for row in cand.itertuples():
         d = demand[demand.product_key == row.product_key]
         if d.empty:
             gated["no demand history at all"] = gated.get("no demand history at all", 0) + 1
             continue
-        sigma_d, reason = r._sigma_d_for_product(d, row.principal)
+        sigma_d, reason = r.planned_sigma_d(d, row.principal, row.product_key, float(row.forecast_value),
+                                            r.opening_period(row.forecast_date), treated)
         if sigma_d is None:
             gated[reason] = gated.get(reason, 0) + 1
             continue
         p, reason = r.product_input(row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
-                                    stock, demand, prior_year=row.forecast_date.year - 1)
+                                    stock[row.forecast_date], demand, prior_year=r.basis_year(row.forecast_date),
+                                    stock_period=r.opening_period(row.forecast_date))
         if p is None:
             gated[reason] = gated.get(reason, 0) + 1
             continue

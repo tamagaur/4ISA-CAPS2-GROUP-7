@@ -17,7 +17,6 @@ tiebreak convention introduced in analytics.classification.abc (2026-09-17).
 from __future__ import annotations
 
 import argparse
-import os
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -337,7 +336,8 @@ def run(
     # Supabase pooler config (confirmed 2026-09-17 - see report's Open items;
     # not investigated further, out of this task's scope). SUPABASE_DIRECT_URL
     # is the writable connection used by every other write path this session.
-    db_url = os.environ.get("SUPABASE_DIRECT_URL") or settings.supabase_db_url
+    from analytics.config import long_read_db_url
+    db_url = long_read_db_url() if settings.supabase_db_url else settings.supabase_db_url  # analytics.config.long_read_db_url: SUPABASE_DIRECT_URL only when it is the same database (2026-11-11)
     engine = create_engine(db_url, pool_pre_ping=True)
     run_id = f"segment_{principal}_{cohort_period}_{uuid4().hex[:8]}"
 

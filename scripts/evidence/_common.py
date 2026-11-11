@@ -144,18 +144,16 @@ def export_env_to_process():
 @contextlib.contextmanager
 def read_only():
     import psycopg2
-    env, errs = _env(), []
-    for var in ("SUPABASE_DIRECT_URL", "SUPABASE_DB_URL"):
-        url = env.get(var) or os.environ.get(var)
-        if not url:
-            errs.append(f"{var}: unset"); continue
-        try:
-            conn = psycopg2.connect(url, connect_timeout=20)
-            break
-        except Exception as exc:  # message class only, never the DSN
-            errs.append(f"{var}: {type(exc).__name__}")
-    else:
-        raise SystemExit("no database connection: " + "; ".join(errs))
+    from analytics.config import long_read_db_url
+    _env()
+    # One URL, no fall-through: until 2026-11-11 this tried SUPABASE_DIRECT_URL first and the other on failure, so a
+    # process told SUPABASE_DB_URL=<a local copy> read live (.env's direct URL).
+    url = long_read_db_url()
+    var = "SUPABASE_DIRECT_URL" if url != os.environ.get("SUPABASE_DB_URL") else "SUPABASE_DB_URL"   # yielded: which route
+    try:
+        conn = psycopg2.connect(url, connect_timeout=20)
+    except Exception as exc:  # message class only, never the DSN
+        raise SystemExit(f"no database connection: {type(exc).__name__}")
     try:
         cur = conn.cursor()
         cur.execute("SET TRANSACTION READ ONLY")      # first statement of the implicit BEGIN

@@ -56,3 +56,32 @@ def test_it_runs_in_both_places_a_scratch_schema_is_built_and_before_anything_is
     assert "if not allow_public" in ensure                      # a live apply is the sanctioned path and is not blocked
     build = inspect.getsource(rehearse_fills.build)
     assert build.index("assert_scratch_migrations_safe") < build.index("CREATE SCHEMA")
+
+
+# KNOWN_ISSUES B3 (2026-11-11): statements that reach beyond the scratch schema without naming public., app. or mart.
+@pytest.mark.parametrize("sql", [
+    "ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;",
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon;",
+    "ALTER ROLE postgres SET idle_in_transaction_session_timeout = '5min';",
+    "ALTER DATABASE postgres SET search_path = public;",
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm;",
+    "REVOKE ALL ON SCHEMA app FROM anon;",
+    "GRANT USAGE ON SCHEMA mart TO authenticated;",
+    "GRANT service_role TO authenticator;",
+])
+def test_database_wide_statements_are_refused(tmp_path, sql):
+    f = _migration(tmp_path, "0997_z.sql", sql + "\n")
+    assert rcl.database_wide_statements(rcl._strip_sql_file(sql))
+    with pytest.raises(SystemExit):
+        rcl.assert_scratch_migrations_safe([f], "ssm_rollover_test")
+
+
+@pytest.mark.parametrize("sql", [
+    "ALTER DEFAULT PRIVILEGES IN SCHEMA ssm_rollover_test GRANT SELECT ON TABLES TO anon;",
+    "GRANT SELECT ON thing TO authenticated;",
+    "CREATE TABLE thing (a int); CREATE INDEX thing_a ON thing (a);",
+])
+def test_statements_confined_to_the_scratch_schema_pass(tmp_path, sql):
+    f = _migration(tmp_path, "0996_w.sql", sql + "\n")
+    rcl.assert_scratch_migrations_safe([f], "ssm_rollover_test")
+

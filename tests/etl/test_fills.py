@@ -209,7 +209,7 @@ def test_coverage_knows_derived_and_the_new_pairs():
 
 def test_0038_keeps_the_real_views_and_tags_every_fill():
     sql = "\n".join(l for l in MIGRATION.splitlines() if not l.strip().startswith("--"))
-    assert not re.search(r"(CREATE|ALTER|DROP|REPLACE)\s+(OR\s+REPLACE\s+)?VIEW", sql, re.I)  # the _Real views are not touched
+    assert not re.search(r"\b(CREATE|ALTER|DROP|REPLACE)\s+(OR\s+REPLACE\s+)?VIEW\b", sql, re.I)  # the _Real views are not touched
     for t in fm.FACT_TABLES:
         assert f"ALTER TABLE {t}" in sql and f"{t}_fill_source_check" in sql
         assert re.search(rf"UPDATE {t}\s+SET fill_source = 'synthetic_v2' WHERE is_demo AND fill_source IS NULL", sql)

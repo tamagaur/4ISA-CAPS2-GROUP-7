@@ -44,17 +44,11 @@ XGB_ROUNDS = 400
 
 
 def _connect():
-    last = None
-    for dsn in (os.environ.get("SUPABASE_DB_URL"), os.environ.get("SUPABASE_DIRECT_URL")):
-        if not dsn:
-            continue
-        try:
-            c = psycopg2.connect(dsn, connect_timeout=15)
-            c.cursor().execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)
-            return c
-        except Exception as e:  # noqa: BLE001
-            last = e
-    raise last
+    from analytics.config import long_read_db_url
+    # One URL, no fall-through to another database on a failed connection (2026-11-11).
+    c = psycopg2.connect(long_read_db_url(), connect_timeout=15)
+    c.cursor().execute("SET TRANSACTION READ ONLY")  # transaction-scoped, never session-level (pooler leak)
+    return c
 
 
 def _fetch(with_synthetic: bool):
