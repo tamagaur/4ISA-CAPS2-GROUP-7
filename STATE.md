@@ -3,13 +3,22 @@
 
 plan: rows=110 pieces=378700 cycle=2026-03-01 lp_run=9
   (Unilever, t12m_new Tier A as of 2026-02; 67 rows order >0; safety stock 459,359.47; total = sum of plan_q_i. Nothing decided yet
-   except legacy row 4. THIS LINE IS THE PLAN AFTER `python -m scripts.apply_final_bundle --target-public` (2026-11-11). Until
-   Kelvin runs it, live still holds lp_run 8 (110 / 381,484 / 69 >0 / SS 462,133) and check.sh --fast is RED on this line
-   against live, by design. lp_run 9 = lp_run 8 with safety stock following the level for zero-forecast products too
+   except legacy row 4. LIVE since 2026-11-11 12:52 UTC: Kelvin ran `python -m scripts.apply_final_bundle --target-public`; all
+   four steps completed (backup, 0075-0078 applied 12:49:33-12:49:36, backfill, re-plan) and it exited 1 at its comparison on
+   definitions_md5 alone (live ab04dcb6..., rehearsal 2866979b...). Diagnosed read-only the same day: a false alarm. The 15
+   differing objects differ only in (a) carriage returns in 8 function bodies and (b) privileges stored explicitly (copy) vs
+   NULL = default (live) on 8 functions and 6 views, both put in by backups/.../structure/*.sql (written CRLF by
+   backup_everything on Windows, with explicit REVOKE/GRANT of the defaults), and already recorded in the attestation's own
+   copy_equals_live_before.measured_differ. Normalised (CR removed, NULL ACL = acldefault) both read 9e16da69... over 32 objects.
+   Every other measured key equals the rehearsal (plan rows md5 f00138e2, decomposition rows md5 58df7ba1, treatments, RLS,
+   privileges, ledger 79 rows). check.sh --fast GREEN against live afterwards, 54 s. No write to live after the apply.
+   Was lp_run 8 (110 / 381,484 / 69 >0 / SS 462,133). lp_run 9 = lp_run 8 with safety stock following the level for zero-forecast products too
    (2 products, 2,784 pieces); rehearsed on a restore of backups/full_backup_20261111T103426Z: docs/FINAL_BUNDLE_REHEARSAL.json.
    lp_run 7 was 110 / 419,344 / 72 >0, lp_run 6 109 / 435,988 / 73.)
 
-FINAL BUNDLE (2026-11-11, Kelvin's brief "last bundle before the code freeze"; nothing written to live). ONE command for Kelvin:
+FINAL BUNDLE (2026-11-11, Kelvin's brief "last bundle before the code freeze"; APPLIED to live 2026-11-11, see the plan line; do not
+re-run: its preflight now refuses, the ledger ends at 0078). Verifier defect, not fixed (script is spent): it compares definitions_md5
+even when the copy's start already differed from live's. The command was:
   python -m scripts.apply_final_bundle --target-public
 It refuses (exit 2, nothing written) unless the tree is clean, the files it runs hash to docs/FINAL_BUNDLE_REHEARSAL.json, the
 live ledger ends at 0074 with exactly 0075-0078 pending, the plan is lp_run 8 110 / 381,484 with nothing decided, and every public
