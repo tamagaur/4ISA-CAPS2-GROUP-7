@@ -115,7 +115,8 @@ def served_backtest(series: dict, tier_by: dict, calendar_totals=None, pool_by: 
             rows.append({"product_key": k, "month": ym(t), "actual": actual,
                          "value": 0.0 if dead else float(r["value"]), "value_before_dead": float(r["value"]),
                          "dead": bool(dead), "bin": r["bin"], "method": "zero_no_order" if dead else r["method"],
-                         "ma3": max(0.0, float(r["ma3_value"])), "backup_fired": bool(r["backup_fired"])})
+                         "ma3": max(0.0, float(r["ma3_value"])), "backup_fired": bool(r["backup_fired"]),
+                         "treatment": r.get("treatment")})
     return pd.DataFrame(rows), skipped
 
 
@@ -487,10 +488,12 @@ def write_runs(db_url: str, runs: dict[str, pd.DataFrame], checks: dict[str, dic
                          json.dumps({"variant": name, "script": "scripts/accuracy_as_served.py", "check": checks[name],
                                      **(COUNTERFACTUAL_NOTES if name.endswith(("_B", "_C")) else {})}, default=str)))
             ids[name] = cur.fetchone()[0]
+            # treatment: migration 0077 (the error decomposition's safety stock follows the level for treated product-months)
             execute_values(cur, """INSERT INTO mart.forecast_run_value (run_id, product_key, month, forecast_pieces, status, method, bin,
-                                                                       ma3_pieces, backup_fired) VALUES %s""",
+                                                                       ma3_pieces, backup_fired, treatment) VALUES %s""",
                            [(ids[name], int(r.product_key), r.month, float(r.value), "dead_sku" if r.dead else "ok", r.method, r.bin,
-                             float(r.ma3), bool(r.backup_fired)) for r in bt.itertuples()], page_size=1000)
+                             float(r.ma3), bool(r.backup_fired), r.treatment if isinstance(r.treatment, str) else None)
+                            for r in bt.itertuples()], page_size=1000)
             print(f"[write] mart.forecast_run {ids[name]}: {label} ({len(bt)} rows)")
         refresh_marts_cursor(cur, "accuracy_as_served", schema="public")
         conn.commit()
@@ -503,6 +506,86 @@ def write_runs(db_url: str, runs: dict[str, pd.DataFrame], checks: dict[str, dic
     return ids
 
 
+def treatment_flags(rows: pd.DataFrame, series: dict, contexts: dict) -> pd.DataFrame:
+    """The treatment (succession / fading / None) analytics/forecasting/treatments.apply gives each stored backtest row, from
+    the history and context the backtest used. apply() chooses the treatment without looking at the value it is given, so
+    the flag is recomputed exactly without re-running the forecast. Adds `treatment` and `reapplied` (apply() run again on
+    the stored value: a treated value is a fixed point, so it must return the stored value for every 'ok' row)."""
+    from analytics.forecasting.treatments import apply as apply_treatment
+    names, again = [], []
+    for r in rows.itertuples():
+        s = series.get(int(r.product_key))
+        if s is None:
+            names.append(None)
+            again.append(float("nan"))
+            continue
+        v, name = apply_treatment(s, pd.Timestamp(f"{r.month}-01"), float(r.forecast_pieces), contexts.get(int(r.product_key)))
+        names.append(name)
+        again.append(v)
+    return rows.assign(treatment=names, reapplied=again)
+
+
+def backfill_treatment(db_url: str, series: dict, contexts: dict) -> dict[int, dict]:
+    """Migration 0077: set mart.forecast_run_value.treatment on every stored as-served run whose label says it was served with
+    the treatments (TREATED), then refresh the marts, one transaction. Refuses, writing nothing, unless (1) every 'ok' row
+    is a fixed point of apply(), and (2) every 'ok' row whose value differs from the same product-month of the untreated twin
+    run (the same label without TREATED, written before the treatments were served) carries a treatment. Re-runnable: it
+    sets the column, it adds no row."""
+    from analytics.marts import refresh_marts_cursor, vacuum_marts
+    conn = psycopg2.connect(db_url)
+    report: dict[int, dict] = {}
+    try:
+        cur = conn.cursor()
+        cur.execute("SHOW default_transaction_read_only")
+        if cur.fetchone()[0] != "off":
+            raise SystemExit("default_transaction_read_only is on for this connection; refusing to write")
+        cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    "WHERE table_schema = 'mart' AND table_name = 'forecast_run_value' AND column_name = 'treatment')")
+        if not cur.fetchone()[0]:
+            raise SystemExit("mart.forecast_run_value has no treatment column: apply migration 0077 first")
+        cur.execute("SELECT run_id, label FROM mart.forecast_run WHERE kind = 'backtest_recreated' AND label LIKE %s ORDER BY run_id",
+                    (f"%{TREATED}%",))
+        runs = cur.fetchall()
+        if not runs:
+            raise SystemExit(f"no stored run carries {TREATED!r}: nothing to backfill")
+        updates = []
+        for run_id, label in runs:
+            cur.execute("SELECT product_key, month, forecast_pieces, status FROM mart.forecast_run_value WHERE run_id = %s", (run_id,))
+            rows = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "forecast_pieces", "status"]).astype({"forecast_pieces": float})
+            cur.execute("""SELECT fv.product_key, fv.month, fv.forecast_pieces FROM mart.forecast_run r
+                           JOIN mart.forecast_run_value fv ON fv.run_id = r.run_id WHERE r.label = %s""", (label.replace(TREATED, ""),))
+            twin = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "untreated"]).astype({"untreated": float})
+            f = treatment_flags(rows, series, contexts).merge(twin, on=["product_key", "month"], how="left")
+            ok = f.status == "ok"
+            not_fixed = f[ok & ~np.isclose(f.reapplied, f.forecast_pieces, rtol=0, atol=1e-4)]
+            moved = ok & f.untreated.notna() & ~np.isclose(f.forecast_pieces, f.untreated.fillna(-1), rtol=0, atol=1e-4)
+            unflagged = f[moved & f.treatment.isna()]
+            report[run_id] = {"label": label, "rows": len(f), "succession": int((f.treatment == "succession").sum()),
+                              "fading": int((f.treatment == "fading").sum()), "twin_rows": int(f.untreated.notna().sum()),
+                              "differs_from_twin": int(moved.sum()), "not_fixed_point": len(not_fixed),
+                              "differs_unflagged": len(unflagged)}
+            print(f"[backfill] run {run_id}: {report[run_id]}")
+            if len(not_fixed) or len(unflagged):
+                raise SystemExit(f"run {run_id}: {len(not_fixed)} row(s) are not a fixed point of apply() and {len(unflagged)} differ "
+                                 "from the untreated twin with no treatment; the stored run is not what this code serves. Nothing written.\n"
+                                 f"{pd.concat([not_fixed, unflagged]).head(10).to_string()}")
+            updates += [(run_id, int(r.product_key), r.month, r.treatment if isinstance(r.treatment, str) else None)
+                        for r in f.itertuples()]
+        execute_values(cur, """UPDATE mart.forecast_run_value v SET treatment = u.t
+                               FROM (VALUES %s) AS u(run_id, product_key, month, t)
+                               WHERE v.run_id = u.run_id AND v.product_key = u.product_key AND v.month = u.month""",
+                       updates, template="(%s::bigint, %s::bigint, %s::text, %s::text)", page_size=1000)
+        refresh_marts_cursor(cur, "accuracy_as_served --backfill-treatment", schema="public")
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    vacuum_marts(db_url)
+    return report
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true", help="write docs/ACCURACY_AS_SERVED.md and local/accuracy_as_served_rows.csv")
@@ -513,7 +596,11 @@ def main() -> int:
                     help="store the calendar-adjusted as-served backtest of Tier B and Tier C as NEW runs (the error "
                          "decomposition scores every tier); computes only those two, then refreshes the marts (back up first; "
                          "needs --target-public)")
-    ap.add_argument("--target-public", action="store_true", help="explicit-only: allow --write-run / --write-tier-runs to write the live mart schema")
+    ap.add_argument("--backfill-treatment", action="store_true",
+                    help="migration 0077: set mart.forecast_run_value.treatment on the stored runs served with the treatments, "
+                         "checked against each run's untreated twin, then refresh the marts (back up first; needs --target-public)")
+    ap.add_argument("--target-public", action="store_true",
+                    help="explicit-only: allow --write-run / --write-tier-runs / --backfill-treatment to write the live mart schema")
     args = ap.parse_args()
     from analytics.config import long_read_db_url
     db_url = long_read_db_url()
@@ -523,6 +610,13 @@ def main() -> int:
     series = {int(k): build_series(g, latest) for k, g in demand.groupby("product_key")}
     tier_by = read_tier_a(db_url, abc_method("unilever"))
     print(f"[inputs] {len(series)} products, latest demand month {latest} ({time.time() - t0:.0f}s)")
+
+    if args.backfill_treatment:
+        if not args.target_public:
+            ap.error("--backfill-treatment writes the live mart schema and needs --target-public")
+        backfill_treatment(db_url, series, contexts)
+        print(f"[done] {time.time() - t0:.0f}s")
+        return 0
 
     if args.write_tier_runs:
         if not args.target_public:

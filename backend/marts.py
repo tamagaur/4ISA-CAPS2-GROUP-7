@@ -1398,6 +1398,32 @@ def decomposition_available(db: Session) -> bool:
     return bool(db.execute(text("SELECT to_regclass('mart.error_decomposition') IS NOT NULL")).scalar())
 
 
+# A failed decomposition refresh rolls back to its savepoint and keeps its previous rows (analytics/marts.py), so the
+# split can be older than the marts around it. Both stamps are now() of the refresh's transaction, so a successful
+# refresh writes the same instant to both; the split is stale exactly when its own stamp is older than the last full
+# refresh (2026-11-11: until then the failure was only printed, and every decomposition answer served the old split as
+# current).
+DECOMPOSITION_FRESHNESS_SQL = """
+    SELECT (SELECT MAX(refreshed_at) FROM mart.error_decomposition) AS decomposition_refreshed_at,
+           (SELECT refreshed_at FROM mart.refresh_status) AS marts_refreshed_at"""
+
+
+def decomposition_freshness(db: Session) -> dict:
+    """{refreshed_at, marts_refreshed_at, stale, stale_reason} for the stored split. stale is None when either stamp is
+    missing (an empty split, or marts never refreshed)."""
+    row = batch.first(db, DECOMPOSITION_FRESHNESS_SQL) or {}
+    d, m = row.get("decomposition_refreshed_at"), row.get("marts_refreshed_at")
+
+    def iso(v):
+        return v.isoformat() if hasattr(v, "isoformat") else v
+
+    stale = None if d is None or m is None else bool(d < m)
+    return {"refreshed_at": iso(d), "marts_refreshed_at": iso(m), "stale": stale,
+            "stale_reason": (f"The last mart refresh ({iso(m)}) did not rebuild this split; it is the split as of {iso(d)}, "
+                             "before the newest data, forecasts or plan. Re-run the mart refresh (python -m analytics.marts) "
+                             "and read its printed error.") if stale else None}
+
+
 def _decomposition_figure(sums: dict) -> dict:
     """One tier's range totals -> the stored figures plus their shares, from the summed components."""
     out = {k: int(sums[k]) for k in _DECOMP_SUMS}

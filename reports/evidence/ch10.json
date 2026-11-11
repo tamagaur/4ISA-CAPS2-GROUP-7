@@ -5,9 +5,9 @@
  "files": {
   "curve": "reports/evidence/ch10_curve.csv"
  },
- "caption": "Service level 85-99 %: total safety stock the LP would hold (73 products, SS = Z x sigma_d x sqrt(8 business days), placeholder review/lead days) against expected stockouts. Current Z = 1.28 (lp.py, 90 %): 485,541 pieces. At 85 % / 95 % / 99 %: 393,149 / 623,940 / 882,451 pieces. Model-implied SKU-months with a stockout per year (normal demand, 4.35 independent weekly cycles a month) fall from 444 at 85 % to 37 at 99 %. Measured on the stored rolling one-step holdout (73 of the products, 1630 SKU-months, 2023-10..2026-02, served model by history length): actual demand exceeded forecast + 1.28 x monthly sigma in 8.4% of months (95 % CI 7.3%-9.6%, bootstrap over SKUs) against the nominal 10 %. Sigma is the LP's own: the SKU's monthly demand standard deviation over its whole history (holdout months included), recovered as sigma_d x sqrt(average business days a month).",
+ "caption": "Service level 85-99 %: total safety stock the LP would hold (110 products, SS = Z x sigma_d x sqrt(8 business days), placeholder review/lead days) against expected stockouts. Current Z = 1.28 (lp.py, 90 %): 459,359 pieces. At 85 % / 95 % / 99 %: 371,950 / 590,296 / 834,867 pieces. Model-implied SKU-months with a stockout per year (normal demand, 4.35 independent weekly cycles a month) fall from 669 at 85 % to 56 at 99 %. Measured on the stored rolling one-step holdout (79 of the products, 1730 SKU-months, 2023-10..2026-02, served model by history length): actual demand exceeded forecast + 1.28 x monthly sigma in 9.1% of months (95 % CI 7.9%-10.5%, bootstrap over SKUs) against the nominal 10 %. Sigma is the LP's own: the SKU's monthly demand standard deviation over its whole history (holdout months included), recovered as sigma_d x sqrt(average business days a month).",
  "verdict": "CONFIRMS",
- "verdict_detail": "measured monthly exceedance at Z=1.28: 8.4% (95% CI 7.3%-9.6%, SKU bootstrap) vs nominal 10%",
+ "verdict_detail": "measured monthly exceedance at Z=1.28: 9.1% (95% CI 7.9%-10.5%, SKU bootstrap) vs nominal 10%",
  "criterion": "Stockout months are labelled model-implied (normal assumption). FLAWED if the measured monthly exceedance (actual > forecast + 1.28 sigma) has a 95% interval entirely above 10% (Z = 1.28 <-> 90%; analytics/optimization/lp.py:14)",
  "otherwise": "CONFIRMS",
  "mase_gate_used": "1.0 (LP candidate pool; run_lp.py:113)",
@@ -20,17 +20,17 @@
   }
  ],
  "script": "scripts/evidence/lp_charts.py",
- "code_commit": "d3dc662",
- "computed_at": "2026-09-30T18:28:35",
+ "code_commit": "afc4d7e +uncommitted",
+ "computed_at": "2026-11-11T19:06:46",
  "data_notes": [
-  "LP inputs are PLACEHOLDERS (analytics/optimization/lp_inputs.py), realistic values the team chose, not SSM's figures: allocation_pct 105, review_days 5, lead_days 3, target_weeks 3, cover_rule aggregate, warehouse_capacity 3.8e+06, default_procurement_cost_per_unit 25, storage_cost_per_unit 0.5.",
+  "LP inputs are PLACEHOLDERS (analytics/params.py PLACEHOLDERS), realistic values the team chose, not SSM's figures: allocation_pct 103, review_days 5, lead_days 3, target_weeks 3, cover_rule aggregate, warehouse_capacity 3.81684e+06, default_procurement_cost_per_unit 33.48, storage_cost_per_unit 0.5.",
   "Pool: Category A with a stored forecast of status 'ok' and MASE < 1 (pipeline gate).",
   "The model-implied stockout months are a formula (normal demand, independent weekly cycles), not a measurement; the measured exceedance is at monthly grain."
  ],
  "z_current": 1.28,
- "measured_rate": 0.08404907975460123,
+ "measured_rate": 0.09132947976878612,
  "measured_ci": [
-  0.07321573292728323,
-  0.09627116488506943
+  0.07928159984575153,
+  0.10468236540038071
  ]
 }

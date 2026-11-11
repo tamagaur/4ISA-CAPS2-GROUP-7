@@ -6,7 +6,7 @@
 
 **For the defence, the path shown is [LOCAL_DEMO_RUNBOOK.md](LOCAL_DEMO_RUNBOOK.md):** generated March sales on a local copy. It replaces steps 1 to 5 with generated rows, so it does not prove them.
 
-**On live this moves things on purpose.** A real month moves the live marts and creates a new plan for the month after, so the 109 rows and 435,988 pieces stop being the current plan. Update STATE.md in the same commit. The 51 pinned figures read frozen rows and do not move.
+**On live this moves things on purpose.** A real month moves the live marts and creates a new plan for the month after, so the plan in STATE.md's `plan:` line stops being the current plan. Update STATE.md in the same commit. The 51 pinned figures read frozen rows and do not move.
 
 ## Before anything: this month's reorder decisions
 

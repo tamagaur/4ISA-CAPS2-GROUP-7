@@ -841,16 +841,18 @@ def fig_l(plt, d) -> Fig:
 # --------------------------------------------------------------------------------------------------------------
 # Prescriptive
 # --------------------------------------------------------------------------------------------------------------
-# The plan the manuscript's Tables 4.2.19 / 4.2.20 print: lp_run 8, cycle 2026-03 (re-planned 2026-11-10 with safety stock
-# following the level for treated products). Measured 2026-11-11 from GET /recommendations with this file's own plan_items,
-# urgency_table and category_plan, read-only. Were lp_run 6's (109 / 73 / 435,988 / 557,612 / 1,217,634) until then, so
-# this script flagged the correct tables as wrong. PLAN_TOTALS[0] and [2] must equal STATE.md's plan line (checked below).
-TIER_B_URGENCY = {"CRITICAL": (16, 16, 65388, 24747.12, 31801.07), "URGENT": (6, 6, 67300, 18652.56, 63011.03),
-                  "PLANNED": (88, 47, 248796, 418733.73, 1089501.29)}
+# The plan the manuscript's Tables 4.2.19 / 4.2.20 print: lp_run 9, cycle 2026-03 (scripts/apply_final_bundle.py: safety
+# stock follows the level for zero-forecast products too). Measured 2026-11-11 on the rehearsal copy (a restore of live's
+# backup of that day plus the bundle) with this file's own plan_items, urgency_table and category_plan; the bundle checks live
+# equals it row for row. Were lp_run 8's (110 / 69 / 381,484 / 462,133 / 1,184,313: Critical 16 / 16 / 65,388 / 24,747.12,
+# Planned 88, Cooking Aids 20 / 15 / 37,926) and before that lp_run 6's (109 / 73 / 435,988 / 557,612 / 1,217,634).
+# PLAN_TOTALS[0] and [2] must equal STATE.md's plan line (tests/test_plan_pins_follow_state.py).
+TIER_B_URGENCY = {"CRITICAL": (14, 14, 62604, 21973.18, 31801.07), "URGENT": (6, 6, 67300, 18652.56, 63011.03),
+                  "PLANNED": (90, 47, 248796, 418733.73, 1089501.29)}
 TIER_B_CATEGORY = {"HAIR CARE": (29, 19, 138516), "FABRIC CLEANING": (25, 12, 86122), "DEODORANTS & FRAGRANCES": (13, 11, 58248),
-                   "FABRIC ENHANCERS": (8, 7, 50040), "COOKING AIDS": (20, 15, 37926),
+                   "FABRIC ENHANCERS": (8, 7, 50040), "COOKING AIDS": (20, 13, 35142),
                    "CONDIMENTS": (7, 3, 9288), "ORAL CARE": (4, 1, 912), "SKIN CLEANSING": (4, 1, 432)}
-PLAN_TOTALS = (110, 69, 381484, 462133, 1184313)
+PLAN_TOTALS = (110, 67, 378700, 459359, 1184313)
 
 
 def _state_plan() -> tuple[int, int]:
@@ -858,6 +860,13 @@ def _state_plan() -> tuple[int, int]:
     line = next(ln for ln in (REPO / "STATE.md").read_text(encoding="utf-8").splitlines() if ln.startswith("plan:"))
     got = dict(re.findall(r"(\w+)=(\S+)", line))
     return int(got["rows"]), int(got["pieces"])
+
+
+def _state_lp_run() -> int:
+    """The plan's lp_run from STATE.md's plan line. The figure sources and the table text named a literal lp_run 6 and
+    109 items until 2026-11-11, two re-plans after both stopped being true."""
+    line = next(ln for ln in (REPO / "STATE.md").read_text(encoding="utf-8").splitlines() if ln.startswith("plan:"))
+    return int(dict(re.findall(r"(\w+)=(\S+)", line))["lp_run"])
 
 
 def plan_items(d) -> pd.DataFrame:
@@ -900,7 +909,7 @@ def check_plan(f: Fig, it):
 
 def fig_m(plt, d) -> Fig:
     f = Fig("m", "fig_m_plan_by_urgency.png", "Order Plan by Urgency, Unilever (cycle March 2026)",
-            "GET /recommendations (lp_recommendation, lp_run 6; rows outside the plan excluded)",
+            f"GET /recommendations (lp_recommendation, lp_run {_state_lp_run()}; rows outside the plan excluded)",
             "planning cycle March 2026 (stock count 2 March 2026; Tier A as of 2026-02)",
             "safety stock and forecast per urgency (Table 4.2.19); peso value of the orders; whether SSM placed them "
             "(no decision is recorded in this cycle); cost inputs are set from SSM's records and not confirmed by SSM",
@@ -937,7 +946,7 @@ def fig_m(plt, d) -> Fig:
 
 def fig_n(plt, d) -> Fig:
     f = Fig("n", "fig_n_plan_by_category.png", "Order Plan by Category, Unilever (cycle March 2026)",
-            "GET /recommendations (lp_run 6) joined to product_dimension.category_path on sku_code",
+            f"GET /recommendations (lp_run {_state_lp_run()}) joined to product_dimension.category_path on sku_code",
             "planning cycle March 2026", "categories with no planned product (Skin Care and the other 9 Unilever "
             "categories have none this cycle); peso value of the orders; products with a zero order (in the labels only)")
     it = plan_items(d)
@@ -975,7 +984,7 @@ def fig_o_values(pesos: dict) -> dict:
 def fig_o(plt, d) -> Fig:
     pol = d["api"]["policy"]
     v = fig_o_values(pol["pesos"])
-    f = Fig("o", "fig_o_plan_vs_rule.png", "Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026)",
+    f = Fig("o", "fig_o_plan_vs_rule.png", f"Per-Product Plan against the 3-Week Rule ({_state_plan()[0]} products, cycle March 2026)",
             "GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are "
             "the last purchase price per piece from the stock file)", "planning cycle March 2026",
             "the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list "
@@ -1358,7 +1367,7 @@ to two decimals and shown rounded; each total is the rounded sum of the unrounde
 differ from it by 1 (forecast rows add to {sum(round(v) for v in u.forecast):,}).
 
 Query: `GET /recommendations?principal=unilever` (cycle {plan_meta['planning_cycle_date']}, `lp_recommendation` of
-`lp_run` 6, rows with `outside_plan` excluded), grouped by `urgency`; Products = rows, Ordering = rows with
+`lp_run` {_state_lp_run()}, rows with `outside_plan` excluded), grouped by `urgency`; Products = rows, Ordering = rows with
 `plan_q_i > 0`, Order = Σ `plan_q_i`, Safety stock = Σ `ss_i`, Forecast = Σ `forecast_units`. Stock count
 {plan_meta['stock_count_date']}; Tier A as of {plan_meta['abc_period']} (`t12m_new`).
 
@@ -1372,7 +1381,7 @@ Query: `GET /recommendations?principal=unilever` (cycle {plan_meta['planning_cyc
 Eight categories: Skin Care is not in the plan (its only row was the run-less accepted recommendation 4, which is
 outside the plan).
 
-Query: the same 109 items, joined to `product_dimension.category_path` on `sku_code` (Unilever, grain `sku`), grouped
+Query: the same {totals[0]} items, joined to `product_dimension.category_path` on `sku_code` (Unilever, grain `sku`), grouped
 by category, ordered by order pieces.
 
 ## Table 4.2.4 Sales by Category, Unilever (March 2025 – February 2026)

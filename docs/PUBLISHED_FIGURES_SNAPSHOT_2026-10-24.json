@@ -8,19 +8,19 @@
   "demand_pieces": 100888220.0,
   "fingerprint": "b31bf58d9b5eaf99ee9d1ef70643d668",
   "latest_load_event_key": 382,
-  "mart_refresh_id": 61,
-  "mart_refreshed_at": "2026-11-10T13:18:52.583740+00:00"
+  "mart_refresh_id": 65,
+  "mart_refreshed_at": "2026-11-11T10:51:14.198060+00:00"
  },
  "mart_refresh": {
-  "refresh_id": 61,
-  "refreshed_at": "2026-11-10T13:18:52.583740+00:00",
-  "trigger": "accuracy_as_served"
+  "refresh_id": 65,
+  "refreshed_at": "2026-11-11T10:51:14.198060+00:00",
+  "trigger": "run_lp"
  },
  "forecast_result_date": "2026-03-01",
  "inputs_sha256": {
   "accuracy_as_served_rows.csv": "056db51707d0e3be25b028c1cbb5eae9d41373004a6c3c32ab7646c22954e33d",
   "demand_money.csv": "1ed3f5e84366fac6c8a13d04e4f7e3428dbf72b67804411093fbf27fdc2d5d47",
-  "error_decomposition_row.csv": "6ca7255fd1f24692718174e04955fe086072a7064fcd36110f20c1e644fc92f3",
+  "error_decomposition_row.csv": "b197ed8adf878bf027750c962b810adf1d94a0216b313873c3db46b989471d60",
   "mase_rows.csv": "00407ed1dda35eec4966e55411b825b6cd68dd8c33b9f218479918b44edbeb98"
  },
  "figures": {
@@ -54,41 +54,41 @@
    "A": {
     "product_months": 4370,
     "over_pieces": 10397753.024420358,
-    "absorbed_pieces": 4966557.65117418,
-    "beyond_pieces": 2705594.870305997,
-    "under_without_safety_stock_pieces": 6.734302004929305e-11,
+    "absorbed_pieces": 4860407.934554784,
+    "beyond_pieces": 2811744.586925394,
+    "under_without_safety_stock_pieces": 6.683675835006397e-11,
     "total_error_pieces": 18069905.545900535,
     "over_pesos": 135273693.3106321,
-    "absorbed_pesos": 63818826.68004008,
-    "beyond_pesos": 38724995.01300457,
-    "exceeds_safety_stock_months": 762,
-    "exceedance_rate": 0.17437070938215102
+    "absorbed_pesos": 62049541.422607854,
+    "beyond_pesos": 40494280.2704368,
+    "exceeds_safety_stock_months": 797,
+    "exceedance_rate": 0.18237986270022882
    },
    "B": {
     "product_months": 5192,
     "over_pieces": 744892.9651226854,
-    "absorbed_pieces": 339481.0381744689,
-    "beyond_pieces": 240405.27123964386,
-    "under_without_safety_stock_pieces": -5.525375296189239e-12,
+    "absorbed_pieces": 319279.0276678961,
+    "beyond_pieces": 260607.28174621664,
+    "under_without_safety_stock_pieces": -5.720774548523266e-12,
     "total_error_pieces": 1324779.2745367982,
     "over_pesos": 22333109.117832266,
-    "absorbed_pesos": 10580571.015141323,
-    "beyond_pesos": 8436677.214993393,
-    "exceeds_safety_stock_months": 883,
-    "exceedance_rate": 0.1700693374422188
+    "absorbed_pesos": 10028298.425471082,
+    "beyond_pesos": 8988949.804663634,
+    "exceeds_safety_stock_months": 902,
+    "exceedance_rate": 0.17372881355932204
    },
    "C": {
     "product_months": 11688,
     "over_pieces": 425309.5381558523,
-    "absorbed_pieces": 167046.8037943393,
-    "beyond_pieces": 154277.25077766145,
-    "under_without_safety_stock_pieces": -1.8000011203778143e-12,
-    "total_error_pieces": 746633.5927278531,
+    "absorbed_pieces": 153426.42984619882,
+    "beyond_pieces": 167897.62472580187,
+    "under_without_safety_stock_pieces": -2.601831944337718e-12,
+    "total_error_pieces": 746633.592727853,
     "over_pesos": 14478486.905660287,
-    "absorbed_pesos": 6715138.518436169,
-    "beyond_pesos": 7181885.661317489,
-    "exceeds_safety_stock_months": 1705,
-    "exceedance_rate": 0.14587611225188227
+    "absorbed_pesos": 6322701.094365195,
+    "beyond_pesos": 7574323.085388462,
+    "exceeds_safety_stock_months": 1782,
+    "exceedance_rate": 0.1524640657084189
    }
   }
  },

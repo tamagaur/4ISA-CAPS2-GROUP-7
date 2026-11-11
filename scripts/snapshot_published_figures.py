@@ -60,10 +60,10 @@ KEEP_COLUMNS = {
 }
 
 
-def write_frozen(name: str, df: pd.DataFrame) -> None:
+def write_frozen(name: str, df: pd.DataFrame, folder: Path = SNAP_DIR) -> None:
     """Write one frozen file with only its KEEP_COLUMNS, in that order."""
-    SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    df[KEEP_COLUMNS[name]].to_csv(SNAP_DIR / name, index=False)
+    folder.mkdir(parents=True, exist_ok=True)
+    df[KEEP_COLUMNS[name]].to_csv(folder / name, index=False)
 
 
 def sha256(path: Path) -> str:
@@ -139,11 +139,11 @@ def flatten(d, prefix=""):
             yield f"{prefix}{k}", v
 
 
-def read_frozen():
-    rows = pd.read_csv(SNAP_DIR / "accuracy_as_served_rows.csv")
-    money = pd.read_csv(SNAP_DIR / "demand_money.csv")
-    mase = pd.read_csv(SNAP_DIR / "mase_rows.csv")
-    dec = pd.read_csv(SNAP_DIR / "error_decomposition_row.csv")
+def read_frozen(folder: Path = SNAP_DIR):
+    rows = pd.read_csv(folder / "accuracy_as_served_rows.csv")
+    money = pd.read_csv(folder / "demand_money.csv")
+    mase = pd.read_csv(folder / "mase_rows.csv")
+    dec = pd.read_csv(folder / "error_decomposition_row.csv")
     return rows, money, mase, dec
 
 
@@ -160,9 +160,12 @@ def connect():
 
 def cmd_write() -> int:
     from analytics import actuals_version
-    SNAP_DIR.mkdir(parents=True, exist_ok=True)
+    # The frozen rows are tracked files too: through report_path like the JSON (until 2026-11-11 only the JSON was, so a run
+    # against the local Postgres overwrote docs/published_snapshot_*/ with a copy's rows while its JSON went to local/).
+    folder = report_path(SNAP_DIR)
+    folder.mkdir(parents=True, exist_ok=True)
     for name, src in FROZEN.items():
-        write_frozen(name, pd.read_csv(src))
+        write_frozen(name, pd.read_csv(src), folder)
     conn, cur = connect()
     try:
         stamp = actuals_version.read(cur)
@@ -181,9 +184,9 @@ def cmd_write() -> int:
     for c in dec.columns:
         if dec[c].dtype == object and c not in ("principal", "tier", "month", "forecast_source", "ss_method"):
             dec[c] = pd.to_numeric(dec[c], errors="coerce")
-    write_frozen("mase_rows.csv", mase)
-    write_frozen("error_decomposition_row.csv", dec)
-    rows, money, mase_f, dec_f = read_frozen()
+    write_frozen("mase_rows.csv", mase, folder)
+    write_frozen("error_decomposition_row.csv", dec, folder)
+    rows, money, mase_f, dec_f = read_frozen(folder)
     figures = compute(rows, money, mase_f, dec_f)
     published = doc_sections(DOC.read_text(encoding="utf-8"), ("Headline (quote these)", "MASE pass rate (quote this one number)",
                                                                "Per route (stored MASE definition)"))
@@ -193,13 +196,13 @@ def cmd_write() -> int:
         "actuals_version": stamp,
         "mart_refresh": {"refresh_id": refresh[0], "refreshed_at": refresh[1].isoformat(), "trigger": refresh[2]},
         "forecast_result_date": str(mase.forecast_date.iloc[0]),
-        "inputs_sha256": {p.name: sha256(p) for p in sorted(SNAP_DIR.glob("*.csv"))},
+        "inputs_sha256": {p.name: sha256(p) for p in sorted(folder.glob("*.csv"))},
         "figures": figures,
         "published_doc_sections_verbatim": {"source": "docs/ACCURACY_AS_SERVED.md", "doc_sha256": sha256(DOC), **published},
     }
     report_path(SNAP_JSON).write_text(json.dumps(out, indent=1, default=str), encoding="utf-8")
     t = figures["error_decomposition"]["A"]
-    print(f"wrote {SNAP_JSON.relative_to(REPO)} ; inputs in {SNAP_DIR.relative_to(REPO)}")
+    print(f"wrote {report_path(SNAP_JSON).relative_to(REPO)} ; inputs in {folder.relative_to(REPO)}")
     print(f"actuals version {stamp['key']}")
     print(f"MASE {figures['mase']['mase_below_1']} of {figures['mase']['products_scored']}, median {figures['mase']['median_mase']:.3f}")
     print(f"as served pooled WAPE {figures['headline_wape']['as_served']['pooled_wape_pcs_served']:.4%}, "

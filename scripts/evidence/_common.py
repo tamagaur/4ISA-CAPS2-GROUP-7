@@ -184,12 +184,17 @@ def prereg(chart: int) -> dict:
 
 def write_result(chart: int, slug: str, title: str, frames: dict, caption: str, verdict: str, verdict_detail: str,
                  checks: list, script: str, extra: dict | None = None):
-    """frames: {suffix: DataFrame} -> reports/evidence/chNN_<suffix>.csv. Writes chNN.json."""
-    os.makedirs(EVID, exist_ok=True)
+    """frames: {suffix: DataFrame} -> reports/evidence/chNN_<suffix>.csv. Writes chNN.json. A run against a database that is
+    not live writes local/nonlive_reports/reports/evidence/ instead (scripts/report_target; until 2026-11-11 this wrote the
+    tracked files whatever the database)."""
+    from pathlib import Path as _Path
+    from scripts.report_target import report_path
+    out = str(report_path(_Path(EVID)))
+    os.makedirs(out, exist_ok=True)
     files = {}
     for suffix, df in frames.items():
         name = f"ch{chart:02d}_{suffix}.csv"
-        df.to_csv(os.path.join(EVID, name), index=False, float_format="%.6g", lineterminator="\n")
+        df.to_csv(os.path.join(out, name), index=False, float_format="%.6g", lineterminator="\n")
         files[suffix] = f"reports/evidence/{name}"
     pr = prereg(chart)
     meta = dict(chart=chart, slug=slug, title=title, files=files, caption=caption, verdict=verdict,
@@ -198,7 +203,7 @@ def write_result(chart: int, slug: str, title: str, frames: dict, caption: str, 
                 script=f"scripts/evidence/{script}",
                 code_commit=git_sha([f"scripts/evidence/{script}", "scripts/evidence/_common.py"]),
                 computed_at=datetime.datetime.now().isoformat(timespec="seconds"), **(extra or {}))
-    with open(os.path.join(EVID, f"ch{chart:02d}.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(out, f"ch{chart:02d}.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, indent=1, allow_nan=False, default=_json_default)
         fh.write("\n")
     print(f"ch{chart:02d} {verdict}: {verdict_detail}")

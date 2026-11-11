@@ -45,6 +45,15 @@ def test_no_quantity_or_zero_history_leaves_sigma_alone():
 def test_switch_is_the_decided_mode_and_query_reads_the_treatment():
     assert SAFETY_STOCK_FOLLOWS_LEVEL == "treated"   # decided 2026-11-10: treated products only, not every product
     assert "model_params->>'treatment'" in TREATMENT_QUERY
+    # a zero 'ok' forecast follows the level too (2026-11-11): it orders no safety stock against a zero forecast
+    assert "OR forecast_value = 0" in TREATMENT_QUERY and "status = 'ok'" in TREATMENT_QUERY
+
+
+def test_zero_forecast_product_in_the_set_carries_no_safety_stock():
+    from scripts.run_lp import planned_sigma_d
+    h = _hist({"2025-01": 300, "2025-02": 0, "2025-03": 0, "2025-04": 0})   # MA3 = 0, too short for the dead-SKU rule
+    sigma, _ = planned_sigma_d(h, "unilever", 7, 0.0, "2025-04", {7})
+    assert sigma == 0.0
 
 
 def test_planned_sigma_d_scales_only_treated_products():

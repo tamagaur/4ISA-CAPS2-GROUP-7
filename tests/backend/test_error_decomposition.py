@@ -26,8 +26,10 @@ from scripts.accuracy_as_served import AS_SERVED_RUNS
 
 REPO = Path(__file__).resolve().parents[2]
 MIGRATION = REPO / "analytics" / "db" / "migrations" / "0063_error_decomposition.sql"
-# the function as last defined (0064 replaces 0063's body)
-LATEST = REPO / "analytics" / "db" / "migrations" / "0064_error_decomposition_counterfactual_and_orphans.sql"
+# 0064's run relabelling (its UPDATE), and the function as last defined: the newest migration that (re)creates it
+M0064 = REPO / "analytics" / "db" / "migrations" / "0064_error_decomposition_counterfactual_and_orphans.sql"
+LATEST = max(p for p in (REPO / "analytics" / "db" / "migrations").glob("[0-9][0-9][0-9][0-9]_*.sql")
+             if "FUNCTION mart.refresh_error_decomposition(" in p.read_text(encoding="utf-8"))
 
 
 def _sql() -> str:
@@ -36,6 +38,10 @@ def _sql() -> str:
 
 def _latest() -> str:
     return "\n".join(l for l in LATEST.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("--"))
+
+
+def _m0064() -> str:
+    return "\n".join(l for l in M0064.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("--"))
 
 
 def test_the_migration_writes_only_its_own_tables():
@@ -117,7 +123,10 @@ def test_every_full_refresh_also_refreshes_the_decomposition_after_the_planning_
 
 def test_a_failed_decomposition_rolls_back_to_its_savepoint_and_keeps_the_other_marts(capsys):
     cur = _Cursor(fail=True)
-    assert amarts.refresh_marts_cursor(cur, "load") == {"sales_mart": 1, "planning_mart": 3}
+    counts = amarts.refresh_marts_cursor(cur, "load")
+    # the other marts' counts stand, and the failure is in the result, not only on stdout (2026-11-11)
+    assert {k: v for k, v in counts.items() if k != "error_decomposition_failed"} == {"sales_mart": 1, "planning_mart": 3}
+    assert counts["error_decomposition_failed"]
     assert "ROLLBACK TO SAVEPOINT error_decomposition" in cur.calls
     assert "FAILED" in capsys.readouterr().out
 
@@ -190,12 +199,15 @@ class _Session:
     def __init__(self, tiers, monthly, products, available=True):
         self.tiers, self.monthly, self.products, self.available, self.calls = tiers, monthly, products, available, []
         self.info: dict = {}
+        self.stamps = {"decomposition_refreshed_at": None, "marts_refreshed_at": None}
 
     def execute(self, stmt, params=None):
         sql = str(stmt)
         self.calls.append(sql)
         if "to_regclass('mart.error_decomposition')" in sql:
             return _Result(self.available)
+        if "decomposition_refreshed_at" in sql:
+            return _Result([self.stamps])
         if "'sales' AS src" in sql:
             return _Result([{"src": "sales", "principal": "unilever", "period": "2026-02", "data_kind": "real",
                              "source_tag": None, "flow": None, "pesos": 1.0, "pieces": None, "recorded_with_tax": False,
@@ -319,7 +331,7 @@ def test_tier_b_and_c_runs_are_labelled_counterfactual_in_the_script_and_the_mig
         label, cohort = AS_SERVED_RUNS[name]
         assert label.startswith("COUNTERFACTUAL (never served") and cohort.startswith("COUNTERFACTUAL, NOT SERVED")
     assert not AS_SERVED_RUNS["as_served_calendar"][0].startswith("COUNTERFACTUAL")
-    sql = _latest()
+    sql = _m0064()
     assert "'counterfactual', true" in sql and "Tier [BC]" in sql and "Tier A" not in sql.split("WHERE kind")[1].split(";")[0]
 
 
@@ -332,3 +344,75 @@ def test_the_accuracy_card_flags_a_counterfactual_run_and_the_decomposition_mark
     body = _get(_Session(tiers, [], []), "/dashboard/error-decomposition?principal=unilever")
     assert {t["tier"]: t["counterfactual"] for t in body["by_tier"]} == {"A": False, "B": True}
     assert body["served_tier"] == "A" and "never served" in body["counterfactual_note"]
+
+
+# ---- 0077: the rebuilt safety stock follows the level, as the plan's does ------------------------------------------
+
+def test_the_latest_body_is_0077_and_scales_rebuilt_safety_stock_for_zero_and_treated_forecasts():
+    assert LATEST.name.startswith("0077_")
+    sql = _latest()
+    # the same set as scripts/run_lp.TREATMENT_QUERY: a zero forecast, or succession / fading
+    assert "fc.forecast_pieces = 0 OR fc.treatment IN ('succession', 'fading')" in sql
+    # run_lp.level_factor: min(1, forecast / mean), never below 0, 1 when the history has no positive mean
+    assert "LEAST(1::numeric, GREATEST(0::numeric, fc.forecast_pieces / rb.level_mean))" in sql
+    assert "CASE WHEN n >= 1 AND s1 > 0 THEN s1 / n END AS level_mean" in sql
+    assert "rb.ss * COALESCE(lv.factor, 1) AS ss_rebuilt" in sql
+    # a stored plan figure already carries the plan's scaling: the factor is recorded only on rebuilt rows
+    assert "CASE WHEN ss_stored IS NULL THEN level_factor END" in sql
+    # same signature: every caller and DECOMPOSITION_SIGNATURE unchanged
+    assert "p_trigger text DEFAULT 'manual'" in sql and amarts.DECOMPOSITION_SIGNATURE == "refresh_error_decomposition(text,numeric,integer,text)"
+
+
+def test_the_decomposition_rule_is_held_to_the_plan_setting():
+    """0077 hard-codes the 'treated' rule: a different analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL needs a migration."""
+    from analytics.params import SAFETY_STOCK_FOLLOWS_LEVEL
+    from scripts.run_lp import TREATMENT_QUERY
+    assert SAFETY_STOCK_FOLLOWS_LEVEL == "treated"
+    assert "IN ('succession', 'fading') OR forecast_value = 0" in TREATMENT_QUERY
+
+
+def test_the_sql_level_mean_is_run_lp_level_factor():
+    """The SQL's mean (positive quantity over the observed months strictly before the month) against the Python one."""
+    import pandas as pd
+    from scripts.run_lp import level_factor
+    hist = {"2025-01": 900.0, "2025-02": None, "2025-04": -50.0, "2025-05": 300.0}   # 2025-03 has no row (= 0), 02 blank
+    df = pd.DataFrame({"period": list(hist), "total_quantity": [float("nan") if v is None else v for v in hist.values()]})
+    q = [900.0, 0.0, 0.0, 300.0]          # the grid: blank out, no row = 0, net-negative = 0
+    mean = sum(q) / len(q)
+    for forecast in (0.0, 120.0, 5000.0):
+        assert level_factor(df, forecast, "2025-05") == max(0.0, min(1.0, forecast / mean))
+
+
+def test_new_runs_record_the_treatment_and_the_backfill_checks_against_the_untreated_twin():
+    src = (REPO / "scripts" / "accuracy_as_served.py").read_text(encoding="utf-8")
+    assert "ma3_pieces, backup_fired, treatment) VALUES %s" in src
+    assert '"treatment": r.get("treatment")' in src
+    assert "label.replace(TREATED, \"\")" in src and "differs_unflagged" in src and "not_fixed_point" in src
+
+
+def test_treatment_flags_are_the_names_apply_gives_and_a_treated_value_is_a_fixed_point():
+    import pandas as pd
+    from analytics.forecasting.treatments import ProductContext
+    from scripts.accuracy_as_served import treatment_flags
+    idx = pd.date_range("2024-01-01", periods=14, freq="MS")
+    s = pd.Series([1000.0] * 11 + [100.0, 80.0, 60.0], index=idx)      # collapsed: fading fires for 2025-03
+    ctx = ProductContext(promo_name=False, successor_first_sales=())
+    rows = pd.DataFrame({"product_key": [1], "month": ["2025-03"], "forecast_pieces": [80.0], "status": ["ok"]})
+    out = treatment_flags(rows, {1: s}, {1: ctx})
+    assert out.treatment.iloc[0] == "fading" and out.reapplied.iloc[0] == 80.0   # min(80, mean of the last 3 = 80)
+    assert treatment_flags(rows, {1: s}, {}).treatment.iloc[0] is None          # no context: never treated
+
+
+# ---- a failed refresh is visible in every answer -------------------------------------------------------------------
+
+def test_a_split_older_than_the_last_full_refresh_is_served_as_stale():
+    import datetime as dt
+    tiers = [{"tier": t, "first_period": "2025-01", "last_period": "2026-02", **_sums()} for t in ("A", "all")]
+    s = _Session(tiers, [], [])
+    old, new = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc), dt.datetime(2026, 11, 11, tzinfo=dt.timezone.utc)
+    s.stamps = {"decomposition_refreshed_at": old, "marts_refreshed_at": new}
+    body = _get(s, "/dashboard/error-decomposition?principal=unilever")
+    assert body["freshness"]["stale"] is True and "did not rebuild this split" in body["freshness"]["stale_reason"]
+    s.stamps = {"decomposition_refreshed_at": new, "marts_refreshed_at": new}
+    body = _get(s, "/dashboard/error-decomposition?principal=unilever&period=2026-01")
+    assert body["freshness"]["stale"] is False and body["freshness"]["stale_reason"] is None

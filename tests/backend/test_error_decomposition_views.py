@@ -55,6 +55,8 @@ class _Session:
         self.calls.append((sql, params))
         if "to_regclass('mart.error_decomposition')" in sql:
             return _Result(self.k.get("available", True))
+        if "decomposition_refreshed_at" in sql:   # backend/marts.decomposition_freshness (2026-11-11)
+            return _Result([self.k.get("stamps", {"decomposition_refreshed_at": None, "marts_refreshed_at": None})])
         if "'sales' AS src" in sql:
             return _Result([{"src": "sales", "principal": "unilever", "period": "2026-02", "data_kind": "real",
                              "source_tag": None, "flow": None, "pesos": 1.0, "pieces": None, "recorded_with_tax": False,
@@ -252,3 +254,15 @@ def test_every_decomposition_response_states_its_figures_basis():
     assert b["served_tiers"] == ["A"] and b["counterfactual_tiers"] == ["B", "C"] and b["counterfactual_rows_included"] is True
     import inspect
     assert inspect.signature(dr.get_error_decomposition).parameters["tier"].default.default == "all"
+
+
+def test_the_narrower_routes_say_when_the_split_is_older_than_the_last_refresh():
+    """A failed decomposition refresh keeps its old rows (analytics/marts.py); every answer says so (2026-11-11)."""
+    import datetime as dt
+    old, new = dt.datetime(2026, 11, 1, tzinfo=dt.timezone.utc), dt.datetime(2026, 11, 11, tzinfo=dt.timezone.utc)
+    stale = {"decomposition_refreshed_at": old, "marts_refreshed_at": new}
+    for path in (f"{BASE}/aggregate?{RANGE}", f"{BASE}/concentration?{RANGE}"):
+        body = _get(_Session(aggregate=[], ranked=[], stamps=stale), path)
+        assert body["freshness"]["stale"] is True and body["freshness"]["refreshed_at"].startswith("2026-11-01"), path
+    body = _get(_Session(aggregate=[], stamps={"decomposition_refreshed_at": new, "marts_refreshed_at": new}), f"{BASE}/aggregate?{RANGE}")
+    assert body["freshness"]["stale"] is False

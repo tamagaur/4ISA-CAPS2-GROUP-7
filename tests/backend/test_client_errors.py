@@ -79,7 +79,7 @@ def test_a_nul_in_the_path_or_query_is_a_400(client, path):
 
 
 def test_an_escaped_backslash_followed_by_u0000_is_not_a_nul(client):
-    """The two-character text \u0000 (a backslash, then u0000) is ordinary text, not U+0000."""
+    r"""The two-character text \u0000 (a backslash, then u0000) is ordinary text, not U+0000."""
     resp = client.post("/auth/login", content=b'{"email":"a@b.org","password":"' + b"\\" * 2 + b'u0000"}',
                        headers={"content-type": "application/json"})
     assert resp.status_code != 400   # it went on to the (absent) database, which this fixture turns into a 500

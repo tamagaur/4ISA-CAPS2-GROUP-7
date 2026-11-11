@@ -31,19 +31,19 @@ Figures keep the chapter's section-level scheme (Figure 4.2.N within §4.2, Figu
 | Figure 4.2.19 | new (g) | Forecasting Model Bake-off: Median MASE of 17 Candidates, Unilever Tier A | §4.2.2.1.1, after Table 4.2.13, before "No model reached a median MAPE below 20%…" | pass |
 | Figure 4.2.20 | Figure 4.2.13 | Portfolio Forecast for March 2026, Unilever (Dashboard) (screenshot) | unchanged position | n/a |
 | Figure 4.2.21 | Figure 4.2.14 | One-Month-Ahead Forecast of a Tier A Product (SKU Forecast page) (screenshot) | unchanged position | n/a |
-| Figure 4.2.22 | new (k) | MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02) | §4.2.2.1.3, after the paragraph beginning "All 189 Tier A products as of February 2026 were processed…" (it follows Table 4.2.15), before "The pass rate differs by model…" | pass |
+| Figure 4.2.22 | new (k) | MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02) | §4.2.2.1.3, after the paragraph beginning "All 189 Tier A products as of February 2026 were processed…" (it follows Table 4.2.15), before "The pass rate differs by model…" | **HELD** |
 | Figure 4.2.23 | Figure 4.2.15 | Del Monte Category Forecast, Labelled as Synthetic (SKU Forecast page, synthetic data on) (screenshot) | unchanged position | n/a |
 | Figure 4.2.24 | new (l) | Half-Year Block Results of 36 Challengers against MA3, by History Bin | §4.2.2.3.2, after Table 4.2.16, before "In every comparison, the simple MA3 was as good…" | **HELD** |
 | Figure 4.2.25 | Figure 4.2.16 | Forecast Accuracy Card, Unilever, March 2025 – February 2026 (Dashboard) (screenshot) | unchanged position | n/a |
-| Figure 4.2.26 | new (h) | Forecast against Actual Pieces by Month, Unilever (as-served backtest) | §4.2.2.3.3, after Table 4.2.18, before "The dashboard card shows the same backtest…" | pass |
-| Figure 4.2.27 | new (i) | Monthly WAPE in Pieces, Unilever (as-served backtest) | §4.2.2.3.3, directly after the forecast-against-actual figure | pass |
-| Figure 4.2.28 | new (j) | Surplus against Shortage by Month, Unilever (as-served backtest, pesos) | §4.2.2.3.3, directly after the monthly WAPE figure | pass |
-| Figure 4.2.29 | new (p) | Forecast Error Decomposition by Month, Unilever Tier A (pieces) | §4.2.3.1.1, after the paragraph beginning "The monthly standard deviation of demand is scaled down…" (end of the section); needs a new sentence, see the cross-reference table | pass |
-| Figure 4.2.30 | new (q) | Concentration of Exposure beyond Safety Stock, Unilever Tier A | §4.2.3.1.1, directly after the error-decomposition figure | pass |
+| Figure 4.2.26 | new (h) | Forecast against Actual Pieces by Month, Unilever (as-served backtest) | §4.2.2.3.3, after Table 4.2.18, before "The dashboard card shows the same backtest…" | **HELD** |
+| Figure 4.2.27 | new (i) | Monthly WAPE in Pieces, Unilever (as-served backtest) | §4.2.2.3.3, directly after the forecast-against-actual figure | **HELD** |
+| Figure 4.2.28 | new (j) | Surplus against Shortage by Month, Unilever (as-served backtest, pesos) | §4.2.2.3.3, directly after the monthly WAPE figure | **HELD** |
+| Figure 4.2.29 | new (p) | Forecast Error Decomposition by Month, Unilever Tier A (pieces) | §4.2.3.1.1, after the paragraph beginning "The monthly standard deviation of demand is scaled down…" (end of the section); needs a new sentence, see the cross-reference table | **HELD** |
+| Figure 4.2.30 | new (q) | Concentration of Exposure beyond Safety Stock, Unilever Tier A | §4.2.3.1.1, directly after the error-decomposition figure | **HELD** |
 | Figure 4.2.31 | Figure 4.2.17 | Order Plan for March 2026, Unilever (Reorder Recommendations page) (screenshot) | unchanged position | n/a |
 | Figure 4.2.32 | new (m) | Order Plan by Urgency, Unilever (cycle March 2026) | §4.2.3.1.2, after Table 4.2.19, before "Of the 110 rows in the cycle…" (that paragraph is itself rewritten by edit list item 9) | pass |
 | Figure 4.2.33 | new (n) | Order Plan by Category, Unilever (cycle March 2026) | §4.2.3.1.3, after Table 4.2.20, before Table 4.2.21 | pass |
-| Figure 4.2.34 | new (o) | Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026) | §4.2.3.1.4, after Table 4.2.22, before "For the 109 planned products, the per-product target stock…" | pass |
+| Figure 4.2.34 | new (o) | Per-Product Plan against the 3-Week Rule (110 products, cycle March 2026) | §4.2.3.1.4, after Table 4.2.22, before "For the 109 planned products, the per-product target stock…" | **HELD** |
 | Figure 4.2.35 | Figure 4.2.18 | Dismissing a Recommendation with a Reason (Reorder Recommendations page) (screenshot) | unchanged position | n/a |
 
 Figures 4.3.1 – 4.3.13: unchanged (old = new). Chapter 5: no figures, before or after.
@@ -153,13 +153,15 @@ Caption: Figure 4.2.19 Forecasting Model Bake-off: Median MASE of 17 Candidates,
 
 Gate: 34 of 34 checks agree with the manuscript or the edit list.
 
-### Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02) (gate: pass)
+### Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02) (HELD)
 
 File: `reports/figures/fig_k_mase_distribution.png`
 
 Caption: Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02). Source: Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175'). Period: forecast month March 2026 (served model's rolling one-step holdout, DEC-25). Not shown: the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size of each product's sales.
 
-Gate: 3 of 3 checks agree with the manuscript or the edit list.
+Gate: 1 of 3 checks agree with the manuscript or the edit list.
+- **Disagrees:** MASE below 1: data gives `110`, Table 4.2.15 / pinned states `109`.
+- **Disagrees:** median MASE: data gives `0.823`, §4.2.2.1.3 / pinned states `0.827`.
 
 ### Figure 4.2.24 Half-Year Block Results of 36 Challengers against MA3, by History Bin (HELD)
 
@@ -170,53 +172,103 @@ Caption: Figure 4.2.24 Half-Year Block Results of 36 Challengers against MA3, by
 Gate: 2 of 3 checks agree with the manuscript or the edit list.
 - **Disagrees:** XGBoost + MA3 average (long, @A) W/T/L: data gives `0/2/0`, §4.2.2.1.2 and Table 4.2.16: '0 wins, 4 ties, 1 loss' (DEC-26, 2026-09-21) states `0/4/1`.
 
-### Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest) (gate: pass)
+### Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest) (HELD)
 
 File: `reports/figures/fig_h_forecast_vs_actual.png`
 
 Caption: Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (this is a backtest: each month forecast from the months before it); per-product error, which is far larger than the total's (median product WAPE about 40%); products not forecast that month.
 
-Gate: 37 of 37 checks agree with the manuscript or the edit list.
+Gate: 22 of 37 checks agree with the manuscript or the edit list.
+- **Disagrees:** 2025-03 forecast: data gives `2554925`, Table 4.2.18 states `2603372`.
+- **Disagrees:** 2025-04 forecast: data gives `2351536`, Table 4.2.18 states `2381632`.
+- **Disagrees:** 2025-05 forecast: data gives `2625601`, Table 4.2.18 states `2626451`.
+- **Disagrees:** 2025-06 forecast: data gives `2687976`, Table 4.2.18 states `2694583`.
+- **Disagrees:** 2025-07 forecast: data gives `2239579`, Table 4.2.18 states `2365326`.
+- **Disagrees:** 2025-08 forecast: data gives `1964264`, Table 4.2.18 states `2125154`.
+- **Disagrees:** 2025-08 direction: data gives `under`, Table 4.2.18 states `over`.
+- **Disagrees:** 2025-09 forecast: data gives `2118181`, Table 4.2.18 states `2341533`.
+- **Disagrees:** 2025-10 forecast: data gives `1905395`, Table 4.2.18 states `1988739`.
+- **Disagrees:** 2025-11 forecast: data gives `1991783`, Table 4.2.18 states `2082199`.
+- **Disagrees:** 2025-12 forecast: data gives `1771172`, Table 4.2.18 states `1810379`.
+- **Disagrees:** 2026-01 forecast: data gives `2212229`, Table 4.2.18 states `2274480`.
+- **Disagrees:** 2026-01 direction: data gives `under`, Table 4.2.18 states `over`.
+- **Disagrees:** 2026-02 forecast: data gives `1854382`, Table 4.2.18 states `1887478`.
+- **Disagrees:** over-forecast months: data gives `6`, edit list item 7 states `8`.
 
-### Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest) (gate: pass)
+### Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest) (HELD)
 
 File: `reports/figures/fig_i_monthly_wape.png`
 
 Caption: Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (a backtest); the median product WAPE (35.49% for this window, a different measure); error in pesos; months before March 2025.
 
-Gate: 12 of 12 checks agree with the manuscript or the edit list.
+Gate: 2 of 12 checks agree with the manuscript or the edit list.
+- **Disagrees:** 2025-03 WAPE (%): data gives `18.7`, Table 4.2.18 states `20.3`.
+- **Disagrees:** 2025-04 WAPE (%): data gives `21.0`, Table 4.2.18 states `22.1`.
+- **Disagrees:** 2025-07 WAPE (%): data gives `40.0`, Table 4.2.18 states `46.9`.
+- **Disagrees:** 2025-08 WAPE (%): data gives `33.5`, Table 4.2.18 states `41.4`.
+- **Disagrees:** 2025-09 WAPE (%): data gives `28.1`, Table 4.2.18 states `40.0`.
+- **Disagrees:** 2025-10 WAPE (%): data gives `40.5`, Table 4.2.18 states `41.7`.
+- **Disagrees:** 2025-11 WAPE (%): data gives `30.3`, Table 4.2.18 states `32.4`.
+- **Disagrees:** 2025-12 WAPE (%): data gives `55.2`, Table 4.2.18 states `58.3`.
+- **Disagrees:** 2026-01 WAPE (%): data gives `45.2`, Table 4.2.18 states `46.4`.
+- **Disagrees:** 2026-02 WAPE (%): data gives `33.8`, Table 4.2.18 states `35.2`.
 
-### Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos) (gate: pass)
+### Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos) (HELD)
 
 File: `reports/figures/fig_j_surplus_shortage.png`
 
 Caption: Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: observed stockouts or overstock (these are forecast misses valued at each product's average selling price, not stock outcomes); live performance; products with no price (net pesos or pieces not positive).
 
-Gate: 24 of 24 checks agree with the manuscript or the edit list.
+Gate: 3 of 24 checks agree with the manuscript or the edit list.
+- **Disagrees:** 2025-03 surplus: data gives `3036166`, Table 4.2.18 states `3376570`.
+- **Disagrees:** 2025-03 shortage: data gives `3862481`, Table 4.2.18 states `3851955`.
+- **Disagrees:** 2025-04 surplus: data gives `2304184`, Table 4.2.18 states `2486130`.
+- **Disagrees:** 2025-04 shortage: data gives `5096578`, Table 4.2.18 states `4944467`.
+- **Disagrees:** 2025-05 surplus: data gives `2907473`, Table 4.2.18 states `2911738`.
+- **Disagrees:** 2025-06 surplus: data gives `5328474`, Table 4.2.18 states `5365124`.
+- **Disagrees:** 2025-06 shortage: data gives `4494367`, Table 4.2.18 states `4403057`.
+- **Disagrees:** 2025-07 surplus: data gives `6471131`, Table 4.2.18 states `7375371`.
+- **Disagrees:** 2025-08 surplus: data gives `2828328`, Table 4.2.18 states `3848422`.
+- **Disagrees:** 2025-08 shortage: data gives `4296721`, Table 4.2.18 states `4247026`.
+- **Disagrees:** 2025-09 surplus: data gives `3864453`, Table 4.2.18 states `5252297`.
+- **Disagrees:** 2025-09 shortage: data gives `5092534`, Table 4.2.18 states `5056550`.
+- **Disagrees:** 2025-10 surplus: data gives `3903451`, Table 4.2.18 states `4291229`.
+- **Disagrees:** 2025-10 shortage: data gives `7564986`, Table 4.2.18 states `7385082`.
+- **Disagrees:** 2025-11 surplus: data gives `4459017`, Table 4.2.18 states `4944624`.
+- **Disagrees:** 2025-11 shortage: data gives `4089975`, Table 4.2.18 states `3907377`.
+- **Disagrees:** 2025-12 surplus: data gives `9707524`, Table 4.2.18 states `9967556`.
+- **Disagrees:** 2026-01 surplus: data gives `7232970`, Table 4.2.18 states `7527223`.
+- **Disagrees:** 2026-01 shortage: data gives `4624189`, Table 4.2.18 states `4485523`.
+- **Disagrees:** 2026-02 surplus: data gives `6174229`, Table 4.2.18 states `6421262`.
+- **Disagrees:** 2026-02 shortage: data gives `2537737`, Table 4.2.18 states `2481131`.
 
-### Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces) (gate: pass)
+### Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces) (HELD)
 
 File: `reports/figures/fig_p_error_decomposition.png`
 
 Caption: Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces). Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months), 4,370 Tier A product-months. Not shown: Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, ₱38,187,551, are a separate figure); observed stockouts (a miss beyond safety stock is potential exposure, not a recorded stockout); live performance (a backtest).
 
-Gate: 7 of 7 checks agree with the manuscript or the edit list.
+Gate: 4 of 7 checks agree with the manuscript or the edit list.
+- **Disagrees:** over / absorbed / beyond as published: data gives `(10397753, 4860408, 2811745)`, docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md states `(12242746, 4847983, 2669295)`.
+- **Disagrees:** months beyond safety stock: data gives `797`, STATE.md headline states `749`.
+- **Disagrees:** pesos beyond safety stock: data gives `40494280`, pinned states `38187551`.
 
-### Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A (gate: pass)
+### Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A (HELD)
 
 File: `reports/figures/fig_q_exposure_concentration.png`
 
 Caption: Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A. Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months). Not shown: Tier B and C products; products with no miss beyond safety stock (not ranked); observed stockouts (exposure is potential, not recorded); pieces.
 
-Chart note: 17 products carry half and 53 carry 80% of the ₱38,187,551 beyond safety stock (204 products have any).
+Chart note: 18 products carry half and 56 carry 80% of the ₱40,494,280 beyond safety stock (217 products have any).
 
-Gate: 1 of 1 checks agree with the manuscript or the edit list.
+Gate: 0 of 1 checks agree with the manuscript or the edit list.
+- **Disagrees:** pesos beyond safety stock: data gives `40494280`, pinned states `38187551`.
 
 ### Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026) (gate: pass)
 
 File: `reports/figures/fig_m_plan_by_urgency.png`
 
-Caption: Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026). Source: GET /recommendations (lp_recommendation, lp_run 6; rows outside the plan excluded). Period: planning cycle March 2026 (stock count 2 March 2026; Tier A as of 2026-02). Not shown: safety stock and forecast per urgency (Table 4.2.19); peso value of the orders; whether SSM placed them (no decision is recorded in this cycle); cost inputs are set from SSM's records and not confirmed by SSM.
+Caption: Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026). Source: GET /recommendations (lp_recommendation, lp_run 9; rows outside the plan excluded). Period: planning cycle March 2026 (stock count 2 March 2026; Tier A as of 2026-02). Not shown: safety stock and forecast per urgency (Table 4.2.19); peso value of the orders; whether SSM placed them (no decision is recorded in this cycle); cost inputs are set from SSM's records and not confirmed by SSM.
 
 Chart note: Two panels instead of one grouped bar: product counts (tens) and order pieces (hundreds of thousands) on one axis would flatten the counts to nothing.
 
@@ -226,17 +278,29 @@ Gate: 20 of 20 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_n_plan_by_category.png`
 
-Caption: Figure 4.2.33 Order Plan by Category, Unilever (cycle March 2026). Source: GET /recommendations (lp_run 6) joined to product_dimension.category_path on sku_code. Period: planning cycle March 2026. Not shown: categories with no planned product (Skin Care and the other 9 Unilever categories have none this cycle); peso value of the orders; products with a zero order (in the labels only).
+Caption: Figure 4.2.33 Order Plan by Category, Unilever (cycle March 2026). Source: GET /recommendations (lp_run 9) joined to product_dimension.category_path on sku_code. Period: planning cycle March 2026. Not shown: categories with no planned product (Skin Care and the other 9 Unilever categories have none this cycle); peso value of the orders; products with a zero order (in the labels only).
 
 Gate: 9 of 9 checks agree with the manuscript or the edit list.
 
-### Figure 4.2.34 Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026) (gate: pass)
+### Figure 4.2.34 Per-Product Plan against the 3-Week Rule (110 products, cycle March 2026) (HELD)
 
 File: `reports/figures/fig_o_plan_vs_rule.png`
 
-Caption: Figure 4.2.34 Per-Product Plan against the 3-Week Rule (109 products, cycle March 2026). Source: GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are the last purchase price per piece from the stock file). Period: planning cycle March 2026. Not shown: the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list item 13); capital freed (none is claimed). The peso panel's bars are one row of GET /policy-comparison, the rule read as a peak: 3 weeks is the stock right after a delivery, and its average is half a weekly order lower. On the other reading, the rule read as an average, the plan's average is -22.6% and its peak -2.2%. Weekly ordering is assumed, not implemented; SSM has not confirmed the prices, its weekly ordering or which reading applies.
+Caption: Figure 4.2.34 Per-Product Plan against the 3-Week Rule (110 products, cycle March 2026). Source: GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are the last purchase price per piece from the stock file). Period: planning cycle March 2026. Not shown: the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list item 13); capital freed (none is claimed). The peso panel's bars are one row of GET /policy-comparison, the rule read as a peak: 3 weeks is the stock right after a delivery, and its average is half a weekly order lower. On the other reading, the rule read as an average, the plan's average is -29.5% and its peak -8.1%. Weekly ordering is assumed, not implemented; SSM has not confirmed the prices, its weekly ordering or which reading applies.
 
 Chart note: Two panels: target stock is in pieces and average and peak stock are in pesos.
 
-Gate: 12 of 12 checks agree with the manuscript or the edit list.
+Gate: 0 of 12 checks agree with the manuscript or the edit list.
+- **Disagrees:** target stock, plan (pieces): data gives `895148`, Table 4.2.22 states `1005661`.
+- **Disagrees:** target stock, rule (pieces): data gives `817103`, Table 4.2.22 states `840092`.
+- **Disagrees:** target vs rule (%): data gives `9.6`, Table 4.2.22 states `19.7`.
+- **Disagrees:** average stock, plan (PHP): data gives `6714485`, rule_read_as_peak states `7496532`.
+- **Disagrees:** average stock, rule (PHP): data gives `7932223`, rule_read_as_peak states `8066830`.
+- **Disagrees:** average vs rule (%): data gives `-15.4`, rule_read_as_peak states `-7.1`.
+- **Disagrees:** peak stock, plan (PHP): data gives `10204663`, rule_read_as_peak states `11045937`.
+- **Disagrees:** peak stock, rule (PHP): data gives `9518668`, rule_read_as_peak states `9680196`.
+- **Disagrees:** peak vs rule (%): data gives `7.2`, rule_read_as_peak states `14.1`.
+- **Disagrees:** the other reading's average vs rule (%), source note only: data gives `-29.5`, rule_read_as_average states `-22.6`.
+- **Disagrees:** the other reading's peak vs rule (%), source note only: data gives `-8.1`, rule_read_as_average states `-2.2`.
+- **Disagrees:** products holding less than the rule: data gives `58`, Table 4.2.22 states `56`.
 

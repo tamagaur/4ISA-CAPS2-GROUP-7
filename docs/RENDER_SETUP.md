@@ -112,8 +112,8 @@ Other things that need attention before trusting a load on the new service:
 2. **Routes need the full repo and its subprocess runtime**: loads call `python -m scripts.run_month` and others, with a 120 s step timeout, on whatever instance
    size you pick. Not measured on Render; do not promise it works until one load has been run there. The only rehearsal was on a local restored copy.
 3. **Request time.** A load is a background job (`/batch/job`), but Render's free instance also sleeps when idle, killing it.
-4. **A load writes to the live database.** Pointing a *second* Render service at the same `SUPABASE_DB_URL` makes it a second writer to live: a plan of
-   109 rows / 435,988 pieces moves when a month loads (CLAUDE.md numeric gate). Do not load a month from the new service until the group decides to.
+4. **A load writes to the live database.** Pointing a *second* Render service at the same `SUPABASE_DB_URL` makes it a second writer to live: the
+   plan in STATE.md's `plan:` line moves when a month loads (CLAUDE.md numeric gate). Do not load a month from the new service until the group decides to.
    Rolling back needs the admin-only `data.rollback` permission.
 5. The practice-month routes (`/batch/practice-month`, practice sign-in) exist only against the local throwaway server and answer
    `batch_not_available` on Render.

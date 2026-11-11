@@ -30,3 +30,17 @@ def test_restricts_service_role_and_public_functions():
     sql = _strip_sql_file(F.read_text(encoding="utf-8")).lower()
     assert "revoke select, insert, update, delete on all tables" in sql and "service_role" in sql
     assert "revoke execute on all functions" in sql and "from public" in sql
+
+
+# 0078: row-level security on the demo schema (the one schema of ours that had it off on every table, read 2026-11-11)
+F78 = F.parent / "0078_demo_row_level_security.sql"
+
+
+def test_0078_enables_rls_on_every_demo_table_from_the_catalog_and_names_none():
+    sql = _strip_sql_file(F78.read_text(encoding="utf-8"))
+    low = sql.lower()
+    assert "pg_class" in low and "nspname = 'demo'" in low and "relkind in ('r', 'p')" in low
+    assert "enable row level security" in low and "force" not in low and "create policy" not in low
+    for name in ("dm_category_sales", "unilever_sku_lp", "run"):     # catalog-driven: no table named
+        assert f"demo.{name}" not in low, name
+    assert database_wide_statements(sql) == []                      # no default-privilege statement, nothing database-wide

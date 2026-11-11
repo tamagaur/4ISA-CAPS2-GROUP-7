@@ -102,7 +102,7 @@ LOAD_EVENTS_SQL = """
     SELECT slice, status, reason, detail, files, real_rows_before, real_rows_after, real_rows_added, quarantine_rows_added
     FROM etl_load_event WHERE run_id = %(run_id)s AND dry_run ORDER BY load_event_key
 """
-COUNTS_SQL = """
+COUNTS_SQL = r"""
     SELECT inv._period, MAX(inv.snapshot_date),
            SUM(CASE WHEN pd.pack_size ~ '^[0-9]+(\.[0-9]+)?$' AND pd.pack_size::numeric > 0
                     THEN COALESCE(inv.quantity_on_hand, 0) * pd.pack_size::numeric + COALESCE(inv.quantity_pieces, 0) END)
@@ -504,8 +504,19 @@ def main() -> int:
         print("  then refresh the marts, print the review, and stop. The close is a separate command.")
         return 0
     if live:
-        print("LIVE WRITE: a new plan moves the 109 rows / 435,988 pieces in STATE.md (the numeric gate). Update STATE.md in the same commit.")
+        print(f"LIVE WRITE: a new plan moves the {state_plan_text()} in STATE.md (the numeric gate). Update STATE.md in the same commit.")
     return run_close_stage(args, params) if args.close else run_plan_stage(args, params)
+
+
+def state_plan_text() -> str:
+    """'<rows> rows / <pieces> pieces' from STATE.md's plan line, which tests/invariants/test_a_plan_agreement.py holds equal
+    to the live plan (this message carried a literal 109 / 435,988 until 2026-11-11, two re-plans after it stopped being true)."""
+    try:
+        line = next(ln for ln in (REPO / "STATE.md").read_text(encoding="utf-8").splitlines() if ln.startswith("plan:"))
+        got = dict(re.findall(r"(\w+)=(\S+)", line))
+        return f"{int(got['rows'])} rows / {int(got['pieces']):,} pieces"
+    except (OSError, StopIteration, KeyError, ValueError):
+        return "plan (STATE.md's plan line could not be read)"
 
 
 if __name__ == "__main__":

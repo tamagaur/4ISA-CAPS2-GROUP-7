@@ -1722,7 +1722,7 @@ const abcTierColor = (tier) => ABC_TIER_COLORS[tier] || CHART_COLORS.abcRamp[0];
 const ABC_TIER_ROLE = {
   A: { name: 'Top sellers', role: 'The only class the app forecasts and plans reorders for.' },
   B: { name: 'Middle sellers', role: 'Watched on this dashboard only — not forecast, no reorder plan.' },
-  C: { name: 'Long tail', role: 'Lowest revenue — kept on minimal monitoring.' },
+  C: { name: 'Low sellers', role: 'Lowest revenue — kept on minimal monitoring.' },
 };
 // Del Monte is ranked by product category (it has no SKU-level sales) and
 // nothing of Del Monte's is forecast or reordered, so the roles above would

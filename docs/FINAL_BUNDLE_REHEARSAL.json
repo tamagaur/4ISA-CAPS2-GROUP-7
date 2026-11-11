@@ -1,0 +1,381 @@
+{
+ "written": "2026-11-11T11:17:16Z",
+ "backup": "full_backup_20261111T103426Z",
+ "copy": "127.0.0.1:55432/ssm_bundle",
+ "files_sha256": "1c518dc93990acfa2f8c26530116c646b0c770fd605ce1e9a6f04c11d2a49143",
+ "files": [
+  "scripts/apply_final_bundle.py",
+  "scripts/run_lp.py",
+  "scripts/accuracy_as_served.py",
+  "scripts/run_canonical_load.py",
+  "analytics/marts.py",
+  "analytics/params.py",
+  "analytics/forecasting/treatments.py",
+  "analytics/forecasting/router.py",
+  "scripts/run_baseline_forecast.py",
+  "scripts/backtest_forecast_run.py",
+  "analytics/db/migrations/0075_lock_down_data_api.sql",
+  "analytics/db/migrations/0076_forecast_challenger.sql",
+  "analytics/db/migrations/0077_decomposition_ss_follows_level.sql",
+  "analytics/db/migrations/0078_demo_row_level_security.sql"
+ ],
+ "copy_equals_live_before": {
+  "tables_compared": 61,
+  "differ": [
+   "app.users",
+   "demo.dm_category_param",
+   "demo.dm_category_sales",
+   "demo.dm_category_stock"
+  ],
+  "public_mart_differ": [],
+  "measured_differ": [
+   "definitions_md5"
+  ]
+ },
+ "start_tables": {
+  "mart.accuracy_mart": [
+   63000,
+   "bc96da95139b46bcf4246e0391b5fa1c"
+  ],
+  "mart.error_decomposition": [
+   104,
+   "81e790bee8ae061bec5d7de2dbae8ee7"
+  ],
+  "mart.error_decomposition_row": [
+   21250,
+   "4ce4863d7632f0dad3833d780d220542"
+  ],
+  "mart.flow_month": [
+   243,
+   "457cd9f57f0963775ef7f31f9a96241f"
+  ],
+  "mart.forecast_run": [
+   17,
+   "eb821d2b8bc3d80ab6731c67fce967b1"
+  ],
+  "mart.forecast_run_value": [
+   63000,
+   "42a20bf136bb07d00f8a7acc1d24648c"
+  ],
+  "mart.idle_stock": [
+   3857,
+   "63a35250db9e351964c2c997f72d74fd"
+  ],
+  "mart.inventory_count": [
+   139,
+   "e25834ad2f22cca7de5f1c3d66813ace"
+  ],
+  "mart.inventory_mart": [
+   52387,
+   "bb1d5581fcdaba67fc604913ebcd2414"
+  ],
+  "mart.planning_mart": [
+   290,
+   "cad29893914956b00f67a50cc95a9d33"
+  ],
+  "mart.refresh_log": [
+   51,
+   "cb63ad8893740feed0e273fd7dd5863d"
+  ],
+  "mart.sales_mart": [
+   43528,
+   "28ff56aaa23df1c18b16a0ecce7069e2"
+  ],
+  "mart.sales_month": [
+   137,
+   "c734f6e87bdad2b01b59b13d966ed74e"
+  ],
+  "public.abc_classification": [
+   74347,
+   "2a044f275b729f9f48a43c5b4d60aac7"
+  ],
+  "public.customer_dimension": [
+   23713,
+   "009b2692cd5031e2010d8b50d8437790"
+  ],
+  "public.date_dimension": [
+   2922,
+   "7e1dd25022894d2c277366e2e10fb081"
+  ],
+  "public.derived_receipt_fact": [
+   28245,
+   "09c082100f6faa0098f843f557e5e3a3"
+  ],
+  "public.etl_coverage": [
+   700,
+   "2c2ef9418c350f752c2bcc79c8a104bb"
+  ],
+  "public.etl_cutover_ledger": [
+   30,
+   "7d641208d4eb35185d64598d93fa7462"
+  ],
+  "public.etl_load_event": [
+   191,
+   "f1ab2670bb2571367d513f5872e2f282"
+  ],
+  "public.etl_quarantine": [
+   8224,
+   "98b16314be70da45684f411d78bd697c"
+  ],
+  "public.expected_receipt": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.forecast_result": [
+   189,
+   "7b57cc135a9bc10625800e8c4025bb31"
+  ],
+  "public.inventory_fact": [
+   60993,
+   "67f9f9990364bee54984be0208dd9a0c"
+  ],
+  "public.lp_decision_reversal": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.lp_direct_apply_grant": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.lp_dismissal_request": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.lp_quantity_change": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.lp_recommendation": [
+   290,
+   "87d5074a1576d76bc05abc00ce5d5073"
+  ],
+  "public.lp_run": [
+   8,
+   "be97b80b19d0351c6be453134b4a618b"
+  ],
+  "public.lp_stock_observation": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.planning_cycle": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.product_dimension": [
+   2783,
+   "e44cd76228d27afb875bf077b350d412"
+  ],
+  "public.purchase_fact": [
+   2788,
+   "8e3c5f42f28bba29f41a7d6c4c050d46"
+  ],
+  "public.review_flag": [
+   189,
+   "782d6d24f8b9e2ad54b2f9938ce31ad3"
+  ],
+  "public.sales_fact": [
+   62223,
+   "fdc8e288940bf329d57524fe557f0bcf"
+  ],
+  "public.salesman_dimension": [
+   33,
+   "9b20b78a76395e62087520fafd937e78"
+  ],
+  "public.salesreturn_fact": [
+   5561,
+   "b9422fb31fd49ebf27b122ce461539b8"
+  ],
+  "public.schema_migrations": [
+   75,
+   "83a6b81d87e691d337062f2c64ea98f0"
+  ],
+  "public.sellout_fact": [
+   6006,
+   "49cd46b6da157db608451d01bdb6c78b"
+  ],
+  "public.sku_demand_fill": [
+   3130,
+   "00221f6b305a65c42dcae82827b41ad5"
+  ],
+  "public.sku_segment": [
+   1926,
+   "86527f17470e7a4dff76b3730a8c81f0"
+  ],
+  "public.sku_traits": [
+   321,
+   "298f4b84c21f2ec15e16d61a4fab3ae5"
+  ],
+  "public.supplier_dimension": [
+   2,
+   "9f329466f84bbe3b52fc1ccc19e941ae"
+  ],
+  "public.unilever_sku_demand_fact": [
+   37149,
+   "93d6e228faf69285be96ae14404b8ed7"
+  ],
+  "public.user_notification": [
+   0,
+   "d41d8cd98f00b204e9800998ecf8427e"
+  ],
+  "public.lp_run_run_key_seq (sequence)": [
+   8,
+   "last_value"
+  ]
+ },
+ "start": {
+  "ledger_latest": "0074_views_real_rows_only.sql",
+  "ledger_rows": 75,
+  "plan": {
+   "run_key": 8,
+   "cycle": "2026-03-01",
+   "rows": 110,
+   "pieces": 381484,
+   "ordering": 69,
+   "ss_total": 462133.41,
+   "rows_md5": "c80bd8d9b0ff7f3b20659ff384847e70"
+  },
+  "decided_rows_all_cycles": 1,
+  "decomposition": {
+   "rows": 21250,
+   "level_factor_rows": null,
+   "over_pieces": 11567955.53,
+   "absorbed_pieces": 5473085.49,
+   "beyond_pieces": 3100277.39,
+   "exceed_product_months": 3350,
+   "safety_stock_pieces": 28404925.55,
+   "rows_md5": "3137f4c7d66b7ffdd6f2b712c14bf57c"
+  },
+  "rls": {
+   "app": [
+    6,
+    6
+   ],
+   "demo": [
+    11,
+    0
+   ],
+   "mart": [
+    13,
+    13
+   ],
+   "public": [
+    33,
+    33
+   ]
+  },
+  "privileges_md5": "fff4470081dae9073fb7bffe5d6374c2",
+  "definitions_md5": "df2099fcd149a6b7cbda611d62de02be"
+ },
+ "expected": {
+  "ledger_latest": "0078_demo_row_level_security.sql",
+  "ledger_rows": 79,
+  "plan": {
+   "run_key": 9,
+   "cycle": "2026-03-01",
+   "rows": 110,
+   "pieces": 378700,
+   "ordering": 67,
+   "ss_total": 459359.47,
+   "rows_md5": "f00138e2fab723c1f8fa4a65437c0431"
+  },
+  "decided_rows_all_cycles": 1,
+  "decomposition": {
+   "rows": 21250,
+   "level_factor_rows": 4200,
+   "over_pieces": 11567955.53,
+   "absorbed_pieces": 5333113.39,
+   "beyond_pieces": 3240249.49,
+   "exceed_product_months": 3481,
+   "safety_stock_pieces": 20125004.53,
+   "rows_md5": "58df7ba1640153ebdbc64583e00bc0fe"
+  },
+  "treatments": [
+   [
+    15,
+    "fading",
+    149
+   ],
+   [
+    15,
+    "succession",
+    152
+   ],
+   [
+    16,
+    "fading",
+    149
+   ],
+   [
+    16,
+    "succession",
+    152
+   ],
+   [
+    17,
+    "fading",
+    136
+   ],
+   [
+    17,
+    "succession",
+    204
+   ],
+   [
+    18,
+    "fading",
+    93
+   ],
+   [
+    18,
+    "succession",
+    147
+   ]
+  ],
+  "rls": {
+   "app": [
+    6,
+    6
+   ],
+   "demo": [
+    11,
+    11
+   ],
+   "mart": [
+    13,
+    13
+   ],
+   "public": [
+    34,
+    34
+   ]
+  },
+  "privileges_md5": "685ef5e50334ae40b1d8d78f4ef9db01",
+  "definitions_md5": "2866979b9505530276bb8edd9c1e4aec"
+ },
+ "changed_tables": [
+  "mart.error_decomposition",
+  "mart.error_decomposition_row",
+  "mart.forecast_run_value",
+  "mart.planning_mart",
+  "mart.refresh_log",
+  "public.forecast_challenger",
+  "public.lp_recommendation",
+  "public.lp_run",
+  "public.lp_run_run_key_seq (sequence)",
+  "public.schema_migrations"
+ ],
+ "steps": [
+  {
+   "step": "migrations",
+   "exit": 0
+  },
+  {
+   "step": "treatment backfill",
+   "exit": 0
+  },
+  {
+   "step": "re-plan",
+   "exit": 0
+  }
+ ]
+}

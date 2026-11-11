@@ -278,12 +278,16 @@ CANDIDATE_QUERY = """
       AND ac.tier = 'A'
 """.format(basis=abc_method_sql(), ac_basis=abc_method_sql("ac"))
 
-# Products whose latest forecast was changed by succession or fading (analytics/forecasting/treatments.py), for
-# analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL = "treated".
+# The products whose safety stock follows the level under analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL = "treated": the latest
+# forecast was changed by succession or fading (analytics/forecasting/treatments.py), OR it is zero. A zero 'ok' forecast is a
+# product whose last three months sold nothing (MA3 = 0) but whose history is too short for the dead-SKU rule (6 months), so
+# it is planned; until 2026-11-11 it kept its full sigma and ordered pure safety stock against a zero forecast (68212522
+# ordered 1,104 pieces and 64957377 1,680 in lp_run 8), the same defect as a faded product. level_factor is 0 there, so its
+# safety stock is 0. migration 0077 applies the same set to the error decomposition's rebuilt safety stock.
 TREATMENT_QUERY = """
     SELECT product_key FROM Forecast_Result
     WHERE forecast_date = (SELECT MAX(forecast_date) FROM Forecast_Result) AND status = 'ok'
-      AND model_params->>'treatment' IN ('succession', 'fading')
+      AND (model_params->>'treatment' IN ('succession', 'fading') OR forecast_value = 0)
 """
 
 # Monthly sales per product (pieces and pesos): sigma_d, and last year's
@@ -470,7 +474,7 @@ def level_factor(demand_df: pd.DataFrame, forecast: float, end_period: str | Non
 
 
 def fetch_treated_keys(cur) -> set[int]:
-    """Products whose latest forecast succession or fading changed (TREATMENT_QUERY), when
+    """Products whose latest forecast succession or fading changed, or is zero (TREATMENT_QUERY), when
     analytics.params.SAFETY_STOCK_FOLLOWS_LEVEL is "treated"; empty otherwise."""
     if SAFETY_STOCK_FOLLOWS_LEVEL != "treated":
         return set()
@@ -1542,7 +1546,7 @@ def main():
     treated_keys = fetch_treated_keys(cur)
     if SAFETY_STOCK_FOLLOWS_LEVEL == "treated":
         logger.info(f"Safety stock follows the level for {len(treated_keys)} product(s) whose forecast was treated "
-                    "(succession / fading).")
+                    "(succession / fading) or is zero.")
 
     considered = len(candidates_df)
     logger.info(f"{considered} product(s) considered (Category A, status='ok', mase < {MASE_GATE}, at the latest forecast_date).")

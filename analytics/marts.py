@@ -138,7 +138,9 @@ def refresh_error_decomposition_cursor(cur, trigger: str, schema: str | None = "
     except Exception as exc:  # noqa: BLE001 - see comment above
         cur.execute("ROLLBACK TO SAVEPOINT error_decomposition")
         print(f"[marts] error decomposition refresh FAILED, previous rows kept: {type(exc).__name__}: {exc}")
-        return None
+        # The API reads the split's own stamp against the full refresh's (backend/marts.decomposition_freshness) and
+        # serves stale: true; this key lets a caller of refresh_marts_cursor see it too.
+        return {"error_decomposition_failed": f"{type(exc).__name__}: {exc}"}
     cur.execute("RELEASE SAVEPOINT error_decomposition")
     print(f"[marts] error decomposition refreshed ({trigger}): {counts}")
     return counts

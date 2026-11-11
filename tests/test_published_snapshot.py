@@ -12,8 +12,9 @@ def test_snapshot_json_names_its_actuals_version_and_inputs():
                                           "error_decomposition_row.csv"}
     f = snap["figures"]
     assert (f["mase"]["mase_below_1"], f["mase"]["products_scored"]) == (110, 175)
-    # 749 on the untreated backtest (run 11); 762 since 2026-11-10, the decomposition on the treated run 16.
-    assert f["error_decomposition"]["A"]["exceeds_safety_stock_months"] == 762
+    # 749 on the untreated backtest (run 11); 762 since 2026-11-10, the decomposition on the treated run 16; 797 since
+    # 2026-11-11 (migration 0077: the rebuilt safety stock of zero-forecast and succession/fading product-months follows the level).
+    assert f["error_decomposition"]["A"]["exceeds_safety_stock_months"] == 797
 
 
 def test_figures_reproduce_from_the_frozen_rows(capsys):

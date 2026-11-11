@@ -1,32 +1,32 @@
 {
   "passed": true,
-  "code_hash": "c9f017302008bf68a90219747d73a22c7e6fa81185a3978db08b64d71bef7559",
+  "code_hash": "9ee606794ce147eac5d38407ed066861a021f8f14b4c66a48a0bb9c217c08a3b",
   "target": "127.0.0.1/ssm_rehearsal",
-  "backup": "full_backup_20261110T132309Z",
-  "when": "2026-11-10T13:53:42.210871+00:00",
+  "backup": "full_backup_20261111T105224Z_LOCALCOPY_ssm_bundle_after_bundle",
+  "when": "2026-11-11T11:20:57.677886+00:00",
   "plan_start": [
     110,
-    381484
+    378700
   ],
   "steps": {
     "load_first": {
       "exact": true,
       "exit": 0,
-      "seconds": 166,
+      "seconds": 148,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
       ],
       "plan": {
         "rows": 123,
-        "pieces": 924794
+        "pieces": 923168
       },
       "newest_cycle": "2026-04"
     },
     "load_second": {
       "exact": true,
       "exit": 0,
-      "seconds": 231,
+      "seconds": 191,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
@@ -34,18 +34,18 @@
       ],
       "plan": {
         "rows": 134,
-        "pieces": 1009976
+        "pieces": 1003628
       },
       "newest_cycle": "2026-05"
     },
     "rollback_second": {
       "exact": true,
       "exit": 0,
-      "seconds": 44,
+      "seconds": 39,
       "differences": [],
       "plan": {
         "rows": 123,
-        "pieces": 924794
+        "pieces": 923168
       },
       "newest_cycle": "2026-04",
       "loaded_after": [
@@ -55,11 +55,11 @@
     "rollback_first": {
       "exact": true,
       "exit": 0,
-      "seconds": 50,
+      "seconds": 40,
       "differences": [],
       "plan": {
         "rows": 110,
-        "pieces": 381484
+        "pieces": 378700
       },
       "newest_cycle": "2026-03",
       "loaded_after": []
@@ -67,21 +67,21 @@
     "load_first_again": {
       "exact": true,
       "exit": 0,
-      "seconds": 167,
+      "seconds": 133,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
       ],
       "plan": {
         "rows": 123,
-        "pieces": 924794
+        "pieces": 923168
       },
       "newest_cycle": "2026-04"
     },
     "load_second_again": {
       "exact": true,
       "exit": 0,
-      "seconds": 243,
+      "seconds": 178,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
@@ -89,18 +89,18 @@
       ],
       "plan": {
         "rows": 134,
-        "pieces": 1009976
+        "pieces": 1003628
       },
       "newest_cycle": "2026-05"
     },
     "rollback_first_with_second_loaded": {
       "exact": true,
       "exit": 0,
-      "seconds": 51,
+      "seconds": 43,
       "differences": [],
       "plan": {
         "rows": 110,
-        "pieces": 381484
+        "pieces": 378700
       },
       "newest_cycle": "2026-03",
       "loaded_after": []
@@ -108,21 +108,21 @@
     "load_first_third": {
       "exact": true,
       "exit": 0,
-      "seconds": 192,
+      "seconds": 136,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
       ],
       "plan": {
         "rows": 123,
-        "pieces": 924794
+        "pieces": 923168
       },
       "newest_cycle": "2026-04"
     },
     "load_second_third": {
       "exact": true,
       "exit": 0,
-      "seconds": 238,
+      "seconds": 164,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
@@ -130,7 +130,7 @@
       ],
       "plan": {
         "rows": 134,
-        "pieces": 1009976
+        "pieces": 1003628
       },
       "newest_cycle": "2026-05"
     },
@@ -143,7 +143,7 @@
         "2026-04"
       ],
       "said": "the 2026-06 plan opens from the stock count of 2026-05 (or, projected from it, of 2026-04) and neither is in the system, so 2026-05 cannot be planned. Load that month's stock count first",
-      "seconds": 1
+      "seconds": 0
     },
     "crash_mid_run_then_rollback": {
       "exact": true,
@@ -159,9 +159,9 @@
       "differences": [],
       "plan": {
         "rows": 110,
-        "pieces": 381484
+        "pieces": 378700
       },
-      "seconds": 31
+      "seconds": 28
     }
   }
 }

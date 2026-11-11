@@ -126,7 +126,7 @@ export const GLOSSARY = [
   { plain: 'Top sellers / Middle sellers / Low sellers (chips: Top / Middle / Low)', technical: 'ABC Class A / B / C', where: 'Dashboard, ABC Classification, Products, Sales forecast, Reorder Recommendations' },
   { plain: 'Most likely between X and Y', technical: '~90% prediction interval (forecast ± 1.645 × holdout RMSE)', where: 'Sales forecast, Dashboard forecast card, Category Trends' },
   { plain: 'Reliable enough to use for ordering / Not reliable enough yet / Not checked yet', technical: 'MASE below 1 / 1 or more / no MASE (lag-1 naive baseline)', where: 'Sales forecast, Dashboard, ABC Classification, Reorder Recommendations' },
-  { plain: 'Usually off by about X%', technical: 'WAPE; for one product, summed absolute miss ÷ summed forecast', where: 'Sales forecast, Dashboard forecast-accuracy card' },
+  { plain: 'Usually off by about X%', technical: 'WAPE; for one product, summed absolute miss ÷ summed forecast', where: 'Sales forecast, the accuracy card on SKU Forecast (no product picked)' },
   { plain: 'Lasts about X weeks', technical: 'Weeks of cover / stock cover / days of cover ÷ 7', where: 'Dashboard, Reorder Recommendations, ABC Classification, Sales forecast' },
   { plain: 'Keep at least', technical: 'Safety stock (ss_i)', where: 'Reorder Recommendations, Sales forecast, Dashboard' },
   { plain: 'Could run out', technical: 'Stock below safety stock', where: 'Dashboard Below safety stock card, ABC Classification stock status' },

@@ -333,6 +333,7 @@ def get_error_decomposition(
     basis["totals_cover_tiers"] = ["A", "B", "C"]
     basis["product_list_includes_counterfactual"] = tier != marts.SERVED_TIER
     return {"available": out["totals"] is not None, "coverage": ["unilever"], **out, "figures_basis": basis,
+            "freshness": marts.decomposition_freshness(db),
             "blocked_reason": None if out["totals"] is not None else "No scored product-months in this range."}
 
 
@@ -376,6 +377,7 @@ def get_error_decomposition_product(
     basis = _decomposition_basis(start, end, tier_filter="one product", applies_to=[],
                                  counterfactual_included=any(m.get("counterfactual") for m in out["months"]))
     return {"available": bool(out["months"]), "coverage": ["unilever"], **out, "figures_basis": basis,
+            "freshness": marts.decomposition_freshness(db),
             "blocked_reason": None if out["months"] else "No scored months for this product in this range."}
 
 
@@ -400,6 +402,7 @@ def get_error_decomposition_aggregate(
     basis = _decomposition_basis(start, end, tier_filter="none (every tier, one row each plus 'all')", applies_to=[],
                                  counterfactual_included=True)
     return {"available": bool(out["principals"]), "coverage": ["unilever"], **out, "figures_basis": basis,
+            "freshness": marts.decomposition_freshness(db),
             "blocked_reason": None if out["principals"] else "No scored product-months in this range."}
 
 
@@ -426,6 +429,7 @@ def get_error_decomposition_concentration(
     basis = _decomposition_basis(start, end, tier_filter=tier, applies_to=["the ranked products and their shares"],
                                  counterfactual_included=tier != marts.SERVED_TIER)
     return {"available": out["products_with_exposure"] > 0, "coverage": ["unilever"], **out, "figures_basis": basis,
+            "freshness": marts.decomposition_freshness(db),
             "blocked_reason": None if out["products_with_exposure"] else "No product has exposure beyond safety stock in this range."}
 
 

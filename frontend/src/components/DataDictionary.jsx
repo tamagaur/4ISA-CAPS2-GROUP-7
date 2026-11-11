@@ -112,7 +112,7 @@ const entries = {
       term: 'Usually off by about X%',
       definition: 'How far a product’s past forecasts were from actual sales, as a percentage.',
       plain: 'Past forecasts are compared with what actually sold, month by month. The misses are added up and shown as a percentage: 0% is a perfect forecast, and lower is better.',
-      technical: 'WAPE (weighted absolute percentage error): the sum of the gaps between forecast and actual sales (each gap counted as positive). On the SKU Forecast page it is divided by the total forecast over the months scored in the date range; on the Dashboard’s forecast accuracy card, by the total actual sales, per product (weighted by sales) and for the company total, which is lower because misses on different products partly cancel out. Uses the forecasts as they were made at the time.',
+      technical: 'WAPE (weighted absolute percentage error): the sum of the gaps between forecast and actual sales (each gap counted as positive). In a selected product’s view on SKU Forecast it is divided by the total forecast over the months scored in the date range; on the company-wide accuracy card (SKU Forecast with no product picked, since 2026-11-06; it was on the Dashboard before), by the total actual sales, per product (weighted by sales) and for the company total, which is lower because misses on different products partly cancel out. Uses the forecasts as they were made at the time.',
     },
     {
       // SkuDemandPatternPanel.jsx CV_BAND_META; backend/routers/segment.py.

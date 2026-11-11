@@ -1,6 +1,6 @@
 """
 Charts 8, 9, 10 - the LP (scripts/run_lp.py, reworked 2026-09-29). PLACEHOLDER inputs
-(analytics/optimization/lp_inputs.PLACEHOLDERS: allocation %, review/lead days, target
+(analytics.params.PLACEHOLDERS: allocation %, review/lead days, target
 weeks, warehouse capacity, costs) - realistic values, NOT SSM's figures.
 Candidate pool: Category A, Forecast_Result status 'ok' and MASE < 1.0 (the pipeline
 gate, run_lp.py:113; not changed here).
@@ -58,10 +58,13 @@ def fetch_products():
         # As run_lp.main(), 2026-11-11: stock at the count that opens each cycle (DEC-32), sigma over the months to that
         # count, and the treated scaling, through run_lp's own functions so this harness cannot drift from the plan.
         treated = r.fetch_treated_keys(cur)
-        stock = {}
+        stock, packs = {}, {}
         for cyc in sorted(set(cand.forecast_date)):
             ks = [int(k) for k in cand[cand.forecast_date == cyc].product_key.unique()]
             stock[cyc] = r.fetch_stock_and_cost(cur, ks, r.opening_period(cyc), cycle=cyc)
+            # case-pack rounding (migration 0066): run_lp.main() passes the pack sizes, so the harness must too, or its orders
+            # are the LP's before rounding and check G7 cannot pass (found 2026-11-11: 374,793.74 against the plan's 378,700)
+            packs[cyc] = r.fetch_pack_sizes(cur, ks)
     by_cycle, gated = {}, {}
     for row in cand.itertuples():
         d = demand[demand.product_key == row.product_key]
@@ -75,7 +78,7 @@ def fetch_products():
             continue
         p, reason = r.product_input(row.product_key, row.sku_id, row.principal, float(row.forecast_value), sigma_d,
                                     stock[row.forecast_date], demand, prior_year=r.basis_year(row.forecast_date),
-                                    stock_period=r.opening_period(row.forecast_date))
+                                    stock_period=r.opening_period(row.forecast_date), pack_sizes=packs[row.forecast_date])
         if p is None:
             gated[reason] = gated.get(reason, 0) + 1
             continue
@@ -156,7 +159,7 @@ def main():
 
     notes = C.null_notes(p.product_key for p in products)
     ph = R().PLACEHOLDERS
-    ph_note = ("LP inputs are PLACEHOLDERS (analytics/optimization/lp_inputs.py), realistic values the team chose, not SSM's "
+    ph_note = ("LP inputs are PLACEHOLDERS (analytics/params.py PLACEHOLDERS), realistic values the team chose, not SSM's "
                "figures: " + ", ".join(f"{k} {v:g}" if isinstance(v, (int, float)) else f"{k} {v}" for k, v in ph.items()) + ".")
     pool_note = f"Pool: Category A with a stored forecast of status 'ok' and MASE < {C.MASE_GATE_PIPELINE:g} (pipeline gate)."
 
@@ -254,7 +257,7 @@ def chart10(products, demand, notes):
     from scipy.stats import norm
     r = R()
     from analytics.optimization.lp import Z_SCORE
-    from analytics.optimization.lp_inputs import BUSINESS_DAYS_PER_WEEK, WEEKS_PER_MONTH
+    from analytics.params import BUSINESS_DAYS_PER_WEEK, WEEKS_PER_MONTH   # analytics/optimization/lp_inputs.py was folded into params on 2026-09-30 (39f27f7)
     ph = r.PLACEHOLDERS
     window = ph["review_days"] + ph["lead_days"]
     cycles = WEEKS_PER_MONTH * BUSINESS_DAYS_PER_WEEK / ph["review_days"]
