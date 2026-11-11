@@ -107,7 +107,7 @@ const NO_TARGET_TEXT = {
     short: 'No sales in the month the plan ranks',
   },
   accuracy: {
-    main: `${RELIABILITY_SHORT.unreliable}. This product’s past forecasts missed by more than simply repeating last month’s sales, so the plan doesn’t use them yet.`,
+    main: `${RELIABILITY_SHORT.unreliable}. This product’s forecast test error was larger than the average month-to-month change in its sales before the test months, so the plan doesn’t use it yet.`,
     short: RELIABILITY_SHORT.unreliable,
     hover: 'forecast not reliable yet',
     tbc: true,

@@ -1052,8 +1052,8 @@ def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
 
 ENTRY_TEST_MEASURE = ("MASE: the served model's mean absolute one-step error over its holdout months (the last 20% of the "
                       "product's history) divided by the mean absolute month-to-month change of its earlier months "
-                      "(Hyndman & Koehler 2006). Under 1 = better than repeating last month. A product is planned only "
-                      "when it is under 1: the plan's entry test.")
+                      "(Hyndman & Koehler 2006). Under 1 = the test error is smaller than that average change. A product "
+                      "is planned only when it is under 1: the plan's entry test.")
 
 
 def _entry_test(row) -> dict | None:
