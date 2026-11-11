@@ -39,6 +39,14 @@ backup of that morning, PASS; every public and mart table equal to live by finge
   recovered/apply_and_write.py connects to SUPABASE_DIRECT_URL at import and writes public.abc_classification (byte-exact evidence
   with recorded sha256, DO NOT RUN README); build_preview_outputs.py can overwrite the tracked reports/preview/app_meta.json from a
   local run.
+  MEASURED on the final tree 1b68298, against the rehearsal copy (ssm_bundle = live's 2026-11-11 backup + the bundle; against live
+  itself the plan line and pins are RED until the apply, by design): check.sh --full GREEN, 2810 passed, 18 skipped, 0 failed of 2828
+  (13 invariants + 2797 suite; 3 of 3 real-data tests), 429 s. A first --full run on the tree before was RED on 8 tests, all one
+  defect of this run (tests/backend/test_error_decomposition_views.py's fake session did not answer the new freshness query): fixed,
+  one test added, totals re-pinned, run again. Clean clone of 1b68298 (own .venv, npm ci, no .env, no data/raw; only SUPABASE_DB_URL
+  = the copy and a placeholder SUPABASE_KEY): check.sh --full GREEN, 2801 passed, 21 skipped, 0 failed of 2822, 375 s = the pins.
+  Frontend 255/255 (node --test). Side finding, not changed: scripts/evidence/_common.SHARED_ENV defaults to the main checkout's
+  .env by absolute path, so an evidence script in another checkout reads live's URLs for any SUPABASE_* key it was not given.
   Deploy: kelvin-be pushed; thea-dashboardedits (the branch Render deploys) NOT moved. The backend reads no column 0077 adds, so the
   code serves either schema; it is held only so the deploy and the apply happen in that order (Kelvin's call).
 
