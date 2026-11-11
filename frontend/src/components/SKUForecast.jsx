@@ -54,6 +54,8 @@ import { forecastLabels, SYNTHETIC_FORECAST_LABELS } from '../utils/syntheticFor
 import { isMissing, NOT_COLLECTED } from '../utils/formatters';
 import { calendarFactorText, calendarSignoffText } from '../utils/calendarAdjustment';
 import { AccuracyLevels, ForecastErrorCard, StockLimitedNote, STOCK_LIMITED_TEXT } from './PendingCards';
+import { CATEGORY_MISS_COLUMNS, ForecastErrorSummaryCard, OVER_RUN_COLUMNS, ProductListModal } from './RangeCards';
+import { accuracyScopeLine } from '../utils/forecastAccuracyScope';
 import ExactValue from './ExactValue';
 import { formatApprox } from '../utils/formatNumber';
 import {
@@ -555,17 +557,24 @@ const SKUForecast = () => {
   // "this is my data" when it was only a placeholder.
   const [selectedSKU, setSelectedSKU] = useState(null);
 
-  // /forecast?sku=<code> — the dashboard's Class A changes and over-forecast
-  // lists open a product here. The code is read once and the parameter
-  // dropped, so it selects that product when the list loads and never
-  // overrides a pick made after.
+  // /forecast?sku=<code> — the dashboard's Class A changes list opens a
+  // product here. The code is read once and the parameter dropped, so it
+  // selects that product when the list loads and never overrides a pick
+  // made after.
   const shadeId = useLineShadeId();
   const [searchParams, setSearchParams] = useSearchParams();
   const linkedSkuRef = useRef(searchParams.get('sku'));
+  // /forecast?view=overview — the Dashboard's "How close past forecasts
+  // were" link (2026-11-06) asks for the overview: no product, even one
+  // picked earlier in this tab, and the accuracy card brought into view once
+  // it has loaded. Read once and dropped, as ?sku= is.
+  const overviewLinkRef = useRef(searchParams.get('view') === 'overview');
+  const scrollToAccuracyRef = useRef(overviewLinkRef.current);
   useEffect(() => {
-    if (!searchParams.has('sku')) return;
+    if (!searchParams.has('sku') && searchParams.get('view') !== 'overview') return;
     const next = new URLSearchParams(searchParams);
     next.delete('sku');
+    if (next.get('view') === 'overview') next.delete('view');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -583,6 +592,9 @@ const SKUForecast = () => {
     if (linked) {
       linkedSkuRef.current = null;
       rememberedSKUCode = linked;
+    } else if (overviewLinkRef.current) {
+      overviewLinkRef.current = false;
+      rememberedSKUCode = null;
     }
     setSelectedSKU((prev) => {
       const code = linked ?? prev?.code ?? rememberedSKUCode;
@@ -849,15 +861,90 @@ const SKUForecast = () => {
   // The latest forecast run's check against a "same as last month" guess
   // (GET /dashboard's forecast block: evaluated, unreliable and total counts),
   // for the line on why Class A products are missing from the plan.
+  // Also the company calendar factor inside the forecast (portfolio_forecast.calendar_adjustment), for the
+  // accuracy card's "adviser sign-off pending" note, as the Dashboard passed it.
   const [reliability, setReliability] = useState(null);
+  const [calendarAdjustment, setCalendarAdjustment] = useState(null);
   useEffect(() => {
     if (principal === 'delmonte') return undefined;
     let cancelled = false;
     getDashboardData({ principal })
-      .then((res) => { if (!cancelled) setReliability(res?.forecast || null); })
-      .catch(() => { if (!cancelled) setReliability(null); });
+      .then((res) => {
+        if (cancelled) return;
+        setReliability(res?.forecast || null);
+        setCalendarAdjustment(res?.portfolio_forecast?.calendar_adjustment || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReliability(null);
+        setCalendarAdjustment(null);
+      });
     return () => { cancelled = true; };
   }, [principal]);
+
+  // How close past forecasts were, company-wide (moved here from the
+  // Dashboard, 2026-11-06): GET /dashboard/accuracy's summary over this
+  // page's range, the call the card already makes for its unadjusted twin.
+  // Shown, and fetched, only while no product is picked; Del Monte has no
+  // product forecasts to check. `attempt` is the error's Retry.
+  const showOverviewAccuracy = canSeeAccuracy && !isDelMonte && !selectedSKU;
+  const rangeIsOrdered = !rangeStartPeriod || !rangeEndPeriod || rangeStartPeriod <= rangeEndPeriod;
+  const [overviewAttempt, setOverviewAttempt] = useState(0);
+  const overviewKey = `${principal ?? ''}|${rangeStartPeriod ?? ''}|${rangeEndPeriod ?? ''}|${overviewAttempt}`;
+  const [overview, setOverview] = useState({ key: null, data: null, error: null });
+  const overviewLoadedKey = overview.key;
+  useEffect(() => {
+    if (!showOverviewAccuracy || !rangeIsOrdered || overviewLoadedKey === overviewKey) return undefined;
+    let cancelled = false;
+    getForecastAccuracy({ period: rangeEndPeriod, startPeriod: rangeStartPeriod, principal })
+      .then((data) => { if (!cancelled) setOverview({ key: overviewKey, data, error: null }); })
+      .catch((err) => { if (!cancelled) setOverview({ key: overviewKey, data: null, error: describeLoadError(err) }); });
+    return () => { cancelled = true; };
+  }, [showOverviewAccuracy, rangeIsOrdered, overviewKey, overviewLoadedKey, principal, rangeStartPeriod, rangeEndPeriod]);
+  const overviewLoading = showOverviewAccuracy && rangeIsOrdered && overviewLoadedKey !== overviewKey;
+  const overviewData = overviewLoadedKey === overviewKey ? overview.data : null;
+  const overviewError = overviewLoadedKey === overviewKey ? overview.error : null;
+
+  // The card's two lists, fetched on demand for the same range and run (the
+  // "Before the adjustment" view passes the unadjusted twin's run): products
+  // over-forecast several months in a row, and the misses by category.
+  // Picking a product in the first opens it on this page.
+  const [missList, setMissList] = useState(null);
+  const openMissList = (kind, runId = null) => {
+    setMissList({ kind, rows: [], loading: true, error: null });
+    const args = { period: rangeEndPeriod, startPeriod: rangeStartPeriod, principal, run_id: runId };
+    const request = kind === 'category'
+      // Category rows carry no product: the category is the row's name.
+      ? getForecastAccuracy({ ...args, level: 'category' })
+        .then((res) => (res.rows || []).map((r) => ({ ...r, product_name: r.category_path })))
+      : getForecastAccuracy(args).then((res) => res.over_forecast_runs?.items || []);
+    request
+      .then((rows) => setMissList((prev) => (prev?.kind === kind ? { kind, rows, loading: false, error: null } : prev)))
+      .catch((err) => setMissList((prev) => (prev?.kind === kind
+        ? { kind, rows: [], loading: false, error: err.message || 'Failed to load the list' } : prev)));
+  };
+  const openFromMissList = (skuId) => {
+    const code = String(skuId);
+    const known = sourceSKUs.find((s) => String(s.code) === code);
+    const row = missList?.rows.find((r) => String(r.sku_id) === code);
+    setMissList(null);
+    handleSelectSKU(known ?? { code, name: row?.product_name || 'Unknown Product', brand: '', cat: null, principal });
+    // The product's page starts at the top, as a pick from the table does.
+    document.querySelector('.main-content')?.scrollTo({ top: 0 });
+  };
+  const overRunRule = overviewData?.over_forecast_runs?.rule;
+
+  // Arriving from the Dashboard's link: bring the card into view once it
+  // has drawn (it sits under the product table, and waits for it, so the
+  // data alone arriving is not enough).
+  const accuracySectionRef = useRef(null);
+  const overviewDrawn = Boolean(overviewData) && showOverviewAccuracy && rangeIsOrdered
+    && !listLoading && !listError && (planLoaded || sourceSKUs.length === 0);
+  useEffect(() => {
+    if (!scrollToAccuracyRef.current || !overviewDrawn || !accuracySectionRef.current) return;
+    scrollToAccuracyRef.current = false;
+    accuracySectionRef.current.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  }, [overviewDrawn]);
 
   // The planned products, most urgent first (then fewest weeks left), for the
   // table shown while nothing is selected. Weeks left is the plan's own cover.
@@ -1635,8 +1722,8 @@ const SKUForecast = () => {
                 from each response (isDemonstration), not from this toggle. */}
             {syntheticOn && !isDelMonte && (
               <p className="chart-placeholder-note">
-                Synthetic data is on. A product that has a synthetic series is shown with it: its forecast is a
-                labelled synthetic demonstration (a 3-month average of the months shown), not the pipeline&apos;s
+                Sample data is on. A product that has a sample-data series is shown with it: its forecast is a
+                labelled sample-data demonstration (a 3-month average of the months shown), not the pipeline&apos;s
                 forecast and not checked for accuracy. A product without one still shows its real forecast.
                 {realFloor ? `This chart starts no earlier than Jan ${FIRST_DATA_YEAR}.` : ''}
               </p>
@@ -1903,14 +1990,16 @@ const SKUForecast = () => {
             shows. Also covers the genuinely empty list. */}
         {/* With nothing selected: the products in the current order plan,
             most urgent first, each opening its forecast (2026-10-19); the
-            old prompt only when there is no plan to list. */}
+            old prompt only when there is no plan to list. Since 2026-11-06
+            it is the page's first section, "Forecast by SKU", with the
+            company-wide accuracy card under it. */}
         {!isDelMonte && !selectedSKU && !listLoading && !listError && sourceSKUs.length > 0 && planLoaded && plan.items.length > 0 && (
-          <div className="forecast-plan-card">
-            <h3 className="forecast-card-title ui-card-title">Products in the current order plan</h3>
+          <section className="forecast-plan-card" aria-labelledby="forecast-by-sku-title">
+            <h3 id="forecast-by-sku-title" className="forecast-card-title ui-card-title forecast-section-title">Forecast by SKU</h3>
             <SectionLede>
               {selectedCategory === PINNED_FILTER
                 ? `${planRows.length.toLocaleString()} pinned of ${plan.items.length.toLocaleString()} products`
-                : `${plan.items.length.toLocaleString()} products`}
+                : `${plan.items.length.toLocaleString()} products`} in the current order plan
               {plan.cycle ? ` for ${formatPeriod(plan.cycle)}` : ''}, pinned first, then most urgent. Pick one to see its
               forecast, or search above.
             </SectionLede>
@@ -1978,7 +2067,7 @@ const SKUForecast = () => {
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
         )}
         {!isDelMonte && !selectedSKU && !listLoading && !listError && sourceSKUs.length > 0 && !planLoaded && (
           <LoadingStatus>Loading the order plan…</LoadingStatus>
@@ -2000,6 +2089,64 @@ const SKUForecast = () => {
             </p>
           </div>
         )}
+
+        {/* How close past forecasts were, company-wide (from the Dashboard,
+            2026-11-06), under the product table and only while no product is
+            picked: a product's own miss is in its "Show details". Drawn once
+            the table has settled, so it never shows above it first. */}
+        {showOverviewAccuracy && rangeIsOrdered && !listLoading && !listError && (planLoaded || sourceSKUs.length === 0) && (
+          <section ref={accuracySectionRef} className="forecast-accuracy-overview" aria-label="How close the forecasts were">
+            {overviewLoading && (
+              <>
+                <LoadingStatus>Loading how close past forecasts were…</LoadingStatus>
+                <div className="chart-widget fc-card" aria-hidden="true">
+                  <SkeletonLine width="16rem" height="1.1rem" />
+                  <SkeletonLine width="22rem" height="0.8rem" />
+                  <SkeletonChart variant="line" height={300} />
+                </div>
+              </>
+            )}
+            {overviewError && !overviewLoading && (
+              <LoadError what="how close past forecasts were" message={overviewError} onRetry={() => setOverviewAttempt((n) => n + 1)} />
+            )}
+            {overviewData && !overviewLoading && (
+              <ForecastErrorSummaryCard
+                accuracy={overviewData}
+                subtitle={accuracyScopeLine(overviewData.coverage)}
+                onOpenList={(runId) => openMissList('over', runId)}
+                onOpenCategories={(runId) => openMissList('category', runId)}
+                principal={principal}
+                calendar={calendarAdjustment}
+              />
+            )}
+          </section>
+        )}
+        <ProductListModal
+          isOpen={Boolean(missList)}
+          onClose={() => setMissList(null)}
+          loading={missList?.loading}
+          error={missList?.error}
+          rows={missList?.rows || []}
+          {...(missList?.kind === 'category' ? {
+            title: 'Forecast misses by category',
+            lede: 'Which categories the forecast misses most',
+            subtitle: [overviewData?.label, 'Unilever products with a scored forecast',
+              overviewData?.pesos_basis ? `pesos at ${String(overviewData.pesos_basis).split(' (')[0]}` : null]
+              .filter(Boolean).join(' · '),
+            columns: CATEGORY_MISS_COLUMNS,
+            firstColumnLabel: 'Category',
+            footnote: 'Largest misses in pesos first. A category can be too high in some months and too low in others; '
+              + 'the net miss in pieces says which way it leaned overall.',
+          } : {
+            title: 'Products over-forecast several months in a row',
+            lede: 'Where the forecast keeps overshooting',
+            subtitle: [overviewData?.label, overRunRule].filter(Boolean).join(' · '),
+            columns: OVER_RUN_COLUMNS,
+            footnote: 'Largest surplus first. Click a product to open its forecast.',
+            onOpenProduct: openFromMissList,
+            openLabel: 'Open its forecast',
+          })}
+        />
 
         {!isDelMonte && selectedSKU && (
           <>
@@ -2061,7 +2208,7 @@ const SKUForecast = () => {
 
             {/* Chart Section */}
             {/* Keyed on the selected SKU so switching products replays the
-                container's entrance animation (index.css's chartWidgetEnter)
+                container's entrance animation (index.css's chart-card-enter)
                 — a clear "this is a different product now" signal. The key
                 deliberately excludes the date range: a range tweak keeps the
                 same chart mounted and lets Recharts tween between the old
@@ -2236,7 +2383,7 @@ const SKUForecast = () => {
                       <SyntheticTag />
                       <p className="demo-forecasts-lead">
                         {forecastResult.demonstration_note
-                          || 'Synthetic demonstration data, generated for visualisation only.'}
+                          || 'Sample demonstration data, generated for visualisation only.'}
                         {' '}The forecast below is the average of this product&apos;s last 3 months in the series shown.
                         It is not the pipeline&apos;s forecast, has not been checked for accuracy, and is never used for
                         SSM&apos;s real orders.

@@ -212,6 +212,14 @@
   white-space: nowrap;
 }
 
+/* Whose products the figures cover, tied to the title above it (SKU Forecast page). */
+.fc-subtitle {
+  margin: -6px 0 0;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 /* The answer: the most readable line on the card. */
 .fc-answer {
   margin: 0;

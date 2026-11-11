@@ -16,7 +16,7 @@ import { CHART_COLORS, STATUS_TIERS, COLORS, SEMANTIC } from '../theme/colors';
 import { formatMonth } from '../utils/formatDate';
 import { formatUnits } from '../utils/formatNumber';
 import { formatCompactPesos, formatExactPesos, formatCompactQty } from '../utils/formatters';
-import { chartAnim, prefersReducedMotion, CHART_ANIM_DURATION, CHART_ANIM_STAGGER } from '../theme/motion';
+import { chartAnim } from '../theme/motion';
 import { useChartZoom, seriesDot, GRID_PROPS, EDGE_LABEL_MARGIN } from './ChartZoom';
 import { ChartTable, ChartViewToggle } from './ChartTable';
 import { isPlaceholderPeriod } from '../dataMode';
@@ -372,10 +372,10 @@ const ESTIMATED_OPACITY = 0.75;
 // Drawn like the purchases estimate, in the chart and its table only.
 const ESTIMATE_KIND_TEXT = {
   filled: 'estimated (filled gap)',
-  generated: 'Synthetic — SSM data not received',
+  generated: 'Sample data — SSM data not received',
   // Del Monte's synthetic demonstration months (GET /dashboard's
   // demonstration block, schema demo), drawn only with synthetic data on.
-  demonstration: 'synthetic',
+  demonstration: 'sample data',
 };
 // Returns get a view of their own: they run at a few percent of sales, so on
 // the sales axis they would lie flat along zero.
@@ -529,8 +529,8 @@ const SvsSwatch = ({ kind, color }) => {
 // rests on, why a month has no figure. Change figures stay in a neutral ink: a
 // rise in stock is not good, and a fall is not bad, by itself.
 const estimateKind = (metric, pt) => ({
-  sales: pt.salesSynthetic ? 'synthetic' : pt.salesEstimatedKind === 'demonstration'
-    ? `synthetic, ${(pt.salesOrigin || []).map(originLabel).join(' and ') || 'generated'}`
+  sales: pt.salesSynthetic ? 'sample data' : pt.salesEstimatedKind === 'demonstration'
+    ? `sample data, ${(pt.salesOrigin || []).map(originLabel).join(' and ') || 'generated'}`
     : ESTIMATE_KIND_TEXT[pt.salesEstimatedKind] || 'estimated',
   stock: ESTIMATE_KIND_TEXT[pt.stockEstimatedKind] || 'estimated',
   returns: ESTIMATE_KIND_TEXT[pt.returnsEstimatedKind] || 'estimated',
@@ -691,7 +691,7 @@ const SvsChangeStrip = ({ strip, rows, scale, left, width, activeIndex, solo = f
           )}
         </div>
         <svg
-          className="svs-strip-plot"
+          className="svs-strip-plot chart-grow-mid"
           width={width}
           height={stripHeight}
           role="img"
@@ -1046,7 +1046,7 @@ export const SalesVsStockWidget = ({
     ));
     if (flaggedOnShow) notes.push(entry(weeks ? 'outline' : 'dot', weeks ? '#475467' : UNUSUAL_INK, 'Stock count needs checking'));
     if (visibleRows.some((r) => isSyntheticMonth(r.pt) || isSyntheticMonth(r.cpt))) {
-      notes.push(entry('hatch', bars ? SVS_COLOR.sales : UNUSUAL_INK, 'Synthetic data'));
+      notes.push(entry('hatch', bars ? SVS_COLOR.sales : UNUSUAL_INK, 'Sample data'));
     }
     if (filledEstimate) notes.push(entry('dotted', UNUSUAL_INK, ESTIMATE_KIND_TEXT.filled));
     if (notes.length) out.push({ label: null, items: notes });
@@ -1169,11 +1169,12 @@ export const SalesVsStockWidget = ({
       dot={estimate ? false : lineDot(key, color, compared)}
       activeDot={false}
       connectNulls={false}
-      isAnimationActive={false}
+      {...chartAnim(1)}
     />
   );
   // The shade under the solid line. An Area of its own: the line stays a Line,
-  // on top of the bars, and the shade goes behind them.
+  // on top of the bars, and the shade goes behind them. It sweeps in with its
+  // line (the same series index), the bars one step before them.
   const shade = (key) => (
     <Area
       key={`${key}-shade`}
@@ -1182,6 +1183,7 @@ export const SalesVsStockWidget = ({
       name={`${key}shade`}
       fill={`url(#${shadeId}-${key})`}
       connectNulls={false}
+      {...chartAnim(1)}
     />
   );
 
@@ -1266,7 +1268,7 @@ export const SalesVsStockWidget = ({
         }]
       : []),
     ...(tableRows.some((r) => r.syntheticStatus)
-      ? [{ key: 'syntheticStatus', label: 'Synthetic data', align: 'left' }]
+      ? [{ key: 'syntheticStatus', label: 'Sample data', align: 'left' }]
       : []),
   ];
 
@@ -1487,24 +1489,24 @@ export const SalesVsStockWidget = ({
                     />
                   )}
                   {purchasesView && comparedVisible && (
-                    <Bar dataKey="salesC" name="soldC" radius={[3, 3, 0, 0]} maxBarSize={12} isAnimationActive={false}>
+                    <Bar dataKey="salesC" name="soldC" radius={[3, 3, 0, 0]} maxBarSize={12} {...chartAnim()}>
                       {visibleRows.map((r, i) => <Cell key={r.period} fill={COMPARE_COLOR.sales} fillOpacity={emphasis(i)} />)}
                     </Bar>
                   )}
                   {purchasesView && (
-                    <Bar dataKey="sales" name="sold" radius={[3, 3, 0, 0]} maxBarSize={comparedVisible ? 12 : 18} isAnimationActive={false}>
+                    <Bar dataKey="sales" name="sold" radius={[3, 3, 0, 0]} maxBarSize={comparedVisible ? 12 : 18} {...chartAnim()}>
                       {visibleRows.map((r, i) => <Cell key={r.period} fill={SOLD_COLOR} fillOpacity={emphasis(i)} />)}
                     </Bar>
                   )}
                   {purchasesView && comparedVisible && (
-                    <Bar dataKey="boughtC" name="boughtC" radius={[3, 3, 0, 0]} maxBarSize={12} isAnimationActive={false}>
+                    <Bar dataKey="boughtC" name="boughtC" radius={[3, 3, 0, 0]} maxBarSize={12} {...chartAnim()}>
                       {visibleRows.map((r, i) => (r.purchFlagC
                         ? <Cell key={r.period} fill="#fff" fillOpacity={0} stroke={COMPARE_COLOR.stock} strokeWidth={1.5} strokeDasharray="4 3" />
                         : <Cell key={r.period} fill={COMPARE_COLOR.bought} fillOpacity={emphasis(i)} />))}
                     </Bar>
                   )}
                   {purchasesView && (
-                    <Bar dataKey="bought" name="bought" radius={[3, 3, 0, 0]} maxBarSize={comparedVisible ? 12 : 18} isAnimationActive={false}>
+                    <Bar dataKey="bought" name="bought" radius={[3, 3, 0, 0]} maxBarSize={comparedVisible ? 12 : 18} {...chartAnim()}>
                       {visibleRows.map((r, i) => (r.purchFlag
                         ? <Cell key={r.period} fill="#fff" fillOpacity={0} stroke={BOUGHT_COLOR} strokeWidth={1.75} strokeDasharray="4 3" />
                         : <Cell key={r.period} fill={BOUGHT_COLOR} fillOpacity={emphasis(i)} />))}
@@ -1520,7 +1522,7 @@ export const SalesVsStockWidget = ({
                       radius={[3, 3, 0, 0]}
                       maxBarSize={MAX_BAR_WIDTH_PAIRED}
                       minPointSize={(_, i) => (visibleRows[i]?.salesC === 0 ? 2 : 0)}
-                      isAnimationActive={false}
+                      {...chartAnim()}
                     >
                       {visibleRows.map((r, i) => <Cell key={r.period} fill={COMPARE_COLOR.sales} fillOpacity={emphasis(i)} />)}
                     </Bar>
@@ -1535,7 +1537,7 @@ export const SalesVsStockWidget = ({
                       strokeWidth={1}
                       radius={[3, 3, 0, 0]}
                       maxBarSize={MAX_BAR_WIDTH_PAIRED}
-                      isAnimationActive={false}
+                      {...chartAnim()}
                     />
                   )}
                   {salesBars && (
@@ -1546,7 +1548,7 @@ export const SalesVsStockWidget = ({
                       radius={[3, 3, 0, 0]}
                       maxBarSize={comparedVisible ? MAX_BAR_WIDTH_PAIRED : MAX_BAR_WIDTH}
                       minPointSize={(_, i) => (visibleRows[i]?.sales === 0 ? 2 : 0)}
-                      isAnimationActive={false}
+                      {...chartAnim()}
                     >
                       {visibleRows.map((r, i) => <Cell key={r.period} fill={SVS_COLOR.sales} fillOpacity={emphasis(i)} />)}
                     </Bar>
@@ -1561,18 +1563,18 @@ export const SalesVsStockWidget = ({
                       strokeWidth={1}
                       radius={[3, 3, 0, 0]}
                       maxBarSize={comparedVisible ? MAX_BAR_WIDTH_PAIRED : MAX_BAR_WIDTH}
-                      isAnimationActive={false}
+                      {...chartAnim()}
                     />
                   )}
                   {weeksView && comparedVisible && (
-                    <Bar dataKey="weeksC" name="weeksC" radius={[3, 3, 0, 0]} maxBarSize={MAX_BAR_WIDTH_PAIRED} isAnimationActive={false}>
+                    <Bar dataKey="weeksC" name="weeksC" radius={[3, 3, 0, 0]} maxBarSize={MAX_BAR_WIDTH_PAIRED} {...chartAnim()}>
                       {visibleRows.map((r, i) => (r.flaggedC
                         ? <Cell key={r.period} fill="#fff" fillOpacity={0} stroke="#94A3B8" strokeWidth={1.5} />
                         : <Cell key={r.period} fill={COMPARE_COLOR.weeks} fillOpacity={emphasis(i)} />))}
                     </Bar>
                   )}
                   {weeksView && (
-                    <Bar dataKey="weeks" name="weeks" radius={[3, 3, 0, 0]} maxBarSize={comparedVisible ? MAX_BAR_WIDTH_PAIRED : MAX_BAR_WIDTH} isAnimationActive={false}>
+                    <Bar dataKey="weeks" name="weeks" radius={[3, 3, 0, 0]} maxBarSize={comparedVisible ? MAX_BAR_WIDTH_PAIRED : MAX_BAR_WIDTH} {...chartAnim()}>
                       {visibleRows.map((r, i) => {
                         const band = weeksBand(r.weeks, policyWeeks);
                         return r.flagged
@@ -1689,8 +1691,8 @@ export const SalesVsStockWidget = ({
           <div className="svs-note-slot">
             {synthetic && (
               <p className={`gap-note${purchasesView ? ' svs-spacer' : ''}`} role="note">
-                <strong>Synthetic.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
-                dotted lines), because synthetic data is on. The solid bars and lines are SSM&apos;s own data, and the notes
+                <strong>Sample data.</strong> Months SSM has no figures for are filled with generated figures (hatched bars,
+                dotted lines), because sample data is on. The solid bars and lines are SSM&apos;s own data, and the notes
                 below are about them.
               </p>
             )}
@@ -2125,67 +2127,72 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
           )}
           <div className="abc-overview">
             <div className="abc-donut-col">
-              <svg
-                ref={ringRef}
-                className="abc-donut"
-                width={ABC_DONUT_SIZE}
-                height={ABC_DONUT_SIZE}
-                viewBox={`0 0 ${ABC_DONUT_SIZE} ${ABC_DONUT_SIZE}`}
-                role="group"
-                aria-label={sharesAddUp ? 'Share of revenue by class' : `Share of ${units} by class`}
-              >
-                {segments.map((s) => s.path && (
-                  <path
-                    key={s.tier}
-                    d={s.path}
-                    fill={abcTierColor(s.tier)}
-                    className={`abc-seg${s.tier === selected.tier ? ' is-selected' : ''}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={s.tier === selected.tier}
-                    aria-label={`Class ${s.tier}`}
-                    onClick={() => setSelectedTier(s.tier)}
-                    onKeyDown={selectOnKey(s.tier)}
-                    onPointerEnter={trackHover(s.tier)}
-                    onPointerMove={trackHover(s.tier)}
-                    onPointerLeave={() => setHover(null)}
-                  />
-                ))}
-                {/* Each tier's share on its band, where the band is wide
-                    enough; the pale plum takes dark text. Not the selected
-                    tier's: its share is the figure in the centre. */}
-                {segments.map((s) => s.label && s.tier !== selected.tier && (
-                  <text
-                    key={`label-${s.tier}`}
-                    x={s.label.x}
-                    y={s.label.y}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    className={`abc-seg-label${s.tier === 'C' ? ' is-dark' : ''}`}
-                    aria-hidden="true"
-                  >
-                    {s.value.toFixed(0)}%
-                  </text>
-                ))}
-                {/* The selected tier's headline number, where the eye lands
-                    first. Revenue share when it can be trusted, else the SKU
-                    count (the notes above say why). */}
-                {selectedFacts && (
-                  <g className="abc-donut-centre" aria-hidden="true">
-                    <text x={centre} y={centre - 20} textAnchor="middle" className="abc-donut-centre-tier">
-                      {ABC_TIER_ROLE[selectedFacts.tier]?.name ?? `Class ${selectedFacts.tier}`}
+              {/* Swept in the way the ring runs, the draw every graph shares
+                  (index.css chart-sweep). The mask sits on this wrapper, a little
+                  larger than the ring, so a segment's focus outline is never cut. */}
+              <span className="abc-donut-sweep chart-sweep">
+                <svg
+                  ref={ringRef}
+                  className="abc-donut"
+                  width={ABC_DONUT_SIZE}
+                  height={ABC_DONUT_SIZE}
+                  viewBox={`0 0 ${ABC_DONUT_SIZE} ${ABC_DONUT_SIZE}`}
+                  role="group"
+                  aria-label={sharesAddUp ? 'Share of revenue by class' : `Share of ${units} by class`}
+                >
+                  {segments.map((s) => s.path && (
+                    <path
+                      key={s.tier}
+                      d={s.path}
+                      fill={abcTierColor(s.tier)}
+                      className={`abc-seg${s.tier === selected.tier ? ' is-selected' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={s.tier === selected.tier}
+                      aria-label={`Class ${s.tier}`}
+                      onClick={() => setSelectedTier(s.tier)}
+                      onKeyDown={selectOnKey(s.tier)}
+                      onPointerEnter={trackHover(s.tier)}
+                      onPointerMove={trackHover(s.tier)}
+                      onPointerLeave={() => setHover(null)}
+                    />
+                  ))}
+                  {/* Each tier's share on its band, where the band is wide
+                      enough; the pale plum takes dark text. Not the selected
+                      tier's: its share is the figure in the centre. */}
+                  {segments.map((s) => s.label && s.tier !== selected.tier && (
+                    <text
+                      key={`label-${s.tier}`}
+                      x={s.label.x}
+                      y={s.label.y}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      className={`abc-seg-label${s.tier === 'C' ? ' is-dark' : ''}`}
+                      aria-hidden="true"
+                    >
+                      {s.value.toFixed(0)}%
                     </text>
-                    <text x={centre} y={centre + 10} textAnchor="middle" className="abc-donut-centre-value">
-                      {selectedFacts.revenuePct != null
-                        ? `${selectedFacts.revenuePct.toFixed(0)}%`
-                        : selectedFacts.count.toLocaleString()}
-                    </text>
-                    <text x={centre} y={centre + 30} textAnchor="middle" className="abc-donut-centre-label">
-                      {selectedFacts.revenuePct != null ? 'of revenue' : units}
-                    </text>
-                  </g>
-                )}
-              </svg>
+                  ))}
+                  {/* The selected tier's headline number, where the eye lands
+                      first. Revenue share when it can be trusted, else the SKU
+                      count (the notes above say why). */}
+                  {selectedFacts && (
+                    <g className="abc-donut-centre" aria-hidden="true">
+                      <text x={centre} y={centre - 20} textAnchor="middle" className="abc-donut-centre-tier">
+                        {ABC_TIER_ROLE[selectedFacts.tier]?.name ?? `Class ${selectedFacts.tier}`}
+                      </text>
+                      <text x={centre} y={centre + 10} textAnchor="middle" className="abc-donut-centre-value">
+                        {selectedFacts.revenuePct != null
+                          ? `${selectedFacts.revenuePct.toFixed(0)}%`
+                          : selectedFacts.count.toLocaleString()}
+                      </text>
+                      <text x={centre} y={centre + 30} textAnchor="middle" className="abc-donut-centre-label">
+                        {selectedFacts.revenuePct != null ? 'of revenue' : units}
+                      </text>
+                    </g>
+                  )}
+                </svg>
+              </span>
               {/* One tier per row: its name, and its share of the products.
                   Picks the tier the panel beside the ring describes. */}
               <ul className="abc-legend">
@@ -2242,6 +2249,7 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
                     return (
                       <span
                         key={d.tier}
+                        className="chart-grow-x"
                         style={{ width: `${v}%`, backgroundColor: abcTierColor(d.tier) }}
                         title={`Class ${d.tier}: ${v.toFixed(0)}% ${pair.key === 'skuPct' ? `of ${units} (${d.count} ${units})` : `of ${rankedMonth ? `${rankedMonth} ` : ''}revenue`}`}
                       />
@@ -2324,11 +2332,6 @@ export const CategoryStockBarWidget = ({
   const hasPending = data.some((row) => (row.pendingReorderCount || 0) > 0);
   // Every count that could be flagged, for the all-clear line below.
   const flaggedTotal = data.reduce((sum, row) => sum + (row.inStock || 0) + (row.deadStock || 0), 0);
-  // Same "off entirely, not just shorter" reduced-motion rule motion.js's
-  // chartAnim() uses for the Recharts-based widgets — this one is plain
-  // CSS (no Recharts here), so it's applied by hand rather than picked up
-  // for free.
-  const disableAnim = prefersReducedMotion();
   // The tier whose counts the detail line under the bars shows — set by
   // hover, keyboard focus or a tap (2026-09-30: was a native title tooltip
   // that floated over the bars below it).
@@ -2376,7 +2379,7 @@ export const CategoryStockBarWidget = ({
             className={`tier-stock-bars${activeRow ? ' has-active' : ''}`}
             onMouseLeave={() => setActiveTier(null)}
           >
-            {data.map((row, index) => {
+            {data.map((row) => {
               const inStock = row.inStock || 0;
               const deadStock = row.deadStock || 0;
               const noData = row.noData || 0;
@@ -2393,16 +2396,6 @@ export const CategoryStockBarWidget = ({
                 if (total <= 0 || v <= 0) return 0;
                 return Math.max((v / total) * 100, MIN_VISIBLE_PCT);
               };
-              // Each row's bar sweeps in staggered by tier — same duration/
-              // easing/stagger constants the Recharts widgets on this page
-              // use (CHART_ANIM_DURATION/STAGGER), just applied as CSS
-              // custom properties instead of Recharts animation props.
-              const animStyle = disableAnim
-                ? undefined
-                : {
-                    '--tier-anim-duration': `${CHART_ANIM_DURATION}ms`,
-                    '--tier-anim-delay': `${index * CHART_ANIM_STAGGER}ms`,
-                  };
               // Focusable so keyboard users reach the same detail line;
               // a tap sets it too (touch has no hover), and it clears when
               // focus or the pointer leaves the bars.
@@ -2418,14 +2411,15 @@ export const CategoryStockBarWidget = ({
                   onClick={() => setActiveTier(row.tier)}
                 >
                   <span className="tier-stock-label">{row.tier}</span>
-                  <div className={`tier-stock-track${disableAnim ? '' : ' is-animated'}`} style={animStyle}>
+                  <div className="tier-stock-track">
                     {total <= 0 ? (
                       <span className="tier-stock-empty">No data</span>
                     ) : (
                       <>
-                        <span style={{ width: `${pct(inStock)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.active }} />
-                        <span style={{ width: `${pct(deadStock)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.deadStock }} />
-                        <span style={{ width: `${pct(noData)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.noData }} />
+                        {/* The one bar draw every graph shares (index.css). */}
+                        <span className="chart-grow-x" style={{ width: `${pct(inStock)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.active }} />
+                        <span className="chart-grow-x" style={{ width: `${pct(deadStock)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.deadStock }} />
+                        <span className="chart-grow-x" style={{ width: `${pct(noData)}%`, backgroundColor: WAREHOUSE_STATUS_COLORS.noData }} />
                       </>
                     )}
                   </div>
@@ -2669,6 +2663,8 @@ export const PortfolioForecastWidget = ({
   // The company calendar factor inside the forecast (GET /dashboard's
   // portfolio_forecast.calendar_adjustment, applied only; 2026-10-19).
   calendar = null,
+  // A line at the foot of the card (the Dashboard's link to the accuracy card on SKU Forecast, 2026-11-06).
+  footer = null,
 }) => {
   const hasData = series.length > 0;
   const tierACount = reliability?.total_count ?? null;
@@ -3109,6 +3105,7 @@ export const PortfolioForecastWidget = ({
           year-earlier and before-adjustment asides that followed it are no
           longer shown (2026-10-28, Audrey: figures only, no written-out
           readings); the figures are on the chart and in its tooltip. */}
+      {footer && <div className="pf-footer">{footer}</div>}
     </div>
   );
 };
@@ -3501,6 +3498,7 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
                   {r.parts.map((part) => (
                     <span
                       key={part.key}
+                      className="chart-grow-x"
                       title={`${part.label}: ${pieces(part.value)}`}
                       style={{ width: `${(part.value / max) * 100}%`, backgroundColor: part.color }}
                     />
@@ -3646,13 +3644,13 @@ export const AllocationWidget = ({ allocation }) => {
               + levels.map((l) => `${l.pct}% allocation ${formatCompactPesos(l.monthly)} a month`).join('; ')
             }>
               {avgMonthlySales != null && (
-                <span className="alloc-bar" style={{ width: at(avgMonthlySales), backgroundColor: CHART_COLORS.salesSeries }}>
+                <span className="alloc-bar chart-grow-x" style={{ width: at(avgMonthlySales), backgroundColor: CHART_COLORS.salesSeries }}>
                   <span className="alloc-bar-label">{formatCompactPesos(avgMonthlySales)}/mo</span>
                 </span>
               )}
               {/* The shortfall to the minimum, a soft amber stretch. */}
               {shortfall && (
-                <span className="alloc-gap" style={{ left: at(avgMonthlySales), width: `${(gap / scaleMax) * 100}%` }} aria-hidden="true" />
+                <span className="alloc-gap chart-grow-x" style={{ left: at(avgMonthlySales), width: `${(gap / scaleMax) * 100}%` }} aria-hidden="true" />
               )}
               {levels.map((l) => (
                 <span

@@ -59,12 +59,40 @@ export const LASTS = 'Lasts about';
 export const lastsWeeks = (weeks) => `Lasts about ${weeks} week${weeks === '1' || weeks === 1 ? '' : 's'}`;
 // Safety stock (ss_i).
 export const KEEP_AT_LEAST = 'Keep at least';
-// Stock below safety stock: the Summary card's word.
+// One meaning each, app-wide (2026-11-06): below safety stock "could run
+// out" (the Dashboard's Below safety stock card, the ABC stock check); below
+// target stock "running low". Until 2026-11-06 the Dashboard card said
+// "Running low" for below safety stock.
+export const COULD_RUN_OUT = 'Could run out';
 export const RUNNING_LOW = 'Running low';
 // Target stock (the plan's order-up-to level, rop_i): not the 3-week rule.
 export const ORDER_UP_TO = 'Order up to';
 // SSM's policy of about 3 weeks of sales in stock (POLICY_COVER_WEEKS).
 export const ssmRule = (weeks) => `SSM's ${weeks}-week rule`;
+
+// A product's stock status on the ABC page (GET /abc stock_status, backend/
+// stock_status.py), judged on the LATEST stock count, so not the Reorder
+// page's Critical / Urgent, which use the count that opens the plan
+// (2026-11-06). Without lp.view the backend sends CRITICAL for nothing on
+// hand (backend/routers/abc.py _status_for): that is OUT_OF_STOCK.
+export const STOCK_STATUS_LABEL = {
+  CRITICAL: COULD_RUN_OUT, // below safety stock
+  LOW: RUNNING_LOW, // at or above safety stock, below target stock
+  'IN STOCK': 'Stocked enough', // at or above target stock
+  'NO ROP': 'No target stock',
+  'NO DATA': 'Not in stock count',
+  'ON HAND': 'Has stock',
+};
+export const OUT_OF_STOCK = 'Out of stock';
+// No target stock + not in the stock count, together.
+export const CANT_CHECK_YET = 'Can’t check yet';
+
+// ── ABC ranking window ──────────────────────────────────────────────────
+// The ABC page's month view picks the END month of what is ranked: for
+// Unilever the 12 months up to it (TIER_A_BASIS t12m_new), for Del Monte
+// that one month (2026-11-06).
+export const ABC_MONTH_VIEW_LABEL = { unilever: '12 months up to', delmonte: 'One month', all: 'Ranking month' };
+export const abcMonthViewLabel = (principal) => ABC_MONTH_VIEW_LABEL[principal] ?? ABC_MONTH_VIEW_LABEL.all;
 
 // ── Urgency (GET /recommendations urgency) ──────────────────────────────
 // Shown as the Reorder page's own pills, CRITICAL / URGENT / PLANNED / NO
@@ -79,6 +107,9 @@ export const SAMPLE_DATA_TITLE = 'Sample data';
 export const INCLUDE_SAMPLE_DATA = 'Include sample data';
 // A cost or capacity input SSM hasn't given yet (not sample data).
 export const NOT_CONFIRMED = 'not yet confirmed by SSM';
+// Badge for a rule the team adopted that SSM or the adviser hasn't confirmed
+// (e.g. the forecast reliability check, MASE below 1). Reference Guide, ABC page.
+export const TO_BE_CONFIRMED = 'To be confirmed';
 
 // ── Units ───────────────────────────────────────────────────────────────
 export const PCS = 'pcs';
@@ -98,11 +129,13 @@ export const GLOSSARY = [
   { plain: 'Usually off by about X%', technical: 'WAPE; for one product, summed absolute miss ÷ summed forecast', where: 'Sales forecast, Dashboard forecast-accuracy card' },
   { plain: 'Lasts about X weeks', technical: 'Weeks of cover / stock cover / days of cover ÷ 7', where: 'Dashboard, Reorder Recommendations, ABC Classification, Sales forecast' },
   { plain: 'Keep at least', technical: 'Safety stock (ss_i)', where: 'Reorder Recommendations, Sales forecast, Dashboard' },
-  { plain: 'Running low', technical: 'Stock below safety stock', where: 'Dashboard summary card, ABC Classification stock status' },
+  { plain: 'Could run out', technical: 'Stock below safety stock', where: 'Dashboard Below safety stock card, ABC Classification stock status' },
+  { plain: 'Running low', technical: 'Stock at or above safety stock but below target stock', where: 'ABC Classification stock status' },
   { plain: 'Order up to', technical: 'Target stock / order-up-to level (rop_i)', where: 'Reorder Recommendations, ABC Classification, Products' },
   { plain: "SSM's 3-week rule", technical: 'Policy cover target (POLICY_COVER_WEEKS = 3)', where: 'Dashboard, Reorder Recommendations' },
   { plain: 'CRITICAL / URGENT / PLANNED / NO DATA (hover: order now / order soon / can wait / stock can’t be read)', technical: 'Order-plan urgency: below safety stock / below target stock / at or above target stock / no usable pack size', where: 'Reorder Recommendations, Dashboard, Sales forecast' },
   { plain: 'Sample data', technical: 'Synthetic / generated / placeholder / demonstration data (is_demo, demo schema, X-Data-Mode: preview)', where: 'Top bar switch, banner, every chart that draws it' },
   { plain: 'not yet confirmed by SSM', technical: 'Placeholder cost and capacity inputs to the LP', where: 'Dashboard order-plan card, Reorder Recommendations' },
+  { plain: 'To be confirmed (badge)', technical: 'A team-adopted rule not confirmed by SSM or the adviser (e.g. MASE below 1, DEC-46)', where: 'Reference Guide, ABC Classification' },
   { plain: 'pcs', technical: 'Pieces (the unit the LP solves in; cases shown as a second line)', where: 'Every quantity on every page' },
 ];

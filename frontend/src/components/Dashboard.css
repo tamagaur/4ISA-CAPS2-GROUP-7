@@ -796,7 +796,7 @@
 .kpi-strip-hero .kpi-card:nth-child(4) { --enter-delay: 150ms; }
 
 .kpi-card {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 
@@ -814,7 +814,7 @@
 
 /* The type tag rides in with its card rather than sitting there first. */
 .dash-slot .dash-kind-row {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 
@@ -1297,7 +1297,7 @@
   color: var(--color-text-heading);
 }
 
-/* The top of the page, held together: context, what warns, what to do first. */
+/* The top of the page, held together: context, then what warns. */
 .dash-top {
   display: flex;
   flex-direction: column;

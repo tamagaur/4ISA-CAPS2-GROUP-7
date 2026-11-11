@@ -1,8 +1,8 @@
-/* Pareto (brand/category) and ABC × FSN cards on the ABC page — the same
-   white-card language as the class chart above them (.abc-pareto-container). */
+/* Pareto (brand/category) card on the ABC page, full width — the same
+   white-card language as the class chart above it (.abc-pareto-container). */
 .abc-breakdown-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
 }
 
@@ -167,102 +167,6 @@
   color: var(--color-text-body);
 }
 
-/* ABC × FSN: counts, with the empty cells visibly quieter. */
-.abcb-matrix-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.92rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.abcb-matrix-table {
-  border-collapse: separate;
-  border-spacing: 3px;
-}
-
-.abcb-matrix-table th,
-.abcb-matrix-table td {
-  padding: 10px 12px;
-  text-align: right;
-  border-bottom: none;
-}
-
-.abcb-matrix-table td {
-  border-radius: 6px;
-}
-
-.abcb-matrix-table thead th {
-  font-size: 0.79rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
-}
-
-.abcb-matrix-table tbody th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--color-text-body);
-  white-space: nowrap;
-}
-
-.abcb-matrix-table td {
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.abcb-matrix-table td.is-zero {
-  color: var(--color-text-subtle);
-  font-weight: 400;
-}
-
-.abcb-matrix-table td.fsn-cell-N {
-  color: #B4392B;
-}
-
-.abcb-matrix-total th,
-.abcb-matrix-total td {
-  border-bottom: none;
-  color: var(--color-text-muted);
-  font-weight: 600;
-}
-
-.abcb-class-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 0.4rem;
-  border-radius: 50%;
-}
-
-.abcb-class-A { background-color: var(--color-abc-a); }
-.abcb-class-B { background-color: var(--color-abc-b); }
-.abcb-class-C { background-color: var(--color-abc-c); }
-
-/* FSN badge in the SKU table (ABCClassification.jsx). */
-.fsn-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.6rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 5px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.fsn-badge.fsn-F { background-color: #DCFCE7; color: #166534; }
-.fsn-badge.fsn-S { background-color: #FEF3C7; color: #92400E; }
-.fsn-badge.fsn-N { background-color: #FEE2E2; color: #991B1B; }
-.fsn-badge.fsn-pending { background-color: var(--color-surface-sunken); color: var(--color-text-subtle); }
-
-@media (max-width: 1100px) {
-  .abc-breakdown-row {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* The Pareto's X axis title, under the chart (see AbcBreakdowns.jsx for
    why it isn't an in-chart label). */
 .abcb-axis-title {
@@ -272,10 +176,156 @@
   color: var(--color-text-subtle);
 }
 
-/* The matrix's corner cell names what its counts count ("SKUs"). */
-.abcb-matrix-table thead th.abcb-matrix-unit {
+/* The bars, horizontal (2026-11-06): one row per brand or category, its
+   name, then its bar with the share right after it. The bars start from one
+   baseline on one linear scale: every bar is a fraction (--abcb-w) of the
+   same length, the bar column less the room the share needs, so the largest
+   bar and its share just fit. A row is the brand's button, so the whole row
+   filters the table. No axes, gridlines or legend: the thin line under the
+   top group carries its share. */
+.abcb-rows {
+  --abcb-name-w: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.abcb-row {
+  min-width: 0;
+}
+
+.abcb-row-btn {
+  display: grid;
+  grid-template-columns: var(--abcb-name-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
   text-align: left;
-  text-transform: none;
-  letter-spacing: 0;
+  cursor: pointer;
+}
+
+/* "Others" and categories are not clickable: no pointer, no hover. */
+.abcb-row-btn.is-static {
+  cursor: default;
+}
+
+.abcb-row-btn:not(.is-static):hover {
+  background-color: var(--color-surface-muted);
+}
+
+.abcb-row-btn:not(.is-static):hover .abcb-row-bar {
+  filter: brightness(1.12);
+}
+
+.abcb-row-btn:focus-visible {
+  outline: 2px solid var(--color-nav-bg);
+  outline-offset: 1px;
+}
+
+.abcb-row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  color: var(--color-text-body);
+}
+
+.abcb-row-name.is-top {
   font-weight: 600;
+  color: var(--color-text);
+}
+
+.abcb-row-name.is-others {
+  color: var(--color-text-muted);
+}
+
+.abcb-row-track {
+  --abcb-value-room: 3rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.abcb-row-bar {
+  display: block;
+  flex: none;
+  width: calc((100% - var(--abcb-value-room)) * var(--abcb-w, 0));
+  height: 16px;
+  border-radius: 0 4px 4px 0;
+  background-color: var(--abcb-bar);
+}
+
+/* "Others" is a group of brands, not one: hatched in its own light grey. */
+.abcb-row-bar.is-others {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--abcb-bar) 0 4px,
+    color-mix(in srgb, var(--abcb-bar) 45%, var(--color-surface)) 4px 8px
+  );
+}
+
+.abcb-row-value {
+  flex: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The line under the top group, labelled with its combined share in the
+   plum of its bars; the arrow points at the rows it adds up. */
+.abcb-cut {
+  position: relative;
+  margin: 9px 6px 9px calc(var(--abcb-name-w) + 18px);
+  border-top: 1px dashed #4F1A41;
+}
+
+.abcb-cut-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-right: 6px;
+  background-color: var(--color-surface);
+  transform: translateY(-50%);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4F1A41;
+  white-space: nowrap;
+}
+
+.abcb-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle, var(--color-text-muted));
+}
+
+/* A phone: a narrower name column; long names end in an ellipsis (the full
+   name is the row's hover) and never run into the bar or its share. */
+@media (max-width: 640px) {
+  .abcb-rows {
+    --abcb-name-w: 6.25rem;
+  }
+  .abcb-row-btn {
+    column-gap: 8px;
+    padding: 2px 4px;
+  }
+  .abcb-cut {
+    margin-left: calc(var(--abcb-name-w) + 12px);
+  }
+  .abcb-row-name,
+  .abcb-row-value {
+    font-size: 0.78rem;
+  }
 }

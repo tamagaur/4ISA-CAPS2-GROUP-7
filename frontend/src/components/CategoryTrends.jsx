@@ -29,6 +29,7 @@ import { labelForPrincipal } from '../principals';
 import { formatMonth } from '../utils/formatDate';
 import { formatCompactPesos } from '../utils/formatters';
 import { CHART_COLORS, COLORS } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { GRID_PROPS, pointLabels } from './ChartZoom';
 import { COMPARISON_LINE, FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, lineDots, lineHoverDot, useLineShadeId } from './ui/lineDesign';
 import { ChartViewToggle } from './ChartTable';
@@ -634,8 +635,8 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                   shading covers exactly [low, high]. */}
               {hasRange && (
                 <>
-                  <Area dataKey="bandBase" stackId="ctBand" stroke="none" fill="transparent" isAnimationActive={false} />
-                  <Area dataKey="bandSpanV" stackId="ctBand" stroke="none" fill={COLORS.forecast} fillOpacity={0.10} isAnimationActive={false} />
+                  <Area dataKey="bandBase" stackId="ctBand" stroke="none" fill="transparent" {...chartAnim(2)} />
+                  <Area dataKey="bandSpanV" stackId="ctBand" stroke="none" fill={COLORS.forecast} fillOpacity={0.10} {...chartAnim(2)} />
                 </>
               )}
               {/* Where history hands over to the projected trend. */}
@@ -647,10 +648,10 @@ const CategoryChart = ({ category, method, placeholder = null }) => {
                   label={<ProjectionStartLabel />}
                 />
               )}
-              <Area {...SHADE_ONLY} dataKey="actual" fill={`url(#${shadeId})`} connectNulls={false} />
-              <Line {...SOLID_LINE} dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} dot={lineDots(CHART_COLORS.salesSeries, { everyPoint: skipsMonths })} activeDot={lineHoverDot} connectNulls={false} isAnimationActive={false} />
-              <Line {...COMPARISON_LINE} dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} dot={false} activeDot={lineHoverDot} connectNulls={false} isAnimationActive={false} />
-              <Line {...FORECAST_LINE} dataKey="projection" name="Projected trend" stroke={COLORS.forecast} dot={lineDots(COLORS.forecast)} activeDot={lineHoverDot} connectNulls={false} isAnimationActive={false} label={projectionLabels} />
+              <Area {...SHADE_ONLY} dataKey="actual" fill={`url(#${shadeId})`} connectNulls={false} {...chartAnim(0)} />
+              <Line {...SOLID_LINE} dataKey="actual" name="Revenue" stroke={CHART_COLORS.salesSeries} dot={lineDots(CHART_COLORS.salesSeries, { everyPoint: skipsMonths })} activeDot={lineHoverDot} connectNulls={false} {...chartAnim(0)} />
+              <Line {...COMPARISON_LINE} dataKey="fitted" name="Trend line" stroke={CHART_COLORS.cumulativeCurve} dot={false} activeDot={lineHoverDot} connectNulls={false} {...chartAnim(1)} />
+              <Line {...FORECAST_LINE} dataKey="projection" name="Projected trend" stroke={COLORS.forecast} dot={lineDots(COLORS.forecast)} activeDot={lineHoverDot} connectNulls={false} {...chartAnim(2)} label={projectionLabels} />
             </ComposedChart>
           </ResponsiveContainer>
         </>

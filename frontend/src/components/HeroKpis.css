@@ -303,7 +303,7 @@
 .hero-progress-short,
 .hero-meter-needed,
 .hero-meter-extra,
-.hero-idle-slow {
+.hero-idle-unsold {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -636,14 +636,14 @@
   white-space: nowrap;
 }
 
-/* All the stock in a light tint; the slow part at the right end. */
+/* All the stock in a light tint; the part not sold in 6 months at the right end. */
 .hero-idle-track {
   height: 8px;
   overflow: hidden;
   background: #A9B8EE;
 }
 
-.hero-idle-slow {
+.hero-idle-unsold {
   right: 0;
   background: #C8453A;
 }
@@ -933,7 +933,7 @@
 
 /* The row is as tall as its tallest card, so the tall one is tightened
    (2026-10-18) rather than the short ones stretched: Inventory value (two
-   comparison boxes and the slow-stock bar) set the height, leaving room
+   comparison boxes and the not-sold bar) set the height, leaving room
    above the footers of Below safety stock and Pending reorders. */
 .hero-kpis > .hero-card:not(.hero-card-wide) .hero-block {
   margin-top: 10px;
@@ -1060,92 +1060,4 @@
 
 .hero-note-trigger:hover {
   color: var(--color-text);
-}
-
-/* What to do first (2026-11-05): three raised tiles under the page's filters,
-   each opening where the figure is worked through. Shared tokens only. */
-.dash-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--card-gap);
-}
-
-.dash-action {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-  padding: 14px 18px;
-  background-color: var(--color-surface);
-  border: var(--card-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-  transition: box-shadow 160ms ease-out;
-}
-
-.dash-action:hover {
-  box-shadow: var(--shadow-card-hover);
-}
-
-.dash-action:focus-visible {
-  outline: 2px solid var(--color-brand-primary);
-  outline-offset: 2px;
-}
-
-.dash-action-text {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.dash-action-label {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--color-text-body);
-}
-
-.dash-action-value {
-  font-size: 26px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-  color: var(--color-text-heading);
-  font-variant-numeric: tabular-nums;
-}
-
-.dash-action-value.is-danger {
-  color: var(--color-danger-ink);
-}
-
-.dash-action-unit {
-  margin-left: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--color-text-muted);
-}
-
-.dash-action-sub {
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--color-text-muted);
-}
-
-.dash-action-arrow {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dash-action {
-    transition: none;
-  }
 }

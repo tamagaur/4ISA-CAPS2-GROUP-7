@@ -1619,7 +1619,7 @@ const ReorderRecommendations = () => {
                 {weightRows.map(([label, value]) => (
                   <div className="reorder-how-weight" key={label}>
                     <dt>{label}<span>{typeof value === 'number' ? `${Math.round(value * 100)}%` : '—'}</span></dt>
-                    <dd><span style={{ width: `${typeof value === 'number' ? Math.round(value * 100) : 0}%` }} /></dd>
+                    <dd><span className="chart-grow-x" style={{ width: `${typeof value === 'number' ? Math.round(value * 100) : 0}%` }} /></dd>
                   </div>
                 ))}
               </dl>
@@ -1784,7 +1784,7 @@ const ReorderRecommendations = () => {
                     {principal === 'delmonte'
                       ? 'The order plan does not cover Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
                         + (isPreviewMode(dataMode) && meta?.demoOrderPlan?.reason
-                          ? ` The synthetic data has no order plan either: ${meta.demoOrderPlan.reason}.` : '')
+                          ? ` The sample data has no order plan either: ${meta.demoOrderPlan.reason}.` : '')
                       : meta?.cycleDate
                         ? 'No recommendations for this planning cycle.'
                         : 'No run of the order plan has produced recommendations for this scope yet.'}

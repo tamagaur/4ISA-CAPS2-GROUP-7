@@ -976,27 +976,8 @@
   color: var(--color-success);
 }
 
-/* Grow-in on mount, staggered per tier — durations/delay come from
-   Charts.jsx as CSS custom properties (the same CHART_ANIM_DURATION/
-   STAGGER constants the Recharts widgets on this page use), so this bar
-   sweeps in the same way the rest of the dashboard's charts do. */
-@keyframes tier-bar-grow {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-/* Identical twin, swapped in by [data-enter-cycle="1"] so the sweep can
-   restart on a filter change — see index.css's replay note. */
-@keyframes tier-bar-grow-b {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-.tier-stock-track.is-animated span {
-  transform-origin: left;
-  animation: var(--anim-tier-bar, tier-bar-grow) var(--tier-anim-duration, 700ms) ease-out both;
-  animation-delay: var(--tier-anim-delay, 0ms);
-}
+/* The segments grow in through the chart-grow-x class (index.css): the
+   same draw as every other graph in the app. */
 
 .tier-stock-empty {
   font-size: 0.8rem;
@@ -1473,6 +1454,17 @@
   display: block;
   flex: none;
   overflow: visible;
+}
+
+/* The ring's sweep mask (index.css chart-sweep) sits on this wrapper, 6px
+   larger than the ring on every side and pulled back by the same margin, so
+   the layout is unchanged and the focus outline of a segment at the edge
+   stays inside the mask. Square padding keeps the sweep centred on the ring. */
+.abc-donut-sweep {
+  display: block;
+  flex: none;
+  padding: 6px;
+  margin: -6px;
 }
 
 /* Unselected tiers step back so the selected one reads first; the panel
@@ -2040,7 +2032,7 @@
 /* chart-card-enter keyframe lives in index.css — see note there. */
 
 .chart-widget {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 
@@ -2052,34 +2044,15 @@
    it; this rule only consumes it. */
 
 /* Plain-CSS bar widgets (no Recharts): the policy comparison and the ABC
-   share pair both sweep in the same way the tier bars already did, so
-   every bar on the dashboard behaves alike. Delay clears the card's own entrance first. */
-@keyframes bar-grow-x {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
+   share pair grow in through the chart-grow-x class (index.css), the same
+   draw as every other graph in the app.
 
-/* Identical twin — see the tier-bar-grow-b note above. */
-@keyframes bar-grow-x-b {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-.policy-bar-track span,
-.abc-share-track span {
-  transform-origin: left;
-  animation: var(--anim-bar-grow-x, bar-grow-x) 620ms ease-out both;
-  animation-delay: 260ms;
-}
-
-/* Reduced motion: switch entrances OFF entirely rather than shortening
+   Reduced motion: switch entrances OFF entirely rather than shortening
    them — large-area movement is exactly what the setting exists to
    suppress. Matches motion.js's chartAnim(), which returns
    isAnimationActive:false under the same condition. */
 @media (prefers-reduced-motion: reduce) {
-  .chart-widget,
-  .policy-bar-track span,
-  .abc-share-track span {
+  .chart-widget {
     animation: none;
   }
 }
@@ -3380,6 +3353,14 @@
   color: #5B3FC4;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* The card's foot: the link to how close past forecasts were (SKU Forecast). */
+.pf-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.86rem;
 }
 
 /* Chart / Table: the active view in navy with white text, on this card

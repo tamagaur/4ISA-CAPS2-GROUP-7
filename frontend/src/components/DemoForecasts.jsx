@@ -15,6 +15,7 @@ import { FORECAST_LINE, LineShade, SHADE_ONLY, SOLID_LINE, lineHoverDot, useLine
 import { getDemoIndex } from '../api/demo';
 import { getDemoCategoryForecast } from '../api/forecast';
 import { COLORS, SEMANTIC } from '../theme/colors';
+import { chartAnim } from '../theme/motion';
 import { originLabel } from '../utils/gapReasons';
 import './DemoForecasts.css';
 import { isMissing, NOT_COLLECTED } from '../utils/formatters';
@@ -33,7 +34,7 @@ const compactQty = (v) => (isMissing(v) ? NOT_COLLECTED : Math.abs(v) >= 1000 ? 
 const UNIT_NOTE = "Quantities are in Del Monte's own unit, which SSM has not confirmed.";
 
 export const SyntheticTag = () => (
-  <span className="demo-tag"><FlaskConical size={12} aria-hidden="true" /> Synthetic data</span>
+  <span className="demo-tag"><FlaskConical size={12} aria-hidden="true" /> Sample data</span>
 );
 
 // Forecast page, Unilever: above the chart whenever GET /forecast sends `demonstration: true`.
@@ -41,7 +42,7 @@ export const SyntheticForecastBanner = () => (
   <div className="forecast-synthetic-banner" role="note">
     <SyntheticTag />
     <p>
-      <strong>Synthetic demonstration forecast.</strong> This is not SSM&apos;s stored forecast: it is the 3-month
+      <strong>Sample-data demonstration forecast.</strong> This is not SSM&apos;s stored forecast: it is the 3-month
       average of the demonstration series, which includes generated months. No accuracy is measured and no range is
       drawn. It never feeds SSM&apos;s real orders.
     </p>
@@ -58,7 +59,7 @@ export const DemoForecastList = ({ forecasts = [], canOpenForecast = false }) =>
       <div className="demo-forecasts-head">
         <SyntheticTag />
         <p className="demo-forecasts-lead">
-          Del Monte has no product-level sales, so the synthetic data forecasts its {forecasts.length} product
+          Del Monte has no product-level sales, so the sample data forecasts its {forecasts.length} product
           categories instead: the average of their last 3 months, for {monthLabel(period)}. Not checked for accuracy,
           and never used for SSM&apos;s real orders.
         </p>
@@ -69,7 +70,7 @@ export const DemoForecastList = ({ forecasts = [], canOpenForecast = false }) =>
             <tr>
               <th scope="col">Category</th>
               <th scope="col" className="num">{monthLabel(period)} forecast</th>
-              <th scope="col">Months averaged that are synthetic</th>
+              <th scope="col">Months averaged that are sample data</th>
             </tr>
           </thead>
           <tbody>
@@ -129,7 +130,7 @@ const DemoTooltip = ({ active, payload }) => {
         <>
           <p>Quantity: <strong>{formatQty(row.quantity)}</strong></p>
           <p className="demo-tooltip-origin">
-            {row.origin === 'real_copy' ? "SSM's own figure" : `Synthetic: ${originLabel(row.origin)}`}
+            {row.origin === 'real_copy' ? "SSM's own figure" : `Sample data: ${originLabel(row.origin)}`}
           </p>
         </>
       )}
@@ -156,7 +157,7 @@ export const DemoCategoryForecast = () => {
         setCategories(keys);
         setSelected((current) => current || keys[0] || null);
       })
-      .catch(() => { if (!cancelled) setError('Could not load the synthetic categories.'); });
+      .catch(() => { if (!cancelled) setError('Could not load the sample-data categories.'); });
     return () => { cancelled = true; };
   }, []);
 
@@ -198,16 +199,16 @@ export const DemoCategoryForecast = () => {
     <section className="demo-cat" aria-labelledby="demo-cat-title">
       <div className="demo-forecasts-head">
         <SyntheticTag />
-        <h3 className="demo-cat-title" id="demo-cat-title">Category forecasts from synthetic data</h3>
+        <h3 className="demo-cat-title" id="demo-cat-title">Category forecasts from sample data</h3>
         <p className="demo-cat-lead">
-          Del Monte has no product-level sales, so there is no product forecast. With synthetic data on, each of its
+          Del Monte has no product-level sales, so there is no product forecast. With sample data on, each of its
           product categories gets one instead: the average of its last 3 months, from history that fills the months
           SSM did not collect. For viewing only: not checked for accuracy, and never used for SSM&apos;s real orders.
         </p>
       </div>
 
       {categories && categories.length === 0 && !error && (
-        <p className="demo-cat-note">Synthetic data is not switched on for this server.</p>
+        <p className="demo-cat-note">Sample data is not switched on for this server.</p>
       )}
       {categories && categories.length > 0 && (
         <div className="demo-cat-chips" role="group" aria-label="Category">
@@ -227,7 +228,7 @@ export const DemoCategoryForecast = () => {
       {error && <p className="demo-cat-note" role="alert">{error}</p>}
       {selected && result === undefined && !error && <p className="demo-cat-note">Loading {titleCase(selected)}…</p>}
       {selected && result === null && (
-        <p className="demo-cat-note">No synthetic history for {titleCase(selected)}.</p>
+        <p className="demo-cat-note">No sample-data history for {titleCase(selected)}.</p>
       )}
 
       {rows.length > 0 && (
@@ -260,7 +261,7 @@ export const DemoCategoryForecast = () => {
                   axisLine={false}
                 />
                 <Tooltip content={<DemoTooltip />} />
-                <Area {...SHADE_ONLY} dataKey="quantity" fill={`url(#${shadeId})`} connectNulls={false} />
+                <Area {...SHADE_ONLY} dataKey="quantity" fill={`url(#${shadeId})`} connectNulls={false} {...chartAnim(0)} />
                 <Line
                   {...SOLID_LINE}
                   dataKey="quantity"
@@ -269,7 +270,7 @@ export const DemoCategoryForecast = () => {
                   dot={OriginDot}
                   activeDot={lineHoverDot}
                   connectNulls={false}
-                  isAnimationActive={false}
+                  {...chartAnim(0)}
                 />
                 <Line
                   {...FORECAST_LINE}
@@ -279,7 +280,7 @@ export const DemoCategoryForecast = () => {
                   dot={ForecastDot}
                   activeDot={lineHoverDot}
                   connectNulls
-                  isAnimationActive={false}
+                  {...chartAnim(1)}
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -293,7 +294,7 @@ export const DemoCategoryForecast = () => {
               <svg width="10" height="10" aria-hidden="true">
                 <circle cx="5" cy="5" r="3" fill="none" stroke={SEMANTIC.noData} strokeWidth="1.5" />
               </svg>
-              Synthetic ({generated} months: {madeUp.map(([origin, n]) => `${n} ${originLabel(origin)}`).join(', ')})
+              Sample data ({generated} months: {madeUp.map(([origin, n]) => `${n} ${originLabel(origin)}`).join(', ')})
             </li>
             <li>
               <svg width="18" height="10" aria-hidden="true">

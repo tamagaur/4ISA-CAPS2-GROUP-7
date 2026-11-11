@@ -588,19 +588,19 @@ const DashboardLayout = () => {
             <p className="preview-banner-text">
               {syntheticAvailable === false ? (
                 <>
-                  <strong>Synthetic data is not switched on for this server,</strong> so every page still shows
+                  <strong>Sample data is not switched on for this server,</strong> so every page still shows
                   SSM&apos;s real data only.
                 </>
               ) : principal === 'delmonte' ? (
                 <>
-                  <strong>Showing Del Monte&apos;s real data plus synthetic data, which is not SSM&apos;s.</strong>{' '}
+                  <strong>Showing Del Monte&apos;s real data plus sample data, which is not SSM&apos;s.</strong>{' '}
                   The months SSM did not collect, the Jan 2025 change of categories and Jan 2021 – Dec 2022 are filled
-                  with generated figures, drawn dotted and marked synthetic wherever they appear. The cards at the top
+                  with generated figures, drawn dotted and marked as sample data wherever they appear. The cards at the top
                   stay real.
                 </>
               ) : (
                 <>
-                  <strong>Showing Unilever&apos;s real data plus synthetic data, which is not SSM&apos;s.</strong>{' '}
+                  <strong>Showing Unilever&apos;s real data plus sample data, which is not SSM&apos;s.</strong>{' '}
                   SSM&apos;s records start in January {FIRST_DATA_YEAR}, so Jan 2021 – Dec 2022 are generated: each
                   product held at its own average, with no trend. They are marked on every chart, and the sales totals
                   that count them say so. Forecasts, reorder plans and safety stock use real data only.

@@ -3,7 +3,7 @@
 // period). Same ranking as the dashboard's ABC ring and class list
 // (GET /dashboard/pareto), so a count on the dashboard is the count here.
 //
-// Stock status, target stock and the movement (FSN) classes belong to one
+// Stock status and target stock belong to one
 // month's plan and run, so this view leaves them out and says where they
 // are, instead of pairing a range ranking with one month's stock.
 //
@@ -12,10 +12,12 @@
 // with the same range and principal, so the two pages show the same list.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SectionLede from './ui/SectionLede';
+import SectionHeading from './ui/SectionHeading';
+import BasisTag from './BasisTag';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../permissions/context';
 import { P } from '../permissions/keys';
-import { AlertTriangle, ArrowLeftRight, ChartLine, CheckCircle2, Info, Layers, ListOrdered, Search, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Layers, ListOrdered, Search, X } from 'lucide-react';
 import KPICard from './KPICard';
 import ProductName from './ProductName';
 import Pagination from './Pagination';
@@ -122,8 +124,8 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
     <p className="ui-note is-info">
       <Info size={14} aria-hidden="true" />
       <span>
-        <strong>Ranked on sales over {label}</strong>, the same ranking as the dashboard. Stock status, target stock
-        and fast/slow/non-moving belong to one month&apos;s plan, so they are on the{' '}
+        <strong>Ranked on sales over {label}</strong>, the same ranking as the dashboard. Stock status and target stock
+        belong to one month&apos;s plan, so they are on the{' '}
         <button type="button" className="abc-range-inline-link" onClick={onShowMonth}>one-month view</button>.
       </span>
     </p>
@@ -170,7 +172,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                   title={`Class ${cls.tier}`}
                   value={cls.count.toLocaleString()}
                   unit={many}
-                  contextLine={`${pct(cls.share)} of revenue · ${label}`}
+                  contextLine={`${pct(cls.share)} of sales · ${label}`}
                   note={cls.revenue != null ? `about ${formatCompactPesos(cls.revenue)}` : null}
                   accent={CLASS_ACCENT[cls.tier]}
                   icon={<span className={`abc-kpi-letter abc-kpi-letter-${cls.tier.toLowerCase()}`} aria-hidden="true">{cls.tier}</span>}
@@ -200,23 +202,30 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
                 </span>
               </p>
             )}
-            <div className="ui-card ui-card-stack">
-            <div className="ui-card-head is-centered">
-              <span className="icon-tile" aria-hidden="true"><ChartLine size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">How few products make most of the sales</SectionLede></div>
-            </div>
+            {/* A Dashboard section (2026-11-06): the card's label is the
+                question now, with the range in its teal tag (this view
+                follows the date filter). */}
+            <section className="ui-section" aria-labelledby={`abc-range-curve-${block.principal}`}>
+            <SectionHeading id={`abc-range-curve-${block.principal}`} tags={<BasisTag label={label} follows />}>
+              How few products make <span className="title-accent">most of the sales</span>?
+            </SectionHeading>
+            <div className="ui-card ui-card-stack card-accent-top">
             <ParetoCurve block={block} cutoffs={pareto?.cutoffs} label={label} />
             </div>
+            </section>
           </React.Fragment>
         );
       })}
 
       {canSeeChanges && (
-        <section className="abc-range-changes ui-card ui-card-stack" aria-busy={changesLoading || undefined}>
-            <div className="ui-card-head is-centered">
-              <span className="icon-tile" aria-hidden="true"><ArrowLeftRight size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Which products joined or left Class A</SectionLede></div>
-            </div>
+        <section className="ui-section" aria-labelledby="abc-range-changes-title" aria-busy={changesLoading || undefined}>
+          <SectionHeading
+            id="abc-range-changes-title"
+            tags={<BasisTag label={changes.data?.label || label} follows />}
+          >
+            Which products <span className="title-accent">joined or left</span> Class A?
+          </SectionHeading>
+        <div className="abc-range-changes ui-card ui-card-stack card-accent-top">
           {changesLoading ? (
             <>
               <LoadingStatus>Loading the products that joined or left Class A…</LoadingStatus>
@@ -238,8 +247,15 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
               <span>No Class A changes to show for {changes.data?.label || label}.</span>
             </p>
           )}
+        </div>
         </section>
       )}
+
+      {/* The ranking table as one section (2026-11-06), as on the month view. */}
+      <section className="ui-section" aria-labelledby="abc-range-products-title">
+      <SectionHeading id="abc-range-products-title" tags={<BasisTag label={label} follows />}>
+        Where does <span className="title-accent">each {allCategories ? 'category' : 'product'}</span> rank?
+      </SectionHeading>
 
       <div className="abc-filters-row abc-range-filters">
         <div className="abc-search-wrapper">
@@ -275,11 +291,13 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         </div>
       </div>
 
-      <div className="ui-card is-flush">
+      <div className="ui-card is-flush card-accent-top">
       <div className="ui-card-intro">
             <div className="ui-card-head is-centered">
               <span className="icon-tile" aria-hidden="true"><ListOrdered size={20} /></span>
-              <div className="ui-card-head-text"><SectionLede className="ui-card-label">Every product, ranked by sales value</SectionLede></div>
+              <div className="ui-card-head-text">
+                <h4 className="section-card-title">All products, from <span className="title-accent">best</span> to least selling</h4>
+              </div>
             </div>
       </div>
       <div className="data-table-card ui-card-table">
@@ -289,9 +307,9 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
               <th className="table-num col-fit">#</th>
               <th className="col-text col-product">{allCategories ? 'Category' : 'Product'}</th>
               <th className="table-center col-fit">Class</th>
-              <th className="table-num">Revenue (₱)<span className="abc-th-sub">{label}</span></th>
+              <th className="table-num">Sales (₱)<span className="abc-th-sub">{label}</span></th>
               <th className="table-num">Sold (pieces)<span className="abc-th-sub">{label}</span></th>
-              <th className="table-num">Share<span className="abc-th-sub">of revenue</span></th>
+              <th className="table-num">Share<span className="abc-th-sub">of sales</span></th>
               <th className="table-num">Running total<span className="abc-th-sub">top seller down</span></th>
               <th className="table-num">Change<span className="abc-th-sub">vs {state.yoy?.prior_label || 'a year earlier'}</span></th>
               <th className="table-num col-fit">Months sold<span className="abc-th-sub">in the range</span></th>
@@ -336,6 +354,7 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
         />
       </div>
       </div>
+      </section>
     </>
   );
 };

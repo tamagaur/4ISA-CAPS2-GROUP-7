@@ -33,7 +33,8 @@ export const COMPARISON_LINE = { ...LINE_BASE, strokeWidth: 2, strokeDasharray: 
 // An Area that draws the shade alone, for a chart that keeps its solid series
 // a Line. Recharts draws every Area under the bars and every Line over them,
 // so a line that must stay on top of bars or a band cannot carry its own fill.
-// No dot, no hover entry: the Line beside it has both.
+// No dot, no hover entry: the Line beside it has both. It moves as its line
+// does: spread chartAnim(i) (theme/motion.js) with the line's own index.
 export const SHADE_ONLY = {
   type: 'monotone',
   stroke: 'none',
@@ -41,7 +42,6 @@ export const SHADE_ONLY = {
   activeDot: false,
   legendType: 'none',
   tooltipType: 'none',
-  isAnimationActive: false,
 };
 
 // Gradient ids are global to the document, and some of these charts appear

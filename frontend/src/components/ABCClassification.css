@@ -227,10 +227,130 @@
   gap: 0.75rem;
 }
 
-.abc-no-target-tip-foot {
+/* "Why … has no target stock" (2026-11-05): the plain main line, an amber
+   "To be confirmed" badge (same look as the Reference Guide's .dict-caveat)
+   and a small "Show details" with the technical figure. */
+.abc-no-target-why {
   display: block;
+}
+
+.abc-tbc-badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0.35rem 0 0 0;
+  padding: 1px 7px;
+  border: 1px solid #F6D9A8;
+  border-radius: 6px;
+  background: #FFF8EB;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9A5A06;
+  white-space: nowrap;
+}
+
+.abc-no-target-why > .abc-tbc-badge {
+  display: flex;
+  width: fit-content;
+}
+
+.abc-no-target-details {
   margin-top: 0.4rem;
+  font-size: 0.8rem;
   opacity: 0.85;
+}
+
+.abc-no-target-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.abc-no-target-details > span {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+/* "About these numbers": the page's notes in one panel, opened from the
+   small link beside the subtitle (2026-11-06). */
+.abc-about {
+  margin-top: 0;
+  padding: 14px 18px;
+  font-size: 0.88rem;
+}
+
+.abc-about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* The "Top sellers as of…" line inside the panel: no margins of its own. */
+.abc-about .abc-about-basis {
+  margin: 0;
+  font-size: inherit;
+}
+
+/* A card line with its ⓘ pop-up beside it. */
+.abc-card-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Header to cards: only the page's card gap (2026-11-06). */
+.abc-page-header,
+.abc-page-header .page-header {
+  margin-bottom: 0;
+}
+
+/* Shorter, equal-height summary cards. */
+.abc-summary-grid {
+  align-items: stretch;
+}
+
+/* The summary cards' labels in the Dashboard's small-label style
+   (2026-11-06). Scoped to this page's grids: KPICard is shared. */
+.abc-summary-grid .kpi-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-body);
+}
+.abc-summary-grid .kpi-card {
+  padding: 14px 16px;
+  gap: 6px;
+}
+
+.abc-about-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: var(--color-text-body);
+  line-height: 1.5;
+}
+
+.abc-about-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.abc-about-details > span {
+  display: block;
+  margin-top: 0.3rem;
+}
+
+/* Option A note under the cover chart's subtitle. */
+.abc-pareto-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--color-text-body);
 }
 
 .abc-principal-note {
@@ -680,7 +800,7 @@
 .abc-filter-controls {
   display: flex;
   align-items: center;
-  /* Brand, movement, class toggle and "This run only" wrap onto a second
+  /* Brand, class toggle and "This run only" wrap onto a second
      line rather than being cut off below ~1300px. */
   flex-wrap: wrap;
   gap: 0.6rem;
@@ -979,7 +1099,7 @@
    changing the month leaves the cards in place and lets the Recharts
    series animate the data change instead. */
 .abc-pareto-container {
-  animation: var(--anim-card-enter, chart-card-enter) 460ms ease-out both;
+  animation: var(--anim-card-enter, chart-card-enter) var(--chart-card-duration) var(--chart-draw-ease) both;
 }
 
 .abc-analysis-chart { animation-delay: 60ms; }
@@ -1100,4 +1220,314 @@
 .abc-drilldown-link:hover,
 .abc-drilldown-link:focus-visible {
   color: var(--color-nav-bg);
+}
+
+/* "Are our top sellers stocked enough?" (2026-11-06): one full-width card,
+   a small table with bars: status | bar | products | share of sales. Bar
+   colours are the table badges' own (ui.css --badge-*-fg). */
+/* The same card spacing as the brand and product sections (ui.css
+   --card-padding; title .ui-card-title, subtitle .ui-card-subtitle). */
+.abc-stock-check {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--card-padding);
+}
+
+.abc-stock-check > .ui-card-subtitle {
+  margin: 0;
+}
+
+.abc-stock-check-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.abc-stock-check-line {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+/* One grid for the head and every row, so the columns line up. */
+.abc-stock-table {
+  --abc-stock-cols: 9.5rem minmax(0, 1fr) 6.5rem 8.5rem;
+  display: flex;
+  flex-direction: column;
+  margin-top: -2px;
+}
+
+.abc-stock-head,
+.abc-stock-row {
+  display: grid;
+  grid-template-columns: var(--abc-stock-cols);
+  align-items: center;
+  column-gap: 16px;
+}
+
+/* The same type as the product table's headers (index.css .data-table
+   thead th, and .abc-th-sub for the second line). Bottom-aligned, two
+   lines each, so both labels share one line. */
+.abc-stock-head {
+  align-items: end;
+  padding: 0 8px 2px;
+  font-size: var(--text-table-header);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.abc-stock-head .abc-stock-label-head {
+  display: block;
+  white-space: nowrap;
+}
+
+.abc-stock-head .abc-stock-num {
+  display: block;
+  font-size: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.abc-stock-head-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.79rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.abc-stock-row {
+  position: relative;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.abc-stock-row:hover {
+  background: var(--color-surface-muted);
+}
+
+/* The row's one button, laid over the whole row. */
+.abc-stock-row-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.abc-stock-row-hit:focus-visible {
+  outline: 2px solid var(--color-nav-bg);
+  outline-offset: 1px;
+}
+
+/* Cells sit over the button but let the pointer through to it. */
+.abc-stock-row > span {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.abc-stock-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* The "Can't check yet" ⓘ takes the pointer back. */
+.abc-stock-label .abc-stock-tip {
+  pointer-events: auto;
+}
+
+.abc-stock-bar-cell {
+  display: block;
+  min-width: 0;
+}
+
+/* The bar is the status's share of sales on a 0-100% scale (2026-11-06,
+   utils/stockBarScale.js), drawn on a faint track that is the whole 100%.
+   No minimum width: a small share is never drawn bigger than it is. */
+.abc-stock-row .abc-stock-bar-cell {
+  height: 18px;
+  border-radius: 4px;
+  background: var(--color-surface-sunken);
+}
+
+.abc-stock-bar-fill {
+  display: block;
+  height: 18px;
+  border-radius: 4px;
+}
+
+/* The scale over the bar column: 0% at the start, 100% at the end. */
+.abc-stock-head .abc-stock-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.79rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Missing stock data ("Can't check yet"): a divider above the row, and a
+   hatched bar in the same grey, at its full share. */
+.abc-stock-row.is-missing {
+  margin-top: 9px;
+}
+
+.abc-stock-row.is-missing::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 8px;
+  right: 8px;
+  border-top: 1px solid var(--color-border);
+  pointer-events: none;
+}
+
+.abc-stock-bar-fill.is-neutral {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--abc-status-neutral) 0 5px,
+    color-mix(in srgb, var(--abc-status-neutral) 55%, var(--color-surface)) 5px 10px
+  );
+}
+
+.abc-stock-row:hover .abc-stock-bar-fill {
+  filter: brightness(0.92);
+}
+
+/* One status colour set (2026-11-06), the same in the bars and in the
+   table badges' dots: the app's SEMANTIC red / amber / green
+   (theme/colors.js, index.css --color-*), grey for no verdict. */
+.abc-stock-check,
+.abc-table {
+  --abc-status-critical: var(--color-critical);
+  --abc-status-warning: var(--color-warning);
+  --abc-status-success: var(--color-success);
+  --abc-status-neutral: #94A3B8;
+}
+
+.abc-stock-bar-fill.is-critical { background-color: var(--abc-status-critical); }
+.abc-stock-bar-fill.is-warning  { background-color: var(--abc-status-warning); }
+.abc-stock-bar-fill.is-success  { background-color: var(--abc-status-success); }
+.abc-stock-bar-fill.is-neutral  { background-color: var(--abc-status-neutral); }
+
+/* The badge's dot: the bar's colour, beside the badge's own tint. */
+.abc-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.abc-status-dot.is-critical { background-color: var(--abc-status-critical); }
+.abc-status-dot.is-warning  { background-color: var(--abc-status-warning); }
+.abc-status-dot.is-success  { background-color: var(--abc-status-success); }
+.abc-status-dot.is-neutral  { background-color: var(--abc-status-neutral); }
+
+/* Centred in its column, header and numbers alike (2026-11-06). */
+.abc-stock-num {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-text-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.abc-stock-row .abc-stock-num {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.abc-stock-hint {
+  margin: 2px 0 0;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle, var(--color-text-muted));
+}
+
+/* Middle / low sellers line, with the Reorder link on the right. */
+.abc-stock-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 2px;
+  padding: 8px 8px 0;
+  border-top: 1px solid var(--color-surface-muted);
+}
+
+.abc-stock-foot-text {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--color-text-body);
+}
+
+.abc-stock-class-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-nav-bg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.abc-stock-class-link:hover,
+.abc-stock-class-link:focus-visible {
+  text-decoration-thickness: 2px;
+}
+
+.abc-stock-check-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Narrow screens: label and numbers on one line, the bar on its own line
+   under them across the row, on the same 0-100% scale (2026-11-06; the bars
+   used to be hidden here). The scale goes under the column headers. */
+@media (max-width: 600px) {
+  .abc-stock-table {
+    --abc-stock-cols: minmax(0, 1fr) 4.5rem 6rem;
+  }
+  .abc-stock-head .abc-stock-bar-cell,
+  .abc-stock-row .abc-stock-bar-cell {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .abc-stock-head {
+    row-gap: 4px;
+  }
+  /* The header's period ("last 12 months to Feb 2026") wraps here; on one
+     line it ran past the card's edge. */
+  .abc-stock-head .abc-stock-num {
+    white-space: normal;
+  }
+  .abc-stock-row {
+    row-gap: 4px;
+    padding-top: 6px;
+    padding-bottom: 8px;
+  }
+  .abc-stock-row .abc-stock-bar-cell,
+  .abc-stock-bar-fill {
+    height: 12px;
+  }
 }

@@ -3,7 +3,6 @@ import { cachedRequest } from './cache';
 import { appendPrincipal } from '../principals';
 
 // The descriptive / predictive endpoints added for the analytical mapping:
-//   GET /fsn              D3  fast / slow / non-moving per product
 //   GET /pareto           D1  brand- and category-level ABC
 //   GET /decomposition    D4  STL trend / seasonality of one SKU
 //   GET /category-trends  P1  category revenue trend, 12 months ahead
@@ -17,14 +16,6 @@ async function getJson(path, what) {
     if (!res.ok) throw new Error(`Failed to fetch ${what}`);
     return res.json();
   });
-}
-
-export function getFsn({ principal, period } = {}) {
-  const query = new URLSearchParams();
-  appendPrincipal(query, principal);
-  if (period) query.append('period', period);
-  const qs = query.toString();
-  return getJson(`/fsn${qs ? `?${qs}` : ''}`, 'FSN classification');
 }
 
 export function getPareto({ grain = 'brand', principal, period, months = 1 } = {}) {
