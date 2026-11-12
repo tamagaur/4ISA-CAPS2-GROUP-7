@@ -15,6 +15,37 @@ plan: rows=110 pieces=378700 cycle=2026-03-01 lp_run=9
    Was lp_run 8 (110 / 381,484 / 69 >0 / SS 462,133). lp_run 9 = lp_run 8 with safety stock following the level for zero-forecast products too
    (2 products, 2,784 pieces); rehearsed on a restore of backups/full_backup_20261111T103426Z: docs/FINAL_BUNDLE_REHEARSAL.json.
    lp_run 7 was 110 / 419,344 / 72 >0, lp_run 6 109 / 435,988 / 73.)
+  check.sh --fast GREEN against live on this branch at 201dae4, 2026-11-12 (6 of 6, 75 s, from a clean worktree). This is the branch
+  to rebuild Chapter 4 from: its plan line, CLAUDE.md gate and docs/CHAPTER4_CODE_FIGURES.json all read lp_run 9.
+
+SPIKE CAP + DECEMBER DIP RULE REFUSED (2026-11-12, Kelvin's recon brief; scored, NOT applied; nothing written to live). The code is
+  NOT on this branch: it lives on kelvin/spike-cap (459f299..c100f9a), which is kept as the record and is not to be merged. That
+  branch's plan line and Chapter 4 pins describe lp_run 10 (116 / 295,210), a plan that exists only on the rehearsal copy ssm_spike;
+  they were not reverted, so check.sh --fast is red there against live. ssm_spike is a restore of live's backup
+  full_backup_20261111T142748Z and its forecast read real history only (Unilever_SKU_Demand_Fact_Real 24,906 rows, 0 labelled, last
+  month 2026-02): rule 2 is not engaged. lp_run 10 values reached no chapter text (Ch4-5 drafts on disk predate it; Google Drive
+  search for 295,210 empty); they are in that branch's MANUSCRIPT_TABLE_DATA, evidence ch08/ch09, FIGURES.md and figures, the
+  published snapshot, and the git-ignored local/nonlive_reports/.
+  Scored by re-running scripts.accuracy_as_served.served_backtest four ways on ssm_spike (current = live run 16, 4,370 of 4,370 rows
+  exact; both rules = copy run 21 exact). Pooled WAPE change in points [95% product bootstrap], all products / lp_run 9's 110 planned:
+    Sep 2025-Feb 2026  cap alone -0.56 [-1.60,+0.42] / -0.51 [-1.94,+0.92]; December alone -1.25 [-2.81,+0.27] / -1.72 [-2.92,-0.57];
+                       both -1.72 [-3.50,-0.14] / -2.10 [-4.44,+0.25]
+    2024-01..2025-08   cap alone -0.37 [-1.10,+0.29] / -0.61 [-1.88,+0.54]; December alone 0 (changes no forecast there); both = cap
+  Median product MAPE (points): Sep-Feb cap -1.2, December -1.9, both -3.1; earlier cap -0.7. MASE median (scale = each product's
+  month-to-month change before the window): Sep-Feb 0.731 -> 0.652 (both), earlier 0.901 -> 0.876.
+  Why refused: (1) the cap fails lab.py's bar (lower in both windows, an interval below 0 in at least one, MASE not higher) for all and
+  for planned products; its interval excludes 0 only on 2024-03..2025-08 ([-1.48,-0.02]), the window its value 1.3 was chosen on.
+  (2) The December rule acts on one scored month, December 2025, the month it was written after; SSM has not confirmed the holiday-break
+  reason; the three Decembers disagree (1.20x, 0.68x, 0.62x). (3) The gain is a level shift: the current forecast scaled to the bundle's
+  monthly total gives the same company-total WAPE (8.18%) and a better pooled product WAPE (36.12% against 36.35%) in Sep-Feb, and
+  against it the bundle is better for 93 products, worse for 110. The company-total fall 12.96% -> 8.18% is the December rule alone
+  (cap alone 10.97%). (4) Stock-out exposure (Tier A decomposition, 29 backtest months, 310 products): months beyond safety stock
+  797 -> 931, PHP 40.49M -> 51.64M (about 1.40M -> 1.78M a month); 90 products gain months; the top 10 carry 48% of the increase.
+  Scoring scripts and per-product rows stayed in the session scratchpad (rule 9), not in the repo.
+  MAPE gate (read 2026-11-12, not changed): run_lp.py gated plan entry on Forecast_Result.mape < 20 from its first commit a28560c
+  (2026-08-28) to bf8a3a3 (Maica, 2026-09-06, MASE < 1); the dashboard's portfolio gate stayed mape < 20 until c63b1d9 (2026-09-29).
+  DEC-46 recorded the MASE gate on 2026-11-03. Chapter 3 (CP-1 manuscript, 3.4.2.2) still states the MAPE gate; the Ch4-5 drafts
+  say it was replaced. Live forecast on the Chapter 3 reading (own 80/20 holdout): 17 of 170 products under 20%, median 39.6%.
 
 FINAL BUNDLE (2026-11-11, Kelvin's brief "last bundle before the code freeze"; APPLIED to live 2026-11-11, see the plan line; do not
 re-run: its preflight now refuses, the ledger ends at 0078). Verifier defect, not fixed (script is spent): it compares definitions_md5
@@ -49,7 +80,7 @@ backup of that morning, PASS; every public and mart table equal to live by finge
   with recorded sha256, DO NOT RUN README); build_preview_outputs.py can overwrite the tracked reports/preview/app_meta.json from a
   local run.
   MEASURED on the final tree 1b68298, against the rehearsal copy (ssm_bundle = live's 2026-11-11 backup + the bundle; against live
-  itself the plan line and pins are RED until the apply, by design): check.sh --full GREEN, 2810 passed, 18 skipped, 0 failed of 2828
+  itself the plan line and pins were RED until the apply, which ran 2026-11-11 12:52 UTC): check.sh --full GREEN, 2810 passed, 18 skipped, 0 failed of 2828
   (13 invariants + 2797 suite; 3 of 3 real-data tests), 429 s. A first --full run on the tree before was RED on 8 tests, all one
   defect of this run (tests/backend/test_error_decomposition_views.py's fake session did not answer the new freshness query): fixed,
   one test added, totals re-pinned, run again. Clean clone of 1b68298 (own .venv, npm ci, no .env, no data/raw; only SUPABASE_DB_URL
