@@ -6,9 +6,9 @@
   "totals": "reports/evidence/ch08_totals.csv",
   "diff_vs_0929": "reports/evidence/ch08_diff_vs_0929.csv"
  },
- "caption": "Supplier allocation at Sir Abe's three levels (last year's sales x 103 / 105 / 108 % / 12), planning cycle 2026-03-01, 110 products, run_lp --dry-run with every other input at its placeholder default. 103%: order 378,700 of need 374,794 pieces, shortfall 0 on 0 SKUs, month-end cover 4.415386 weeks (PHP +4,490,863.75 against the 3-week requirement); 105%: order 378,700 of need 374,794 pieces, shortfall 0 on 0 SKUs, month-end cover 4.415386 weeks (PHP +4,490,863.75 against the 3-week requirement); 108%: order 378,700 of need 374,794 pieces, shortfall 0 on 0 SKUs, month-end cover 4.415386 weeks (PHP +4,490,863.75 against the 3-week requirement). The pre-registered test is strict (cover below 3 weeks), so 105% passes it. Target cover 3 weeks (placeholder). Against the 2026-09-29 dry run: 103% 67 of 110 orders changed; 105% 67 of 110 orders changed; 108% 67 of 110 orders changed. Inputs are placeholders, not SSM's figures.",
+ "caption": "Supplier allocation at Sir Abe's three levels (last year's sales x 103 / 105 / 108 % / 12), planning cycle 2026-03-01, 115 products, run_lp --dry-run with every other input at its placeholder default. 103%: order 330,212 of need 326,491 pieces, shortfall 0 on 0 SKUs, month-end cover 4.795889 weeks (PHP +5,304,757.94 against the 3-week requirement); 105%: order 330,212 of need 326,491 pieces, shortfall 0 on 0 SKUs, month-end cover 4.795889 weeks (PHP +5,304,757.94 against the 3-week requirement); 108%: order 330,212 of need 326,491 pieces, shortfall 0 on 0 SKUs, month-end cover 4.795889 weeks (PHP +5,304,757.94 against the 3-week requirement). The pre-registered test is strict (cover below 3 weeks), so 105% passes it. Target cover 3 weeks (placeholder). Against the 2026-09-29 dry run: 103% 67 of 115 orders changed; 105% 67 of 115 orders changed; 108% 67 of 115 orders changed. Inputs are placeholders, not SSM's figures.",
  "verdict": "CONFIRMS",
- "verdict_detail": "105%: month-end cover 4.415386215 weeks vs target 3 (met; PHP +4,490,863.749028 against the requirement; run_lp's own log rule, stock >= required - PHP 1 (run_lp.py:556), calls it met); short SKUs 0 at 105% vs 0 at 108% (not cleared by 108%)",
+ "verdict_detail": "105%: month-end cover 4.795888686 weeks vs target 3 (met; PHP +5,304,757.942478 against the requirement; run_lp's own log rule, stock >= required - PHP 1 (run_lp.py:556), calls it met); short SKUs 0 at 105% vs 0 at 108% (not cleared by 108%)",
  "criterion": "The default 105% leaves month-end cover below 3 weeks (lp_inputs target_weeks), or leaves a shortfall that 108% clears",
  "otherwise": "CONFIRMS",
  "mase_gate_used": "1.0 (LP candidate pool; scripts/run_lp.py:113)",
@@ -17,12 +17,12 @@
   {
    "id": "G7",
    "pass": true,
-   "detail": "harness at weights (0.45, 0.35, 0.2) equals run_lp --dry-run order for order at 103%, 105%, 108% (110 products each)"
+   "detail": "harness at weights (0.45, 0.35, 0.2) equals run_lp --dry-run order for order at 103%, 105%, 108% (115 products each)"
   }
  ],
  "script": "scripts/evidence/lp_charts.py",
- "code_commit": "afc4d7e +uncommitted",
- "computed_at": "2026-11-11T19:06:42",
+ "code_commit": "941fadb",
+ "computed_at": "2026-11-12T21:46:23",
  "data_notes": [
   "LP inputs are PLACEHOLDERS (analytics/params.py PLACEHOLDERS), realistic values the team chose, not SSM's figures: allocation_pct 103, review_days 5, lead_days 3, target_weeks 3, cover_rule aggregate, warehouse_capacity 3.81684e+06, default_procurement_cost_per_unit 33.48, storage_cost_per_unit 0.5.",
   "Pool: Category A with a stored forecast of status 'ok' and MASE < 1 (pipeline gate)."

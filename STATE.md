@@ -1,7 +1,13 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-11.
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-12.
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
-plan: rows=110 pieces=378700 cycle=2026-03-01 lp_run=9
+plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
+  (BRANCH kelvin/calendar-grain, WAITING FOR THE APPLY: live holds lp_run 9 (110 / 378,700) until Kelvin runs
+   `python -m scripts.apply_calendar_grain --target-public` from this branch; until then check.sh --fast against live is RED on the
+   plan invariant and the Chapter 4 pins, on this branch only. kelvin-be (941fadb) holds lp_run 9 and is GREEN on live. lp_run 10 here
+   = the forecast with the calendar factor computed per product (see CALENDAR GRAIN below): 64 rows order >0, safety stock 466,158.59,
+   rehearsed: docs/CALENDAR_GRAIN_REHEARSAL.json. Not the lp_run 10 of kelvin/spike-cap or kelvin/forecastability-gate.)
+  Previous plan, lp_run 9:
   (Unilever, t12m_new Tier A as of 2026-02; 67 rows order >0; safety stock 459,359.47; total = sum of plan_q_i. Nothing decided yet
    except legacy row 4. LIVE since 2026-11-11 12:52 UTC: Kelvin ran `python -m scripts.apply_final_bundle --target-public`; all
    four steps completed (backup, 0075-0078 applied 12:49:33-12:49:36, backfill, re-plan) and it exited 1 at its comparison on
@@ -17,6 +23,53 @@ plan: rows=110 pieces=378700 cycle=2026-03-01 lp_run=9
    lp_run 7 was 110 / 419,344 / 72 >0, lp_run 6 109 / 435,988 / 73.)
   check.sh --fast GREEN against live on this branch at 201dae4, 2026-11-12 (6 of 6, 75 s, from a clean worktree). This is the branch
   to rebuild Chapter 4 from: its plan line, CLAUDE.md gate and docs/CHAPTER4_CODE_FIGURES.json all read lp_run 9.
+
+CALENDAR GRAIN (2026-11-12, Kelvin's brief "compute the calendar adjustment at the grain it is applied at"; branch kelvin/calendar-grain
+from kelvin-be 941fadb; REHEARSED, NOT ON LIVE). ONE command, Kelvin's:
+  python -m scripts.apply_calendar_grain --target-public
+  Refuses (exit 2, nothing written) unless the tree is clean, the files hash to docs/CALENDAR_GRAIN_REHEARSAL.json, the ledger ends at
+  0078 with nothing pending, the plan is lp_run 9 110 / 378,700 undecided, no ", product calendar" run is stored, and every public and
+  mart table equals the rehearsal's start; then backup (PASS required), forecast, review flags, backtests, tier runs, re-plan, a check
+  that the result equals the rehearsal's (plan rows md5, forecast rows md5, review flags, the four new runs, decomposition, planning_stale
+  false) and that definitions, privileges, RLS and the ledger did not change, then check.sh --fast on live. No migration; runs 15-18 and
+  lp_run 9 stay stored. --check = the preflight alone.
+  THE DEFECT: analytics/forecasting/calendar.py computed the factor from the company total (volume-weighted) and router.route() applied it
+  to every product. Product grain (Unilever_SKU_Demand_Fact_Real, 419-543 products per month-year) disagreed in direction in 4 of 35
+  month-years (2023-06, 2023-12, 2024-03, 2025-06) and by over 10% in 8 more; the company ratio equals the same-products volume-weighted
+  ratio, so the cause is a few large products, not products entering or leaving. Live's March 2026 factor 1.0762 rests on March 2024
+  (company 1.136, product median 0.906, 61% of products fell) and March 2025 (1.169 vs 1.033).
+  THE FIX: calendar.ProductCalendar (analytics.params.CALENDAR_GRAIN = "product", CALENDAR_OWN_YEARS_PRIOR = 2): per product, its own
+  month ratios pulled toward the typical product's (median over eligible products) with weight n / (n + 2), geometric mean over earlier
+  years, halfway to 1; DECEMBER_DIP_RULE on the same grain (last December's typical-product dip in full). Callers hand route() the
+  product's own view (calendar.for_product): run_baseline_forecast (forecast and holdout), accuracy_as_served, compute_review_flags.
+  Card, API and glossary method texts say so.
+  CHOSEN BY CRITERIA FIXED BEFORE THE RESULTS (scratchpad CRITERIA_GRAIN_2026-11-12.md, sha256 cf9edd20..., written 13:19:31Z): the
+  measure is the bar (pooled WAPE = pieces the plan gets wrong; median MASE = the typical product and the plan's entry test); MAPE is
+  reported, never a criterion. Three product-grain estimators (median; volume-tercile median; product shrunk to the median) ALL passed
+  the both-windows bar against the company factor; the rule built the lowest mean pooled WAPE (product shrunk, 32.341% vs median
+  32.343%). Add-ons scored against it: the December rule PASSED (it now acts in December 2024 too: interval [-0.38, -0.20] in
+  2024-01..2025-08); the spike cap FAILED (no interval below 0); the blind rule FAILED (MASE higher in the earlier window).
+  Final vs live, identical product-months: pooled WAPE 38.07% -> 36.33% [-3.43, -0.19] (Sep 2025-Feb 2026, 208 products) and 27.86% ->
+  27.24% [-0.91, -0.34] (2024-01..2025-08, 270 products); median MASE 0.731 -> 0.646 [-0.132, -0.019] and 0.901 -> 0.869; planned products
+  the same direction with intervals below 0 in both windows. The first change this week to pass in both windows.
+  RESULT ON THE COPY (every figure, old and new, with populations: docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md section 9): plan lp_run 10 =
+  115 / 330,212 / 64 ordering / safety stock 466,158.59 (was 110 / 378,700 / 67 / 459,359.47); March forecast 1,952,313 -> 1,837,121;
+  MASE < 1 110 -> 115 (median 0.823 -> 0.755); review flags 63 -> 40; card Sep 2025-Feb 2026 company 13.30% -> 7.22%, pooled 38.27% ->
+  36.53%, MAPE 41.0% -> 35.2% (183 products both sides); 2024-01..2025-08 10.23% -> 9.07%, 27.88% -> 27.25%, 34.6% -> 32.8% (237).
+  STOCK-OUT PRICE: Tier A months beyond safety stock 797 -> 852 (+55), PHP 40.49M -> 43.77M (+3.27M over 29 backtest months, about
+  PHP 113k a month); the card's shortage pesos rise PHP 25.84M -> 28.29M (Sep-Feb) while surplus falls PHP 35.34M -> 28.58M.
+  ALSO FIXED HERE: accuracy_as_served's MASE recomputation trains on the runner's pool (from kelvin/spike-cap 0b85f6f) and its doc
+  sentence; the error card's MAPE as Chapter 3 defines it (backend/marts.mape_summary, ported from kelvin/forecastability-gate; zero-stock
+  months counted apart; an empty range returns no block, so the practice copy withholds it); tests/test_final_bundle.py held at 201dae4;
+  tests/test_chapter_figures.py reads the plan's product count; CLAUDE.md's gate line (it still said live held lp_run 8).
+  CHECKED AND LEFT: the supplier allocation and warehouse capacity are aggregate constraints by design, not a factor applied per product;
+  the default procurement cost (33.48) is an average applied per product but only as a fallback, and 0 of lp_run 9's 110 products use it;
+  challenger.py, backtest_forecast_run.py (run 7) and forecast_bias_diagnosis.py still use the company factor and serve nothing.
+  Report for the panel: reports/CALENDAR_GRAIN_2026-11-12.md.
+  REHEARSED twice on ssm_grain (restore of full_backup_20261111T142748Z; every public and mart table equal to live before), exit 0,
+  identical results (the second after a report-only sentence fix). MEASURED once on the final tree: scripts/check.sh --full against
+  ssm_grain GREEN, exit 0: 2,826 passed, 18 skipped, 0 failed of 2,844 (13 invariants + suite; 3 of 3 real-data tests); frontend
+  build passed. Against LIVE, check.sh --fast is red on this branch on the plan invariant and the Chapter 4 pins only, until the apply.
 
 SPIKE CAP + DECEMBER DIP RULE REFUSED (2026-11-12, Kelvin's recon brief; scored, NOT applied; nothing written to live). The code is
   NOT on this branch: it lives on kelvin/spike-cap (459f299..c100f9a), which is kept as the record and is not to be merged. That

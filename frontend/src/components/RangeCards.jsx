@@ -424,6 +424,8 @@ export const ForecastErrorSummaryCard = ({
   const runs = accuracy.over_forecast_runs || {};
   const company = accuracy.company_total?.value;
   const typical = accuracy.typical_product_weighted?.value;
+  // Chapter 3's MAPE (backend/marts.mape_summary): rule-ordered products and zero-stock months counted apart, never dropped.
+  const mape = accuracy.mape?.value != null ? accuracy.mape : null;
   // The plan's entry test on the latest forecast (GET /dashboard forecast_accuracy.entry_test): not this range's months.
   const entry = showingBefore ? null : served?.entry_test;
   const months = [...(accuracy.by_month || [])]
@@ -485,6 +487,11 @@ export const ForecastErrorSummaryCard = ({
                   {' '}· Pooled product WAPE (pieces): <strong>{wholePct(typical)}</strong>
                 </>
               )}
+              {mape && (
+                <>
+                  {' '}· MAPE (typical product): <strong>{wholePct(mape.value)}</strong>
+                </>
+              )}
               {entry && (
                 <>
                   {' '}· MASE: <strong>{entry.mase_passed} of {entry.mase_scored}</strong> under {entry.mase_gate}
@@ -500,6 +507,16 @@ export const ForecastErrorSummaryCard = ({
             {accuracy.company_total?.label} ({accuracy.company_total?.unit}).</span>
           <span className="fc-tip-line"><strong>Pooled product WAPE ({typical != null ? pct(typical) : '—'}).</strong>{' '}
             {accuracy.typical_product_weighted?.label} ({accuracy.typical_product_weighted?.unit}).</span>
+          {mape && (
+            <span className="fc-tip-line"><strong>MAPE ({pct(mape.value)}).</strong>{' '}{mape.label}{' '}
+              {mape.products.toLocaleString()} products scored; {mape.under_20_pct.toLocaleString()} under 20%,
+              {' '}{mape.at_or_above_100_pct.toLocaleString()} at 100% or more.
+              {mape.rule_ordered_products > 0 && (
+                <>{' '}{mape.rule_ordered_products.toLocaleString()} products ({mape.rule_ordered_product_months.toLocaleString()} product-months)
+                  {' '}were served an ordering rule, not a forecast, and are counted apart.</>
+              )}
+              {' '}{mape.zero_stock_months_apart.toLocaleString()} months with a zero stock count are counted apart.</span>
+          )}
           {entry && (
             <span className="fc-tip-line"><strong>MASE ({entry.mase_passed} of {entry.mase_scored} under {entry.mase_gate},
               median {entry.median_mase.toFixed(3)}).</strong>{' '}{entry.measure} On the forecast of {formatMonth(entry.forecast_date.slice(0, 7))},

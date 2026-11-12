@@ -178,6 +178,18 @@ CALENDAR_FACTOR_PRIOR_MONTHS = 3
 # on every 'ok' row), so the dashboard says the forecast is adjusted AND that
 # his sign-off is missing, from this flag. Set True only when he approves it.
 CALENDAR_FACTOR_SIGNED_OFF = False
+# GRAIN of the calendar factor (analytics/forecasting/calendar.py, 2026-11-12): "product" = computed per product (each product's
+# own month ratios pulled toward the typical product's, ProductCalendar); "company" = the company-total ratio applied to every
+# product (live until this change). The company ratio is volume-weighted and disagreed in direction with the typical product in
+# 4 of 35 month-years (March 2024: 1.136 vs 0.906). Chosen on criteria fixed before the results (STATE.md): all three product-grain
+# estimators passed the both-windows bar; this one had the lowest mean pooled WAPE.
+CALENDAR_GRAIN = "product"
+CALENDAR_OWN_YEARS_PRIOR = 2     # a product's own years weigh n / (n + 2) against the typical product's ratio (fixed beforehand)
+# December dip rule at product grain: a December target takes the most recent earlier December's product-median ratio in full
+# when it was below 1. At product grain December 2023 was a dip too (0.950), so the rule acts in December 2024 and 2025 and was
+# scored in both windows: it passed the bar against the product calendar (2024-01..2025-08 interval [-0.38, -0.20]). Not confirmed
+# by SSM as to cause. False = off.
+DECEMBER_DIP_RULE = True
 
 # --------------------------------------------------------------------------- #
 # Review flag (analytics/forecasting/review_flag.py) and the yearly-pattern

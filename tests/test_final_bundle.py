@@ -29,10 +29,27 @@ def _state() -> dict:
     return dict(re.findall(r"(\w+)=(\S+)", line))
 
 
-def test_the_attestation_is_for_the_files_in_the_tree():
+# The bundle was applied to live on 2026-11-11 from this commit's tree (STATE.md plan line) and its preflight now refuses
+# (the ledger ends at 0078). From then on the attestation is held against the files AS THEY WERE when live ran them, not
+# against the working tree: later work on the forecast (e.g. kelvin/spike-cap, which edits analytics/params.py and
+# router.py) is not a change to what was applied.
+APPLIED_AT = "201dae4"
+
+
+def _files_hash_at(commit: str) -> str:
+    import hashlib
+    import subprocess
+    h = hashlib.sha256()
+    for f in b.FILES:
+        blob = subprocess.run(["git", "-C", str(REPO), "show", f"{commit}:{f}"], capture_output=True, check=True).stdout
+        h.update(f.encode() + b"\0" + blob.replace(b"\r\n", b"\n") + b"\0")
+    return h.hexdigest()
+
+
+def test_the_attestation_is_for_the_files_the_live_apply_ran():
     att = _att()
     assert att["files"] == list(b.FILES)
-    assert att["files_sha256"] == b.files_hash(), "a file the bundle runs changed: re-run --rehearse"
+    assert att["files_sha256"] == _files_hash_at(APPLIED_AT), "the attestation does not match the files live's apply ran"
 
 
 def test_every_attested_file_exists():
@@ -47,7 +64,12 @@ def test_pending_migrations_are_exactly_the_files_after_the_last_applied():
 
 
 def test_the_rehearsed_result_is_the_plan_state_md_names():
-    exp, st = _att()["expected"], _state()
+    # STATE.md as it stood when the bundle was applied (a later plan, e.g. the spike cap's, replaces the line)
+    import subprocess
+    text = subprocess.run(["git", "-C", str(REPO), "show", f"{APPLIED_AT}:STATE.md"], capture_output=True, check=True,
+                          text=True, encoding="utf-8").stdout
+    st = dict(re.findall(r"(\w+)=(\S+)", next(ln for ln in text.splitlines() if ln.startswith("plan:"))))
+    exp = _att()["expected"]
     assert exp["plan"]["rows"] == int(st["rows"]) and exp["plan"]["pieces"] == int(st["pieces"])
     assert exp["plan"]["run_key"] == int(st["lp_run"]) and exp["plan"]["cycle"] == st["cycle"]
     assert exp["ledger_latest"] == b.PENDING[-1]

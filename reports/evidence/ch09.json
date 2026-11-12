@@ -5,7 +5,7 @@
  "files": {
   "grid": "reports/evidence/ch09_grid.csv"
  },
- "caption": "LP weights (cost w1, service w2, storage w3) on a 0.05 grid summing to 1 (231 points), allocation 103 %, 110 products, placeholder inputs. At the current weights (0.45, 0.35, 0.2): 0 SKUs cut (order below need), shortfall 0 pieces, order cost PHP 8,828,107. Within +/-0.10 of the current weights on every weight (18 other points) the cut set changes at 0; across the whole grid at 0 of 230. Shortfall across the grid 0-0 pieces; order cost PHP 8,828,107-8,828,107.",
+ "caption": "LP weights (cost w1, service w2, storage w3) on a 0.05 grid summing to 1 (231 points), allocation 103 %, 115 products, placeholder inputs. At the current weights (0.45, 0.35, 0.2): 0 SKUs cut (order below need), shortfall 0 pieces, order cost PHP 7,569,570. Within +/-0.10 of the current weights on every weight (18 other points) the cut set changes at 0; across the whole grid at 0 of 230. Shortfall across the grid 0-0 pieces; order cost PHP 7,569,570-7,569,570.",
  "verdict": "CONFIRMS",
  "verdict_detail": "0 of 18 grid points within +/-0.10 of (0.45, 0.35, 0.2) change the cut-SKU set",
  "criterion": "At any grid point within +/-0.10 of (0.45, 0.35, 0.20) on every weight, the cut-SKU set (short > 0 at 103%) differs from the default's",
@@ -16,12 +16,12 @@
   {
    "id": "G7",
    "pass": true,
-   "detail": "harness at weights (0.45, 0.35, 0.2) equals run_lp --dry-run order for order at 103%, 105%, 108% (110 products each)"
+   "detail": "harness at weights (0.45, 0.35, 0.2) equals run_lp --dry-run order for order at 103%, 105%, 108% (115 products each)"
   }
  ],
  "script": "scripts/evidence/lp_charts.py",
- "code_commit": "afc4d7e +uncommitted",
- "computed_at": "2026-11-11T19:06:42",
+ "code_commit": "941fadb",
+ "computed_at": "2026-11-12T21:46:23",
  "data_notes": [
   "LP inputs are PLACEHOLDERS (analytics/params.py PLACEHOLDERS), realistic values the team chose, not SSM's figures: allocation_pct 103, review_days 5, lead_days 3, target_weeks 3, cover_rule aggregate, warehouse_capacity 3.81684e+06, default_procurement_cost_per_unit 33.48, storage_cost_per_unit 0.5.",
   "Pool: Category A with a stored forecast of status 'ok' and MASE < 1 (pipeline gate)."

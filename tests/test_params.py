@@ -87,6 +87,10 @@ PINNED = {
     "LOW_PIECES_6M": 500,
     # Safety stock follows the level for treated products, decided 2026-11-10 (scripts/run_lp.level_factor).
     "SAFETY_STOCK_FOLLOWS_LEVEL": "treated",
+    # The calendar factor at product grain and the December rule on it, 2026-11-12 (analytics/forecasting/calendar.py).
+    "CALENDAR_GRAIN": "product",
+    "CALENDAR_OWN_YEARS_PRIOR": 2,
+    "DECEMBER_DIP_RULE": True,
 }
 
 

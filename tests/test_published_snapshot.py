@@ -11,10 +11,12 @@ def test_snapshot_json_names_its_actuals_version_and_inputs():
     assert set(snap["inputs_sha256"]) == {"accuracy_as_served_rows.csv", "demand_money.csv", "mase_rows.csv",
                                           "error_decomposition_row.csv"}
     f = snap["figures"]
-    assert (f["mase"]["mase_below_1"], f["mase"]["products_scored"]) == (110, 175)
+    assert (f["mase"]["mase_below_1"], f["mase"]["products_scored"]) == (115, 175)   # 110 before the product-grain calendar
     # 749 on the untreated backtest (run 11); 762 since 2026-11-10, the decomposition on the treated run 16; 797 since
-    # 2026-11-11 (migration 0077: the rebuilt safety stock of zero-forecast and succession/fading product-months follows the level).
-    assert f["error_decomposition"]["A"]["exceeds_safety_stock_months"] == 797
+    # 2026-11-11 (migration 0077: the rebuilt safety stock of zero-forecast and succession/fading product-months follows the level);
+    # 852 since the calendar factor is computed per product (2026-11-12, scripts/apply_calendar_grain.py): the factor no longer
+    # raises every product by the company's volume-weighted rise, so more months' demand beats forecast + safety stock.
+    assert f["error_decomposition"]["A"]["exceeds_safety_stock_months"] == 852
 
 
 def test_figures_reproduce_from_the_frozen_rows(capsys):

@@ -202,3 +202,54 @@ safety stock) and one deleted (`tests/test_transform_config.py`, `def test_dummy
 - Table 4.2.18 (monthly forecast, WAPE, surplus and shortage), Table 4.2.15 / 4.2.16 and section 4.2.2.1.3 (rows h to l
   above): moved by the 2026-11-10 treatments, before this bundle.
 - Tables 4.2.22 and 4.2.25 print the mixed policy pair (-22.6 / +14.1); the consistent pairs are in row o.
+
+## 9. The calendar factor at product grain, 2026-11-12 (`scripts/apply_calendar_grain.py`, branch kelvin/calendar-grain)
+
+Supersedes nothing in sections 1-8 except the figures below; the spike cap (refused) and the forecastability gate (not adopted)
+are on other branches and never reached live. Every "after" value was measured on the rehearsal copy (`ssm_grain`: a restore of
+live's backup `full_backup_20261111T142748Z` plus the apply), and the apply refuses to finish unless live reproduces it
+(`docs/CALENDAR_GRAIN_REHEARSAL.json`). Every before/after is on the same products and product-months.
+
+What changed: the calendar factor (DEC-41) was the company total's month ratio, applied to every product. In 4 of 35 month-years it
+pointed the opposite way to the typical product (March 2024: company 1.136, product median 0.906, 61% of products fell) and in 8
+more it differed by over 10%: a few large products move the total. It is now computed per product: each product's own month
+ratios, pulled toward the typical product's (weight n / (n + 2) for n own years), halfway to 1; December takes last December's
+typical-product dip in full when it was a dip (at product grain December 2023 was a dip, 0.950, so the rule acts in December 2024
+and 2025). Chosen on criteria fixed before the results (STATE.md).
+
+| Figure | Before (live, lp_run 9) | After (lp_run 10) |
+|---|---|---|
+| Calendar factor for March 2026 | 1.0762, every product | per product, 0.7103 to 1.2608 |
+| March forecast, 175 'ok' products | 1,952,313 | **1,837,121** (-5.9%) |
+| MASE < 1 (Tier A as of 2026-02) / median | 110 of 175 / 0.823 | **115 of 175 / 0.755** |
+| Review flags 2026-03 | 63 of 189 | **40 of 189** |
+| Plan rows / ordering / pieces | 110 / 67 / 378,700 | **115 / 64 / 330,212** (-12.8%) |
+| Safety stock / forecast over the plan rows | 459,359 / 1,184,313 | **466,159 / 1,146,783** |
+| Critical / Urgent / Planned: products, ordering, pieces | 14/14/62,604; 6/6/67,300; 90/47/248,796 | **15/15/58,832; 5/5/33,328; 95/44/238,052** |
+| Categories (products / ordering / pieces) | Hair 29/19/138,516; Fabric Cleaning 25/12/86,122; Deo 13/11/58,248; Fabric Enh 8/7/50,040; Cooking Aids 20/13/35,142; Condiments 7/3/9,288; Oral 4/1/912; Skin Cleansing 4/1/432 | **Hair 30/19/130,116; Fabric Cleaning 25/12/72,368; Deo 14/11/50,256; Fabric Enh 8/5/36,600; Cooking Aids 19/12/32,364; Condiments 11/3/7,296; Oral 4/1/876; Skin Cleansing 4/1/336** |
+| Error card Sep 2025-Feb 2026 (208 products, 1,078 product-months): company-total / pooled product WAPE | 13.30% / 38.27% | **7.22% / 36.53%** |
+| Error card Sep 2025-Feb 2026: MAPE (183 products scored both sides) / under 20% / at 100%+ | 41.0% / 24 / 39 | **35.2% / 31 / 34** |
+| Error card Sep 2025-Feb 2026: surplus / shortage pesos | PHP 35.34M / 25.84M | **PHP 28.58M / 28.29M** |
+| Error card 2024-01..2025-08 (270 products, 3,292 product-months): company / pooled WAPE | 10.23% / 27.88% | **9.07% / 27.25%** |
+| Error card 2024-01..2025-08: MAPE (237 products both sides) / under 20% / at 100%+ | 34.6% / 27 / 45 | **32.8% / 38 / 42** |
+| Error card 2024-01..2025-08: surplus / shortage pesos | PHP 100.84M / 76.70M | **PHP 93.69M / 79.54M** |
+| Error card Mar 2025-Feb 2026 (the card's default range; 233 products): company / pooled / MAPE (210) | 10.29% / 32.28% / 38.2% | **8.52% / 32.04% / 34.0%** |
+| Products at 50%+ MAPE (as-served frame, 183 / 237 products) | 73 / 76 | **63 / 74** |
+| Backtest pooled WAPE (as-served frame), 95% interval of the change: Sep-Feb / earlier | 38.07% / 27.86% | **36.33% [-3.43, -0.19] / 27.24% [-0.91, -0.34]** |
+| Backtest median MASE, interval: Sep-Feb / earlier | 0.731 / 0.901 | **0.646 [-0.132, -0.019] / 0.869 [-0.080, +0.016]** |
+| Planned products (lp_run 9's 110): pooled WAPE Sep-Feb / earlier | 32.63% / 28.47% | **31.07% [-3.17, -0.10] / 27.82% [-0.91, -0.37]** |
+| Headline, calendar-adjusted (whole window): median product WAPE / pooled / pesos | 37.88% / 29.69% / 10.77% | **36.37% / 28.87% / 8.70%** |
+| Headline, no calendar factor | 38.55% / 30.12% / 10.02% | unchanged (that run has no calendar factor) |
+| **Stock-out price: Tier A months beyond safety stock (29 backtest months)** | **797 (18.24%)** | **852 (19.50%)**, +55 |
+| **Tier A pesos / pieces beyond safety stock** | **PHP 40.49M / 2,811,745** | **PHP 43.77M / 3,096,724** (+PHP 3.27M, about PHP 113k a month) |
+| Tier A absorbed by safety stock, pieces / PHP | 4,860,408 / 62,049,541 | 5,083,650 / 64,062,674 |
+| Tier B / C months beyond safety stock (counterfactual tiers) | 902 / 1,782 | 952 / 1,807 |
+| Chapter 4 code figures: critical counted products / stock / order | 11 / 3,192 / 45,468 | **12 / 3,198 / 42,272** |
+| critical absent products / order; critical total order | 3 / 17,136; 62,604 | **3 / 16,560; 58,832** |
+| count 2 Mar over 3 Feb / over 6 Apr; requirement at 3 Feb / 6 Apr (M pcs) | 3.7 / 3.0; 1.53 / 1.47 | **3.7 / 2.9; 1.47 / 1.40** |
+| single delivery requirement (sensitivity) / before rounding | 240,236 / 237,360 | **213,062 / 210,825** |
+| Chart 10: measured monthly exceedance at Z = 1.28 (95% CI) | 9.1% (7.9-10.5) | **9.0% (7.7-10.3)** |
+| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,844 / 2,826; 2,838 / 2,817** |
+
+Manuscript figure checks: Tables 4.2.19 and 4.2.20 pass on the new plan; figures h-l and o-q stay "held" against older manuscript
+values exactly as before (chapter work). DEC-41's text ("the company calendar factor", "1.0762") no longer describes the system.

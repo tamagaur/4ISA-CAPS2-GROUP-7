@@ -37,7 +37,8 @@ def test_the_static_figures_match_the_pin():
 
 
 def test_the_dependence_figures_are_the_published_rounding_of_the_query():
-    rows = [("2026-01", 110, 598943, 1628023.44), ("2026-02", 110, 2232032, 414820.41), ("2026-03", 110, 737235, 1519085.62)]   # lp_run 7
+    n = cf.DEPENDENCE_PRODUCTS   # the stock and requirement sums are lp_run 7's; the count is the pinned plan's
+    rows = [("2026-01", n, 598943, 1628023.44), ("2026-02", n, 2232032, 414820.41), ("2026-03", n, 737235, 1519085.62)]
     assert cf.dependence_figures(rows) == {"count_2mar_over_3feb": 3.7, "count_2mar_over_6apr": 3.0,
                                            "requirement_at_3feb_million_pieces": 1.63, "requirement_at_6apr_million_pieces": 1.52}
 
@@ -49,14 +50,14 @@ def test_a_dependence_read_of_the_wrong_products_is_refused():
 
 def test_the_single_delivery_figures_come_from_the_query_and_its_control_holds():
     # (products, plan total, live formula rounded, one delivery raw, one delivery rounded)
-    assert cf.single_delivery_figures([(110, 419344, 419344, 277386.57, 280856)]) == {   # lp_run 7
+    assert cf.single_delivery_figures([(cf.DEPENDENCE_PRODUCTS, 419344, 419344, 277386.57, 280856)]) == {   # lp_run 7's sums
         "single_delivery_requirement_pieces": 280856, "single_delivery_requirement_before_case_rounding_pieces": 277387}
 
 
 def test_a_single_delivery_read_whose_control_misses_the_plan_is_refused():
     # The same query rebuilds the live plan; if it cannot, its alternative means nothing.
     with pytest.raises(SystemExit):
-        cf.single_delivery_figures([(110, 419344, 419000, 277387, 280856)])
+        cf.single_delivery_figures([(cf.DEPENDENCE_PRODUCTS, 419344, 419000, 277387, 280856)])
     with pytest.raises(SystemExit):
         cf.single_delivery_figures([(108, 419344, 419344, 277387, 280856)])
 

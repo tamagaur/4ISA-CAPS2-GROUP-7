@@ -984,7 +984,7 @@ def idle_items_query(count_period: str, limit: int | None = None) -> tuple[str, 
 # Since 2026-11-10 the run with succession + fading applied, as the forecast is served (scripts/accuracy_as_served.py
 # AS_SERVED_RUNS); the untreated run of that window stays selectable by run_id.
 DEFAULT_BACKTEST_LABEL = ("as-served backtest 2023-10..2026-02, Tier A the month before each month, succession + fading, "
-                          "calendar-adjusted")
+                          "product calendar, calendar-adjusted")
 # A calendar-adjusted run is the at-the-time run with this suffix on its label
 # (scripts/backtest_forecast_run.py's at_the_time_calendar); its unadjusted twin is
 # the same label without it, so the card can show both from the run list alone.
@@ -1123,6 +1123,35 @@ def accuracy_headlines(company_total: float | None, typical_product_weighted: fl
     }
 
 
+# Chapter 3's MAPE (section 3.4.4.2.2.2; Kelvin, 2026-11-12: the Technical Adviser and panel ask for MAPE). Each product's
+# mean |forecast - actual| / actual over its months with a sale, the median over products. Graded apart, and counted in the
+# answer, never dropped silently: months whose opening or closing stock count is zero (sales capped by an empty shelf measure
+# stock, not demand) and any product-month served by an ordering rule instead of a forecast (method 'rule_order'; none is
+# written today: the forecastability gate of kelvin/forecastability-gate was not adopted, so that count is 0).
+RULE_ORDER_METHOD = "rule_order"
+MAPE_LABEL = ("Typical product's percentage miss (MAPE, as Chapter 3 defines it): each product's average monthly percentage "
+              "miss over the months it sold, the middle product of them. Months with a zero stock count are counted apart, since "
+              "their sales measure an empty shelf, not demand.")
+
+
+def _zero_stock(row: dict) -> bool:
+    return any(row.get(k) is not None and float(row[k]) == 0 for k in ("opening_pieces", "closing_pieces"))
+
+
+def mape_summary(by_product: dict) -> dict:
+    vals = sorted(p["ape_sum"] / p["ape_n"] for p in by_product.values() if p.get("ape_n"))
+    n = len(vals)
+    median = None if not n else (vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2)
+    return {
+        "value": round(median, 6) if median is not None else None, "label": MAPE_LABEL,
+        "measure": "median over products of mean(|forecast - actual| / actual) over the product's months with actual > 0",
+        "products": n, "under_20_pct": sum(1 for v in vals if v < 0.20), "at_or_above_100_pct": sum(1 for v in vals if v >= 1.0),
+        "rule_ordered_products": sum(1 for p in by_product.values() if p.get("rule_rows")),
+        "rule_ordered_product_months": sum(int(p.get("rule_rows") or 0) for p in by_product.values()),
+        "zero_stock_months_apart": sum(int(p.get("stockout_rows") or 0) for p in by_product.values()),
+    }
+
+
 OVER_RUN_RULE = ("over-forecast {n}+ months in a row as of the product's last scored month in the range "
                  "(the over-forecast part of DEC-33, on this range's forecasts)")
 
@@ -1152,10 +1181,19 @@ def accuracy_aggregates(rows: list[dict]) -> dict:
             m["surplus_pesos"] += max(fc - act, 0.0) * price
             m["shortage_pesos"] += max(act - fc, 0.0) * price
             m["actual_pesos"] += act * price
-        p = by_product.setdefault(int(r["product_key"]), {"abs": 0.0, "act": 0.0, "last": None, "priced": False})
+        p = by_product.setdefault(int(r["product_key"]), {"abs": 0.0, "act": 0.0, "last": None, "priced": False,
+                                                          "ape_sum": 0.0, "ape_n": 0, "rule_rows": 0, "stockout_rows": 0})
         p["abs"] += abs(fc - act)
         p["act"] += abs(act)
         p["priced"] = p["priced"] or price is not None
+        # Chapter 3 MAPE (mape_summary): months the product sold, not under the ordering rule, stock count not zero
+        if r.get("method") == RULE_ORDER_METHOD:
+            p["rule_rows"] += 1
+        elif _zero_stock(r):
+            p["stockout_rows"] += 1
+        elif act > 0:
+            p["ape_sum"] += abs(fc - act) / act
+            p["ape_n"] += 1
         p["last"] = r  # rows arrive ordered by product, then month
     return {
         "product_months": len(rows),
@@ -1195,10 +1233,20 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
             FROM scored GROUP BY month) x
         UNION ALL
         SELECT 'product', row_to_json(x) FROM (
-            SELECT p.product_key, p.abs_miss, p.abs_actual, p.priced, l.month, l.direction, l.run_length,
+            SELECT p.product_key, p.abs_miss, p.abs_actual, p.priced, p.rule_rows, p.stockout_rows, p.ape_sum, p.ape_n, l.month, l.direction, l.run_length,
                    l.miss_pieces, l.price_per_piece, l.sku_code, l.product_name, l.possibly_stock_limited
             FROM (SELECT product_key, SUM(ABS(forecast_pieces - actual_pieces)) AS abs_miss,
-                         SUM(ABS(actual_pieces)) AS abs_actual, bool_or(price_per_piece IS NOT NULL) AS priced
+                         SUM(ABS(actual_pieces)) AS abs_actual, bool_or(price_per_piece IS NOT NULL) AS priced,
+                         -- Chapter 3 MAPE (mape_summary): the same three cases as accuracy_aggregates
+                         COUNT(*) FILTER (WHERE method = 'rule_order') AS rule_rows,
+                         COUNT(*) FILTER (WHERE method IS DISTINCT FROM 'rule_order'
+                                          AND (opening_pieces = 0 OR closing_pieces = 0)) AS stockout_rows,
+                         COALESCE(SUM(ABS(forecast_pieces - actual_pieces) / actual_pieces) FILTER (
+                             WHERE method IS DISTINCT FROM 'rule_order' AND NOT COALESCE(opening_pieces = 0 OR closing_pieces = 0, false)
+                               AND actual_pieces > 0), 0) AS ape_sum,
+                         COUNT(*) FILTER (WHERE method IS DISTINCT FROM 'rule_order'
+                                          AND NOT COALESCE(opening_pieces = 0 OR closing_pieces = 0, false)
+                                          AND actual_pieces > 0) AS ape_n
                   FROM scored GROUP BY product_key) p
             JOIN (SELECT DISTINCT ON (product_key) product_key, month, direction, run_length, miss_pieces,
                          price_per_piece, sku_code, product_name, possibly_stock_limited
@@ -1227,6 +1275,8 @@ def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
         elif r["kind"] == "product":
             products[int(d["product_key"])] = {
                 "abs": float(d["abs_miss"]), "act": float(d["abs_actual"]), "priced": bool(d["priced"]),
+                "ape_sum": float(d.get("ape_sum") or 0), "ape_n": int(d.get("ape_n") or 0),
+                "rule_rows": int(d.get("rule_rows") or 0), "stockout_rows": int(d.get("stockout_rows") or 0),
                 "last": {k: d[k] for k in ("month", "direction", "run_length", "miss_pieces", "price_per_piece",
                                            "sku_code", "product_name", "possibly_stock_limited")}}
         else:
@@ -1253,7 +1303,7 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
     if not agg["product_months"]:
         return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
                 "run_labels": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
-                **accuracy_headlines(None, None),
+                **accuracy_headlines(None, None), "mape": None,   # nothing scored: no MAPE block (a withheld range is built from this)
                 "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
                 "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
                                    "with a real actual in these months.")}
@@ -1309,6 +1359,7 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
         # company_total / typical_product_weighted are the labelled pair to show; wape_pieces
         # and total_wape_pesos are the same two numbers under their older names.
         **accuracy_headlines(month_total_wape, pooled_wape),
+        "mape": mape_summary(by_product),
         "wape_pieces": pooled_wape,
         "median_product_wape": round(median, 6) if median is not None else None,
         "total_wape_pesos": month_total_wape,

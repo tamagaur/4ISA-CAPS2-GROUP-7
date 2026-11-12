@@ -43,7 +43,7 @@ import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 
-from analytics.forecasting.calendar import company_totals
+from analytics.forecasting.calendar import calendar_basis, for_product
 from analytics.forecasting.global_model import GlobalForecaster
 from analytics.forecasting.review_flag import review_flag
 from analytics.forecasting.router import assert_real_rows, route
@@ -103,12 +103,12 @@ def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool =
     wanted = set(int(k) for k in fr.product_key)
     last_month = (cycle - pd.DateOffset(months=1)).strftime("%Y-%m")   # the latest real demand month
     series = {int(k): build_series(g, last_month) for k, g in demand.groupby("product_key") if int(k) in wanted}
-    calendar_totals = company_totals(demand) if calendar else None
+    calendar_totals = calendar_basis(demand) if calendar else None
     forecaster = GlobalForecaster(series)
 
     gaps = []
     for r in fr[fr.status == "ok"].itertuples():
-        got = route(series[int(r.product_key)], cycle, forecaster, calendar_totals=calendar_totals,
+        got = route(series[int(r.product_key)], cycle, forecaster, calendar_totals=for_product(calendar_totals, int(r.product_key)),
                     context=None if contexts is None else contexts.get(int(r.product_key)))["value"]
         gaps.append(abs(round(float(got), STORED_DECIMALS) - float(r.forecast_value)))
     worst = max(gaps, default=0.0)
@@ -123,7 +123,7 @@ def compute(cycle_date, fr: pd.DataFrame, demand: pd.DataFrame, calendar: bool =
         k = int(r.product_key)
         s = series.get(k)
         served_bin = r.served_bin if r.status == "ok" else None
-        f = review_flag(s, cycle, served_bin, forecaster, calendar_totals,
+        f = review_flag(s, cycle, served_bin, forecaster, for_product(calendar_totals, k),
                         None if contexts is None else contexts.get(k)) if s is not None else {
             "needs_review": None, "reasons": [], "collapse": None, "collapse_ratio": None, "over_run_months": None}
         rows.append({"product_key": k, "sku_code": r.sku_code, "product_name": r.product_name,

@@ -10,17 +10,17 @@ no disagreement.
 
 | Urgency | Rule | Products | Ordering more than 0 | Order (pieces) | Safety stock (pieces) | Forecast (pieces) |
 |---|---|---|---|---|---|---|
-| Critical | Stock below safety stock | 14 | 14 | 62,604 | 21,973 | 31,801 |
-| Urgent | Stock below target stock | 6 | 6 | 67,300 | 18,653 | 63,011 |
-| Planned | Stock at or above target | 90 | 47 | 248,796 | 418,734 | 1,089,501 |
-| **Total** | | **110** | **67** | **378,700** | **459,359** | **1,184,313** |
+| Critical | Stock below safety stock | 15 | 15 | 58,832 | 22,001 | 29,054 |
+| Urgent | Stock below target stock | 5 | 5 | 33,328 | 10,094 | 30,051 |
+| Planned | Stock at or above target | 95 | 44 | 238,052 | 434,064 | 1,087,677 |
+| **Total** | | **115** | **64** | **330,212** | **466,159** | **1,146,783** |
 
 Note: Order quantities are whole case packs, so the order column adds up exactly. Safety stock and forecast are stored
 to two decimals and shown rounded; each total is the rounded sum of the unrounded rows, so the displayed rows can
-differ from it by 1 (forecast rows add to 1,184,313).
+differ from it by 1 (forecast rows add to 1,146,782).
 
 Query: `GET /recommendations?principal=unilever` (cycle 2026-03-01, `lp_recommendation` of
-`lp_run` 9, rows with `outside_plan` excluded), grouped by `urgency`; Products = rows, Ordering = rows with
+`lp_run` 10, rows with `outside_plan` excluded), grouped by `urgency`; Products = rows, Ordering = rows with
 `plan_q_i > 0`, Order = Σ `plan_q_i`, Safety stock = Σ `ss_i`, Forecast = Σ `forecast_units`. Stock count
 2026-03-02; Tier A as of 2026-02 (`t12m_new`).
 
@@ -28,20 +28,20 @@ Query: `GET /recommendations?principal=unilever` (cycle 2026-03-01, `lp_recommen
 
 | Category | Products in plan | Ordering more than 0 | Order (pieces) |
 |---|---|---|---|
-| Hair Care | 29 | 19 | 138,516 |
-| Fabric Cleaning | 25 | 12 | 86,122 |
-| Deodorants & Fragrances | 13 | 11 | 58,248 |
-| Fabric Enhancers | 8 | 7 | 50,040 |
-| Cooking Aids | 20 | 13 | 35,142 |
-| Condiments | 7 | 3 | 9,288 |
-| Oral Care | 4 | 1 | 912 |
-| Skin Cleansing | 4 | 1 | 432 |
-| **Total** | **110** | **67** | **378,700** |
+| Hair Care | 30 | 19 | 130,116 |
+| Fabric Cleaning | 25 | 12 | 72,368 |
+| Deodorants & Fragrances | 14 | 11 | 50,256 |
+| Fabric Enhancers | 8 | 5 | 36,600 |
+| Cooking Aids | 19 | 12 | 32,364 |
+| Condiments | 11 | 3 | 7,296 |
+| Oral Care | 4 | 1 | 876 |
+| Skin Cleansing | 4 | 1 | 336 |
+| **Total** | **115** | **64** | **330,212** |
 
 Eight categories: Skin Care is not in the plan (its only row was the run-less accepted recommendation 4, which is
 outside the plan).
 
-Query: the same 110 items, joined to `product_dimension.category_path` on `sku_code` (Unilever, grain `sku`), grouped
+Query: the same 115 items, joined to `product_dimension.category_path` on `sku_code` (Unilever, grain `sku`), grouped
 by category, ordered by order pieces.
 
 ## Table 4.2.4 Sales by Category, Unilever (March 2025 – February 2026)

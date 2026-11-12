@@ -62,7 +62,7 @@ from analytics.forecasting.baseline import (
     sba_forecast,
 )
 from analytics.forecasting.diagnostic_metrics import mape, mase, naive_scale, rmse, wape
-from analytics.forecasting.calendar import company_totals
+from analytics.forecasting.calendar import calendar_basis, for_product
 from analytics.forecasting.global_model import GlobalForecaster, missing_months, with_missing, with_placeholder
 from analytics.forecasting.practice_switch import labelled_rows_permitted
 from analytics.forecasting.router import LIVE_MODEL, assert_real_rows, ma3_value, rolling_one_step, route
@@ -1058,11 +1058,12 @@ def served_forecasts(df, demand_by_key, planning_month, calendar_totals=None, co
         p_key = int(r["product_key"])
         series = series_by_key[p_key]
         ctx = None if contexts is None else contexts.get(p_key)
-        routed = route(series, planning_month, forecaster, calendar_totals=calendar_totals, allow_placeholder=allow_placeholder,
+        cal = for_product(calendar_totals, p_key)   # the product's own calendar factor (analytics/forecasting/calendar.py, GRAIN)
+        routed = route(series, planning_month, forecaster, calendar_totals=cal, allow_placeholder=allow_placeholder,
                        context=ctx)
         train, holdout = train_holdout_split(series, holdout_fraction=HOLDOUT_FRACTION)
         scored = rolling_one_step(series, list(holdout.index), forecaster, force_bin=routed["bin"],
-                                  calendar_totals=calendar_totals, allow_placeholder=allow_placeholder, context=ctx)
+                                  calendar_totals=cal, allow_placeholder=allow_placeholder, context=ctx)
         a, p = scored["actual"].to_numpy(), scored["value"].to_numpy()     # missing months are not scored
         out[p_key] = {
             **routed,
@@ -1194,7 +1195,7 @@ def _write_forecast_result(cur, df, calendar: bool = False):
 
     labelled = labelled_rows_permitted(cur, demand)
     assert_real_rows(demand, allow_placeholder=labelled)
-    calendar_totals = company_totals(demand) if calendar else None
+    calendar_totals = calendar_basis(demand) if calendar else None
     run_meta = {"code_version": _code_version(), "calendar_factor_on": bool(calendar),
                 "written_at": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")}
     if labelled:

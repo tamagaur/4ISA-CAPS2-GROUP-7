@@ -2491,3 +2491,22 @@ def test_the_dashboard_tier_cards_state_the_basis_they_were_ranked_on():
         body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
     assert body["abc_basis"]["method"] == "range_pareto"
     assert body["abc_basis"]["planning_basis"]["unilever"]["method"] == "t12m_new"
+
+
+def test_error_card_mape_follows_chapter_3_and_counts_what_it_sets_apart():
+    """Chapter 3's MAPE (marts.mape_summary, 2026-11-12): each product's mean |f - a| / a over months it sold, median over
+    products. Rule-ordered product-months and zero-stock months are counted apart, never silently dropped."""
+    rows = [
+        _accuracy_row(1, "2024-01", 110, 100), _accuracy_row(1, "2024-02", 90, 100),            # product 1: 10%
+        _accuracy_row(2, "2024-01", 150, 100), {**_accuracy_row(2, "2024-02", 900, 10), "method": "rule_order"},  # 50%; rule row apart
+        {**_accuracy_row(3, "2024-01", 500, 5), "opening_pieces": 0},                           # zero stock: apart
+        _accuracy_row(3, "2024-02", 130, 100),                                                    # product 3: 30%
+    ]
+    acc = marts.accuracy_summary(rows, "2024-01", "2024-02", 3)
+    m = acc["mape"]
+    assert m["value"] == pytest.approx(0.30) and m["products"] == 3
+    assert m["under_20_pct"] == 1 and m["at_or_above_100_pct"] == 0
+    assert m["rule_ordered_products"] == 1 and m["rule_ordered_product_months"] == 1 and m["zero_stock_months_apart"] == 1
+    agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
+    assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3) == acc
+    assert marts.accuracy_summary([], "2024-01", "2024-02", 3)["mape"] is None   # no block at all when nothing is scored

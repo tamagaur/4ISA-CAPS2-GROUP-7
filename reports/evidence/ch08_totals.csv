@@ -1,4 +1,4 @@
 allocation_pct,products,need,ordered,shortfall,n_short,short_skus,month_end_cover_weeks,cover_gap_php,run_lp_says_met,order_cost,allocation_binds
-103,110,374794,378700,0,0,,4.41539,4.49086e+06,True,8.82811e+06,False
-105,110,374794,378700,0,0,,4.41539,4.49086e+06,True,8.82811e+06,False
-108,110,374794,378700,0,0,,4.41539,4.49086e+06,True,8.82811e+06,False
+103,115,326491,330212,0,0,,4.79589,5.30476e+06,True,7.56957e+06,False
+105,115,326491,330212,0,0,,4.79589,5.30476e+06,True,7.56957e+06,False
+108,115,326491,330212,0,0,,4.79589,5.30476e+06,True,7.56957e+06,False

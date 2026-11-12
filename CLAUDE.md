@@ -19,7 +19,7 @@ SCOPE FENCE. Only what the prompt names is in scope. Never touch the forecast,
 the LP objective, migrations or frontend files unless told to. Log a side
 finding in one line; do not investigate it.
 
-NUMERIC GATE. Plan invariant: 110 rows, 378,700 pieces, nothing decided (lp_run 9, from scripts/apply_final_bundle.py of 2026-11-11: safety stock follows the level for treated AND zero-forecast products; live holds lp_run 8, 110 / 381,484, until Kelvin runs that command; lp_run 7 was 110 / 419,344, lp_run 6 109 / 435,988). If a
+NUMERIC GATE. Plan invariant: 115 rows, 330,212 pieces, nothing decided (lp_run 10, from scripts/apply_calendar_grain.py of 2026-11-12: the calendar factor computed per product; live holds lp_run 9, 110 / 378,700, until Kelvin runs that command from branch kelvin/calendar-grain; lp_run 8 was 110 / 381,484, lp_run 7 110 / 419,344, lp_run 6 109 / 435,988). If a
 change moves either, STOP and report. Pinned manuscript figures are verified,
 never recomputed into new values.
 

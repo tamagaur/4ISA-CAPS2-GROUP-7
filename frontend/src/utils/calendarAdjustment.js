@@ -36,9 +36,10 @@ export function calendarSignoffText(signedOff) {
 }
 
 // What the adjustment is, for a "?" — the API's own sentence when sent.
-export const CALENDAR_METHOD_FALLBACK = 'Each forecast is multiplied by how that calendar month has sold against the 3 '
-  + 'months before it in earlier years (company total, halfway toward no change); a month with no earlier year on '
-  + 'record is left as it is.';
+export const CALENDAR_METHOD_FALLBACK = 'Each product’s forecast is multiplied by how that calendar month has sold against '
+  + 'the 3 months before it in earlier years: the product’s own history, pulled toward the typical product’s, halfway '
+  + 'toward no change; a month with no earlier year on record is left as it is. December takes last December’s '
+  + 'typical-product dip in full when last December was a dip.';
 
 // Why the adjustment can make older months worse (Kelvin, 2026-10-19): each
 // month's factor is learned only from the same month in earlier years.

@@ -62,8 +62,10 @@ def test_calendar_adjusted_state_reads_the_label_suffix():
 
 def test_the_unadjusted_twin_is_the_label_without_the_suffix():
     sql, params = marts.unadjusted_twin_query(marts.DEFAULT_BACKTEST_LABEL)
-    # The default is the as-served run since 2026-10-21 (Kelvin): run 11, whose twin is run 10.
-    assert params["label"] == "as-served backtest 2023-10..2026-02, Tier A the month before each month, succession + fading"
+    # The default is the as-served run since 2026-10-21 (Kelvin); treated since 2026-11-10; with the calendar factor at product grain
+    # since 2026-11-12 (scripts/apply_calendar_grain.py): its twin is the same series' run without the calendar factor.
+    assert params["label"] == ("as-served backtest 2023-10..2026-02, Tier A the month before each month, succession + fading, "
+                               "product calendar")
     assert "mart.forecast_run" in sql
 
 

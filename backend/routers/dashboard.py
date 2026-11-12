@@ -1151,9 +1151,10 @@ def calendar_adjustment(gated_rows: list) -> dict:
         "years": years[0] if len(years) == 1 else None, "years_min": years[0] if years else None,
         "years_max": years[-1] if years else None,
         "forecast_pieces": round(forecast, 2), "before_pieces": round(before, 2),
-        "method": ("Each forecast is multiplied by how that calendar month has sold against the 3 months "
-                   "before it in earlier years (company total, halfway toward no change); a month with no "
-                   "earlier year on record is left as it is."),
+        "method": ("Each product's forecast is multiplied by how that calendar month has sold against the 3 months "
+                   "before it in earlier years: the product's own history, pulled toward the typical product's, halfway "
+                   "toward no change; a month with no earlier year on record is left as it is. December takes last "
+                   "December's typical-product dip in full when last December was a dip."),
     }
 
 

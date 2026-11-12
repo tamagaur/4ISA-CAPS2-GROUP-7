@@ -8,20 +8,20 @@
   "demand_pieces": 100888220.0,
   "fingerprint": "b31bf58d9b5eaf99ee9d1ef70643d668",
   "latest_load_event_key": 382,
-  "mart_refresh_id": 65,
-  "mart_refreshed_at": "2026-11-11T10:51:14.198060+00:00"
+  "mart_refresh_id": 74,
+  "mart_refreshed_at": "2026-11-12T21:59:11.104169+08:00"
  },
  "mart_refresh": {
-  "refresh_id": 65,
-  "refreshed_at": "2026-11-11T10:51:14.198060+00:00",
+  "refresh_id": 74,
+  "refreshed_at": "2026-11-12T21:59:11.104169+08:00",
   "trigger": "run_lp"
  },
  "forecast_result_date": "2026-03-01",
  "inputs_sha256": {
-  "accuracy_as_served_rows.csv": "056db51707d0e3be25b028c1cbb5eae9d41373004a6c3c32ab7646c22954e33d",
+  "accuracy_as_served_rows.csv": "476d84021a27ea3366d38d0b1d9888263935c084d8013c0c5cfabd2f267cf9df",
   "demand_money.csv": "1ed3f5e84366fac6c8a13d04e4f7e3428dbf72b67804411093fbf27fdc2d5d47",
-  "error_decomposition_row.csv": "b197ed8adf878bf027750c962b810adf1d94a0216b313873c3db46b989471d60",
-  "mase_rows.csv": "00407ed1dda35eec4966e55411b825b6cd68dd8c33b9f218479918b44edbeb98"
+  "error_decomposition_row.csv": "a018487b65fe7e5184237ba9d7684375563021272d330ac8c267b401b7d3cca7",
+  "mase_rows.csv": "44eedcc9f8eba9f973864bd11e30a1fe85e698ddb7891c669b0870f60b5d32de"
  },
  "figures": {
   "headline_wape": {
@@ -35,68 +35,68 @@
     "product_months": 4370
    },
    "as_served_calendar": {
-    "median_product_wape_served": 0.3787588269707069,
-    "pooled_wape_pcs_served": 0.29688111769540537,
-    "total_wape_pesos_served": 0.10770928953569209,
-    "surplus_share_of_miss_pesos": 0.5688129964209773,
-    "surplus_share_of_miss_pieces": 0.5754182277272205,
+    "median_product_wape_served": 0.36373281169834204,
+    "pooled_wape_pcs_served": 0.28866153988047427,
+    "total_wape_pesos_served": 0.08704172595057479,
+    "surplus_share_of_miss_pesos": 0.5295354005051959,
+    "surplus_share_of_miss_pieces": 0.5344022251700228,
     "products": 310,
     "product_months": 4370
    }
   },
   "mase": {
    "products_scored": 175,
-   "mase_below_1": 110,
-   "pass_rate": 0.6285714285714286,
-   "median_mase": 0.823
+   "mase_below_1": 115,
+   "pass_rate": 0.6571428571428571,
+   "median_mase": 0.755
   },
   "error_decomposition": {
    "A": {
     "product_months": 4370,
-    "over_pieces": 10397753.024420358,
-    "absorbed_pieces": 4860407.934554784,
-    "beyond_pieces": 2811744.586925394,
-    "under_without_safety_stock_pieces": 6.683675835006397e-11,
-    "total_error_pieces": 18069905.545900535,
-    "over_pesos": 135273693.3106321,
-    "absorbed_pesos": 62049541.422607854,
-    "beyond_pesos": 40494280.2704368,
-    "exceeds_safety_stock_months": 797,
-    "exceedance_rate": 0.18237986270022882
+    "over_pieces": 9389241.030424412,
+    "absorbed_pieces": 5083649.823750826,
+    "beyond_pieces": 3096723.5452355733,
+    "under_without_safety_stock_pieces": -3.487699018478452e-11,
+    "total_error_pieces": 17569614.39941081,
+    "over_pesos": 121368985.60987425,
+    "absorbed_pesos": 64062674.01203439,
+    "beyond_pesos": 43767342.92652129,
+    "exceeds_safety_stock_months": 852,
+    "exceedance_rate": 0.19496567505720824
    },
    "B": {
     "product_months": 5192,
-    "over_pieces": 744892.9651226854,
-    "absorbed_pieces": 319279.0276678961,
-    "beyond_pieces": 260607.28174621664,
-    "under_without_safety_stock_pieces": -5.720774548523266e-12,
-    "total_error_pieces": 1324779.2745367982,
-    "over_pesos": 22333109.117832266,
-    "absorbed_pesos": 10028298.425471082,
-    "beyond_pesos": 8988949.804663634,
-    "exceeds_safety_stock_months": 902,
-    "exceedance_rate": 0.17372881355932204
+    "over_pieces": 677049.723049503,
+    "absorbed_pieces": 336196.41985627153,
+    "beyond_pieces": 270178.890545435,
+    "under_without_safety_stock_pieces": -6.2014776994190335e-12,
+    "total_error_pieces": 1283425.0334512095,
+    "over_pesos": 20222382.33129012,
+    "absorbed_pesos": 10441204.517012455,
+    "beyond_pesos": 9200797.69754504,
+    "exceeds_safety_stock_months": 952,
+    "exceedance_rate": 0.18335901386748846
    },
    "C": {
     "product_months": 11688,
-    "over_pieces": 425309.5381558523,
-    "absorbed_pieces": 153426.42984619882,
-    "beyond_pieces": 167897.62472580187,
-    "under_without_safety_stock_pieces": -2.601831944337718e-12,
-    "total_error_pieces": 746633.592727853,
-    "over_pesos": 14478486.905660287,
-    "absorbed_pesos": 6322701.094365195,
-    "beyond_pesos": 7574323.085388462,
-    "exceeds_safety_stock_months": 1782,
-    "exceedance_rate": 0.1524640657084189
+    "over_pieces": 387491.594516756,
+    "absorbed_pieces": 159362.95754932915,
+    "beyond_pieces": 170199.86295704718,
+    "under_without_safety_stock_pieces": -2.094872886271304e-12,
+    "total_error_pieces": 717054.4150231323,
+    "over_pesos": 13464959.25383495,
+    "absorbed_pesos": 6552272.295819271,
+    "beyond_pesos": 7727167.72802954,
+    "exceeds_safety_stock_months": 1807,
+    "exceedance_rate": 0.15460301163586584
    }
   }
  },
  "published_doc_sections_verbatim": {
   "source": "docs/ACCURACY_AS_SERVED.md",
-  "doc_sha256": "e687198d88d636d12d7c422a701f6c735a374539b2cd38bb0a712df14a4f336e",
-  "Headline (quote these)": "| Run | Median product WAPE | Pooled WAPE (pieces) | Total WAPE (pesos) | Surplus share of miss (pesos) | Surplus share of miss (pieces) | Products | Product-months |\n|---|---|---|---|---|---|---|---|\n| **As served** (no calendar factor) | 38.55% | 30.12% | 10.02% | 56.40% | 56.99% | 310 | 4,370 |\n| **As served, calendar-adjusted** (the run 7 equivalent) | 37.88% | 29.69% | 10.77% | 56.88% | 57.54% | 310 | 4,370 |\n\n*As served* means: months after a product's last sale are scored (a forecast of 0 against 0 counts); the dead-SKU rule is applied as the live forecast applies it (6 months, positive sales only, returns and blanks are not sales); a net-negative month is 0 in both the history and the actual; a blank-quantity month is not scored. Total WAPE (pesos) is the WAPE of the monthly peso totals over products with a price; surplus share of miss is (over-forecast miss) / (total miss), in the unit named. Median product WAPE is over products whose scored actuals are not all 0 (15 of 310 products have an undefined WAPE in the plain run, 15 in the calendar run).",
-  "MASE pass rate (quote this one number)": "**110 of 175** Unilever Tier A products (as of 2026-02, basis `t12m_new`) have MASE < 1 (62.9%); median MASE 0.817. The cohort is 189 products, 175 with status ok; 175 have a defined MASE (0 undefined).\n\nDefinition (Hyndman & Koehler 2006, non-seasonal), the same call that writes `Forecast_Result.mase` (`run_baseline_forecast.served_forecasts`): MASE = MAE / scale. MAE is the served model's rolling one-step error over the last 20% of the product's own series (median 6 months, blank-quantity months not scored). The scale is the mean absolute lag-1 difference, mean |y(t) - y(t-1)|, of the first 80% of that series only (in-sample naive, training months). Calendar-adjusted, as the live forecast is served. The gate (MASE < 1, `analytics.params.MASE_GATE`) is unchanged.\n\nCross-check: `Forecast_Result` for 2026-03-01 stores 110 of 175 for the same cohort. XGBoost is retrained on every run, so a few products' MASE moves in the second or third decimal between runs; the pass count is what to quote. A rolling-origin MASE over the whole as-served window (scale taken before each product's first scored month) is a different protocol with a different count and is not quoted.",
-  "Per route (stored MASE definition)": "Same 175 products and the same scored product-months as the MASE figure above (the last 20% of each product's series, rolling one step, calendar-adjusted as served). Route = the bin the router assigns the product today (short / medium / long history). WAPE is pooled over the route's scored product-months: sum |actual - forecast| / sum |actual|. MASE is the median over the route's products, with each product's own scale. The MA3 columns score the plain 3-month moving average on exactly the same rows; it is not calendar-adjusted, so on rows where MA3 is the served model the two differ by the calendar factor alone.\n\n| Route | Served model(s) | Products | Scored product-months | WAPE, selected | WAPE, MA3 | Median MASE, selected | Median MASE, MA3 | MASE < 1, selected | MASE < 1, MA3 |\n|---|---|---|---|---|---|---|---|---|---|\n| short | ma3 36 | 36 | 68 | 39.75% | 44.46% | 0.797 | 0.707 | 24 of 36 | 22 of 36 |\n| medium | tsb 34 | 34 | 137 | 64.76% | 67.22% | 1.277 | 1.186 | 11 of 34 | 11 of 34 |\n| long | xgb_ma3_avg 105 | 105 | 760 | 33.57% | 35.75% | 0.736 | 0.904 | 75 of 105 | 63 of 105 |\n| all routes | xgb_ma3_avg 105, ma3 36, tsb 34 | 175 | 965 | 35.40% | 37.70% | 0.817 | 0.912 | 110 of 175 | 96 of 175 |"
+  "doc_sha256": "25e7e0213a584c230f5ff8f05748029755ff39cb741cb4d62c097024b8141055",
+  "Headline (quote these)": "| Run | Median product WAPE | Pooled WAPE (pieces) | Total WAPE (pesos) | Surplus share of miss (pesos) | Surplus share of miss (pieces) | Products | Product-months |\n|---|---|---|---|---|---|---|---|\n| **As served** (no calendar factor) | 38.55% | 30.12% | 10.02% | 56.40% | 56.99% | 310 | 4,370 |\n| **As served, calendar-adjusted** (the run 7 equivalent) | 36.37% | 28.87% | 8.70% | 52.95% | 53.44% | 310 | 4,370 |\n\n*As served* means: months after a product's last sale are scored (a forecast of 0 against 0 counts); the dead-SKU rule is applied as the live forecast applies it (6 months, positive sales only, returns and blanks are not sales); a net-negative month is 0 in both the history and the actual; a blank-quantity month is not scored. Total WAPE (pesos) is the WAPE of the monthly peso totals over products with a price; surplus share of miss is (over-forecast miss) / (total miss), in the unit named. Median product WAPE is over products whose scored actuals are not all 0 (15 of 310 products have an undefined WAPE in the plain run, 15 in the calendar run).",
+  "MASE pass rate (quote this one number)": "**115 of 175** Unilever Tier A products (as of 2026-02, basis `t12m_new`) have MASE < 1 (65.7%); median MASE 0.755. The cohort is 189 products, 175 with status ok; 175 have a defined MASE (0 undefined).\n\nDefinition (Hyndman & Koehler 2006, non-seasonal), the same call that writes `Forecast_Result.mase` (`run_baseline_forecast.served_forecasts`): MASE = MAE / scale. MAE is the served model's rolling one-step error over the last 20% of the product's own series (median 6 months, blank-quantity months not scored). The scale is the mean absolute lag-1 difference, mean |y(t) - y(t-1)|, of the first 80% of that series only (in-sample naive, training months). Calendar-adjusted, as the live forecast is served. The gate (MASE < 1, `analytics.params.MASE_GATE`) is unchanged.\n\nCross-check: `Forecast_Result` for 2026-03-01 stores 115 of 175 for the same cohort. Since the recomputation trains XGBoost on the runner's own pool (2026-11-11), every product's MASE equals the stored one (175 of 175 to three decimals, measured 2026-11-12); the pass count is what to quote. A rolling-origin MASE over the whole as-served window (scale taken before each product's first scored month) is a different protocol with a different count and is not quoted.",
+  "Per route (stored MASE definition)": "Same 175 products and the same scored product-months as the MASE figure above (the last 20% of each product's series, rolling one step, calendar-adjusted as served). Route = the bin the router assigns the product today (short / medium / long history). WAPE is pooled over the route's scored product-months: sum |actual - forecast| / sum |actual|. MASE is the median over the route's products, with each product's own scale. The MA3 columns score the plain 3-month moving average on exactly the same rows; it is not calendar-adjusted, so on rows where MA3 is the served model the two differ by the calendar factor alone.\n\n| Route | Served model(s) | Products | Scored product-months | WAPE, selected | WAPE, MA3 | Median MASE, selected | Median MASE, MA3 | MASE < 1, selected | MASE < 1, MA3 |\n|---|---|---|---|---|---|---|---|---|---|\n| short | ma3 36 | 36 | 68 | 39.88% | 44.46% | 0.738 | 0.707 | 24 of 36 | 22 of 36 |\n| medium | tsb 34 | 34 | 137 | 57.49% | 67.22% | 1.056 | 1.186 | 15 of 34 | 11 of 34 |\n| long | xgb_ma3_avg 104, ma3 1 | 105 | 760 | 32.89% | 35.75% | 0.733 | 0.904 | 76 of 105 | 63 of 105 |\n| all routes | xgb_ma3_avg 104, ma3 37, tsb 34 | 175 | 965 | 34.43% | 37.70% | 0.755 | 0.912 | 115 of 175 | 96 of 175 |"
  }
 }

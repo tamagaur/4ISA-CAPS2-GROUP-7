@@ -43,7 +43,7 @@ Figures keep the chapter's section-level scheme (Figure 4.2.N within §4.2, Figu
 | Figure 4.2.31 | Figure 4.2.17 | Order Plan for March 2026, Unilever (Reorder Recommendations page) (screenshot) | unchanged position | n/a |
 | Figure 4.2.32 | new (m) | Order Plan by Urgency, Unilever (cycle March 2026) | §4.2.3.1.2, after Table 4.2.19, before "Of the 110 rows in the cycle…" (that paragraph is itself rewritten by edit list item 9) | pass |
 | Figure 4.2.33 | new (n) | Order Plan by Category, Unilever (cycle March 2026) | §4.2.3.1.3, after Table 4.2.20, before Table 4.2.21 | pass |
-| Figure 4.2.34 | new (o) | Per-Product Plan against the 3-Week Rule (110 products, cycle March 2026) | §4.2.3.1.4, after Table 4.2.22, before "For the 109 planned products, the per-product target stock…" | **HELD** |
+| Figure 4.2.34 | new (o) | Per-Product Plan against the 3-Week Rule (115 products, cycle March 2026) | §4.2.3.1.4, after Table 4.2.22, before "For the 109 planned products, the per-product target stock…" | **HELD** |
 | Figure 4.2.35 | Figure 4.2.18 | Dismissing a Recommendation with a Reason (Reorder Recommendations page) (screenshot) | unchanged position | n/a |
 
 Figures 4.3.1 – 4.3.13: unchanged (old = new). Chapter 5: no figures, before or after.
@@ -268,7 +268,7 @@ Gate: 0 of 1 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_m_plan_by_urgency.png`
 
-Caption: Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026). Source: GET /recommendations (lp_recommendation, lp_run 9; rows outside the plan excluded). Period: planning cycle March 2026 (stock count 2 March 2026; Tier A as of 2026-02). Not shown: safety stock and forecast per urgency (Table 4.2.19); peso value of the orders; whether SSM placed them (no decision is recorded in this cycle); cost inputs are set from SSM's records and not confirmed by SSM.
+Caption: Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026). Source: GET /recommendations (lp_recommendation, lp_run 10; rows outside the plan excluded). Period: planning cycle March 2026 (stock count 2 March 2026; Tier A as of 2026-02). Not shown: safety stock and forecast per urgency (Table 4.2.19); peso value of the orders; whether SSM placed them (no decision is recorded in this cycle); cost inputs are set from SSM's records and not confirmed by SSM.
 
 Chart note: Two panels instead of one grouped bar: product counts (tens) and order pieces (hundreds of thousands) on one axis would flatten the counts to nothing.
 
@@ -278,29 +278,29 @@ Gate: 20 of 20 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_n_plan_by_category.png`
 
-Caption: Figure 4.2.33 Order Plan by Category, Unilever (cycle March 2026). Source: GET /recommendations (lp_run 9) joined to product_dimension.category_path on sku_code. Period: planning cycle March 2026. Not shown: categories with no planned product (Skin Care and the other 9 Unilever categories have none this cycle); peso value of the orders; products with a zero order (in the labels only).
+Caption: Figure 4.2.33 Order Plan by Category, Unilever (cycle March 2026). Source: GET /recommendations (lp_run 10) joined to product_dimension.category_path on sku_code. Period: planning cycle March 2026. Not shown: categories with no planned product (Skin Care and the other 9 Unilever categories have none this cycle); peso value of the orders; products with a zero order (in the labels only).
 
 Gate: 9 of 9 checks agree with the manuscript or the edit list.
 
-### Figure 4.2.34 Per-Product Plan against the 3-Week Rule (110 products, cycle March 2026) (HELD)
+### Figure 4.2.34 Per-Product Plan against the 3-Week Rule (115 products, cycle March 2026) (HELD)
 
 File: `reports/figures/fig_o_plan_vs_rule.png`
 
-Caption: Figure 4.2.34 Per-Product Plan against the 3-Week Rule (110 products, cycle March 2026). Source: GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are the last purchase price per piece from the stock file). Period: planning cycle March 2026. Not shown: the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list item 13); capital freed (none is claimed). The peso panel's bars are one row of GET /policy-comparison, the rule read as a peak: 3 weeks is the stock right after a delivery, and its average is half a weekly order lower. On the other reading, the rule read as an average, the plan's average is -29.5% and its peak -8.1%. Weekly ordering is assumed, not implemented; SSM has not confirmed the prices, its weekly ordering or which reading applies.
+Caption: Figure 4.2.34 Per-Product Plan against the 3-Week Rule (115 products, cycle March 2026). Source: GET /policy-comparison (portfolio and pesos blocks; lp_recommendation ss_i, rop_i, forecast; prices are the last purchase price per piece from the stock file). Period: planning cycle March 2026. Not shown: the safety-stock comparison (the rule has no separate safety stock, so it is not comparable: edit list item 13); capital freed (none is claimed). The peso panel's bars are one row of GET /policy-comparison, the rule read as a peak: 3 weeks is the stock right after a delivery, and its average is half a weekly order lower. On the other reading, the rule read as an average, the plan's average is -24.7% and its peak -4.0%. Weekly ordering is assumed, not implemented; SSM has not confirmed the prices, its weekly ordering or which reading applies.
 
 Chart note: Two panels: target stock is in pieces and average and peak stock are in pesos.
 
 Gate: 0 of 12 checks agree with the manuscript or the edit list.
-- **Disagrees:** target stock, plan (pieces): data gives `895148`, Table 4.2.22 states `1005661`.
-- **Disagrees:** target stock, rule (pieces): data gives `817103`, Table 4.2.22 states `840092`.
-- **Disagrees:** target vs rule (%): data gives `9.6`, Table 4.2.22 states `19.7`.
-- **Disagrees:** average stock, plan (PHP): data gives `6714485`, rule_read_as_peak states `7496532`.
-- **Disagrees:** average stock, rule (PHP): data gives `7932223`, rule_read_as_peak states `8066830`.
-- **Disagrees:** average vs rule (%): data gives `-15.4`, rule_read_as_peak states `-7.1`.
-- **Disagrees:** peak stock, plan (PHP): data gives `10204663`, rule_read_as_peak states `11045937`.
-- **Disagrees:** peak stock, rule (PHP): data gives `9518668`, rule_read_as_peak states `9680196`.
-- **Disagrees:** peak vs rule (%): data gives `7.2`, rule_read_as_peak states `14.1`.
-- **Disagrees:** the other reading's average vs rule (%), source note only: data gives `-29.5`, rule_read_as_average states `-22.6`.
-- **Disagrees:** the other reading's peak vs rule (%), source note only: data gives `-8.1`, rule_read_as_average states `-2.2`.
-- **Disagrees:** products holding less than the rule: data gives `58`, Table 4.2.22 states `56`.
+- **Disagrees:** target stock, plan (pieces): data gives `888137`, Table 4.2.22 states `1005661`.
+- **Disagrees:** target stock, rule (pieces): data gives `791209`, Table 4.2.22 states `840092`.
+- **Disagrees:** target vs rule (%): data gives `12.3`, Table 4.2.22 states `19.7`.
+- **Disagrees:** average stock, plan (PHP): data gives `6675571`, rule_read_as_peak states `7496532`.
+- **Disagrees:** average stock, rule (PHP): data gives `7384586`, rule_read_as_peak states `8066830`.
+- **Disagrees:** average vs rule (%): data gives `-9.6`, rule_read_as_peak states `-7.1`.
+- **Disagrees:** peak stock, plan (PHP): data gives `9924781`, rule_read_as_peak states `11045937`.
+- **Disagrees:** peak stock, rule (PHP): data gives `8861503`, rule_read_as_peak states `9680196`.
+- **Disagrees:** peak vs rule (%): data gives `12.0`, rule_read_as_peak states `14.1`.
+- **Disagrees:** the other reading's average vs rule (%), source note only: data gives `-24.7`, rule_read_as_average states `-22.6`.
+- **Disagrees:** the other reading's peak vs rule (%), source note only: data gives `-4.0`, rule_read_as_average states `-2.2`.
+- **Disagrees:** products holding less than the rule: data gives `48`, Table 4.2.22 states `56`.
 

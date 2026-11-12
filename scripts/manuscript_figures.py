@@ -841,18 +841,19 @@ def fig_l(plt, d) -> Fig:
 # --------------------------------------------------------------------------------------------------------------
 # Prescriptive
 # --------------------------------------------------------------------------------------------------------------
-# The plan the manuscript's Tables 4.2.19 / 4.2.20 print: lp_run 9, cycle 2026-03 (scripts/apply_final_bundle.py: safety
-# stock follows the level for zero-forecast products too). Measured 2026-11-11 on the rehearsal copy (a restore of live's
-# backup of that day plus the bundle) with this file's own plan_items, urgency_table and category_plan; the bundle checks live
-# equals it row for row. Were lp_run 8's (110 / 69 / 381,484 / 462,133 / 1,184,313: Critical 16 / 16 / 65,388 / 24,747.12,
-# Planned 88, Cooking Aids 20 / 15 / 37,926) and before that lp_run 6's (109 / 73 / 435,988 / 557,612 / 1,217,634).
+# The plan the manuscript's Tables 4.2.19 / 4.2.20 print: lp_run 10, cycle 2026-03 (scripts/apply_calendar_grain.py, 2026-11-12:
+# the calendar factor computed per product, with the December rule on it). Measured 2026-11-12 on the rehearsal copy (a restore of
+# live's backup full_backup_20261111T142748Z plus the apply) with this file's own plan_items, urgency_table and category_plan; the
+# apply checks live equals it row for row. Not the lp_run 10 of kelvin/spike-cap or kelvin/forecastability-gate (neither applied).
+# Were lp_run 9's (110 / 67 / 378,700 / 459,359 / 1,184,313: Critical 14 / 14 / 62,604, Urgent 6 / 6 / 67,300, Planned 90 / 47 /
+# 248,796), lp_run 8's (110 / 69 / 381,484 / 462,133 / 1,184,313) and before that lp_run 6's (109 / 73 / 435,988 / 557,612 / 1,217,634).
 # PLAN_TOTALS[0] and [2] must equal STATE.md's plan line (tests/test_plan_pins_follow_state.py).
-TIER_B_URGENCY = {"CRITICAL": (14, 14, 62604, 21973.18, 31801.07), "URGENT": (6, 6, 67300, 18652.56, 63011.03),
-                  "PLANNED": (90, 47, 248796, 418733.73, 1089501.29)}
-TIER_B_CATEGORY = {"HAIR CARE": (29, 19, 138516), "FABRIC CLEANING": (25, 12, 86122), "DEODORANTS & FRAGRANCES": (13, 11, 58248),
-                   "FABRIC ENHANCERS": (8, 7, 50040), "COOKING AIDS": (20, 13, 35142),
-                   "CONDIMENTS": (7, 3, 9288), "ORAL CARE": (4, 1, 912), "SKIN CLEANSING": (4, 1, 432)}
-PLAN_TOTALS = (110, 67, 378700, 459359, 1184313)
+TIER_B_URGENCY = {"CRITICAL": (15, 15, 58832, 22000.87, 29053.78), "URGENT": (5, 5, 33328, 10094.07, 30051.35),
+                  "PLANNED": (95, 44, 238052, 434063.65, 1087677.49)}
+TIER_B_CATEGORY = {"HAIR CARE": (30, 19, 130116), "FABRIC CLEANING": (25, 12, 72368), "DEODORANTS & FRAGRANCES": (14, 11, 50256),
+                   "FABRIC ENHANCERS": (8, 5, 36600), "COOKING AIDS": (19, 12, 32364),
+                   "CONDIMENTS": (11, 3, 7296), "ORAL CARE": (4, 1, 876), "SKIN CLEANSING": (4, 1, 336)}
+PLAN_TOTALS = (115, 64, 330212, 466159, 1146783)
 
 
 def _state_plan() -> tuple[int, int]:

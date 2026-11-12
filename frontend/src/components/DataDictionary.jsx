@@ -131,7 +131,7 @@ const entries = {
       caveat: 'Team decision; adviser sign-off pending',
       definition: 'An adjustment for the time of year, applied to the stored forecast and shown beside it as ×factor.',
       plain: 'Each forecast is raised or lowered by how that month has usually sold compared with the months before it in earlier years. Until it is confirmed, the SKU Forecast page shows the forecast without it; the order plan uses the adjusted figure.',
-      technical: 'The factor is how the calendar month sold against the 3 months before it in earlier years, for the Unilever company total in pieces, averaged over those years (geometric mean) and moved halfway toward no change. A month with no earlier year on record is left as it is; only months before the forecast month are read. The forecast is multiplied by the factor after the model’s own checks. It is a team decision; adviser sign-off is pending.',
+      technical: 'Computed for each product (since 2026-11-12): for every earlier year, the calendar month over the mean of the 3 months before it, for the product itself and for the typical product (the middle of every product that sold in all four months). The product’s own years count n / (n + 2) against the typical product’s; the result is moved halfway toward no change. December takes last December’s typical-product dip in full when last December was a dip. A month with no earlier year on record is left as it is; only months before the forecast month are read. It was the company total until 2026-11-12, which a few large products could move against most products (March 2024).',
     },
   ],
   'reorder-planning': [

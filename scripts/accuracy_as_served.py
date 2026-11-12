@@ -21,7 +21,7 @@ HOW THIS DIFFERS FROM THE STORED RUNS (mart.forecast_run 5 and 7, scripts/backte
   basis (analytics.params.abc_method), XGBoost pool the same, router.route() on the history before the
   month, window 2023-10..2026-02, a product-month dropped when the router has no model for it
   (fewer than 3 sales months: the live forecast serves a provisional average there, not a forecast).
-  The calendar run multiplies by the company calendar factor from calendar.company_totals(demand), the
+  The calendar run multiplies by the calendar factor from calendar.calendar_basis(demand) (product grain since 2026-11-12), the
   call the live runner makes, not the series-based totals the stored run 7 used.
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ sys.path.insert(0, str(REPO))
 from analytics import actuals_version  # noqa: E402
 import analytics.forecasting.global_model as gm  # noqa: E402
 from analytics.classification.fsn import no_sale_in_last_months  # noqa: E402
-from analytics.forecasting.calendar import company_totals  # noqa: E402
+from analytics.forecasting.calendar import calendar_basis, for_product  # noqa: E402
 from analytics.forecasting.router import route  # noqa: E402
 from analytics.params import DEAD_SKU_MONTHS, abc_method  # noqa: E402
 from psycopg2.extras import execute_values  # noqa: E402
@@ -97,7 +97,7 @@ def served_backtest(series: dict, tier_by: dict, calendar_totals=None, pool_by: 
             if t not in s.index or not t > s.index[0]:
                 continue
             try:
-                r = route(s, t, fc, calendar_totals=calendar_totals,
+                r = route(s, t, fc, calendar_totals=for_product(calendar_totals, k),
                           context=None if contexts is None else contexts.get(k))
             except ValueError:  # no history before the month at all
                 skipped["no_history"] = skipped.get("no_history", 0) + 1
@@ -201,7 +201,11 @@ def mase_pass_rate(db_url: str, demand: pd.DataFrame, latest: str, calendar_tota
         if len(s) >= DEAD_SKU_MONTHS and no_sale_in_last_months(s.index.strftime("%Y-%m"), s.to_numpy(), latest):
             continue
         ok.append(int(k))
-    df = pd.DataFrame({"product_key": ok, "status": "ok"})
+    # Every cohort product, not only the 'ok' ones: served_forecasts trains XGBoost on every product of the frame (its pool)
+    # and forecasts only the 'ok' rows, as the runner passes all Tier A rows. With the 'ok' rows alone the pool was 175 products
+    # instead of 189, so 99 long-route MASEs differed from Forecast_Result by up to 0.10 (found 2026-11-11; the two counts
+    # agreed at 110 by chance, and parted at 115 against 116 once the spike cap was on).
+    df = pd.DataFrame({"product_key": sorted(by_key), "status": ["ok" if int(k) in set(ok) else "excluded" for k in sorted(by_key)]})
     planning = pd.Timestamp(f"{latest}-01") + pd.offsets.MonthBegin(1)
     served = served_forecasts(df, by_key, planning, calendar_totals, contexts=contexts)
     m = pd.Series({k: v["holdout_mase"] for k, v in served.items()}, dtype=float)
@@ -245,7 +249,8 @@ def render_mase(x: dict) -> list[str]:
         "Calendar-adjusted, as the live forecast is served. The gate (MASE < 1, `analytics.params.MASE_GATE`) is unchanged.",
         "",
         f"Cross-check: `Forecast_Result` for {st['date']} stores {st['passes']} of {st['scored']} for the same cohort. "
-        "XGBoost is retrained on every run, so a few products' MASE moves in the second or third decimal between runs; the pass count is what to quote. "
+        "Since the recomputation trains XGBoost on the runner's own pool (2026-11-11), every product's MASE equals the stored one "
+        "(175 of 175 to three decimals, measured 2026-11-12); the pass count is what to quote. "
         "A rolling-origin MASE over the whole as-served window (scale taken before each product's first scored month) is a different protocol "
         "with a different count and is not quoted.",
         "",
@@ -429,18 +434,21 @@ def render(res: dict, ver: dict, today: str) -> str:
 # The label still matches 0064's pattern (as-served backtest .*calendar-adjusted), and the error decomposition takes the
 # newest matching run per product-month, so the new runs supersede the old ones there with no migration.
 TREATED = ", succession + fading"
+# ", product calendar" since 2026-11-12 (analytics/forecasting/calendar.py GRAIN: the calendar factor computed per product, with the
+# December rule on it): NEW labels, so runs 15-18 (company factor) stay stored and selectable; 0064's pattern still matches.
+PRODUCT_CAL = ", product calendar"
 AS_SERVED_RUNS = {
-    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED,
+    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + PRODUCT_CAL,   # no calendar factor in this run; the suffix names the series (the default's twin)
                   "Tier A (current basis) the month before each test month; months after a product's last sale "
                   "scored; dead-SKU rule applied as the live forecast applies it; succession and fading applied as served"),
-    "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + ", calendar-adjusted",
+    "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
                            "as above; served value x the company calendar factor"),
     # Tier B and C cohorts (the error decomposition, migration 0063, scores every tier). Calendar-adjusted only,
     # the form the live forecast is served in; XGBoost pool = Tier A, as the live runner trains it.
-    "as_served_calendar_B": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier B the month before each month" + TREATED + ", calendar-adjusted",
+    "as_served_calendar_B": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier B the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
                              "COUNTERFACTUAL, NOT SERVED - Tier B (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
                              "succession and fading applied; served value x the company calendar factor"),
-    "as_served_calendar_C": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier C the month before each month" + TREATED + ", calendar-adjusted",
+    "as_served_calendar_C": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier C the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
                              "COUNTERFACTUAL, NOT SERVED - Tier C (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
                              "succession and fading applied; served value x the company calendar factor"),
 }
@@ -543,8 +551,8 @@ def backfill_treatment(db_url: str, series: dict, contexts: dict) -> dict[int, d
                     "WHERE table_schema = 'mart' AND table_name = 'forecast_run_value' AND column_name = 'treatment')")
         if not cur.fetchone()[0]:
             raise SystemExit("mart.forecast_run_value has no treatment column: apply migration 0077 first")
-        cur.execute("SELECT run_id, label FROM mart.forecast_run WHERE kind = 'backtest_recreated' AND label LIKE %s ORDER BY run_id",
-                    (f"%{TREATED}%",))
+        cur.execute("SELECT run_id, label FROM mart.forecast_run WHERE kind = 'backtest_recreated' AND label LIKE %s "
+                    "AND label NOT LIKE %s ORDER BY run_id", (f"%{TREATED}%", f"%{PRODUCT_CAL}%"))
         runs = cur.fetchall()
         if not runs:
             raise SystemExit(f"no stored run carries {TREATED!r}: nothing to backfill")
@@ -621,7 +629,7 @@ def main() -> int:
     if args.write_tier_runs:
         if not args.target_public:
             ap.error("--write-tier-runs writes the live mart schema and needs --target-public")
-        cal = company_totals(demand)
+        cal = calendar_basis(demand)
         runs, checks = {}, {}
         for tier in ("B", "C"):
             cohort = read_tier_cohort(db_url, abc_method("unilever"), tier)
@@ -636,7 +644,7 @@ def main() -> int:
 
     bt, skipped = served_backtest(series, tier_by, contexts=contexts)
     print(f"[as served] {len(bt)} rows in {time.time() - t0:.0f}s")
-    btc, skipped_c = served_backtest(series, tier_by, calendar_totals=company_totals(demand), contexts=contexts)
+    btc, skipped_c = served_backtest(series, tier_by, calendar_totals=calendar_basis(demand), contexts=contexts)
     print(f"[as served, calendar] {len(btc)} rows in {time.time() - t0:.0f}s")
 
     res = {
@@ -648,7 +656,7 @@ def main() -> int:
         "stored5": {**stored_run_headline(db_url, 5, money), "surplus_share_of_miss_pieces": float("nan")},
         "stored7": {**stored_run_headline(db_url, 7, money), "surplus_share_of_miss_pieces": float("nan")},
         "dead_n": int(bt.dead.sum()), "dead_n_cal": int(btc.dead.sum()),
-        "mase": mase_pass_rate(db_url, demand, latest, company_totals(demand), contexts),
+        "mase": mase_pass_rate(db_url, demand, latest, calendar_basis(demand), contexts),
     }
     print(f"[mase] {res['mase']['passes']} of {res['mase']['scored']} < {res['mase']['gate']:g} ({time.time() - t0:.0f}s)")
     # the stored runs' pieces-based surplus share, on the same rows their headline used
