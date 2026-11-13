@@ -16,6 +16,20 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0081 (ledger ends at 0080, 81 rows, live 2026-11-13 after backup full_backup_20261113T112358Z). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
+THE 2 MARCH 2026 COUNT (recon, 2026-11-13; read only, nothing changed). The count the live plan opens on (Unilever, period 2026-02,
+  PHP 46,576,778.51) is NOT shown to be wrong. Per product against 3 Feb (PHP 24.34M) and 6 Apr (PHP 22.70M): 0 duplicate rows, 1 file;
+  price effect PHP 0.07M of the +PHP 22.24M (23 products changed price); 4 products whose cases jump by about their pack size
+  (PHP 0.29M); 106 products new to the count (PHP 2.03M); the rest, PHP 20.43M, is more cases on unchanged prices, spread over 177
+  products above twice both neighbours (top 25 carry 51% of the excess: Surf 288x65g, Knorr Singles 48(12+2), Sunsilk (11+1)
+  sachets, mostly promo bundles near 0 -> hundreds of cases -> near 0). Those top 15 products reach the same peak every few
+  months (7,963 cases on 2 Mar vs 8,744 Dec 2024, 7,703 Jan 2025, 7,074-7,320 Jun-Jul 2025, 6,270 Dec 2025): a load-in, as the
+  2026-10-03 balance check found (two-month balance 0.98x sales, normal). 6 Apr is an ordinary trough, not the anomaly; 3 Feb is
+  itself low (0.59x its neighbours). Not provable without Unilever's Feb-Mar 2026 delivery invoices for the Ilocos warehouse (SSM).
+  The plan's 115 products open on 2,277,933 pcs (620,403 at 3 Feb, 772,433 at 6 Apr); were the count overstated, their requirement
+  would be 1.40-1.47M pcs (the pinned Chapter 4 dependence figures), capped by the 1,307,963-pc allocation. Other out-of-line counts:
+  2025-05 partial (404 products), 2026-01 low; no plan rests on them (every lp_run is cycle 2026-03) and no reported accuracy figure
+  reads a count (only the stock-limited flags, shown on the error card and product chart). Per-product evidence kept out of git.
+
 DEPLOY + FIXES (2026-11-13, Kelvin's brief "finish the fix and make it deployable"; LP unchanged by decision, its descriptions changed).
   The non-restore of the calendar-grain apply is confirmed: apply_calendar_grain.measure with the committed byte-ordered _md5, live vs
   ssm_grain, every result key EQUAL; ledger differs by 0079 only; definitions/privileges differ copy-vs-live as before the apply.
