@@ -6,7 +6,7 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    legacy row 4. LIVE since 2026-11-13 08:05 UTC: `python -m scripts.apply_calendar_grain --target-public` from 163b42f (the calendar
    factor computed per product, December rule on; CALENDAR GRAIN below). check.sh --fast GREEN against live afterwards (6 of 6, 67 s,
    13 invariants). lp_run 10 has ONE meaning in this repo: this plan. The rehearsal plans of the two unapplied branches are relabelled
-   SPIKE-COPY (kelvin/spike-cap, 116 / 295,210) and GATE-COPY (kelvin/forecastability-gate, 114 / 335,800); neither was ever live.
+   SPIKE-COPY (kelvin/spike-cap, 116 / 295,210) and GATE-COPY (kelvin/forecastability-gate, 114 / 335,800) in this branch; neither was ever live (the two branches themselves are not yet relabelled, see the GATE note below).
    Was lp_run 9 (110 / 378,700 / 67 >0 / SS 459,359.47, live 2026-11-11 12:52 UTC to 2026-11-13, the final bundle); lp_run 8
    110 / 381,484, lp_run 7 110 / 419,344, lp_run 6 109 / 435,988. A re-plan rewrites the cycle's rows in place: lp_run 9's row values
    are in backups/full_backup_20261113T075729Z, its three products that left in reports/lp_runs/retired_2026-03-01_20261113T080859Z.csv
@@ -55,8 +55,17 @@ CALENDAR GRAIN (2026-11-12 build, branch kelvin/calendar-grain 163b42f, fast-for
     March plan  -48,488 pieces = PHP 8.83M -> 7.57M at cost (-1.26M committed); safety stock PHP 5.13M -> 5.20M.
     Assumptions, not SSM figures: storage cost (DEC-44), carrying rate, spoilage (no Unilever figure exists; Del Monte's bad orders are
     0.051% of purchases 2023-09..2025-12), the share of a shortfall never recovered. Measured: margin, pieces, pesos.
-  MONTH-LOAD GATE: scripts/demo_rehearsal.FILES now also hashes what a load runs (ABC, forecast, LP, marts); REHEARSAL_RESULT_PENDING
+  MONTH-LOAD GATE: scripts/demo_rehearsal.FILES now also hashes what a load runs (ABC, forecast, LP, marts); re-rehearsed 2026-11-13 on a restore of backups/full_backup_20261113T082354Z (live after 0079):
+  all 11 steps EXACT (start 115 / 330,212; March 131 / 1,016,754; April 138 rows; both rollbacks back to 115 / 330,212; crash and third-month
+  cases), docs/MONTH_LOAD_REHEARSAL.json rewritten for the new hash.
   Report for the panel: reports/CALENDAR_GRAIN_2026-11-12.md.
+  STOPPED AT THE BRIEF'S SECOND GATE (2026-11-13): python -m scripts.manuscript_figures against live (exit 2, the same 8 figures held,
+  0 table problems) shows seven manuscript statements that agreed with lp_run 9's served backtest and disagree now: Table 4.2.18's 2025-04 and 2025-12 over/under direction (figure 4.2.26), its 2025-05 and 2025-06 monthly WAPE (4.2.27), and its 2025-05, 2025-07 and 2025-12 shortage pesos (4.2.28).
+  The 2026-11-12 re-pin had not redrawn figures h-k, p, q (its FIGURES.md still read lp_run 9's 110 / 0.823); they are redrawn from live
+  in this commit. Not reconcilable in code (they describe the served forecast's backtest). Left for Kelvin, so NOT DONE after the
+  stop: kelvin-be not pushed (team/kelvin-be is at 340c9a5; local is 941fadb..this commit ahead); kelvin/spike-cap and
+  kelvin/forecastability-gate not relabelled (they still state their rehearsal plans as lp_run 10); kelvin/calendar-grain (163b42f,
+  merged into kelvin-be) not deleted.
 
 SPIKE CAP + DECEMBER DIP RULE REFUSED (2026-11-12, Kelvin's recon brief; scored, NOT applied; nothing written to live). The code is
   NOT on this branch: it lives on kelvin/spike-cap (459f299..c100f9a), kept as the record, not to be merged. Its rehearsal plan is

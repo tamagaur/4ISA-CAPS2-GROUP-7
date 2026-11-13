@@ -160,8 +160,8 @@ File: `reports/figures/fig_k_mase_distribution.png`
 Caption: Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02). Source: Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175'). Period: forecast month March 2026 (served model's rolling one-step holdout, DEC-25). Not shown: the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size of each product's sales.
 
 Gate: 1 of 3 checks agree with the manuscript or the edit list.
-- **Disagrees:** MASE below 1: data gives `110`, Table 4.2.15 / pinned states `109`.
-- **Disagrees:** median MASE: data gives `0.823`, §4.2.2.1.3 / pinned states `0.827`.
+- **Disagrees:** MASE below 1: data gives `115`, Table 4.2.15 / pinned states `109`.
+- **Disagrees:** median MASE: data gives `0.755`, §4.2.2.1.3 / pinned states `0.827`.
 
 ### Figure 4.2.24 Half-Year Block Results of 36 Challengers against MA3, by History Bin (HELD)
 
@@ -178,21 +178,23 @@ File: `reports/figures/fig_h_forecast_vs_actual.png`
 
 Caption: Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (this is a backtest: each month forecast from the months before it); per-product error, which is far larger than the total's (median product WAPE about 40%); products not forecast that month.
 
-Gate: 22 of 37 checks agree with the manuscript or the edit list.
-- **Disagrees:** 2025-03 forecast: data gives `2554925`, Table 4.2.18 states `2603372`.
-- **Disagrees:** 2025-04 forecast: data gives `2351536`, Table 4.2.18 states `2381632`.
-- **Disagrees:** 2025-05 forecast: data gives `2625601`, Table 4.2.18 states `2626451`.
-- **Disagrees:** 2025-06 forecast: data gives `2687976`, Table 4.2.18 states `2694583`.
-- **Disagrees:** 2025-07 forecast: data gives `2239579`, Table 4.2.18 states `2365326`.
-- **Disagrees:** 2025-08 forecast: data gives `1964264`, Table 4.2.18 states `2125154`.
+Gate: 20 of 37 checks agree with the manuscript or the edit list.
+- **Disagrees:** 2025-03 forecast: data gives `2344756`, Table 4.2.18 states `2603372`.
+- **Disagrees:** 2025-04 forecast: data gives `2414843`, Table 4.2.18 states `2381632`.
+- **Disagrees:** 2025-04 direction: data gives `over`, Table 4.2.18 states `under`.
+- **Disagrees:** 2025-05 forecast: data gives `2520159`, Table 4.2.18 states `2626451`.
+- **Disagrees:** 2025-06 forecast: data gives `2622788`, Table 4.2.18 states `2694583`.
+- **Disagrees:** 2025-07 forecast: data gives `2288874`, Table 4.2.18 states `2365326`.
+- **Disagrees:** 2025-08 forecast: data gives `1946008`, Table 4.2.18 states `2125154`.
 - **Disagrees:** 2025-08 direction: data gives `under`, Table 4.2.18 states `over`.
-- **Disagrees:** 2025-09 forecast: data gives `2118181`, Table 4.2.18 states `2341533`.
-- **Disagrees:** 2025-10 forecast: data gives `1905395`, Table 4.2.18 states `1988739`.
-- **Disagrees:** 2025-11 forecast: data gives `1991783`, Table 4.2.18 states `2082199`.
-- **Disagrees:** 2025-12 forecast: data gives `1771172`, Table 4.2.18 states `1810379`.
-- **Disagrees:** 2026-01 forecast: data gives `2212229`, Table 4.2.18 states `2274480`.
+- **Disagrees:** 2025-09 forecast: data gives `2040539`, Table 4.2.18 states `2341533`.
+- **Disagrees:** 2025-10 forecast: data gives `1947698`, Table 4.2.18 states `1988739`.
+- **Disagrees:** 2025-11 forecast: data gives `2039632`, Table 4.2.18 states `2082199`.
+- **Disagrees:** 2025-12 forecast: data gives `1215264`, Table 4.2.18 states `1810379`.
+- **Disagrees:** 2025-12 direction: data gives `under`, Table 4.2.18 states `over`.
+- **Disagrees:** 2026-01 forecast: data gives `2156233`, Table 4.2.18 states `2274480`.
 - **Disagrees:** 2026-01 direction: data gives `under`, Table 4.2.18 states `over`.
-- **Disagrees:** 2026-02 forecast: data gives `1854382`, Table 4.2.18 states `1887478`.
+- **Disagrees:** 2026-02 forecast: data gives `1824625`, Table 4.2.18 states `1887478`.
 - **Disagrees:** over-forecast months: data gives `6`, edit list item 7 states `8`.
 
 ### Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest) (HELD)
@@ -201,17 +203,19 @@ File: `reports/figures/fig_i_monthly_wape.png`
 
 Caption: Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (a backtest); the median product WAPE (35.49% for this window, a different measure); error in pesos; months before March 2025.
 
-Gate: 2 of 12 checks agree with the manuscript or the edit list.
-- **Disagrees:** 2025-03 WAPE (%): data gives `18.7`, Table 4.2.18 states `20.3`.
-- **Disagrees:** 2025-04 WAPE (%): data gives `21.0`, Table 4.2.18 states `22.1`.
-- **Disagrees:** 2025-07 WAPE (%): data gives `40.0`, Table 4.2.18 states `46.9`.
-- **Disagrees:** 2025-08 WAPE (%): data gives `33.5`, Table 4.2.18 states `41.4`.
-- **Disagrees:** 2025-09 WAPE (%): data gives `28.1`, Table 4.2.18 states `40.0`.
-- **Disagrees:** 2025-10 WAPE (%): data gives `40.5`, Table 4.2.18 states `41.7`.
-- **Disagrees:** 2025-11 WAPE (%): data gives `30.3`, Table 4.2.18 states `32.4`.
-- **Disagrees:** 2025-12 WAPE (%): data gives `55.2`, Table 4.2.18 states `58.3`.
-- **Disagrees:** 2026-01 WAPE (%): data gives `45.2`, Table 4.2.18 states `46.4`.
-- **Disagrees:** 2026-02 WAPE (%): data gives `33.8`, Table 4.2.18 states `35.2`.
+Gate: 0 of 12 checks agree with the manuscript or the edit list.
+- **Disagrees:** 2025-03 WAPE (%): data gives `21.6`, Table 4.2.18 states `20.3`.
+- **Disagrees:** 2025-04 WAPE (%): data gives `21.6`, Table 4.2.18 states `22.1`.
+- **Disagrees:** 2025-05 WAPE (%): data gives `23.3`, Table 4.2.18 states `22.0`.
+- **Disagrees:** 2025-06 WAPE (%): data gives `37.2`, Table 4.2.18 states `37.1`.
+- **Disagrees:** 2025-07 WAPE (%): data gives `40.5`, Table 4.2.18 states `46.9`.
+- **Disagrees:** 2025-08 WAPE (%): data gives `32.6`, Table 4.2.18 states `41.4`.
+- **Disagrees:** 2025-09 WAPE (%): data gives `26.4`, Table 4.2.18 states `40.0`.
+- **Disagrees:** 2025-10 WAPE (%): data gives `40.1`, Table 4.2.18 states `41.7`.
+- **Disagrees:** 2025-11 WAPE (%): data gives `32.7`, Table 4.2.18 states `32.4`.
+- **Disagrees:** 2025-12 WAPE (%): data gives `44.6`, Table 4.2.18 states `58.3`.
+- **Disagrees:** 2026-01 WAPE (%): data gives `43.6`, Table 4.2.18 states `46.4`.
+- **Disagrees:** 2026-02 WAPE (%): data gives `32.0`, Table 4.2.18 states `35.2`.
 
 ### Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos) (HELD)
 
@@ -219,28 +223,31 @@ File: `reports/figures/fig_j_surplus_shortage.png`
 
 Caption: Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: observed stockouts or overstock (these are forecast misses valued at each product's average selling price, not stock outcomes); live performance; products with no price (net pesos or pieces not positive).
 
-Gate: 3 of 24 checks agree with the manuscript or the edit list.
-- **Disagrees:** 2025-03 surplus: data gives `3036166`, Table 4.2.18 states `3376570`.
-- **Disagrees:** 2025-03 shortage: data gives `3862481`, Table 4.2.18 states `3851955`.
-- **Disagrees:** 2025-04 surplus: data gives `2304184`, Table 4.2.18 states `2486130`.
-- **Disagrees:** 2025-04 shortage: data gives `5096578`, Table 4.2.18 states `4944467`.
-- **Disagrees:** 2025-05 surplus: data gives `2907473`, Table 4.2.18 states `2911738`.
-- **Disagrees:** 2025-06 surplus: data gives `5328474`, Table 4.2.18 states `5365124`.
-- **Disagrees:** 2025-06 shortage: data gives `4494367`, Table 4.2.18 states `4403057`.
-- **Disagrees:** 2025-07 surplus: data gives `6471131`, Table 4.2.18 states `7375371`.
-- **Disagrees:** 2025-08 surplus: data gives `2828328`, Table 4.2.18 states `3848422`.
-- **Disagrees:** 2025-08 shortage: data gives `4296721`, Table 4.2.18 states `4247026`.
-- **Disagrees:** 2025-09 surplus: data gives `3864453`, Table 4.2.18 states `5252297`.
-- **Disagrees:** 2025-09 shortage: data gives `5092534`, Table 4.2.18 states `5056550`.
-- **Disagrees:** 2025-10 surplus: data gives `3903451`, Table 4.2.18 states `4291229`.
-- **Disagrees:** 2025-10 shortage: data gives `7564986`, Table 4.2.18 states `7385082`.
-- **Disagrees:** 2025-11 surplus: data gives `4459017`, Table 4.2.18 states `4944624`.
-- **Disagrees:** 2025-11 shortage: data gives `4089975`, Table 4.2.18 states `3907377`.
-- **Disagrees:** 2025-12 surplus: data gives `9707524`, Table 4.2.18 states `9967556`.
-- **Disagrees:** 2026-01 surplus: data gives `7232970`, Table 4.2.18 states `7527223`.
-- **Disagrees:** 2026-01 shortage: data gives `4624189`, Table 4.2.18 states `4485523`.
-- **Disagrees:** 2026-02 surplus: data gives `6174229`, Table 4.2.18 states `6421262`.
-- **Disagrees:** 2026-02 shortage: data gives `2537737`, Table 4.2.18 states `2481131`.
+Gate: 0 of 24 checks agree with the manuscript or the edit list.
+- **Disagrees:** 2025-03 surplus: data gives `1993512`, Table 4.2.18 states `3376570`.
+- **Disagrees:** 2025-03 shortage: data gives `5483966`, Table 4.2.18 states `3851955`.
+- **Disagrees:** 2025-04 surplus: data gives `2712093`, Table 4.2.18 states `2486130`.
+- **Disagrees:** 2025-04 shortage: data gives `4588932`, Table 4.2.18 states `4944467`.
+- **Disagrees:** 2025-05 surplus: data gives `2533132`, Table 4.2.18 states `2911738`.
+- **Disagrees:** 2025-05 shortage: data gives `4493995`, Table 4.2.18 states `3752116`.
+- **Disagrees:** 2025-06 surplus: data gives `5266140`, Table 4.2.18 states `5365124`.
+- **Disagrees:** 2025-06 shortage: data gives `4775670`, Table 4.2.18 states `4403057`.
+- **Disagrees:** 2025-07 surplus: data gives `6877137`, Table 4.2.18 states `7375371`.
+- **Disagrees:** 2025-07 shortage: data gives `1303087`, Table 4.2.18 states `1509676`.
+- **Disagrees:** 2025-08 surplus: data gives `2706117`, Table 4.2.18 states `3848422`.
+- **Disagrees:** 2025-08 shortage: data gives `4525159`, Table 4.2.18 states `4247026`.
+- **Disagrees:** 2025-09 surplus: data gives `3342069`, Table 4.2.18 states `5252297`.
+- **Disagrees:** 2025-09 shortage: data gives `5674144`, Table 4.2.18 states `5056550`.
+- **Disagrees:** 2025-10 surplus: data gives `4133863`, Table 4.2.18 states `4291229`.
+- **Disagrees:** 2025-10 shortage: data gives `6893667`, Table 4.2.18 states `7385082`.
+- **Disagrees:** 2025-11 surplus: data gives `5163238`, Table 4.2.18 states `4944624`.
+- **Disagrees:** 2025-11 shortage: data gives `4297630`, Table 4.2.18 states `3907377`.
+- **Disagrees:** 2025-12 surplus: data gives `4595887`, Table 4.2.18 states `9967556`.
+- **Disagrees:** 2025-12 shortage: data gives `4556321`, Table 4.2.18 states `1931876`.
+- **Disagrees:** 2026-01 surplus: data gives `5951972`, Table 4.2.18 states `7527223`.
+- **Disagrees:** 2026-01 shortage: data gives `4778130`, Table 4.2.18 states `4485523`.
+- **Disagrees:** 2026-02 surplus: data gives `5393558`, Table 4.2.18 states `6421262`.
+- **Disagrees:** 2026-02 shortage: data gives `2091739`, Table 4.2.18 states `2481131`.
 
 ### Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces) (HELD)
 
@@ -249,9 +256,9 @@ File: `reports/figures/fig_p_error_decomposition.png`
 Caption: Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces). Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months), 4,370 Tier A product-months. Not shown: Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, ₱38,187,551, are a separate figure); observed stockouts (a miss beyond safety stock is potential exposure, not a recorded stockout); live performance (a backtest).
 
 Gate: 4 of 7 checks agree with the manuscript or the edit list.
-- **Disagrees:** over / absorbed / beyond as published: data gives `(10397753, 4860408, 2811745)`, docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md states `(12242746, 4847983, 2669295)`.
-- **Disagrees:** months beyond safety stock: data gives `797`, STATE.md headline states `749`.
-- **Disagrees:** pesos beyond safety stock: data gives `40494280`, pinned states `38187551`.
+- **Disagrees:** over / absorbed / beyond as published: data gives `(9389241, 5083650, 3096724)`, docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md states `(12242746, 4847983, 2669295)`.
+- **Disagrees:** months beyond safety stock: data gives `852`, STATE.md headline states `749`.
+- **Disagrees:** pesos beyond safety stock: data gives `43767343`, pinned states `38187551`.
 
 ### Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A (HELD)
 
@@ -259,10 +266,10 @@ File: `reports/figures/fig_q_exposure_concentration.png`
 
 Caption: Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A. Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months). Not shown: Tier B and C products; products with no miss beyond safety stock (not ranked); observed stockouts (exposure is potential, not recorded); pieces.
 
-Chart note: 18 products carry half and 56 carry 80% of the ₱40,494,280 beyond safety stock (217 products have any).
+Chart note: 17 products carry half and 53 carry 80% of the ₱43,767,343 beyond safety stock (218 products have any).
 
 Gate: 0 of 1 checks agree with the manuscript or the edit list.
-- **Disagrees:** pesos beyond safety stock: data gives `40494280`, pinned states `38187551`.
+- **Disagrees:** pesos beyond safety stock: data gives `43767343`, pinned states `38187551`.
 
 ### Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026) (gate: pass)
 

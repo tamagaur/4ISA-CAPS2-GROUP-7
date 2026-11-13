@@ -261,6 +261,8 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,845 / 2,827; 2,839 / 2,818** (2026-11-13, +1 test for the month-load gate; passed counts derived by chapter_figures --write) |
 
 Manuscript figure checks: Tables 4.2.19 and 4.2.20 pass on the new plan; figures h-l and o-q stay "held" against older manuscript
-values exactly as before (chapter work): every figure's agree/disagree count is the same before (941fadb) and after, so this change
-contradicts no manuscript figure that agreed before. DEC-41's text in ARCHITECTURE.md describes the per-product factor since
+values (chapter work), but NOT exactly as before: drawn from live on 2026-11-13 (163b42f's re-pin had not redrawn figures h-k, p and
+q, which still showed lp_run 9's data), seven manuscript statements that agreed with lp_run 9's served backtest now disagree: Table 4.2.18's 2025-04 and 2025-12 over/under direction (figure 4.2.26), its 2025-05 and 2025-06 monthly WAPE (4.2.27), and its 2025-05, 2025-07 and 2025-12 shortage pesos (4.2.28).
+The served forecast's backtest moved with the method, so no code change reconciles them; the chapter text is the author's. This is
+the 2026-11-13 brief's second gate (STATE.md). DEC-41's text in ARCHITECTURE.md describes the per-product factor since
 2026-11-13. Stored run descriptions of runs 21-23 corrected by migration 0079 (they said "x the company calendar factor").

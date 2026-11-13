@@ -1,51 +1,51 @@
 {
   "passed": true,
-  "code_hash": "9ee606794ce147eac5d38407ed066861a021f8f14b4c66a48a0bb9c217c08a3b",
+  "code_hash": "5ae895f90956ecf8d722d7d10af587e102558c9ac0dcb64c040c557d1ff05e3c",
   "target": "127.0.0.1/ssm_rehearsal",
-  "backup": "full_backup_20261111T105224Z_LOCALCOPY_ssm_bundle_after_bundle",
-  "when": "2026-11-11T11:20:57.677886+00:00",
+  "backup": "full_backup_20261113T082354Z",
+  "when": "2026-11-13T08:57:23.339947+00:00",
   "plan_start": [
-    110,
-    378700
+    115,
+    330212
   ],
   "steps": {
     "load_first": {
       "exact": true,
       "exit": 0,
-      "seconds": 148,
+      "seconds": 170,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
       ],
       "plan": {
-        "rows": 123,
-        "pieces": 923168
+        "rows": 131,
+        "pieces": 1016754
       },
       "newest_cycle": "2026-04"
     },
     "load_second": {
       "exact": true,
       "exit": 0,
-      "seconds": 191,
+      "seconds": 233,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
         "2026-04"
       ],
       "plan": {
-        "rows": 134,
-        "pieces": 1003628
+        "rows": 138,
+        "pieces": 985960
       },
       "newest_cycle": "2026-05"
     },
     "rollback_second": {
       "exact": true,
       "exit": 0,
-      "seconds": 39,
+      "seconds": 55,
       "differences": [],
       "plan": {
-        "rows": 123,
-        "pieces": 923168
+        "rows": 131,
+        "pieces": 1016754
       },
       "newest_cycle": "2026-04",
       "loaded_after": [
@@ -55,11 +55,11 @@
     "rollback_first": {
       "exact": true,
       "exit": 0,
-      "seconds": 40,
+      "seconds": 61,
       "differences": [],
       "plan": {
-        "rows": 110,
-        "pieces": 378700
+        "rows": 115,
+        "pieces": 330212
       },
       "newest_cycle": "2026-03",
       "loaded_after": []
@@ -67,40 +67,40 @@
     "load_first_again": {
       "exact": true,
       "exit": 0,
-      "seconds": 133,
+      "seconds": 210,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
       ],
       "plan": {
-        "rows": 123,
-        "pieces": 923168
+        "rows": 131,
+        "pieces": 1016754
       },
       "newest_cycle": "2026-04"
     },
     "load_second_again": {
       "exact": true,
       "exit": 0,
-      "seconds": 178,
+      "seconds": 286,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
         "2026-04"
       ],
       "plan": {
-        "rows": 134,
-        "pieces": 1003628
+        "rows": 138,
+        "pieces": 985960
       },
       "newest_cycle": "2026-05"
     },
     "rollback_first_with_second_loaded": {
       "exact": true,
       "exit": 0,
-      "seconds": 43,
+      "seconds": 63,
       "differences": [],
       "plan": {
-        "rows": 110,
-        "pieces": 378700
+        "rows": 115,
+        "pieces": 330212
       },
       "newest_cycle": "2026-03",
       "loaded_after": []
@@ -108,29 +108,29 @@
     "load_first_third": {
       "exact": true,
       "exit": 0,
-      "seconds": 136,
+      "seconds": 206,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
       ],
       "plan": {
-        "rows": 123,
-        "pieces": 923168
+        "rows": 131,
+        "pieces": 1016754
       },
       "newest_cycle": "2026-04"
     },
     "load_second_third": {
       "exact": true,
       "exit": 0,
-      "seconds": 164,
+      "seconds": 277,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
         "2026-04"
       ],
       "plan": {
-        "rows": 134,
-        "pieces": 1003628
+        "rows": 138,
+        "pieces": 985960
       },
       "newest_cycle": "2026-05"
     },
@@ -143,7 +143,7 @@
         "2026-04"
       ],
       "said": "the 2026-06 plan opens from the stock count of 2026-05 (or, projected from it, of 2026-04) and neither is in the system, so 2026-05 cannot be planned. Load that month's stock count first",
-      "seconds": 0
+      "seconds": 1
     },
     "crash_mid_run_then_rollback": {
       "exact": true,
@@ -158,10 +158,10 @@
       "rollback_exit": 0,
       "differences": [],
       "plan": {
-        "rows": 110,
-        "pieces": 378700
+        "rows": 115,
+        "pieces": 330212
       },
-      "seconds": 28
+      "seconds": 40
     }
   }
 }
