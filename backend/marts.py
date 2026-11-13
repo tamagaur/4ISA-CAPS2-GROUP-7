@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from analytics import actuals_version as _av
 from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF
-from backend import batch
+from backend import batch, stock_signal
 from backend.data_mode import PREVIEW, REAL
 from backend.demo_flag import demo_enabled
 
@@ -1054,7 +1054,8 @@ def accuracy_rows(db: Session, start: str, end: str, run_id: int | None = None) 
     """Scored product-months (actual known) in start..end. With no run_id: each month from
     the default backtest when it covers the month, else from the newest stored run that
     forecast it — so the card never mixes two forecasts for one month."""
-    return [dict(r) for r in batch.rows(db, *accuracy_rows_query(start, end, run_id))]
+    # The stock-limited label as served (backend/stock_signal: the stored column under today's rule, the rows untouched).
+    return stock_signal.apply_to_rows([dict(r) for r in batch.rows(db, *accuracy_rows_query(start, end, run_id))])
 
 
 def accuracy_rows_query(start: str, end: str, run_id: int | None = None) -> tuple[str, dict]:
@@ -1150,7 +1151,8 @@ MAPE_LABEL = ("Typical product's percentage miss (MAPE, as Chapter 3 defines it)
 
 
 def _zero_stock(row: dict) -> bool:
-    return any(row.get(k) is not None and float(row[k]) == 0 for k in ("opening_pieces", "closing_pieces"))
+    # The months MAPE sets apart (backend/stock_signal.MAPE_APART; today: a zero opening or closing count).
+    return stock_signal.zero_stock_row(row)
 
 
 def mape_summary(by_product: dict) -> dict:
@@ -1232,6 +1234,12 @@ _SUM_KEYS = ("forecast_pieces", "actual_pieces", "net_miss_pieces", "abs_miss_pi
 
 def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> tuple[str, dict]:
     sql, params = accuracy_rows_query(start, end, run_id)
+    # backend/stock_signal's switches. At today's values these are the stored column and the zero-count test, so the SQL is the
+    # same text as before they existed (tests/backend/test_stock_signal.py).
+    flag = stock_signal.flag_sql()
+    flag_col = flag if flag == "possibly_stock_limited" else f"{flag} AS possibly_stock_limited"
+    zero = stock_signal.zero_stock_sql()
+    zero_bare = zero[1:-1] if zero.startswith("(") and zero.endswith(")") else zero   # inside COALESCE( , false)
     return f"""
         WITH scored AS ({sql})
         SELECT 'month' AS kind, row_to_json(x) AS d FROM (
@@ -1255,23 +1263,23 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
                          -- Chapter 3 MAPE (mape_summary): the same three cases as accuracy_aggregates
                          COUNT(*) FILTER (WHERE method = 'rule_order') AS rule_rows,
                          COUNT(*) FILTER (WHERE method IS DISTINCT FROM 'rule_order'
-                                          AND (opening_pieces = 0 OR closing_pieces = 0)) AS stockout_rows,
+                                          AND {zero}) AS stockout_rows,
                          COALESCE(SUM(ABS(forecast_pieces - actual_pieces) / actual_pieces) FILTER (
-                             WHERE method IS DISTINCT FROM 'rule_order' AND NOT COALESCE(opening_pieces = 0 OR closing_pieces = 0, false)
+                             WHERE method IS DISTINCT FROM 'rule_order' AND NOT COALESCE({zero_bare}, false)
                                AND actual_pieces > 0), 0) AS ape_sum,
                          COUNT(*) FILTER (WHERE method IS DISTINCT FROM 'rule_order'
-                                          AND NOT COALESCE(opening_pieces = 0 OR closing_pieces = 0, false)
+                                          AND NOT COALESCE({zero_bare}, false)
                                           AND actual_pieces > 0) AS ape_n
                   FROM scored GROUP BY product_key) p
             JOIN (SELECT DISTINCT ON (product_key) product_key, month, direction, run_length, miss_pieces,
-                         price_per_piece, sku_code, product_name, possibly_stock_limited
+                         price_per_piece, sku_code, product_name, {flag_col}
                   FROM scored ORDER BY product_key, month DESC) l ON l.product_key = p.product_key) x
         UNION ALL
         SELECT 'total', row_to_json(x) FROM (
             SELECT COUNT(*)::int AS product_months, array_agg(DISTINCT forecast_source) AS sources,
                    array_agg(DISTINCT run_label) AS run_labels,
-                   (COUNT(*) FILTER (WHERE possibly_stock_limited IS TRUE))::int AS possibly_stock_limited,
-                   (COUNT(*) FILTER (WHERE direction = 'over' AND possibly_stock_limited IS NULL))::int
+                   (COUNT(*) FILTER (WHERE {flag} IS TRUE))::int AS possibly_stock_limited,
+                   (COUNT(*) FILTER (WHERE direction = 'over' AND {flag} IS NULL))::int
                        AS possibly_stock_limited_unknown
             FROM scored) x
     """, params
