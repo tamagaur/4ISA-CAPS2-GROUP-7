@@ -89,6 +89,9 @@ fixed allocation and **meeting the target service level**."* Service level as a
 **constraint**, not a `w₂` term in the weighted objective.
 
 **Why this matters:**
+- [Superseded 2026-09-30, corrected 2026-11-13: the LP is now solved in stages (layers, then the 3-week cover rule, then
+  w₁ purchase cost − w₂ revenue-weighted need met + w₃ storage); w₃ is a flat storage cost, never spoilage; the
+  normalisation problem below was fixed 2026-09-18 (8f79729). The text below is the question as asked on 2026-09-14.]
 - The current LP objective is `minimize w₁·cost − w₂·service + w₃·spoilage`. We
   verified empirically that the `w₂·service` term is normalized to ~1e-5 and never
   actually influences the answer — the LP returns `Q = ROP` for 94% of SKUs and is

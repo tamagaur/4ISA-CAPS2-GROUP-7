@@ -1000,11 +1000,26 @@ def calendar_adjusted_state(run_labels: list[str]) -> str | None:
     return "yes" if all(adjusted) else "partly" if any(adjusted) else "no"
 
 
+# The label of a run that applies no calendar factor, written beside a run whose label names a calendar grain (", product
+# calendar"): without the factor the grain changes nothing, so such a run equals the run labelled without the grain (run 20 = run
+# 15 on live). Migration 0080 (2026-11-13) gave run 20 this suffix; scripts/accuracy_as_served.py writes it.
+CALENDAR_OFF_SUFFIX = ", calendar factor not applied"
+
+
+def unadjusted_twin_labels(label: str) -> tuple[str, str]:
+    """(preferred, fallback) labels of the same backtest without the calendar factor: `label` minus ", calendar-adjusted" with
+    CALENDAR_OFF_SUFFIX (the product-calendar twin, run 20), else without it (the company-factor twin, run 15 of run 16)."""
+    base = label.removesuffix(CALENDAR_ADJUSTED_SUFFIX)
+    return base + CALENDAR_OFF_SUFFIX, base
+
+
 def unadjusted_twin_query(label: str) -> tuple[str, dict]:
-    """The stored run with `label` minus the calendar suffix (the same backtest, unadjusted)."""
+    """The stored run of the same backtest without the calendar factor (unadjusted_twin_labels: the suffixed label first)."""
+    off, base = unadjusted_twin_labels(label)
     return """
-        SELECT run_id, label FROM mart.forecast_run WHERE label = :label ORDER BY run_id DESC LIMIT 1
-    """, {"label": label[: -len(CALENDAR_ADJUSTED_SUFFIX)]}
+        SELECT run_id, label FROM mart.forecast_run WHERE label IN (:off, :base)
+        ORDER BY (label = :off) DESC, run_id DESC LIMIT 1
+    """, {"off": off, "base": base}
 
 
 def accuracy_comparison(db: Session, summary: dict) -> dict | None:

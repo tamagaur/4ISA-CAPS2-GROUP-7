@@ -10,7 +10,7 @@
 //              own question, "2025 vs 2024?")
 //   previous — the same number of months just before the range
 //   none     — no comparison
-import { LATEST_DATA_PERIOD, FIRST_DATA_YEAR } from './dataCoverage.js';
+import { FIRST_DATA_YEAR } from './dataCoverage.js';
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -84,7 +84,7 @@ export function comparisonAvailable(versus, floor = { month: 'Jan', year: String
 // The last `n` months ending at `latest` ({ month, year }): the quick ranges
 // that move with the data. The default view is lastNRange(12, latest).
 export const RELATIVE_RANGES = { last6: 6, last12: 12, last24: 24 };
-export function lastNRange(n, latest = LATEST_DATA_PERIOD) {
+export function lastNRange(n, latest) {
   const end = ordinal(latest.month, latest.year);
   const start = fromOrdinal(end - n + 1);
   return { startMonth: start.month, startYear: start.year, endMonth: latest.month, endYear: String(latest.year) };
@@ -97,7 +97,8 @@ export function lastNRange(n, latest = LATEST_DATA_PERIOD) {
 // to 2021; real data starts in FIRST_DATA_YEAR). `latest`: the latest month
 // with data for the page's principal (dataCoverage.latestFor), so "Last 12
 // months" for Del Monte ends at its own latest month, not Unilever's.
-export function quickRanges(firstYear = FIRST_DATA_YEAR, latest = LATEST_DATA_PERIOD) {
+export function quickRanges(firstYear = FIRST_DATA_YEAR, latest) {
+  if (!latest) return [];
   const last = ordinal(latest.month, latest.year);
   const ranges = Object.entries(RELATIVE_RANGES).map(([key, n]) => ({
     key, label: `Last ${n} months`, range: lastNRange(n, latest),

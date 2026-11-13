@@ -2,7 +2,8 @@
 // every card that mentions it: the forecast card, the error card, the order
 // plan's cards and the SKU Forecast page. Kelvin's analytics/forecasting/
 // calendar.py multiplies each served forecast by how that calendar month has
-// sold against the 3 months before it in earlier years (company total),
+// sold against the 3 months before it in earlier years, for that product
+// (its own years, pulled toward the typical product's where it has few),
 // halfway toward no change. Every figure comes from the API: GET /dashboard's
 // portfolio_forecast.calendar_adjustment, or a forecast row's model_params
 // (calendar_factor, calendar_years, value_before_calendar).

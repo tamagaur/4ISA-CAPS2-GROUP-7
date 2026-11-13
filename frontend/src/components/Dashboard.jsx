@@ -1230,9 +1230,8 @@ const Dashboard = () => {
   const noPlanNote = pagePrincipal === 'delmonte'
     ? 'The order plan does not cover Del Monte: it has no SKU-level sales to forecast, so there are no reorder recommendations for it.'
     : 'No run of the order plan has produced recommendations for this scope yet.';
-  // Non-null only when the live data has moved past the hardcoded ceiling.
-  // Only when the layout could not read "today" from GET /data-mode and fell
-  // back to dataCoverage.js's month while this payload knows a newer one.
+  // Non-null only when this payload knows a newer month than the layout's
+  // "today": a month loaded since the layout last read GET /data-mode.
   const coverageStale = staleCoverageNotice(data.latest_data_period, outletLatest);
   // The cards connected (Technical Adviser, 2 Oct 2026): which products
   // matter (ABC card) -> which are at risk (the count below, and the list

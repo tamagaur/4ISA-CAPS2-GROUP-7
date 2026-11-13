@@ -189,13 +189,16 @@ the most balanced.
 SKU-origins, a −287-unit median per-SKU ME. For this system that is the wrong
 direction: `ROP = forecast + safety stock`, so a forecast biased low pulls the
 reorder point low, and the LP weights service level highest (w1 = 0.45 vs
-w2 = 0.35 cost). A model that under-shoots demand more than half the time
+w2 = 0.35 cost). [Corrected 2026-11-13: reversed. w1 = 0.45 is purchase cost, w2 = 0.35 the revenue-weighted share of need
+met, w3 = 0.20 storage (analytics/params.py LP_WEIGHTS); the LP fills the need in layers before any weight applies, and the
+ROP = forecast + SS model described here was retired 2026-09-30.] A model that under-shoots demand more than half the time
 converts directly into stockout risk that the safety-stock buffer then has to
 paper over. This is the single clearest behavioural difference in the whole
 analysis, and it favours MA3 over its closest rival.
 
 HW and Theta over-forecast most (61 %, 59 %) — that is the "safe" direction but it
-is holding cost, which the LP also penalises.
+is holding cost, which the LP also penalises. [Corrected 2026-11-13: it does not. The LP charges a flat storage cost per piece
+ordered, the same for every product, which cannot change a plan; it has no holding-cost term on stock held.]
 
 ---
 
@@ -278,7 +281,8 @@ for a gain that §2 shows is not statistically real.
 4. **SBA α=0.3, the only real contender, is behaviourally wrong for this system**:
    it under-forecasts 58 % of the time with a −287-unit median bias (§4). In a
    `ROP = forecast + safety stock` pipeline whose LP weights service level highest
-   (w1 = 0.45), a low-biased forecast is a stockout generator. MA3's mild
+   (w1 = 0.45), a low-biased forecast is a stockout generator. [Corrected 2026-11-13: w1 = 0.45 is purchase cost, not
+   service; see §4's correction.] MA3's mild
    over-forecast (+51, 54/46) is the safe direction.
 5. **No candidate is meaningfully more stable across origins** (§3, all within
    1.5 pp) — so the one thing that could justify a switch on SSM's own terms

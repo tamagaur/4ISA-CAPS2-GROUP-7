@@ -1,7 +1,7 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Calendar, ChevronDown, Check, RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
-import { LATEST_DATA_PERIOD, FIRST_DATA_YEAR } from '../dataCoverage';
+import { FIRST_DATA_YEAR } from '../dataCoverage';
 import { PLACEHOLDER_START, isPreviewMode } from '../dataMode';
 import './DateFilter.css';
 
@@ -102,7 +102,8 @@ const DateFilter = ({
   showToday = true, ceiling = null,
 }) => {
   const outlet = useOutletContext() || {};
-  const dataCeiling = outlet.dataLatest || LATEST_DATA_PERIOD;
+  // Always set: the layout renders no page until GET /data-mode has said which months have data.
+  const dataCeiling = outlet.dataLatest;
   const { latestYear, latestYearMonths, monthsForYear, yearsFrom } = pickerBounds(dataCeiling);
   const years = yearsFrom(
     !realOnly && isPreviewMode(outlet.dataMode) ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR

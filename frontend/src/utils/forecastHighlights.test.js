@@ -113,7 +113,7 @@ test('why: a month the API did not send, or a generated month, is never assumed'
 
 test('why: the calendar factor in words, raised, lowered, or none on record', () => {
   assert.equal(byKey(why({ calendar: { factor: 1.0762, years: 2 } })).calendar,
-    'Across all Unilever products, March has on average sold more than the 3 months before it (2 earlier years), so the forecast is raised by about 7.6%.');
+    'For this product, March has on average sold more than the 3 months before it (2 earlier years), so the forecast is raised by about 7.6%.');
   assert.match(byKey(why({ calendar: { factor: 0.95, years: 1 } })).calendar, /sold less .*\(1 earlier year\), so the forecast is lowered by about 5\.0%\.$/);
   assert.equal(byKey(why({ calendar: { factor: 1, years: 0 } })).calendar,
     'No calendar adjustment: there is no earlier March on record to compare with.');

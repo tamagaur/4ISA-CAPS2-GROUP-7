@@ -2,7 +2,8 @@
 
     python scripts/check_helpers.py env [--full]
         The live database must be configured AND reachable (read-only probe), and every variable the checks import
-        must be set: SUPABASE_DB_URL and SUPABASE_KEY (analytics/config.py). Names every missing variable. JWT_SECRET_KEY
+        must be set: SUPABASE_DB_URL (analytics/config.py; SUPABASE_KEY is no longer required there since 2026-11-13, nothing reads it).
+        Names every missing variable. JWT_SECRET_KEY
         is not required since 2026-11-11: no test signs a token at import any more (KNOWN_ISSUES B1, fixed), and the
         tests that sign one in-process supply a throwaway secret (tests/backend/conftest.py, tests/invariants/conftest.py).
     python scripts/check_helpers.py junit <junit.xml> [--allow-listed]
@@ -20,7 +21,7 @@ from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-REQUIRED = ("SUPABASE_DB_URL", "SUPABASE_KEY")
+REQUIRED = ("SUPABASE_DB_URL",)
 REQUIRED_FULL: tuple[str, ...] = ()   # was JWT_SECRET_KEY, for the import-time tokens of KNOWN_ISSUES B1 (fixed 2026-11-11)
 
 

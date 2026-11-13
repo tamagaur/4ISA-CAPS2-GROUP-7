@@ -212,9 +212,10 @@ export function forecastWhy({
   }
 
   // The calendar adjustment (analytics/forecasting/calendar.py): above 1
-  // when, across every real Unilever product (calendar.py company_totals),
-  // the month has on average sold more than the 3
-  // months before it in earlier years; 1 with no earlier year on record.
+  // when this product's month has on average sold more than the 3 months
+  // before it in earlier years (calendar.py ProductCalendar: its own years,
+  // pulled toward the typical product's; per product since 2026-11-13);
+  // 1 with no earlier year on record.
   const factor = calendar?.factor != null ? Number(calendar.factor) : null;
   if (factor != null && Number.isFinite(factor) && target != null) {
     const month = MONTH_LONG[target % 12];
@@ -223,15 +224,15 @@ export function forecastWhy({
     const pct = Math.abs((factor - 1) * 100).toFixed(1);
     let text = null;
     if (factor > 1) {
-      text = `Across all Unilever products, ${month} has on average sold more than the 3 months before it${yearsText}, `
+      text = `For this product, ${month} has on average sold more than the 3 months before it${yearsText}, `
         + `so the forecast is raised by about ${pct}%.`;
     } else if (factor < 1) {
-      text = `Across all Unilever products, ${month} has on average sold less than the 3 months before it${yearsText}, `
+      text = `For this product, ${month} has on average sold less than the 3 months before it${yearsText}, `
         + `so the forecast is lowered by about ${pct}%.`;
     } else if (years === 0) {
       text = `No calendar adjustment: there is no earlier ${month} on record to compare with.`;
     } else if (years != null) {
-      text = `Across all Unilever products, ${month} has sold about the same as the 3 months before it${yearsText}, `
+      text = `For this product, ${month} has sold about the same as the 3 months before it${yearsText}, `
         + 'so the calendar adjustment leaves the forecast unchanged.';
     }
     if (text) lines.push(lineOf('calendar', [text]));

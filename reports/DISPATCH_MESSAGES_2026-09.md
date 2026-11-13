@@ -28,7 +28,8 @@ recommendation. A quick orientation:
   (best median ~33%). We recommend MASE < 1.0. This changes prescriptive coverage
   from ~19 SKUs to ~67.
 - **Q5 (LP restructure)**: we found the service-level term in the current
-  objective is normalized to ~1e-5 and never actually influences the result. The
+  objective is normalized to ~1e-5 and never actually influences the result. [Fixed 2026-09-18 (8f79729) and the LP
+  restructured 2026-09-30 (staged fill, then cover rule, then weights); noted 2026-11-13.] The
   map already calls for service level as a *constraint*. We want to take that to
   you as the proposal.
 - **Q2, Q4, Q6, Q7** (σ form, ROP→S, weights provenance, EOQ/DEC-08) are lower

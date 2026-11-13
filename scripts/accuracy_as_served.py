@@ -438,9 +438,12 @@ TREATED = ", succession + fading"
 # December rule on it): NEW labels, so runs 15-18 (company factor) stay stored and selectable; 0064's pattern still matches.
 PRODUCT_CAL = ", product calendar"
 AS_SERVED_RUNS = {
-    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + PRODUCT_CAL,   # no calendar factor in this run; the suffix names the series (the default's twin)
+    # No calendar factor in this run, and its label says so (backend/marts.CALENDAR_OFF_SUFFIX, migration 0080): without the factor
+    # the grain changes nothing, so it equals the run labelled without PRODUCT_CAL. It is the card default's "before" twin.
+    "as_served": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + PRODUCT_CAL + ", calendar factor not applied",
                   "Tier A (current basis) the month before each test month; months after a product's last sale "
-                  "scored; dead-SKU rule applied as the live forecast applies it; succession and fading applied as served"),
+                  "scored; dead-SKU rule applied as the live forecast applies it; succession and fading applied as served; "
+                  "no calendar factor: the same forecasts as the run labelled without ', product calendar'"),
     "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
                            "as above; served value x each product's own calendar factor"),
     # Tier B and C cohorts (the error decomposition, migration 0063, scores every tier). Calendar-adjusted only,

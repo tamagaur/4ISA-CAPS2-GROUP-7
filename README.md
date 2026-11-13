@@ -14,7 +14,7 @@ Before you run anything, read [What the data is](#what-the-data-is-and-is-not) b
 | 2. Classify | ABC/Pareto ranking; the top class is what gets forecast | `analytics/classification/` |
 | 3. Forecast | One method per product, chosen by how much history it has | `analytics/forecasting/router.py`, `scripts/run_baseline_forecast.py` |
 | 4. Safety stock and target stock | Per product, from its own forecast and variability | `analytics/optimization/lp.py`, `scripts/run_lp.py` |
-| 5. Optimise | Multi-objective linear program (PuLP); settings in `analytics/params.py` | `analytics/optimization/lp.py`, `scripts/run_lp.py` |
+| 5. Optimise | Linear program solved in stages (PuLP/CBC): fill the need in layers, then the 3-week cover rule, then the weights (purchase cost 0.45, revenue-weighted need met 0.35, storage 0.20); settings in `analytics/params.py` | `analytics/optimization/lp.py`, `scripts/run_lp.py` |
 | 6. Present | Marts, then a FastAPI backend, then a React + Vite frontend | `analytics/marts.py`, `backend/`, `frontend/` |
 
 `python -m scripts.run_month` chains the monthly steps, and it is a dry run unless told otherwise. Schema changes go only through the numbered files in `analytics/db/migrations/`.

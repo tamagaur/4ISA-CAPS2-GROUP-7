@@ -6,12 +6,44 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    legacy row 4. LIVE since 2026-11-13 08:05 UTC: `python -m scripts.apply_calendar_grain --target-public` from 163b42f (the calendar
    factor computed per product, December rule on; CALENDAR GRAIN below). check.sh --fast GREEN against live afterwards (6 of 6, 67 s,
    13 invariants). lp_run 10 has ONE meaning in this repo: this plan. The rehearsal plans of the two unapplied branches are relabelled
-   SPIKE-COPY (kelvin/spike-cap, 116 / 295,210) and GATE-COPY (kelvin/forecastability-gate, 114 / 335,800) in this branch; neither was ever live (the two branches themselves are not yet relabelled, see the GATE note below).
+   SPIKE-COPY (kelvin/spike-cap, 116 / 295,210) and GATE-COPY (kelvin/forecastability-gate, 114 / 335,800); neither was ever live. Both
+   branches were relabelled 2026-11-13 (records reports/SPIKE_CAP_RECORD_2026-11-12.md and reports/FORECASTABILITY_GATE_RECORD_2026-11-12.md on
+   them); kelvin/calendar-grain was deleted (163b42f is in kelvin-be).
    Was lp_run 9 (110 / 378,700 / 67 >0 / SS 459,359.47, live 2026-11-11 12:52 UTC to 2026-11-13, the final bundle); lp_run 8
    110 / 381,484, lp_run 7 110 / 419,344, lp_run 6 109 / 435,988. A re-plan rewrites the cycle's rows in place: lp_run 9's row values
    are in backups/full_backup_20261113T075729Z, its three products that left in reports/lp_runs/retired_2026-03-01_20261113T080859Z.csv
    (git-ignored).)
-  Next migration: 0080 (ledger ends at 0079, 80 rows, live 2026-11-13). kelvin-be is the branch to write Chapter 4 from.
+  Next migration: 0081 (ledger ends at 0080, 81 rows, live 2026-11-13 after backup full_backup_20261113T112358Z). kelvin-be is the
+  branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+DEPLOY + FIXES (2026-11-13, Kelvin's brief "finish the fix and make it deployable"; LP unchanged by decision, its descriptions changed).
+  The non-restore of the calendar-grain apply is confirmed: apply_calendar_grain.measure with the committed byte-ordered _md5, live vs
+  ssm_grain, every result key EQUAL; ledger differs by 0079 only; definitions/privileges differ copy-vs-live as before the apply.
+  0080 (live): run 20's label ends ", calendar factor not applied" (it applies no factor: same forecasts as run 15); the twin lookup
+  (backend/marts.unadjusted_twin_query, forecast_bias_diagnosis) prefers that label, falls back to the bare one (run 16 -> 15); and
+  mart.accuracy_mart's copies of the product-calendar runs' label/cohort set from mart.forecast_run (25,620 rows; 0079 had left runs
+  21-23's cohort saying "company calendar factor" there). Plan unchanged 115 / 330,212.
+  Del Monte regroup count, queried SellOut_Fact_Real: 82 category paths with real rows 2023-01..2024-02 (62-69 in any one month,
+  median 66), 5 categories from 2025-03 (4-5 a month); 80 of the 82 ever ranked in ABC (2 had only net-negative sales). Page, code
+  comments and abc.py corrected ("about 63", "about 80", "~63 per month" were all off).
+  Fixed: LP weight labels (0.45 purchase cost, 0.35 the revenue-weighted share of need met, 0.20 storage; the 90% is the safety
+  stock's) on the Reorder page, the review drawer, the dashboard widget and the Reference Guide, which now reads the weights from the
+  stored plan; every repo description of the LP objective that was wrong (list in the session report); "(company total)" on SKU
+  Forecast; the Reference Guide's live date; the fallback months (no constant: the layout waits for GET /data-mode, loading state /
+  retry); the upload's bypass of the expired-session check; the post-sign-out return to the page; a range ending before a loaded
+  month losing its MAPE (backend/practice_copy._range_stands); SUPABASE_KEY required by analytics/config though read by nothing
+  (it would have stopped a month load's ABC step on Render); a frontend build without VITE_API_URL (now refuses).
+  Not a defect (the brief's item 6): mart.forecast_run.label is UNIQUE on live (forecast_run_label_key, 0041:155), so two runs cannot
+  share the default label; no change.
+  Loading March on live, measured on a restored copy with the same file: default range moves to Apr 2025 - Mar 2026 (by design:
+  the loaded month counts), the banner appears, the plan becomes cycle 2026-04 131 / 1,016,754 (it opens on the real count of
+  2026-04-06, PHP 22.7M, against the flagged PHP 46.6M count of 2026-03-02), the error card is withheld in the default range and
+  shows 8.52 / 32.04 / 34.0% on Mar 2025 - Feb 2026. Every figure: docs/DEPLOY_AND_TEST_2026-11-13.md section 3.
+  Deployed backend (fourisa-caps2-group-7.onrender.com) still serves 84 routes (no /batch/*): it must be redeployed from kelvin-be
+  before a month can be loaded there. Which branch Render watches is not in the repo (no render.yaml).
+  Security: no secret value in any of 70 remote refs, the unpushed commits, the tracked tree or the deployed bundle (exact-value and
+  pattern scan); the data API is locked (anon/authenticated: no SELECT on any public/app/mart/demo table or view; RLS on all 64
+  tables); Supabase Storage has no bucket (avatar upload cannot work until one is made).
 
 CALENDAR GRAIN (2026-11-12 build, branch kelvin/calendar-grain 163b42f, fast-forwarded into kelvin-be; APPLIED to live 2026-11-13).
   THE DEFECT: analytics/forecasting/calendar.py computed the factor from the company total (volume-weighted) and router.route() applied it
@@ -62,10 +94,8 @@ CALENDAR GRAIN (2026-11-12 build, branch kelvin/calendar-grain 163b42f, fast-for
   STOPPED AT THE BRIEF'S SECOND GATE (2026-11-13): python -m scripts.manuscript_figures against live (exit 2, the same 8 figures held,
   0 table problems) shows seven manuscript statements that agreed with lp_run 9's served backtest and disagree now: Table 4.2.18's 2025-04 and 2025-12 over/under direction (figure 4.2.26), its 2025-05 and 2025-06 monthly WAPE (4.2.27), and its 2025-05, 2025-07 and 2025-12 shortage pesos (4.2.28).
   The 2026-11-12 re-pin had not redrawn figures h-k, p, q (its FIGURES.md still read lp_run 9's 110 / 0.823); they are redrawn from live
-  in this commit. Not reconcilable in code (they describe the served forecast's backtest). Left for Kelvin, so NOT DONE after the
-  stop: kelvin-be not pushed (team/kelvin-be is at 340c9a5; local is 941fadb..this commit ahead); kelvin/spike-cap and
-  kelvin/forecastability-gate not relabelled (they still state their rehearsal plans as lp_run 10); kelvin/calendar-grain (163b42f,
-  merged into kelvin-be) not deleted.
+  in this commit. Not reconcilable in code (they describe the served forecast's backtest). Left for Kelvin (the chapter text). The
+  push, the two relabels and the deletion held back at that stop were done the same day (DEPLOY + FIXES above).
 
 SPIKE CAP + DECEMBER DIP RULE REFUSED (2026-11-12, Kelvin's recon brief; scored, NOT applied; nothing written to live). The code is
   NOT on this branch: it lives on kelvin/spike-cap (459f299..c100f9a), kept as the record, not to be merged. Its rehearsal plan is

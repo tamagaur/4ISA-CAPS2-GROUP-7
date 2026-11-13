@@ -118,8 +118,8 @@ The opening count is the 2 March 2026 count. It is accepted for planning pending
 ### A7. LP decision
 
 The model bounds the order: 0 ≤ Q_i ≤ need_i. Stage 1 fills the need in three layers (this month's demand, then safety stock,
-then the rest of the target), as far as the allocation and the warehouse allow. The cost weights (w1 0.45, w2 0.35, w3 0.20) only
-decide who gives up a layer when a ceiling binds.
+then the rest of the target), as far as the allocation and the warehouse allow. The weights (w1 0.45 purchase cost, w2 0.35 the revenue-weighted
+share of need met, w3 0.20 storage) only decide who gives up a layer when a ceiling binds.
 
 | Check | Value | Source |
 |---|---|---|

@@ -160,6 +160,22 @@ def test_a_range_ending_before_the_month_keeps_the_real_figures():
     assert out["forecast_accuracy"]["company_total"]["value"] == 0.109 and "blocked_reason" not in out["forecast_accuracy"]
 
 
+def test_a_range_ending_before_the_month_keeps_its_mape_too_but_not_the_entry_test():
+    # 2026-11-13: "mape" is in STORED_ACCURACY_KEYS, so the stored-figure sweep nulled the range's own MAPE block on a range the rule
+    # says keeps its figures (a Mar 2025 - Feb 2026 card kept company and product WAPE and lost MAPE once March was loaded).
+    card = {**_card("2025-03", "2026-02"), "mape": {"value": 0.3397, "products": 210},
+            "entry_test": {"median_mase": 0.755, "mase_passed": 115, "mase_scored": 175}}
+    acc = pc.label_payload(dict(card), MARCH, "/dashboard/accuracy")
+    assert acc["mape"]["value"] == 0.3397 and acc["company_total"]["value"] == 0.109 and "blocked_reason" not in acc
+    assert acc["entry_test"]["median_mase"] is None and acc["entry_test"]["mase_passed"] is None
+    assert "_range_stands" not in acc
+    dash = pc.label_payload({"forecast_accuracy": {**card, "entry_test": dict(card["entry_test"])}}, MARCH, "/dashboard")
+    block = dash["forecast_accuracy"]
+    assert block["mape"]["value"] == 0.3397 and block["entry_test"]["median_mase"] is None and "_range_stands" not in block
+    reached = pc.label_payload({**card, "start_period": "2025-04", "end_period": "2026-03"}, MARCH, "/dashboard/accuracy")
+    assert reached["blocked_reason"] and accuracy_figure(reached) is None
+
+
 def test_the_accuracy_route_at_every_level_is_withheld_with_no_rows():
     out = pc.label_payload({**_card(), "level": "product", "rows": [{"sku_code": "1", "month": "2026-03", "miss_pieces": 4}]}, MARCH, "/dashboard/accuracy")
     assert out["rows"] == [] and out["level"] == "product" and out["blocked_reason"] and accuracy_figure(out) is None

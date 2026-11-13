@@ -148,7 +148,7 @@ const loadCompare = () => {
 // live-tracked across resizes.
 const startsWithSidebarOpen = () => !window.matchMedia('(max-width: 900px)').matches;
 
-const DashboardLayout = () => {
+const DashboardLayoutInner = ({ initialCoverage }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(startsWithSidebarOpen);
   // True once the menu button has been used, so the page's slide
   // (Sidebar.css) plays on a toggle and not on first load.
@@ -189,12 +189,11 @@ const DashboardLayout = () => {
     localStorage.setItem(PRINCIPAL_STORAGE_KEY, next);
   };
 
-  // What months have data (GET /data-mode's `coverage`): null until it
-  // answers, then { first_data_period, latest_data_period,
-  // latest_data_period_by_principal }. latestFor() falls back to
-  // dataCoverage.js's values meanwhile, so the first render already ends on
-  // the right month in the normal case.
-  const [coverage, setCoverage] = useState(null);
+  // What months have data (GET /data-mode's `coverage`: { first_data_period,
+  // latest_data_period, latest_data_period_by_principal }). Read by the outer
+  // DashboardLayout before this renders (initialCoverage), so every range below
+  // starts from a measured month; there is no constant to fall back on.
+  const [coverage, setCoverage] = useState(initialCoverage);
   // "Today": the latest month with data for this page's principal (where the
   // default and the "Last N months" ranges end), and for either principal
   // (the date picker's ceiling).
@@ -215,20 +214,18 @@ const DashboardLayout = () => {
   const [rangeAnchor, setRangeAnchor] = useState(() => {
     const fromUrl = loadUrlAnchor();
     if (fromUrl) return fromUrl;
-    return loadUrlRange(dataMode, latestFor(null, 'all')) ? null : DEFAULT_RANGE_KEY;
+    return loadUrlRange(dataMode, latestFor(initialCoverage, 'all')) ? null : DEFAULT_RANGE_KEY;
   });
   const [initialRange] = useState(() => (rangeAnchor
-    ? lastNRange(RELATIVE_RANGES[rangeAnchor], latestFor(null, principal))
-    : loadUrlRange(dataMode, latestFor(null, 'all')) || getDefaultDateRange(latestFor(null, principal))));
+    ? lastNRange(RELATIVE_RANGES[rangeAnchor], latestFor(initialCoverage, principal))
+    : loadUrlRange(dataMode, latestFor(initialCoverage, 'all')) || getDefaultDateRange(latestFor(initialCoverage, principal))));
   // A shared link's from/to that failed the check above (audit FE-13,
-  // 2026-10-22). That check runs before GET /data-mode answers, against
-  // dataCoverage.js's fallback ceiling, so a link ending in a month of real
-  // data newer than the fallback was dropped for the default. The address it
-  // came in is kept here and checked again once live coverage arrives (the
-  // effect below); any range the user applies first clears it, so a range
-  // they have since picked is never replaced.
+  // 2026-10-22). Since 2026-11-13 that check already runs against live
+  // coverage (initialCoverage), so the re-check below finds the same answer
+  // unless a month was loaded meanwhile; kept for that case. Any range the
+  // user applies first clears it, so a range they have picked is never replaced.
   const urlRangeToRecheck = useRef(
-    !loadUrlAnchor() && !loadUrlRange(dataMode, latestFor(null, 'all'))
+    !loadUrlAnchor() && !loadUrlRange(dataMode, latestFor(initialCoverage, 'all'))
       && new URLSearchParams(window.location.search).has('from')
       ? window.location.search
       : null,
@@ -698,6 +695,47 @@ const DashboardLayout = () => {
           </button>
         </div>
       </Modal>
+    </div>
+  );
+};
+
+// The layout waits for GET /data-mode's `coverage` (which months have real
+// sales) before it renders any page (2026-11-13). Every default range, the
+// picker's ceiling and "Today" are worked out from it; until then a constant
+// month stood in, and was shown whenever this call failed. Now: a loading
+// state while it is asked, and on a failure a message and a retry, never a
+// page on a guessed month. A 401 here signs out as every request does (auth.js).
+const DashboardLayout = () => {
+  const [coverage, setCoverage] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    getDataModeInfo({ preview: true })
+      .then((info) => {
+        if (cancelled) return;
+        if (info?.coverage?.latest_data_period) setCoverage(info.coverage);
+        else setFailed(true);
+      })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  if (coverage) return <DashboardLayoutInner initialCoverage={coverage} />;
+  return (
+    <div className="dashboard-layout-gate" role="status" aria-live="polite">
+      {failed ? (
+        <div className="dashboard-layout-gate-card">
+          <AlertTriangle size={20} aria-hidden="true" />
+          <p>
+            The dashboard could not read which months have data from the server, so it shows no page rather than
+            a guessed month. The server may still be starting; try again in a moment.
+          </p>
+          <button type="button" className="period-save-btn" onClick={() => { setFailed(false); setAttempt((a) => a + 1); }}>Try again</button>
+        </div>
+      ) : (
+        <LoadingStatus>Reading which months have data…</LoadingStatus>
+      )}
     </div>
   );
 };

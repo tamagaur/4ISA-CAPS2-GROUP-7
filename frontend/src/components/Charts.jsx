@@ -3140,8 +3140,8 @@ const URGENCY_CLASS = {
 // model — "reorder-point demand", and storage keeping orders "within what
 // the warehouse can affordably hold" — and storage has no effect at all
 // today: every SKU carries the same placeholder storage cost per piece
-// (lp_inputs.PLACEHOLDERS), so it scores every SKU alike (raising its
-// weight to 0.8 changed 0 SKUs' orders).
+// (analytics/params.py storage_cost_per_unit), so h cancels out of the
+// normalised term (h·ΣQ / h·Σneed) and it scores every SKU alike.
 //
 // One colour for all three rows (CHART_COLORS.lpWeight, the model-output
 // indigo): they are co-equal weights of a single objective, not three
@@ -3150,12 +3150,12 @@ const URGENCY_CLASS = {
 const LP_PRIORITY_ROWS = [
   {
     key: 'cost',
-    label: 'Cost',
+    label: 'Purchase cost',
     blurb: 'Only matters when the supplier allocation can’t cover every order. Then SKUs that cost more per piece are cut first. With enough allocation it changes nothing.',
   },
   {
     key: 'service_level',
-    label: 'Service level',
+    label: 'Need met (by sales value)',
     blurb: 'Only matters when the supplier allocation can’t cover every order. Then SKUs that bring in more revenue keep their orders longest, so the best sellers are the last to come up short.',
   },
   {
@@ -3165,8 +3165,8 @@ const LP_PRIORITY_ROWS = [
   },
 ];
 
-// Where the LP weights (45/35/20) come from is not on record: analytics/
-// params.py:205-207 marks them asserted, in no scribe note (2026-10-22).
+// Where the LP weights come from is not on record: analytics/params.py
+// LP_WEIGHTS marks them asserted, in no scribe note (2026-10-22).
 const LP_WEIGHTS_SOURCE_NOTE = 'a team setting; source not yet confirmed';
 
 // Compact dashboard-card version of the ReorderRecommendations page.

@@ -1,5 +1,9 @@
 # Render setup: a new web service for the SSM DSD backend
 
+> **Superseded in part (2026-11-13):** the settings sheet and browser checklist are `docs/DEPLOY_AND_TEST_2026-11-13.md`. Three things
+> below changed: `SUPABASE_KEY` is no longer required by anything; `SUPABASE_DIRECT_URL` IS needed on Render for a month load; the
+> month-load attestation hashes 21 files, not 9. The deploy branch is now `kelvin-be`.
+
 Written 2026-11-06 from the repo at `ead658a` (branch `kelvin-be`) and from probes of the live service. Nothing here was run
 against Render's dashboard (no access); anything that needs the dashboard is marked **DASHBOARD**. No secret values appear in this file.
 

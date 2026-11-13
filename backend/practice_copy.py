@@ -260,6 +260,8 @@ def _withhold_stored(node, months: list[str] | None, reason: str, delmonte: bool
         return
     if isinstance(node.get("principal"), str):
         delmonte = node["principal"].lower().replace(" ", "") == "delmonte"
+    if node.pop("_range_stands", False):       # a range ending before the month (_range_stands): its entry test is already withheld
+        stands = True
     stands = stands or _stands(node, months)
     if not (delmonte or stands):
         held = [k for k in STORED_ACCURACY_KEYS if node.get(k) is not None]
@@ -284,14 +286,33 @@ def withhold_accuracy(body, generated: list[str] | None, path: str = "", uploade
     if months == []:
         return body
     reason = accuracy_withheld_reason(generated, uploaded)
-    if isinstance(body, dict) and path.startswith(ACCURACY_RANGE_ROUTES) and not body.get("blocked_reason") and _reaches_generated(body, months):
-        return _withheld_range(body, reason, months[0] if months else None) if path == "/dashboard/accuracy" else _withheld_decomposition(body, reason)
+    if isinstance(body, dict) and path.startswith(ACCURACY_RANGE_ROUTES) and not body.get("blocked_reason"):
+        if _reaches_generated(body, months):
+            return _withheld_range(body, reason, months[0] if months else None) if path == "/dashboard/accuracy" else _withheld_decomposition(body, reason)
+        _range_stands(body, months, reason)
+        return body
     if isinstance(body, dict) and path == "/dashboard" and isinstance(body.get("forecast_accuracy"), dict):
         block = body["forecast_accuracy"]
         if block.get("coverage") and _reaches_generated(block, months):
             body["forecast_accuracy"] = _withheld_range(block, reason, months[0] if months else None)
+        elif block.get("coverage"):
+            _range_stands(block, months, reason)
+            block["_range_stands"] = True           # so the sweep below passes over it (and removes the marker)
     _withhold_stored(body, months, reason)
     return body
+
+
+def _range_stands(block: dict, months: list[str] | None, reason: str) -> None:
+    """A range ending before the first generated or uploaded month keeps its figures: they are the real months' (the rule above).
+    The stored-figure sweep must then leave them alone: its key list names "mape", which is also the range's own MAPE block, so
+    until 2026-11-13 a Mar 2025 - Feb 2026 card kept its company and product WAPE and lost its MAPE once a month was loaded. The
+    entry test is not a range figure (it reads the newest forecast, which rests on the loaded month) and is still withheld.
+    On GET /dashboard the caller marks the block so the sweep that follows (withhold_accuracy's last line) passes over it."""
+    for key, value in list(block.items()):
+        if key == "entry_test":
+            _withhold_stored(value, months, reason)
+        elif isinstance(value, (dict, list)):
+            _withhold_stored(value, months, reason, stands=True)
 
 
 def label_payload(body, months: list[str] | None, path: str = "", uploaded: list[str] | None = (), note: str | None = None):

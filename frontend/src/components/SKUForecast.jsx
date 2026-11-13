@@ -39,7 +39,7 @@ import { P } from '../permissions/keys';
 import TierBasisLabel from './TierBasisLabel';
 import { prefersReducedMotion } from '../theme/motion';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
-import { FIRST_DATA_YEAR, LATEST_DATA_PERIOD } from '../dataCoverage';
+import { FIRST_DATA_YEAR } from '../dataCoverage';
 import { isPlaceholderPeriod, isPreviewMode } from '../dataMode';
 import { placeholderSpan, renderPlaceholderBand } from '../utils/placeholderBand';
 import InfoTip from './InfoTip';
@@ -459,8 +459,7 @@ const SKUForecast = () => {
     const floorStart = { startMonth: 'Jan', startYear: String(FIRST_DATA_YEAR) };
     return Number(shared.endYear) >= FIRST_DATA_YEAR
       ? { ...shared, ...floorStart }
-      : { ...floorStart, endMonth: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).month,
-        endYear: (dashboardRange.latestPeriod || LATEST_DATA_PERIOD).year };
+      : { ...floorStart, endMonth: dashboardRange.latestPeriod.month, endYear: dashboardRange.latestPeriod.year };
   })();
   // The page follows the dashboard's range LIVE (Technical Adviser, 2 Oct
   // 2026: change the filter and the screen answers; one range across the
@@ -3079,7 +3078,7 @@ const SKUForecast = () => {
                               {' '}{calendarFactorText({ factor: servedModel.calendar.factor })}, takes it to the{' '}
                               {fmtPcs(adjustedValue)} pcs shown above: how this month has sold against the 3 months before it
                               {servedModel.calendar.years != null ? ` in ${servedModel.calendar.years} earlier ${servedModel.calendar.years === 1 ? 'year' : 'years'}` : ''}
-                              {' '}(company total).
+                              , for this product (its own years, leaning on the typical product where it has few).
                               {calendarPending
                                 ? ` The adjustment is ${calendarPendingText}.`
                                 : ''}

@@ -33,6 +33,11 @@ not defensible.**
 
 ## 1.1 Objective function as actually implemented
 
+> **Superseded (noted 2026-11-13).** This section describes the model of 2026-09-06 (Q driven to ROP, SL = ΣQ/ΣROP). Since
+> 2026-09-30 (aa315f8) `analytics/optimization/lp.py` solves in stages: fill the need in layers (demand, safety stock, rest of
+> target), then the 3-week cover rule, then w1·TC/TC_ref − w2·SL + w3·SC/SC_ref with TC = purchase cost, SL = revenue-weighted
+> share of need met, SC = flat storage per piece (no spoilage, no Bad Order rate). The line numbers below are of that date.
+
 `analytics/optimization/lp.py:143-158`:
 
 ```

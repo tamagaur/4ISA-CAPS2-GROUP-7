@@ -47,8 +47,9 @@ const tierRuleText = (rules) =>
   `Class A makes up the first ${asPct(rules.tier_a_cutoff, 0)} of sales, `
   + `B the next ${asPct(rules.tier_b_cutoff - rules.tier_a_cutoff, 0)}, C the last ${asPct(1 - rules.tier_b_cutoff, 0)}.`;
 
-// Del Monte regrouped its product categories in Jan 2025 (about 63
-// sub-categories became 4-5). In a run from then on, a Del Monte row last
+// Del Monte regrouped its product categories in Jan 2025 (82 sub-category
+// paths became 5 categories; 62-69 paths reported in any one month before, 4-5
+// categories after; SellOut_Fact_Real, queried 2026-11-13). In a run from then on, a Del Monte row last
 // classified before this month is one of the old sub-categories carried
 // forward — not a category that stopped selling. DEL_MONTE_REGROUP_PERIOD
 // lives in utils/abcMonth.js since 2026-10-22, so SKU Management applies the
@@ -1184,8 +1185,8 @@ const ABCClassification = () => {
               run after the regrouping (showRegroupNote). */}
           {showRegroupNote && (
             <p className="abc-principal-note">
-              <strong>Del Monte regrouped its product categories in Jan 2025</strong> — about 63 sub-categories
-              became 4–5 — so {preRegroupCarriedCount === carriedCount
+              <strong>Del Monte regrouped its product categories in Jan 2025</strong> — 82 sub-categories
+              became 5 categories — so {preRegroupCarriedCount === carriedCount
                 ? `the ${preRegroupCarriedCount.toLocaleString()} rows not sold this month`
                 : `${preRegroupCarriedCount.toLocaleString()} of the ${carriedCount.toLocaleString()} rows not sold this month`}{' '}
               here are the older sub-categories, last grouped before the change.

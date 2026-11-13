@@ -33,7 +33,18 @@ const csp = () => {
     apply: 'build',
     configResolved(config) {
       // Vercel's project settings arrive as process.env; a local .env as config.env.
-      apiUrl = process.env.VITE_API_URL || config.env.VITE_API_URL || 'http://localhost:8000'
+      apiUrl = process.env.VITE_API_URL || config.env.VITE_API_URL
+      // A build with no backend address used to succeed and send every request to http://localhost:8000 (src/auth.js's
+      // dev fallback), with a CSP allowing only that: the deployed site failed every call as a network error and the build
+      // said nothing (2026-11-13). A build now refuses to finish without it. The dev server still falls back.
+      if (!apiUrl) {
+        throw new Error('VITE_API_URL is not set: the build needs the backend address (for example '
+          + 'https://fourisa-caps2-group-7.onrender.com, no trailing slash). Set it in the Vercel project, or in frontend/.env '
+          + 'for a local build.')
+      }
+      if (/\/$/.test(apiUrl)) {
+        throw new Error(`VITE_API_URL must not end with a slash (got ${apiUrl}): every request path starts with one.`)
+      }
     },
     transformIndexHtml() {
       return [{

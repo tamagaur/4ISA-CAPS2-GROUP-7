@@ -2,8 +2,8 @@ import { apiFetch } from '../auth';
 import { cachedRequest, invalidateCache } from './cache';
 import { appendPrincipal } from '../principals';
 
-// Unilever-only (2026-09): no more principal param — the backend always
-// scopes to Unilever now. from/to (2026-09): the shared date-range
+// principal: sent when given (appendPrincipal); the plan exists for Unilever only, and Del Monte's answer says so.
+// from/to (2026-09): the shared date-range
 // picker's applied start/end, 'YYYY-MM-DD' — filters on planning_cycle_date.
 // Both must be given together or neither is used, matching every other
 // call site of the shared picker (see backend/routers/recommendations.py).

@@ -31,8 +31,9 @@ export function latestRunFor(tierAPeriods, label) {
   return periods.length ? periods.sort().at(-1) : null;
 }
 
-// Del Monte regrouped its product categories in Jan 2025: about 80 old
-// sub-category paths became five categories, with no mapping between them
+// Del Monte regrouped its product categories in Jan 2025: 82 old
+// sub-category paths (80 of them ever ranked; the other 2 only had returns)
+// became five categories, with no mapping between them
 // (DEC-03). A Del Monte row last ranked before this month is one of the old
 // paths. GET /abc already leaves those out of the ABC page (its
 // retired_series_count, audit BE-3); GET /sku still lists them, so SKU

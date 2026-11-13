@@ -848,8 +848,8 @@ const ReorderRecommendations = () => {
   // optimized" block above the table.
   const lpWeights = meta?.lpModel?.weights || null;
   const weightRows = lpWeights ? [
-    ['Cost', lpWeights.cost],
-    ['Service level', lpWeights.service_level],
+    ['Purchase cost', lpWeights.cost],
+    ['Need met (by sales value)', lpWeights.service_level],
     ['Storage', lpWeights.storage],
   ] : [];
   // "Opening stock: Unilever count of Feb 2026, counted Mar 2, 2026 (accepted

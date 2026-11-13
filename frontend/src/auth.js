@@ -76,11 +76,39 @@ export function getCurrentUser() {
 // any component can render the "Session expired" error apiFetch throws, so
 // the user was simply bounced mid-action with no explanation.
 export const SESSION_EXPIRED_KEY = 'san2_session_expired';
+// The page the user was on when the session ended (2026-11-13): the login
+// page returns there after signing in again, instead of to the Dashboard.
+export const RETURN_TO_KEY = 'san2_return_to';
+
+// A path inside this app only: one leading '/', never '//' or '/\' (which a
+// browser reads as another host), never the login page itself. Anything else
+// is dropped, so a crafted value cannot send a signed-in user off the site.
+export function safeReturnPath(path) {
+  if (typeof path !== 'string' || !path.startsWith('/')) return null;
+  if (path.startsWith('//') || path.startsWith('/\\') || path.startsWith('/login')) return null;
+  return path;
+}
+
+// Where the login page sends the user after signing in: the page the session
+// ended on (redirectToLogin), else null. Read only; forgetReturnPath clears it.
+export function readReturnPath() {
+  try {
+    return safeReturnPath(sessionStorage.getItem(RETURN_TO_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function forgetReturnPath() {
+  try { sessionStorage.removeItem(RETURN_TO_KEY); } catch { /* storage unavailable */ }
+}
 
 function redirectToLogin() {
   if (typeof window !== 'undefined') {
     try {
       sessionStorage.setItem(SESSION_EXPIRED_KEY, '1');
+      const here = safeReturnPath(`${window.location.pathname}${window.location.search}`);
+      if (here) sessionStorage.setItem(RETURN_TO_KEY, here);
     } catch { /* private mode / storage disabled — the redirect still works */ }
     window.location.href = '/login';
   }
@@ -371,11 +399,15 @@ export async function apiFetch(path, options = {}) {
   }
 
   // Preview mode rides on every read as X-Data-Mode (src/dataMode.js), so
-  // no api/*.js wrapper has to remember it.
+  // no api/*.js wrapper has to remember it. A FormData body (a file upload)
+  // gets no Content-Type from here: the browser must set it, with the
+  // multipart boundary, so uploads go through this same expiry check and 401
+  // redirect as every other request (2026-11-13; the upload used a bare fetch).
+  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: authHeaders({
-      'Content-Type': 'application/json',
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
       ...dataModeHeaders(options.method),
       ...options.headers,
     }),

@@ -60,7 +60,7 @@ from scripts.backtest_forecast_run import read_tier_a, ym  # noqa: E402
 from scripts.run_baseline_forecast import build_series, fetch_contexts, fetch_demand  # noqa: E402
 
 DIAG_START, DIAG_END = "2025-09-01", "2026-02-01"
-CAL_SUFFIX = ", calendar-adjusted"   # the card's default run carries it; its calendar-off twin is the same label without it
+CAL_SUFFIX = ", calendar-adjusted"   # the card's default run carries it; its calendar-off twin: backend/marts.unadjusted_twin_labels
 LOCAL_OUT = REPO / "local" / "forecast_bias_diagnosis_rows.csv"
 
 
@@ -92,16 +92,18 @@ def card_rows(url: str, run_id: int, start: str, end: str) -> list[dict]:
 def run_ids(url: str) -> tuple[int, int]:
     """(the card's default run, its calendar-off twin), by label: backend.marts.DEFAULT_BACKTEST_LABEL."""
     import backend.marts as M
-    cal, plain = M.DEFAULT_BACKTEST_LABEL, M.DEFAULT_BACKTEST_LABEL.removesuffix(CAL_SUFFIX)
+    cal = M.DEFAULT_BACKTEST_LABEL
+    off, base = M.unadjusted_twin_labels(cal)     # the twin's label since migration 0080 (", calendar factor not applied"), else the bare one
     conn = psycopg2.connect(url)
     try:
         cur = conn.cursor()
         cur.execute("SET TRANSACTION READ ONLY")
-        cur.execute("SELECT label, MAX(run_id) FROM mart.forecast_run WHERE label IN (%s, %s) GROUP BY label", (cal, plain))
+        cur.execute("SELECT label, MAX(run_id) FROM mart.forecast_run WHERE label IN (%s, %s, %s) GROUP BY label", (cal, off, base))
         got = dict(cur.fetchall())
         conn.rollback()
     finally:
         conn.close()
+    plain = off if off in got else base
     if cal not in got or plain not in got:
         sys.exit(f"the card's default run or its calendar-off twin is not stored: {sorted(got)}")
     return int(got[cal]), int(got[plain])

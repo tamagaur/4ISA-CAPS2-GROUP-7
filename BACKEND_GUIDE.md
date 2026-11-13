@@ -257,12 +257,12 @@ After these five, the rest of the file-by-file section below will make sense wit
 **Status:** Working and tested against synthetic time series; never run against real Unilever SKU demand data.
 
 #### `analytics/optimization/lp.py`
-**What it does:** Turns a forecast into a recommended order quantity, using linear programming (LP) to balance cost, service level, and storage cost, subject to warehouse capacity and per-company supplier limits.
+**What it does:** Turns a forecast into a recommended order quantity, using a linear program (LP) solved in stages: it first fills each product's need in layers (this month's demand, then safety stock, then the rest of the target), then closes any shortfall against SSM's 3-week cover rule, and only then applies the weights (0.45 purchase cost, 0.35 the revenue-weighted share of need met, 0.20 storage) to decide which products give way when the warehouse or the per-principal supplier allocation binds.
 **Why it exists:** This is the final "here's what to order" step (Phase 5) that feeds `LP_Recommendation`, which the dashboard shows to a human to accept or dismiss.
-**Calls / called by:** Not yet called by any orchestration script. Uses the `pulp` library with the CBC solver.
+**Calls / called by:** `scripts/run_lp.py` (and `scripts/run_month.py` through it); every live plan (`lp_run`) was written this way. Uses the `pulp` library with the CBC solver.
 **Key functions:** `compute_safety_stock`, `target_stock` and `net_need` (what to order, net of stock on hand), `build_lp_model`, `solve_lp` (returns `None` — never raises — if the problem is infeasible, so the caller can show a warning instead of crashing).
-**Gotchas:** The objective function's "storage cost" term is a plain per-unit cost, not tied to spoilage or Bad Order data specifically, even though the manuscript sometimes describes it as a "spoilage cost" — worth knowing if you're cross-referencing the manuscript.
-**Status:** Working and tested against synthetic inputs; never run against real forecast output.
+**Gotchas:** The "storage" term is one flat cost per piece ordered (₱0.50, DEC-44 placeholder) for every product, not spoilage or Bad Order data; the manuscript's older text calls it a "spoilage cost", which the code does not have. Because the cost is the same for every product and the term is normalised (h·ΣQ / h·Σneed), it cannot change any plan today.
+**Status:** Live: every plan since lp_run 1 (2026-10-03) comes from it; lp_run 10 is the current one (STATE.md).
 
 ---
 

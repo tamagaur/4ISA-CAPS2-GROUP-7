@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, LockKeyhole, Mail, Sparkles } from 'lucide-react';
 import {
-  API_URL, confirmLoginMfaSetup, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup,
+  API_URL, confirmLoginMfaSetup, forgetReturnPath, readReturnPath, safeReturnPath, isDeviceRemembered, login, REMEMBER_DAYS, SESSION_EXPIRED_KEY, startLoginMfaSetup,
   verifyLoginCode,
 } from './auth';
 import TwoStepCodeForm from './components/TwoStepCodeForm';
@@ -37,6 +37,14 @@ const Login = () => {
   // "Your password is set..."). Kept in state, then cleared from the history
   // entry below so a reload or Back doesn't show it again.
   const [notice] = useState(() => location.state?.notice || '');
+  // Where to go after signing in (2026-11-13): the page the user was on when
+  // they were sent here, from ProtectedRoute's state.from or, after a session
+  // that ended mid-use, from auth.js's redirectToLogin. Captured once, because
+  // the notice effect below clears location.state. In-app paths only.
+  const [returnTo] = useState(() => {
+    const from = location.state?.from;
+    return safeReturnPath(from ? `${from.pathname || ''}${from.search || ''}` : null) || readReturnPath() || '/';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -78,7 +86,8 @@ const Login = () => {
   const enterDashboard = async () => {
     beginHandoff('in');
     await holdForHandoff();
-    navigate('/');
+    forgetReturnPath();
+    navigate(returnTo);
   };
 
   useEffect(() => {

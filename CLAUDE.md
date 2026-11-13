@@ -3,8 +3,9 @@
 Read STATE.md first. Update it before finishing.
 
 REPO (changed 2026-11-05, Kelvin). The team's repo, and the basis for the final deploys, is
-https://github.com/tamagaur/4ISA-CAPS2-GROUP-7 (remote `team`). Today it holds one branch, `thea-dashboardedits`
-(Audrey's frontend; unprotected, no rulesets, read with `gh api` 2026-11-05; the repo is PUBLIC). My branch there is
+https://github.com/tamagaur/4ISA-CAPS2-GROUP-7 (remote `team`). It holds `thea-dashboardedits` (Audrey's frontend, afc4d7e on 2026-11-13), `abc-tab-edits` (8010f11, 2026-11-06) and `kelvin-be`;
+both team branches are ancestors of `kelvin-be` (unprotected, no rulesets, read with `gh api` 2026-11-05; the repo is PUBLIC). Deploy
+`kelvin-be` to Render and Vercel: `docs/DEPLOY_AND_TEST_2026-11-13.md` is the settings sheet. My branch there is
 `kelvin-be`: made from Main-BE's tip 4f12e24 with `thea-dashboardedits` (7b91936) merged in by `git merge`, never by copying
 files. `4ISA-Capstone-Group-7/SSM_DSD` (remote `newrepo`, branches Main-BE, Main-FE, Main-Final) stays as the history; nothing
 new is pushed to it unless the prompt says so. Never touch origin or group7. Never push unless the prompt says so, and read a
@@ -44,7 +45,7 @@ REPORT. End with these, each under five lines, "none" when there is none:
 
 Problem: SSM's blanket 3-week safety stock rule causes trapped capital + spoilage. DSD gives per-SKU data-driven replenishment recommendations.
 
-Pipeline: ETL → ABC/Pareto classification → forecasting (deployed: `analytics/forecasting/router.py` serves short history MA3, the 3-month moving average, medium TSB, long the XGBoost+MA3 average, MA3 as fallback, DEC-25/26; SARIMA was bake-off'd against 16 other models and retired, never deployed) → safety stock/ROP → multi-objective LP optimization (PuLP, w1=0.45, w2=0.35, w3=0.20) → dashboard.
+Pipeline: ETL → ABC/Pareto classification → forecasting (deployed: `analytics/forecasting/router.py` serves short history MA3, the 3-month moving average, medium TSB, long the XGBoost+MA3 average, MA3 as fallback, DEC-25/26; SARIMA was bake-off'd against 16 other models and retired, never deployed) → safety stock / target stock → an LP solved in stages (PuLP/CBC): fill each product's need in layers (this month's demand, then safety stock, then the rest of the target), then SSM's 3-week cover rule, then the weights w1=0.45 purchase cost, w2=0.35 the revenue-weighted share of need met, w3=0.20 storage, which only pick who gives way when a ceiling binds; no spoilage term (analytics/optimization/lp.py) → dashboard.
 
 Tier A basis (DEC-38; adopted by the team as DEC-42, 2026-11-02; not confirmed by the TA): Unilever Tier A = Class A on the last 12 months + products first sold within 12 months that are Class A on the last 3 (ABC method `t12m_new`; 189 products as of 2026-02). The setting is `analytics.params.TIER_A_BASIS`; read it through `abc_method()` / `abc_method_sql()`, never a literal `method = 'single'`. Del Monte stays on `single`.
 

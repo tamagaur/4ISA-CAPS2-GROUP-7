@@ -124,7 +124,8 @@ function withCalendar(served, params) {
       ...served.plain,
       short: `${served.plain.short}, adjusted for the month`,
       season: `Yes, through the calendar adjustment: ${adjust}, how this month has sold against the 3 months before `
-        + `it${years != null ? ` in ${years} earlier ${years === 1 ? 'year' : 'years'}` : ''} (company total).`
+        + `it${years != null ? ` in ${years} earlier ${years === 1 ? 'year' : 'years'}` : ''}, for this product (its own years, `
+        + 'leaning on the typical product where it has few).'
         + `${own ? ` The model on its own: ${own}.` : ''}`,
     },
   };

@@ -54,8 +54,8 @@ category_path: with a '' fallback every Del Monte row shared one empty
 sku_id, and the ABC page, which keyed its rows on it, collided on all 85.
 product_key is returned as well so the frontend has a key that is unique
 by construction. Open question for the data side, NOT resolved here: that
-run ranks ~63 sub-categories per month in 2023-24 but only 4-5 top-level
-categories in 2025, so view=last_known mixes the two grains for Del Monte.
+run ranks 62-69 sub-category paths per month in 2023-24 (82 in all) but only 4-5 top-level
+categories per month in 2025 (5 in all; SellOut_Fact_Real, queried 2026-11-13), so view=last_known mixes the two grains for Del Monte.
 
 METHOD FILTER (migration 0017): abc_classification's natural key widened
 to (product_key, classification_period, method), and a 't3m' run is now

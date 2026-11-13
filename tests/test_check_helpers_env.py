@@ -17,7 +17,13 @@ def test_missing_variables_are_named_and_fail(monkeypatch, capsys):
     monkeypatch.delenv("SUPABASE_KEY", raising=False)
     assert ch.cmd_env() == 1
     out = capsys.readouterr().out
-    assert "SUPABASE_DB_URL" in out and "SUPABASE_KEY" in out and out.startswith("FAIL")
+    # SUPABASE_KEY is not required since 2026-11-13 (analytics/config.REQUIRED_KEYS: nothing reads it), so it is not named.
+    assert "SUPABASE_DB_URL" in out and "SUPABASE_KEY" not in out and out.startswith("FAIL")
+
+
+def test_supabase_key_is_not_required_by_anything():
+    import analytics.config as cfg
+    assert cfg.REQUIRED_KEYS == ("SUPABASE_DB_URL",) and ch.REQUIRED == ("SUPABASE_DB_URL",)
 
 
 def test_a_placeholder_value_counts_as_missing(monkeypatch, capsys):

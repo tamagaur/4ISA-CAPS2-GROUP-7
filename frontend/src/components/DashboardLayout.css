@@ -234,3 +234,20 @@
     margin-left: 1.6rem;
   }
 }
+
+/* The gate before any page renders: GET /data-mode's coverage (DashboardLayout.jsx). */
+.dashboard-layout-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.dashboard-layout-gate-card {
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}

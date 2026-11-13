@@ -10,7 +10,8 @@
 // plain "How it's computed" and a closed "Technical details" (her method
 // text), with `caveat` as a short badge. Nothing on this page reads the principal, range or data mode:
 // it explains them, so the top bar's principal switch is not shown here.
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { getRecommendations } from '../api/recommendations';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle, ArrowLeft, BarChart3, BookOpen, Calculator, ChartLine, ChevronDown, ClipboardCheck, Database, Info,
@@ -18,6 +19,29 @@ import {
 } from 'lucide-react';
 import { NOT_CONFIRMED, TO_BE_CONFIRMED } from '../labels';
 import './DataDictionary.css';
+
+// The order weights entry, filled from the stored plan's lp_model.weights (analytics/params.LP_WEIGHTS, written into
+// lp_run.model by scripts/run_lp.py; "TEAM (asserted)", in no scribe note; analytics/optimization/lp.py stage 3).
+// `weights` is null while the plan is read, and `failed` when it could not be: the entry then says where to see them.
+const ORDER_WEIGHTS_TERM = 'Order weights';
+const ORDER_WEIGHTS_ENTRY = { orderWeights: true, term: ORDER_WEIGHTS_TERM };
+const pctOf = (v) => `${Math.round(Number(v) * 100)}%`;
+function orderWeightsEntry(weights, failed = false) {
+  const has = weights && ['cost', 'service_level', 'storage'].every((k) => Number.isFinite(Number(weights[k])));
+  const values = has
+    ? `Purchase cost ${pctOf(weights.cost)}, need met ${pctOf(weights.service_level)} (the share of each product’s need `
+      + `that is ordered, weighted by its sales value) and storage ${pctOf(weights.storage)}, as stored with the current plan.`
+    : failed
+      ? 'The current plan could not be read here, so its weights are not shown; the Reorder page shows them with the plan.'
+      : 'Reading the weights from the current plan…';
+  return {
+    term: ORDER_WEIGHTS_TERM,
+    caveat: 'Team setting, source not yet confirmed; costs not yet confirmed by SSM',
+    definition: 'How the plan decides which products give way when the supplier allocation cannot cover every order.',
+    plain: 'When the supplier can’t fill every order, the plan decides which products get less by weighing what they cost to buy, how much of each product’s need is met, and storage.',
+    technical: `${values} These weights are a team setting; their source is not yet confirmed. They only matter when the allocation is short; with enough allocation every need is ordered in full. Storage has no effect today: every product carries the same placeholder storage cost per piece, so it cannot tell one product from another. The 90% service level belongs to the safety stock, not to these weights. The procurement and storage costs behind them are ${NOT_CONFIRMED}.`,
+  };
+}
 
 // In alphabetical order (Audrey, 2026-10-18), for the pills and the sections.
 // Each section has its own one-line description (2026-10-26).
@@ -131,7 +155,7 @@ const entries = {
       caveat: 'Team decision; adviser sign-off pending',
       definition: 'An adjustment for the time of year, applied to the stored forecast and shown beside it as ×factor.',
       plain: 'Each forecast is raised or lowered by how that month has usually sold compared with the months before it in earlier years. Until it is confirmed, the SKU Forecast page shows the forecast without it; the order plan uses the adjusted figure.',
-      technical: 'Computed for each product (since 2026-11-12): for every earlier year, the calendar month over the mean of the 3 months before it, for the product itself and for the typical product (the middle of every product that sold in all four months). The product’s own years count n / (n + 2) against the typical product’s; the result is moved halfway toward no change. December takes last December’s typical-product dip in full when last December was a dip. A month with no earlier year on record is left as it is; only months before the forecast month are read. It was the company total until 2026-11-12, which a few large products could move against most products (March 2024).',
+      technical: 'Computed for each product (since 2026-11-13): for every earlier year, the calendar month over the mean of the 3 months before it, for the product itself and for the typical product (the middle of every product that sold in all four months). The product’s own years count n / (n + 2) against the typical product’s; the result is moved halfway toward no change. December takes last December’s typical-product dip in full when last December was a dip. A month with no earlier year on record is left as it is; only months before the forecast month are read. It was the company total until 2026-11-13, which a few large products could move against most products (March 2024).',
     },
   ],
   'reorder-planning': [
@@ -183,15 +207,10 @@ const entries = {
       plain: 'It works out how much of each top seller to order so stock gets back to its target, without going over what the supplier will allow.',
       technical: 'A linear program (LP), a standard method for choosing quantities within limits. It orders each product up to its target stock, net of the stock on hand. If the supplier allocation cannot cover every order, SSM’s 3-week stock rule and then the order weights decide which products are cut. Only Class A products whose forecast test error is below the average month-to-month change in their sales before the test months are planned (that cut-off is a team decision, not confirmed by SSM or the adviser). Quantities are in pieces.',
     },
-    {
-      // analytics/params.LP_WEIGHTS ("TEAM (asserted)", in no scribe note,
-      // reports/LP_READINESS.md §1.5); analytics/optimization/lp.py (stage 3).
-      term: 'Order weights (45 / 35 / 20)',
-      caveat: 'Team setting, source not yet confirmed; costs not yet confirmed by SSM',
-      definition: 'How the plan decides which products give way when the supplier allocation cannot cover every order.',
-      plain: 'When the supplier can’t fill every order, the plan decides which products get less by weighing cost, how much of each product’s need is met, and storage.',
-      technical: `Cost 45%, need met 35% (the share of the need met, weighted by each product’s sales value) and storage 20%. These weights are a team setting; their source is not yet confirmed. They only matter when the allocation is short; with enough allocation every need is ordered in full. The procurement and storage costs behind them are ${NOT_CONFIRMED}.`,
-    },
+    // The weights come from the stored plan (GET /recommendations lp_model.weights), as on the Reorder page: never typed
+    // in here (2026-11-13; this entry said "45 / 35 / 20" and "Cost 45%, need met 35%" as literals). orderWeightsEntry
+    // fills it in once the plan is read.
+    ORDER_WEIGHTS_ENTRY,
     {
       // analytics/allocation.monthly_allocation; scripts/run_lp.py
       // (allocation_ceilings); analytics/params ALLOCATION_DEFAULT_PCT.
@@ -415,6 +434,19 @@ const DataDictionary = () => {
   const searchRef = useRef(null);
   const q = norm(query.trim());
 
+  // The order weights, from the stored plan (as the Reorder page reads them), never typed in here.
+  const [lpWeights, setLpWeights] = useState({ weights: null, failed: false });
+  useEffect(() => {
+    let cancelled = false;
+    getRecommendations({ principal: 'unilever', cycle: 'current' })
+      .then((res) => { if (!cancelled) setLpWeights({ weights: res?.lp_model?.weights || null, failed: !res?.lp_model?.weights }); })
+      .catch(() => { if (!cancelled) setLpWeights({ weights: null, failed: true }); });
+    return () => { cancelled = true; };
+  }, []);
+  const liveEntries = useMemo(() => Object.fromEntries(Object.entries(entries).map(([id, list]) => [
+    id, list.map((entry) => (entry.orderWeights ? orderWeightsEntry(lpWeights.weights, lpWeights.failed) : entry)),
+  ])), [lpWeights]);
+
   // The search bar and pills stay where they are on screen when a category
   // or the search changes the list under them (Audrey: clicking Top
   // Products made the page jump). The toolbar's position is noted before
@@ -446,7 +478,7 @@ const DataDictionary = () => {
   const matches = useMemo(() => {
     const out = {};
     sections.forEach(({ id }) => {
-      out[id] = entries[id]
+      out[id] = liveEntries[id]
         .map((entry) => {
           if (!q) return { entry, methodHit: false, techHit: false };
           const inHead = [entry.term, entry.definition, entry.caveat].some((t) => norm(t).includes(q));
@@ -457,9 +489,9 @@ const DataDictionary = () => {
         .filter(Boolean);
     });
     return out;
-  }, [q]);
+  }, [q, liveEntries]);
 
-  const total = sections.reduce((n, { id }) => n + entries[id].length, 0);
+  const total = sections.reduce((n, { id }) => n + liveEntries[id].length, 0);
   const found = sections.reduce((n, { id }) => n + matches[id].length, 0);
   const shown = sections.filter(({ id }) => (category === ALL || category === id) && matches[id].length > 0);
   const shownCount = shown.reduce((n, { id }) => n + matches[id].length, 0);

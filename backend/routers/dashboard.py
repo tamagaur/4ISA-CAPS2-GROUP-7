@@ -313,11 +313,13 @@ zero):
     keeps the latest count (kpis.stock_counts).
   reorder_preview.lp_weights
     — {cost, service_level, storage} fractions, always present (never
-    null): a straight mirror of analytics/optimization/lp.py's W1/W2/W3
-    module constants (LP_WEIGHT_* below), not derived from any row or
-    query. Read-only display value, not an adjustable control — there is
-    no warehouse-capacity/supplier-ceiling/storage-cost data anywhere in
-    the schema to re-solve the LP against (see
+    null): the weights stored with the current plan (lp_run.model.weights,
+    written by scripts/run_lp.py), else, when no plan run exists, the
+    current constants (LP_WEIGHT_* below); lp_weights_source says which.
+    cost = purchase cost, service_level = the revenue-weighted share of
+    need met, storage = flat storage per piece. Read-only display value,
+    not an adjustable control: the inputs the plan was solved with are in
+    lp_run.inputs, but the API never re-solves the LP (see
     frontend/src/components/Charts.jsx's ReorderRecommendationWidget for
     the display side of this same note).
 
@@ -456,9 +458,10 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 # x103%, mid x105%, maximum x108%, revised in Q4 on how the market went.
 # One definition with the LP's ceiling: analytics/allocation.py.
 
-# Step 19's LP objective weights (analytics/optimization/lp.py's W1/W2/W3:
-# 0.45/0.35/0.20) — hardcoded module constants there, not stored per-
-# recommendation anywhere in the schema. Mirrored once, in
+# The LP objective weights (analytics/params.LP_WEIGHTS: purchase cost 0.45,
+# revenue-weighted need met 0.35, storage 0.20). Each plan stores the ones it
+# was solved with (lp_run.model.weights), which is what the API serves; these
+# constants are only the answer when no plan run exists. Mirrored once, in
 # backend/lp_cycle.LP_WEIGHTS (lp.py pulls in the pulp solver, a batch-job
 # dependency this always-on API shouldn't require just to read three
 # floats), and pinned to lp.py by tests/backend/test_recommendations.py. See

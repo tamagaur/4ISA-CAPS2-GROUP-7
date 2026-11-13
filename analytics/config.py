@@ -2,7 +2,7 @@
 analytics.config — Central configuration loader.
 
 Phase 3A (CLAUDE.md Step 1):
-  Loads SUPABASE_DB_URL and SUPABASE_KEY from .env via python-dotenv.
+  Loads SUPABASE_DB_URL (required) and SUPABASE_KEY (optional, read by nothing) from .env via python-dotenv.
   Exposes a typed Settings object consumed by db/, etl/, and optimization/.
 
 TODO: Implement Settings using pydantic-settings or os.environ; validate that
@@ -24,7 +24,11 @@ from functools import lru_cache
 
 from dotenv import load_dotenv
 
-REQUIRED_KEYS = ("SUPABASE_DB_URL", "SUPABASE_KEY")
+# SUPABASE_DB_URL only (2026-11-13). SUPABASE_KEY was required here too and nothing anywhere reads it (Settings.supabase_key has no
+# reader; the local .env holds .env.example's placeholder, and scripts/local_pg.py, optin_run.py and data_management_app.py pass
+# "local-dummy" just to get past this check). On a server without it (Render: the API never reads it, so nobody sets it) every
+# script that calls get_settings() refused to start, the month load's ABC step (orchestrate_abc) and the migration runner among them.
+REQUIRED_KEYS = ("SUPABASE_DB_URL",)
 
 
 class MissingConfigError(RuntimeError):
@@ -70,7 +74,7 @@ def get_settings(dotenv_path: str | None = None) -> Settings:
     values = {key: _read_required(key) for key in REQUIRED_KEYS}
     return Settings(
         supabase_db_url=values["SUPABASE_DB_URL"],
-        supabase_key=values["SUPABASE_KEY"],
+        supabase_key=os.environ.get("SUPABASE_KEY", "").strip(),   # optional, unread (REQUIRED_KEYS)
     )
 
 

@@ -1,4 +1,4 @@
-import { API_URL, apiFetch, authHeaders } from '../auth';
+import { apiFetch } from '../auth';
 
 // Monthly Data Processing (backend/routers/monthly_batch.py). GET /batch/status answers { enabled: false } where no database is named.
 
@@ -52,9 +52,9 @@ export async function uploadBatchFile(month, kind, file) {
   form.append('month', month);
   form.append('kind', kind);
   form.append('file', file);
-  // Not apiFetch: it sets a JSON Content-Type, and the browser must set this one
-  // itself so the multipart boundary is included.
-  const res = await fetch(`${API_URL}/batch/files`, { method: 'POST', headers: authHeaders(), body: form });
+  // Through apiFetch (2026-11-13), which leaves a FormData body's Content-Type to the browser (the multipart boundary):
+  // an expired session is caught before the upload is sent and a 401 signs out, as for every other request.
+  const res = await apiFetch('/batch/files', { method: 'POST', body: form });
   return readJson(res, 'The file could not be uploaded.');
 }
 

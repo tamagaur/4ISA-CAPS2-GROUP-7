@@ -353,7 +353,7 @@ Still hard-coded, flagged for a later decision (each is a *display* convention, 
 a data value, but worth knowing about):
 - `Dashboard.jsx` `SAFETY_STOCK_WATCH = 0.9` / `SAFETY_STOCK_ACT = 0.6` — the card
   colour thresholds for the Below-safety-stock KPI.
-- `ABCClassification.jsx`'s Del Monte regrouping note ("about 63 sub-categories
+- `ABCClassification.jsx`'s Del Monte regrouping note ("about 63 sub-categories [corrected 2026-11-13: 82 paths became 5 categories; 62-69 per month before, 4-5 after]
   became 4–5") — a sentence about the source data with numbers typed in the page.
 - Dressings' change column can render "— (−100% to −100%)" when a projection is all
   zeros — cosmetic; the range adds nothing when the point estimate is a dash.

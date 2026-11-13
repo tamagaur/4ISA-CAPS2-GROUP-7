@@ -42,14 +42,12 @@ const objectiveWeights = (lpModel) => {
   if (!w) return [];
   const pct = (v) => Math.round(v * 100);
   return [
-    { key: 'cost', label: 'Cost', weight: pct(w.cost), color: CHART_COLORS.lpWeight },
-    {
-      key: 'service',
-      label: lpModel.service_level_pct != null ? `Service level (${lpModel.service_level_pct}% target)` : 'Service level',
-      weight: pct(w.service_level),
-      color: CHART_COLORS.lpWeight,
-    },
-    { key: 'storage', label: 'Storage cost', weight: pct(w.storage), color: CHART_COLORS.lpWeight },
+    // The objective's three terms (analytics/optimization/lp.py stage 3): what the order costs to buy, the share of
+    // each product's need met weighted by its sales value, and storage. The service level percentage (90) belongs to
+    // the safety stock (its Z), not to this weight; it is shown with the safety stock below (2026-11-13).
+    { key: 'cost', label: 'Purchase cost', weight: pct(w.cost), color: CHART_COLORS.lpWeight },
+    { key: 'service', label: 'Need met (by sales value)', weight: pct(w.service_level), color: CHART_COLORS.lpWeight },
+    { key: 'storage', label: 'Storage', weight: pct(w.storage), color: CHART_COLORS.lpWeight },
   ];
 };
 
