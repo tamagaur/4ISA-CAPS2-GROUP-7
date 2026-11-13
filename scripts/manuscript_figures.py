@@ -844,7 +844,7 @@ def fig_l(plt, d) -> Fig:
 # The plan the manuscript's Tables 4.2.19 / 4.2.20 print: lp_run 10, cycle 2026-03 (scripts/apply_calendar_grain.py, 2026-11-12:
 # the calendar factor computed per product, with the December rule on it). Measured 2026-11-12 on the rehearsal copy (a restore of
 # live's backup full_backup_20261111T142748Z plus the apply) with this file's own plan_items, urgency_table and category_plan; the
-# apply checks live equals it row for row. Not the lp_run 10 of kelvin/spike-cap or kelvin/forecastability-gate (neither applied).
+# apply checked live equals it (2026-11-13). The unapplied branches' rehearsal plans are SPIKE-COPY and GATE-COPY, not lp_run 10.
 # Were lp_run 9's (110 / 67 / 378,700 / 459,359 / 1,184,313: Critical 14 / 14 / 62,604, Urgent 6 / 6 / 67,300, Planned 90 / 47 /
 # 248,796), lp_run 8's (110 / 69 / 381,484 / 462,133 / 1,184,313) and before that lp_run 6's (109 / 73 / 435,988 / 557,612 / 1,217,634).
 # PLAN_TOTALS[0] and [2] must equal STATE.md's plan line (tests/test_plan_pins_follow_state.py).

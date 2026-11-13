@@ -22,7 +22,7 @@ The dependence figures (2026-11-03) read the live database, inside a READ ONLY t
 how far the 115 planned products of lp_run 10 (scripts/apply_calendar_grain.py, 2026-11-12: the calendar factor computed per
 product; lp_run 9 held 110 / 378,700, lp_run 8 110 / 381,484, lp_run 7 110 / 419,344, lp_run 6 109) lean on the count of 2 March 2026.
 Pinned from the rehearsal copy (a restore of live's backup full_backup_20261111T142748Z plus the apply), which the apply proves equal to
-live. Not the lp_run 10 of kelvin/spike-cap or kelvin/forecastability-gate (neither applied). They are fixed to that run, so a later
+live (applied 2026-11-13; the rehearsal plans of the unapplied branches are SPIKE-COPY and GATE-COPY). They are fixed to that run, so a later
 plan does not move them; DEPENDENCE_SQL is written into the pin beside them.
 
 The manuscript figures of 2026-11-03 read the same way, each query pinned beside its value, each fixed to a run, a period or

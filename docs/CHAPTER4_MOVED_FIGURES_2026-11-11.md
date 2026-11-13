@@ -203,12 +203,18 @@ safety stock) and one deleted (`tests/test_transform_config.py`, `def test_dummy
   above): moved by the 2026-11-10 treatments, before this bundle.
 - Tables 4.2.22 and 4.2.25 print the mixed policy pair (-22.6 / +14.1); the consistent pairs are in row o.
 
-## 9. The calendar factor at product grain, 2026-11-12 (`scripts/apply_calendar_grain.py`, branch kelvin/calendar-grain)
+## 9. The calendar factor at product grain, LIVE 2026-11-13 (`scripts/apply_calendar_grain.py`, built 2026-11-12)
 
-Supersedes nothing in sections 1-8 except the figures below; the spike cap (refused) and the forecastability gate (not adopted)
-are on other branches and never reached live. Every "after" value was measured on the rehearsal copy (`ssm_grain`: a restore of
-live's backup `full_backup_20261111T142748Z` plus the apply), and the apply refuses to finish unless live reproduces it
-(`docs/CALENDAR_GRAIN_REHEARSAL.json`). Every before/after is on the same products and product-months.
+Supersedes nothing in sections 1-8 except the figures below; the spike cap (refused, rehearsal plan SPIKE-COPY) and the
+forecastability gate (not adopted, rehearsal plan GATE-COPY) are on other branches and never reached live. Every "after" value was
+measured on the rehearsal copy (`ssm_grain`: a restore of live's backup `full_backup_20261111T142748Z` plus the apply) and LIVE
+REPRODUCES IT: applied 2026-11-13 08:05 UTC, every result key equal to the copy's when compared byte-ordered (the apply's own
+comparison stopped on a collation artefact of its hash, STATE.md), and check.sh --fast GREEN against live. Every before/after is on
+the same products and product-months.
+
+December rule: included by the 2026-11-13 brief's rule. Pooled WAPE, 95% product bootstrap: grain alone vs company 38.07% -> 37.15%
+[-1.57, -0.34] (Sep 2025-Feb 2026) and 27.86% -> 27.53% [-0.62, -0.05] (2024-01..2025-08), MASE 0.731 -> 0.674 and 0.901 -> 0.869;
+grain + December 36.33% / 27.24% (below); December over grain alone [-2.37, +0.63] and [-0.38, -0.20].
 
 What changed: the calendar factor (DEC-41) was the company total's month ratio, applied to every product. In 4 of 35 month-years it
 pointed the opposite way to the typical product (March 2024: company 1.136, product median 0.906, 61% of products fell) and in 8
@@ -240,8 +246,11 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | Planned products (lp_run 9's 110): pooled WAPE Sep-Feb / earlier | 32.63% / 28.47% | **31.07% [-3.17, -0.10] / 27.82% [-0.91, -0.37]** |
 | Headline, calendar-adjusted (whole window): median product WAPE / pooled / pesos | 37.88% / 29.69% / 10.77% | **36.37% / 28.87% / 8.70%** |
 | Headline, no calendar factor | 38.55% / 30.12% / 10.02% | unchanged (that run has no calendar factor) |
-| **Stock-out price: Tier A months beyond safety stock (29 backtest months)** | **797 (18.24%)** | **852 (19.50%)**, +55 |
-| **Tier A pesos / pieces beyond safety stock** | **PHP 40.49M / 2,811,745** | **PHP 43.77M / 3,096,724** (+PHP 3.27M, about PHP 113k a month) |
+| **Stock-out price: Tier A months beyond safety stock (26 months, 2024-01..2026-02; was printed "29 backtest months", the backtest's length, not the decomposition's)** | **797 (18.24%)** | **852 (19.50%)**, +55 |
+| **Tier A pesos / pieces beyond safety stock** | **PHP 40.49M / 2,811,745** | **PHP 43.77M / 3,096,724** (+PHP 3.27M at sales value, about PHP 126k a month; was printed PHP 113k, over 29 months) |
+| Tier A end-of-month stock the forecast leaves, max(0, F + SS - A), same 4,370 rows: piece-months / PHP at cost | 22,681,047 / 260.16M | **21,427,253 / 245.56M** (-1,253,794 / -PHP 14.60M) |
+| The trade, 26 months: holding saved / stock-out margin lost / net (assumption ranges, STATE.md) | | **PHP 0.77M to 1.21M / 0.08M to 0.30M / +0.47M to +1.14M** (central +0.62M; turns negative only if a shortfall costs over 24-37% of its sales value; margin measured 9.21%) |
+| March plan at cost (LP cost per piece) / safety stock at cost | PHP 8.83M / 5.13M | **PHP 7.57M / 5.20M** |
 | Tier A absorbed by safety stock, pieces / PHP | 4,860,408 / 62,049,541 | 5,083,650 / 64,062,674 |
 | Tier B / C months beyond safety stock (counterfactual tiers) | 902 / 1,782 | 952 / 1,807 |
 | Chapter 4 code figures: critical counted products / stock / order | 11 / 3,192 / 45,468 | **12 / 3,198 / 42,272** |
@@ -249,7 +258,9 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | count 2 Mar over 3 Feb / over 6 Apr; requirement at 3 Feb / 6 Apr (M pcs) | 3.7 / 3.0; 1.53 / 1.47 | **3.7 / 2.9; 1.47 / 1.40** |
 | single delivery requirement (sensitivity) / before rounding | 240,236 / 237,360 | **213,062 / 210,825** |
 | Chart 10: measured monthly exceedance at Z = 1.28 (95% CI) | 9.1% (7.9-10.5) | **9.0% (7.7-10.3)** |
-| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,844 / 2,826; 2,838 / 2,817** |
+| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,845 / 2,827; 2,839 / 2,818** (2026-11-13, +1 test for the month-load gate; passed counts derived by chapter_figures --write) |
 
 Manuscript figure checks: Tables 4.2.19 and 4.2.20 pass on the new plan; figures h-l and o-q stay "held" against older manuscript
-values exactly as before (chapter work). DEC-41's text ("the company calendar factor", "1.0762") no longer describes the system.
+values exactly as before (chapter work): every figure's agree/disagree count is the same before (941fadb) and after, so this change
+contradicts no manuscript figure that agreed before. DEC-41's text in ARCHITECTURE.md describes the per-product factor since
+2026-11-13. Stored run descriptions of runs 21-23 corrected by migration 0079 (they said "x the company calendar factor").

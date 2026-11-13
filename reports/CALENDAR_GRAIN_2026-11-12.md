@@ -1,8 +1,7 @@
 # The calendar factor computed at the grain it is applied at (2026-11-12)
 
-For: the panel and the adviser, and whoever writes the chapter text. Status: built and rehearsed on a restored copy of live
-(branch `kelvin/calendar-grain`); not on the live system until `python -m scripts.apply_calendar_grain --target-public` runs, and
-that command refuses to finish unless live reproduces the rehearsal. Aggregates only.
+For: the panel and the adviser, and whoever writes the chapter text. Status: LIVE since 2026-11-13 (`python -m
+scripts.apply_calendar_grain --target-public`); live reproduces the rehearsal on every result. Aggregates only.
 
 ## 1. The defect
 The calendar factor (team decision DEC-41) multiplies each product's forecast by how that calendar month has sold against the
@@ -49,9 +48,9 @@ Evidence (`Unilever_SKU_Demand_Fact_Real`, 419-543 products per month-year, 35 m
 | March forecast, total pieces | | 1,952,313 | **1,837,121** (-5.9%) | 175 |
 
 **What it costs.** The old factor raised every product by the company's volume-weighted rise; the new one does not, so forecasts are
-lower for most products and more months run short. Over the 29 backtest months, Tier A product-months whose demand exceeded forecast
+lower for most products and more months run short. Over the 26 months the error decomposition covers (2024-01 to 2026-02), Tier A product-months whose demand exceeded forecast
 plus safety stock rise from **797 to 852** (+55), and the pesos beyond safety stock from **PHP 40.49M to PHP 43.77M** (+PHP 3.27M,
-about PHP 113k a month). On the card, money lost to under-forecasting rises PHP 25.84M -> 28.29M (Sep-Feb) while money tied up by
+about PHP 126k a month, at sales value). On the card, money lost to under-forecasting rises PHP 25.84M -> 28.29M (Sep-Feb) while money tied up by
 over-forecasting falls PHP 35.34M -> 28.58M.
 
 Every figure, including the plan by urgency and category and the Chapter 4 code figures: `docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md`
@@ -74,4 +73,19 @@ section 9.
 - Supplier allocation and warehouse capacity: aggregate limits by design, not a factor applied to products.
 - Default procurement cost (PHP 33.48 per piece): an average applied to a product only when its own cost is missing; 0 of the 110
   planned products use it.
-- Three non-serving scripts still use the company factor (the challenger experiment, the legacy run-7 recreation, a bias diagnosis).
+- Three non-serving scripts used the company factor. Since 2026-11-13 the challenger experiment and the bias diagnosis compute each
+  product's own factor, as served. The run-7 recreation keeps the company factor on purpose: it recreates a stored run whose label
+  says so.
+
+## 7. Both sides of the trade (2026-11-13)
+Same 4,370 Tier A product-months (310 products, 2024-01 to 2026-02), before and after:
+- **Short side:** +55 months beyond safety stock, +284,979 pieces, +PHP 3.27M of sales (+PHP 2.96M at cost). The money actually lost
+  is the gross margin on sales never recovered: measured margin 9.21%, so PHP 0.08M (a quarter never recovered) to PHP 0.30M (all).
+- **Long side:** the stock the forecast leaves at month end falls by 1,253,794 piece-months (PHP 14.60M at cost). At the plan's own
+  storage cost (PHP 0.50 a piece a month, a team assumption, DEC-44), plus 1-3% a month for the money tied up and 0-1% a month for
+  spoilage: PHP 0.77M to 1.21M saved.
+- **Net:** +PHP 0.47M to +1.14M over 26 months for the per-product factor. It turns against it only if a peso of shortfall costs more
+  than 24-37% of its sales value (2.6-4 times the margin), for example if lost customers or the principal's penalties are counted.
+- **Assumptions, not SSM figures:** storage cost, the carrying rate, spoilage (no Unilever figure exists; Del Monte's bad orders were
+  0.051% of purchases), and how much of a shortfall is never recovered. Margin, pieces and pesos are measured.
+- The March order itself falls 48,488 pieces, PHP 8.83M to 7.57M at cost.
