@@ -1124,7 +1124,7 @@ def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
 
 
 def calendar_adjustment(gated_rows: list) -> dict:
-    """The company calendar factor in the forecast the card sums (2026-10-19, Kelvin's
+    """The calendar factor in the forecast the card sums (2026-10-19; per product since 2026-11-13, Kelvin's
     analytics/forecasting/calendar.py; run_baseline_forecast.py --calendar-factor): from each
     gated row's own model_params, never recomputed here. `forecast_pieces` is the card's
     forecast total, `before_pieces` the same rows before the factor (a row without one counts

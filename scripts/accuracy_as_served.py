@@ -430,7 +430,7 @@ def render(res: dict, ver: dict, today: str) -> str:
 # (backend/marts.DEFAULT_BACKTEST_LABEL), since the live forecast is calendar-adjusted.
 # Labels carry ", succession + fading" since 2026-11-10 (Kelvin's brief: the card shows the forecast as served now, with the
 # treatments of analytics/forecasting/treatments.py; read_inputs passes their contexts to served_backtest). The untreated runs
-# (11, 12, 13 and twin 10) stay stored and selectable by run_id; scripts/challenger_forecast.py still reads run 11 by its label.
+# (11, 12, 13 and twin 10) stay stored and selectable by run_id. scripts/challenger_forecast.py reads the card's default by its label.
 # The label still matches 0064's pattern (as-served backtest .*calendar-adjusted), and the error decomposition takes the
 # newest matching run per product-month, so the new runs supersede the old ones there with no migration.
 TREATED = ", succession + fading"
@@ -442,15 +442,15 @@ AS_SERVED_RUNS = {
                   "Tier A (current basis) the month before each test month; months after a product's last sale "
                   "scored; dead-SKU rule applied as the live forecast applies it; succession and fading applied as served"),
     "as_served_calendar": ("as-served backtest 2023-10..2026-02, Tier A the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
-                           "as above; served value x the company calendar factor"),
+                           "as above; served value x each product's own calendar factor"),
     # Tier B and C cohorts (the error decomposition, migration 0063, scores every tier). Calendar-adjusted only,
     # the form the live forecast is served in; XGBoost pool = Tier A, as the live runner trains it.
     "as_served_calendar_B": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier B the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
                              "COUNTERFACTUAL, NOT SERVED - Tier B (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
-                             "succession and fading applied; served value x the company calendar factor"),
+                             "succession and fading applied; served value x each product's own calendar factor"),
     "as_served_calendar_C": ("COUNTERFACTUAL (never served: the live runner forecasts Tier A only) - as-served backtest 2023-10..2026-02, Tier C the month before each month" + TREATED + PRODUCT_CAL + ", calendar-adjusted",
                              "COUNTERFACTUAL, NOT SERVED - Tier C (current basis) the month before each test month; XGBoost pool Tier A; dead-SKU rule applied; "
-                             "succession and fading applied; served value x the company calendar factor"),
+                             "succession and fading applied; served value x each product's own calendar factor"),
 }
 # Migration 0064's notes for the counterfactual tiers, set at write time on a new run (0064 updated the runs of its day).
 COUNTERFACTUAL_NOTES = {"counterfactual": True,

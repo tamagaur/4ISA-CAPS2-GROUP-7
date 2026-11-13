@@ -361,11 +361,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "stock + MA3 forecast; unilever: a one-step MA3 forecast only, over real_copy "
                              "sales already in demo.*).")
     parser.add_argument("--calendar-factor", action="store_true", default=False,
-                        help="Multiply each served forecast by the company calendar factor "
-                             "(analytics/forecasting/calendar.py). OFF by default (opt-in), but the live "
-                             "Forecast_Result written 2026-10-19 WAS run with it (x1.0762 for March, all 175 'ok' "
-                             "rows): applied; team decision DEC-41; adviser sign-off outstanding (still pending). Without it the LP plans 354,975 "
-                             "pieces instead of 424,127 (-16.3%, 70 of 107 rows change).")
+                        help="Multiply each served forecast by its product's own calendar factor "
+                             "(analytics/forecasting/calendar.py, CALENDAR_GRAIN). OFF by default (opt-in), but every live "
+                             "Forecast_Result since 2026-10-19 WAS written with it (company factor x1.0762 until 2026-11-13; "
+                             "per product since, 0.7103 to 1.2608 for March 2026); team decision DEC-41; adviser sign-off "
+                             "outstanding. Always pass it when writing the live forecast, or the plan moves.")
     parser.add_argument("--allow-stale-abc", action="store_true", default=False,
                         help="Go on when the resolved ABC period is older than the latest real sales month. Without it "
                              "the run refuses (exit 2): it would forecast the wrong Tier A.")

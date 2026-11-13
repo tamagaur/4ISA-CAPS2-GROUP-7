@@ -1574,7 +1574,7 @@ const ReorderRecommendations = () => {
                 here too (Technical Adviser, 2 Oct 2026; 2026-10-22). */}
             {meta?.lpModel?.calendar_factor_on && (
               <p className="reorder-table-note">
-                The forecasts behind these orders include the company calendar adjustment (each month scaled by how
+                The forecasts behind these orders include the calendar adjustment (each product's forecast scaled by how
                 that month has sold in earlier years){calendarSignoffText(meta.lpModel.calendar_signed_off)
                   ? `, ${calendarSignoffText(meta.lpModel.calendar_signed_off)}` : ''}.
               </p>

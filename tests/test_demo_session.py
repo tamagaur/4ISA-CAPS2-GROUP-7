@@ -224,6 +224,17 @@ def test_the_attested_files_include_everything_that_writes():
         assert name in demo_rehearsal.FILES
 
 
+def test_the_attested_files_include_what_a_load_runs():
+    """A load runs ABC, the forecast and the LP (scripts/run_month.py). The 2026-11-11 attestation stayed valid after the calendar
+    factor moved to product grain (2026-11-13) because none of that code was hashed."""
+    for name in ("analytics/params.py", "analytics/forecasting/calendar.py", "analytics/forecasting/router.py",
+                 "scripts/run_baseline_forecast.py", "scripts/run_lp.py", "analytics/optimization/lp.py",
+                 "analytics/classification/orchestrate_abc.py"):
+        assert name in demo_rehearsal.FILES
+    for name in demo_rehearsal.FILES:
+        assert (demo_rehearsal.REPO / name).is_file(), name
+
+
 def test_a_load_writes_no_tracked_report(monkeypatch):
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://u:p@aws-0.pooler.supabase.com:6543/postgres")
     monkeypatch.delenv(report_target.DEMO_SESSION_ENV, raising=False)

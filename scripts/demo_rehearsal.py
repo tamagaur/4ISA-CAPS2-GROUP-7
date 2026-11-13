@@ -29,6 +29,20 @@ FILES = (
     "scripts/run_month.py",
     "scripts/report_target.py",
     "scripts/cycle_feedback.py",
+    # What a load RUNS (scripts/run_month.py's steps: ABC, forecast, LP, marts). Added 2026-11-13: the rehearsal of 2026-11-11
+    # stayed "valid" after the calendar factor moved to product grain, though a load would then forecast with code it never ran.
+    "analytics/params.py",
+    "analytics/classification/orchestrate_abc.py",
+    "analytics/forecasting/router.py",
+    "analytics/forecasting/global_model.py",
+    "analytics/forecasting/calendar.py",
+    "analytics/forecasting/treatments.py",
+    "analytics/forecasting/baseline.py",
+    "analytics/forecasting/review_flag.py",
+    "analytics/optimization/lp.py",
+    "analytics/marts.py",
+    "scripts/run_baseline_forecast.py",
+    "scripts/run_lp.py",
 )
 # The steps a rehearsal must have shown exact, in order (scripts/month_load_rehearsal.py).
 STEPS = ("load_first", "load_second", "rollback_second", "rollback_first", "load_first_again", "load_second_again", "rollback_first_with_second_loaded",

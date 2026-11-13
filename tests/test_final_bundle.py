@@ -60,7 +60,9 @@ def test_every_attested_file_exists():
 def test_pending_migrations_are_exactly_the_files_after_the_last_applied():
     on_disk = sorted(p.name for p in b.MIGRATIONS_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
     assert b.LAST_APPLIED in on_disk
-    assert tuple(on_disk[on_disk.index(b.LAST_APPLIED) + 1:]) == b.PENDING
+    # The bundle's four follow 0074 directly. Migrations written after it was applied (0079 on 2026-11-13) come after them.
+    after = tuple(on_disk[on_disk.index(b.LAST_APPLIED) + 1:])
+    assert after[:len(b.PENDING)] == b.PENDING
 
 
 def test_the_rehearsed_result_is_the_plan_state_md_names():

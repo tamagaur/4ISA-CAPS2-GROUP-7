@@ -157,14 +157,13 @@ XGB_NTHREAD = 1
 # --------------------------------------------------------------------------- #
 # DEC-41 (team decision, adopted 2026-11-02; approved by Kelvin 2026-10-19 for build + dry run).
 # Sir Catubag has not signed it off (a methodology change); the runner applies it only with --calendar-factor.
-# LIVE STATUS (corrected 2026-10-20, calc audit): the factor IS applied to the stored forecast. All 175
-# 'ok' Forecast_Result rows written 2026-10-19 10:37 UTC carry calendar_factor 1.0762 (March 2026, 2 earlier
-# years) and value_before_calendar, so lp_run 3 (2026-10-19) plans on adjusted forecasts. Sir Catubag's
-# sign-off has not been given: DEC-41 records the team's adoption, not his approval. The runner's default
-# stays OFF (opt-in --calendar-factor); the live write used it.
-# Measured sensitivity (closed form on the 107 stored LP rows, stored safety stock and 2026-02 stock held
-# fixed): 424,127 pieces with the factor, 354,975 without, a 16.3% difference across 70 changed rows. Total
-# forecast 2,036,469 with vs 1,892,199 without (+7.62%). reports/diagnostics/calc_audit_2026-10-20/.
+# LIVE STATUS (2026-11-13): the factor IS applied to the stored forecast, PER PRODUCT (CALENDAR_GRAIN below): the 175
+# 'ok' Forecast_Result rows for March 2026 carry calendar_factor 0.7103 to 1.2608 and value_before_calendar, and lp_run 10
+# plans on them. From 2026-10-19 to 2026-11-13 it was the company factor, 1.0762 on every row (lp_run 3 to 9). Sir Catubag's
+# sign-off has not been given: DEC-41 records the team's adoption, not his approval. The runner's default stays OFF (opt-in
+# --calendar-factor); every live write used it.
+# Sensitivity measured on the company factor (2026-10-20, closed form on the 107 stored LP rows of that day): 424,127 pieces with
+# it, 354,975 without (-16.3%, 70 rows). reports/diagnostics/calc_audit_2026-10-20/. Not re-measured at product grain.
 # SHRINK 0.5 = the "half"
 # variant: same overall gain as the full factor (median WAPE 0.318 -> 0.305 vs
 # 0.304 on MA3) with more products improved (121/59 vs 113/67), chosen because
@@ -173,9 +172,9 @@ XGB_NTHREAD = 1
 CALENDAR_FACTOR_SHRINK = 0.5
 CALENDAR_FACTOR_PRIOR_MONTHS = 3
 # DEC-41: whether Sir Catubag has signed the factor off (he has not; the team
-# adopted it without him). The live 2026-03 forecast was written with
-# --calendar-factor on 2026-10-19 (Forecast_Result.model_params.calendar_factor
-# on every 'ok' row), so the dashboard says the forecast is adjusted AND that
+# adopted it without him). The live 2026-03 forecast is written with
+# --calendar-factor (Forecast_Result.model_params.calendar_factor on every
+# 'ok' row, per product since 2026-11-13), so the dashboard says the forecast is adjusted AND that
 # his sign-off is missing, from this flag. Set True only when he approves it.
 CALENDAR_FACTOR_SIGNED_OFF = False
 # GRAIN of the calendar factor (analytics/forecasting/calendar.py, 2026-11-12): "product" = computed per product (each product's

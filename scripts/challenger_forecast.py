@@ -17,6 +17,8 @@ backtest   the as-served protocol of scripts/accuracy_as_served.py, calendar-adj
            the same history for the same rows, with the same calendar factor and dead-SKU rule. REPRODUCE CHECK before
            anything is written: every served value must equal mart.forecast_run_value of the stored as-served
            calendar-adjusted backtest (the dashboard card's default run), same rows, within 1e-4 pieces.
+           Both sides take each product's own calendar factor (calendar.calendar_basis / for_product) and the served side its
+           treatment context, as the runner and scripts/accuracy_as_served.py do (2026-11-13; the company factor before).
 cycle      the products of the cycle's Forecast_Result. served_value = the stored forecast_value. REPRODUCE CHECK
            (as compute_review_flags): route() rerun for the cycle, rounded to the column's 2 decimals, must equal every
            stored 'ok' value. A dead_sku row is 0 for both. Status 'insufficient' rows have no forecast and no row here.
@@ -48,14 +50,18 @@ sys.path.insert(0, str(REPO))
 import analytics.forecasting.global_model as gm  # noqa: E402
 from analytics.classification.fsn import no_sale_in_last_months  # noqa: E402
 from analytics.forecasting import selection_rule  # noqa: E402
-from analytics.forecasting.calendar import company_totals  # noqa: E402
+from analytics.forecasting.calendar import calendar_basis, for_product  # noqa: E402
 from analytics.forecasting.challenger import CHALLENGER_ID, challenger_route  # noqa: E402
 from analytics.forecasting.router import assert_real_rows, route  # noqa: E402
 from analytics.params import DEAD_SKU_MONTHS, abc_method  # noqa: E402
 from scripts.backtest_forecast_run import WINDOW, read_tier_a, ym  # noqa: E402
-from scripts.run_baseline_forecast import build_series, fetch_demand  # noqa: E402
+from scripts.run_baseline_forecast import build_series, fetch_contexts, fetch_demand  # noqa: E402
 
-AS_SERVED_CAL_LABEL = ("as-served backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted")
+# The run the dashboard card defaults to (backend/marts.DEFAULT_BACKTEST_LABEL): the served forecast as it is served now, with the
+# succession / fading treatments and each product's own calendar factor. Was run 11 (company factor, no treatments) until
+# 2026-11-13; the served side here could no longer reproduce Forecast_Result once either of those went live.
+AS_SERVED_CAL_LABEL = ("as-served backtest 2023-10..2026-02, Tier A the month before each month, succession + fading, "
+                       "product calendar, calendar-adjusted")
 TOL_BACKTEST = 1e-4
 STORED_DECIMALS = 2
 THROWAWAY = ("127.0.0.1", 55432)
@@ -82,17 +88,20 @@ def code_version() -> str:
     return head + ("+uncommitted" if dirty else "")
 
 
-def read_demand(url: str) -> pd.DataFrame:
+def read_demand(url: str, with_contexts: bool = False):
+    """The demand frame as the runner reads it; with_contexts also the served treatments' contexts (run_baseline_forecast.
+    fetch_contexts), so route() serves the treated forecast as Forecast_Result and the as-served runs hold it."""
     conn = psycopg2.connect(url)
     try:
         cur = conn.cursor()
         cur.execute("SET TRANSACTION READ ONLY")
         demand = fetch_demand(cur)
+        contexts = fetch_contexts(cur, demand) if with_contexts else None
         conn.rollback()
     finally:
         conn.close()
     assert_real_rows(demand)
-    return demand
+    return (demand, contexts) if with_contexts else demand
 
 
 def all_series(demand: pd.DataFrame) -> dict[int, pd.Series]:
@@ -104,9 +113,12 @@ def is_dead(hist: pd.Series, prev: str) -> bool:
     return len(hist) >= DEAD_SKU_MONTHS and no_sale_in_last_months(hist.index.strftime("%Y-%m"), hist.to_numpy(dtype=float), prev)
 
 
-def pair(s: pd.Series, t: pd.Timestamp, fc, totals, dead: bool) -> dict | None:
-    """Served and challenger for one product-month, the same history, calendar factor and dead-SKU rule."""
-    r = route(s, t, fc, calendar_totals=totals)
+def pair(s: pd.Series, t: pd.Timestamp, fc, totals, dead: bool, product_key: int, context=None) -> dict | None:
+    """Served and challenger for one product-month, the same history, calendar factor (the product's own, as served:
+    calendar.for_product) and dead-SKU rule. The served side also takes the product's treatment context, as route() serves
+    it; the challenger never had the treatments (analytics/forecasting/challenger.py)."""
+    totals = for_product(totals, product_key)
+    r = route(s, t, fc, calendar_totals=totals, context=context)
     if r["value"] is None:
         return None
     c = challenger_route(s, t, calendar_totals=totals)
@@ -120,8 +132,8 @@ def pair(s: pd.Series, t: pd.Timestamp, fc, totals, dead: bool) -> dict | None:
 # --- backtest ---------------------------------------------------------------------------------------------------
 
 def compute_backtest(url: str) -> pd.DataFrame:
-    demand = read_demand(url)
-    series, totals = all_series(demand), company_totals(demand)
+    demand, contexts = read_demand(url, with_contexts=True)
+    series, totals = all_series(demand), calendar_basis(demand)
     tier = read_tier_a(url, abc_method("unilever"))
     rows = []
     for t in WINDOW:
@@ -133,7 +145,7 @@ def compute_backtest(url: str) -> pd.DataFrame:
             if t not in s.index or not t > s.index[0] or np.isnan(float(s.loc[t])):
                 continue                                   # as-served: a blank actual is not scored, so not stored
             try:
-                p = pair(s, t, fc, totals, is_dead(s[s.index < t], prev))
+                p = pair(s, t, fc, totals, is_dead(s[s.index < t], prev), k, contexts.get(k))
             except ValueError:
                 continue                                   # no history before the month
             if p is not None:
@@ -192,11 +204,11 @@ def compute_cycle(url: str, cycle: str | None) -> tuple[pd.Timestamp, pd.DataFra
     ok = fr[fr.status == "ok"]
     if ok.calendar.nunique() != 1:
         sys.exit("the cycle's 'ok' rows disagree on whether the calendar factor was applied")
-    demand = read_demand(url)
+    demand, contexts = read_demand(url, with_contexts=True)
     last = ym(cdate - pd.offsets.MonthBegin(1))
     wanted = set(int(k) for k in fr.product_key)
     series = {int(k): build_series(g, last) for k, g in demand.groupby("product_key") if int(k) in wanted}
-    totals = company_totals(demand) if bool(ok.calendar.iloc[0]) else None
+    totals = calendar_basis(demand) if bool(ok.calendar.iloc[0]) else None
     fc = gm.GlobalForecaster(series)                    # the pool the run used: every product in its Forecast_Result
     rows, gaps = [], []
     for r in fr.itertuples():
@@ -205,7 +217,7 @@ def compute_cycle(url: str, cycle: str | None) -> tuple[pd.Timestamp, pd.DataFra
             continue
         s = series[k]
         dead = r.status == "dead_sku"
-        p = pair(s, cdate, fc, totals, dead)
+        p = pair(s, cdate, fc, totals, dead, k, contexts.get(k))
         if p is None:
             sys.exit(f"product {k}: the router has no forecast for a stored '{r.status}' row")
         if not dead:

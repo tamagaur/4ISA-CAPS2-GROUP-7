@@ -56,7 +56,7 @@ class ForecastResponse(BaseModel):
     blocked_reason: str | None = None
     # Present when any actual carries a `reason`: what the codes mean.
     gap_note: str | None = None
-    # Whether Sir Catubag has signed off the company calendar factor that a
+    # Whether Sir Catubag has signed off the calendar factor that a
     # forecast row's model_params.calendar_factor records (analytics.params.
     # CALENDAR_FACTOR_SIGNED_OFF, 2026-10-19); None outside real forecasts.
     calendar_signed_off: bool | None = None

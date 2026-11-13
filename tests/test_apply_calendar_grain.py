@@ -30,10 +30,27 @@ def test_the_switches_it_applies_are_on():
     assert params.CALENDAR_GRAIN == "product" and params.DECEMBER_DIP_RULE is True
 
 
-def test_the_attestation_is_for_the_files_in_the_tree():
+# Applied to live on 2026-11-13 from this commit's tree (STATE.md); its preflight now refuses (lp_run 10 is the newest plan and the
+# product-calendar runs are stored). From then on the attestation is held against the files AS THEY WERE when live ran them, not
+# against the working tree: later edits to an attested file (e.g. scripts/backtest_forecast_run.py's run-7 note) change nothing
+# that was applied.
+APPLIED_AT = "163b42f"
+
+
+def _files_hash_at(commit: str) -> str:
+    import hashlib
+    import subprocess
+    h = hashlib.sha256()
+    for f in s.FILES:
+        blob = subprocess.run(["git", "-C", str(REPO), "show", f"{commit}:{f}"], capture_output=True, check=True).stdout
+        h.update(f.encode() + b"\0" + blob.replace(b"\r\n", b"\n") + b"\0")
+    return h.hexdigest()
+
+
+def test_the_attestation_is_for_the_files_the_live_apply_ran():
     att = _att()
     assert att["files"] == list(s.FILES)
-    assert att["files_sha256"] == s.files_hash(), "a file the apply runs changed: re-run --rehearse"
+    assert att["files_sha256"] == _files_hash_at(APPLIED_AT), "the attestation does not match the files live's apply ran"
 
 
 def test_the_rehearsed_result_is_the_plan_state_md_names():

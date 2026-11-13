@@ -1348,7 +1348,7 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
         "start_period": start, "end_period": end, "label": range_label(months[0], months[-1]), "months": months,
         "forecast_source": "/".join(agg["sources"]),
         "run_labels": agg["run_labels"],
-        # Whether those runs' forecasts carry the company calendar factor (2026-10-19):
+        # Whether those runs' forecasts carry the calendar factor (2026-10-19; per product since 2026-11-13):
         # 'yes' / 'partly' / 'no' (calendar_adjusted_state).
         "calendar_adjusted": calendar_adjusted_state(agg["run_labels"]),
         "products": len(by_product), "product_months": agg["product_months"],

@@ -101,7 +101,7 @@ export function describeServedModel(modelParams, status) {
   }, params);
 }
 
-// A served forecast multiplied by the company calendar factor (model_params
+// A served forecast multiplied by its calendar factor (model_params
 // .calendar_factor, run_baseline_forecast.py --calendar-factor, 2026-10-19)
 // does know the time of year, whatever its model: `season` says so first,
 // then what the model does on its own; `short` says the number is adjusted.

@@ -197,7 +197,7 @@ def lp_model_info(run: dict | None = None) -> dict:
             "code_version": run["code_version"],
         },
         "safety_stock_assumption": model.get("safety_stock_assumption", SAFETY_STOCK_ASSUMPTION),
-        # Whether the forecasts this run planned from carry the company calendar
+        # Whether the forecasts this run planned from carry the calendar
         # factor (scripts/run_lp.py records it per forecast run, 2026-10-20), and
         # whether the Technical Adviser has signed that method off: the Reorder
         # page states both, since the factor moves every order quantity.

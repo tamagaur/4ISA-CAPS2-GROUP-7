@@ -94,11 +94,13 @@ RUNS = {
         "headline_file": HEADLINE_107_CURRENT,
         "abc_method": "single",  # pinned: this cohort IS the ABC-single 107, never re-based
     },
-    # at_the_time with the company calendar factor on (analytics/forecasting/calendar.py), the
-    # way the live forecast has been served since 2026-10-19 (run_baseline_forecast.py
-    # --calendar-factor). A new run, not a reproduction: there is no published reference to
-    # verify it against, so `reference` is None and verify() only records its headline. The
-    # factor for each test month reads only months before it.
+    # at_the_time with the COMPANY calendar factor on (calendar.company_totals), the way the live forecast
+    # was served from 2026-10-19 to 2026-11-13 (stored as mart.forecast_run 7). It stays at company grain on
+    # purpose, whatever analytics.params.CALENDAR_GRAIN says: this label names that run, and --replace would
+    # otherwise write product-grain values under it. The served product-grain factor is backtested by
+    # scripts/accuracy_as_served.py (labels ending ", product calendar[, calendar-adjusted]"), the card's runs.
+    # No published reference, so `reference` is None and verify() only records its headline. The factor for
+    # each test month reads only months before it.
     "at_the_time_calendar": {
         "label": "backtest 2023-10..2026-02, Tier A the month before each month, calendar-adjusted",
         "cohort": "Tier A (current basis) as of the month before each test month; XGBoost pool the same; "
@@ -163,8 +165,9 @@ def read_inputs(db_url: str, abc_method: str):
 
 def company_totals_from_series(series: dict) -> pd.Series:
     """The company total in pieces per month, from the same series the backtest scores: every
-    real Unilever product summed, a blank month skipped (the calendar factor's input,
-    analytics.forecasting.calendar.company_totals, without a second read)."""
+    real Unilever product summed, a blank month skipped (the company calendar factor's input,
+    analytics.forecasting.calendar.company_totals, without a second read). Only at_the_time_calendar
+    uses it: the recreation of run 7, company grain by definition (RUNS above)."""
     return pd.concat(series.values(), axis=1).sum(axis=1, min_count=1).dropna().sort_index()
 
 

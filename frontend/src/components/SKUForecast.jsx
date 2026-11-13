@@ -861,7 +861,7 @@ const SKUForecast = () => {
   // The latest forecast run's check against a "same as last month" guess
   // (GET /dashboard's forecast block: evaluated, unreliable and total counts),
   // for the line on why Class A products are missing from the plan.
-  // Also the company calendar factor inside the forecast (portfolio_forecast.calendar_adjustment), for the
+  // Also the calendar factor inside the forecast (portfolio_forecast.calendar_adjustment), for the
   // accuracy card's "adviser sign-off pending" note, as the Dashboard passed it.
   const [reliability, setReliability] = useState(null);
   const [calendarAdjustment, setCalendarAdjustment] = useState(null);

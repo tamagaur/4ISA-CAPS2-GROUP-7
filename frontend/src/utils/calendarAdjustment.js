@@ -1,4 +1,4 @@
-// The company calendar factor in plain words (2026-10-19), one wording for
+// The calendar factor in plain words (2026-10-19; per product since 2026-11-13), one wording for
 // every card that mentions it: the forecast card, the error card, the order
 // plan's cards and the SKU Forecast page. Kelvin's analytics/forecasting/
 // calendar.py multiplies each served forecast by how that calendar month has

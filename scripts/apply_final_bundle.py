@@ -88,7 +88,7 @@ def table_fingerprints(cur) -> dict[str, list]:
     for s, t in cur.fetchall():
         if f"{s}.{t}" in EXCLUDED:
             continue
-        cur.execute(f'SELECT count(*), md5(coalesce(string_agg(x::text, \',\' ORDER BY x::text), \'\')) FROM "{s}"."{t}" x')
+        cur.execute(f'SELECT count(*), md5(coalesce(string_agg(x::text, \',\' ORDER BY x::text COLLATE "C"), \'\')) FROM "{s}"."{t}" x')
         n, h = cur.fetchone()
         out[f"{s}.{t}"] = [int(n), h]
     # The lp_run key sequence too: the new run's key comes from it, and the pinned chapter queries name that key. A sequence
@@ -102,8 +102,13 @@ def table_fingerprints(cur) -> dict[str, list]:
     return out
 
 
+# Byte order (COLLATE "C"), never the server's collation: these hashes are compared ACROSS servers (a local rehearsal copy,
+# collation English_Philippines.1252, against live, en_US.UTF-8), and the two collations sort text with spaces and punctuation
+# differently. Without it the calendar-grain apply of 2026-11-13 stopped on grain_runs_md5 while live held the rehearsal's
+# 25,620 rows exactly (same row texts on both; the byte-ordered hash b78fb9ca... on both). Hashes recorded before this line
+# (the final-bundle and calendar-grain attestations, both spent) used the server's order.
 def _md5(cur, sql: str, params=None) -> str:
-    cur.execute(f"SELECT md5(coalesce(string_agg(t::text, ',' ORDER BY t::text), '')) FROM ({sql}) t", params)
+    cur.execute(f"SELECT md5(coalesce(string_agg(t::text, ',' ORDER BY t::text COLLATE \"C\"), '')) FROM ({sql}) t", params)
     return cur.fetchone()[0]
 
 

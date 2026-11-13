@@ -55,8 +55,6 @@ PINNED = {
     "YEARLY_ACF_Z": 1.96,
     "LP_WEIGHTS": {"cost": 0.45, "service_level": 0.35, "storage": 0.20},
     "SERVICE_Z": 1.28,
-    "CALENDAR_FACTOR_SHRINK": 0.5,
-    "CALENDAR_FACTOR_PRIOR_MONTHS": 3,
     "SERVICE_LEVEL_PCT": 90,
     "DAYS_PER_MONTH": 365.25 / 12,
     "WEEKS_PER_MONTH": 365.25 / 12 / 7,

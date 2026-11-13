@@ -2660,7 +2660,7 @@ export const PortfolioForecastWidget = ({
   // "actual" is never mistaken for the summary card's: 965,554 pieces here
   // against 1,766,710 there for the same month (2026-10-19).
   piecesShare = null,
-  // The company calendar factor inside the forecast (GET /dashboard's
+  // The calendar factor inside the forecast (GET /dashboard's
   // portfolio_forecast.calendar_adjustment, applied only; 2026-10-19).
   calendar = null,
   // A line at the foot of the card (the Dashboard's link to the accuracy card on SKU Forecast, 2026-11-06).

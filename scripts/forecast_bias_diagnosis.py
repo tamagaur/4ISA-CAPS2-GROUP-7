@@ -8,12 +8,17 @@ Window: Sep 2025 - Feb 2026 (DIAG_START..DIAG_END). These months are SEEN by thi
 (docs/CHALLENGER_SELECTION_RULE.md) excludes them from any challenger comparison.
 
 What it reads, all in one READ ONLY transaction each:
-  * the dashboard card's own scored rows (backend.marts.accuracy_rows_query, the default backtest = mart.forecast_run
-    11, as-served, calendar-adjusted) and the same rows of run 10 (as-served, calendar OFF): signed error per product,
-    and the card's "too high 3 or more months in a row" set (accuracy_summary's over_forecast_runs);
+  * the dashboard card's own scored rows (backend.marts.accuracy_rows_query, the default backtest
+    backend.marts.DEFAULT_BACKTEST_LABEL, as-served, calendar-adjusted) and the same rows of its twin without the calendar
+    factor (the same label without ", calendar-adjusted"): signed error per product, and the card's "too high 3 or more
+    months in a row" set (accuracy_summary's over_forecast_runs);
   * the real demand (run_baseline_forecast.fetch_demand), from which every flagged product-month is recomputed through
-    router.route() with the calendar factor, so each forecast can be split into its parts. The recomputed served value
-    must equal the mart's stored forecast_pieces (checked, printed).
+    router.route() as it is served (each product's own calendar factor, calendar.for_product, and its treatment context),
+    so each forecast can be split into its parts. The recomputed served value must equal the mart's stored forecast_pieces
+    (checked, printed).
+  Until 2026-11-13 this read runs 11 / 10 and recomputed with the company calendar factor and no treatments: the served
+  forecast of 2026-11-10, whose figures docs/CHALLENGER_FORECAST.md records with that date. Run today it diagnoses what is
+  served today.
 
 Mechanism tests on each flagged product's run (the over-forecast months in a row ending at its last scored month):
   (c) calendar   the run is shorter than 3 when the same forecasts are scored without the calendar factor
@@ -48,14 +53,14 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 import analytics.forecasting.global_model as gm  # noqa: E402
-from analytics.forecasting.calendar import company_totals  # noqa: E402
+from analytics.forecasting.calendar import calendar_basis, company_totals, for_product  # noqa: E402
 from analytics.forecasting.router import route  # noqa: E402
 from analytics.params import REVIEW_OVER_RUN_MONTHS, abc_method  # noqa: E402
 from scripts.backtest_forecast_run import read_tier_a, ym  # noqa: E402
-from scripts.run_baseline_forecast import build_series, fetch_demand  # noqa: E402
+from scripts.run_baseline_forecast import build_series, fetch_contexts, fetch_demand  # noqa: E402
 
 DIAG_START, DIAG_END = "2025-09-01", "2026-02-01"
-RUN_CAL, RUN_PLAIN = 11, 10     # mart.forecast_run: as-served calendar-adjusted (the card's default) / calendar off
+CAL_SUFFIX = ", calendar-adjusted"   # the card's default run carries it; its calendar-off twin is the same label without it
 LOCAL_OUT = REPO / "local" / "forecast_bias_diagnosis_rows.csv"
 
 
@@ -84,16 +89,36 @@ def card_rows(url: str, run_id: int, start: str, end: str) -> list[dict]:
     return rows
 
 
-def read_demand(url: str) -> pd.DataFrame:
+def run_ids(url: str) -> tuple[int, int]:
+    """(the card's default run, its calendar-off twin), by label: backend.marts.DEFAULT_BACKTEST_LABEL."""
+    import backend.marts as M
+    cal, plain = M.DEFAULT_BACKTEST_LABEL, M.DEFAULT_BACKTEST_LABEL.removesuffix(CAL_SUFFIX)
+    conn = psycopg2.connect(url)
+    try:
+        cur = conn.cursor()
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SELECT label, MAX(run_id) FROM mart.forecast_run WHERE label IN (%s, %s) GROUP BY label", (cal, plain))
+        got = dict(cur.fetchall())
+        conn.rollback()
+    finally:
+        conn.close()
+    if cal not in got or plain not in got:
+        sys.exit(f"the card's default run or its calendar-off twin is not stored: {sorted(got)}")
+    return int(got[cal]), int(got[plain])
+
+
+def read_demand(url: str):
+    """(demand frame as the runner reads it, the served treatments' contexts)."""
     conn = psycopg2.connect(url)
     try:
         cur = conn.cursor()
         cur.execute("SET TRANSACTION READ ONLY")
         demand = fetch_demand(cur)
+        contexts = fetch_contexts(cur, demand)
         conn.rollback()
     finally:
         conn.close()
-    return demand
+    return demand, contexts
 
 
 def signed_error_table(rows: list[dict]) -> pd.DataFrame:
@@ -112,19 +137,25 @@ def over_run_set(rows: list[dict], start: str, end: str) -> dict[int, dict]:
     return {int(it["product_key"]): it for it in s["over_forecast_runs"]["items"]}
 
 
-def components(series: pd.Series, t: pd.Timestamp, fc, totals) -> dict:
-    r = route(series, t, fc, calendar_totals=totals)
+def components(series: pd.Series, t: pd.Timestamp, fc, totals, context=None) -> dict:
+    """The served value and its parts. `totals` is the product's own calendar (calendar.for_product). The value without the
+    calendar factor is route() again with none, the same treatment context; the median-of-3 variant is not testable
+    (None) where a treatment replaced the value."""
+    r = route(series, t, fc, calendar_totals=totals, context=context)
+    r_off = route(series, t, fc, calendar_totals=None, context=context)
     hist = series[series.index < t].dropna()
     hist = gm.from_first_sale(hist) if len(gm.from_first_sale(hist)) else hist
     med3 = float(np.median(hist.tail(3).to_numpy(dtype=float)))
     method, ma3 = r["method"], max(0.0, float(r["ma3_value"]))
-    pre = float(r.get("value_before_calendar", r["value"]))
+    pre = float(r_off["value"])
     if method == "ma3":
         pre_med = max(0.0, med3)
     elif method == "xgb_ma3_avg":
         pre_med = max(0.0, (float(r["components"]["xgb"]) + med3) / 2.0)
     else:
         pre_med = None                                   # TSB: no 3-month window to replace
+    if r.get("treatment"):
+        pre_med = None                                   # succession / fading replaced the value: no window to replace
     f = float(r.get("calendar_factor", 1.0))
     return {"value": float(r["value"]), "pre_calendar": pre, "calendar_factor": f, "method": method, "bin": r["bin"],
             "ma3": ma3, "med3": med3, "value_med3": None if pre_med is None else max(0.0, pre_med * f)}
@@ -149,13 +180,14 @@ def main() -> int:
     # Context months before DIAG_START so a run that ends in September is seen whole (the mart counts runs over
     # the run's scored rows, from the window start 2023-10).
     ctx_start = "2023-10-01"
-    rows_cal = card_rows(url, RUN_CAL, ctx_start, DIAG_END)
-    rows_plain = card_rows(url, RUN_PLAIN, ctx_start, DIAG_END)
+    run_cal, run_plain = run_ids(url)
+    rows_cal = card_rows(url, run_cal, ctx_start, DIAG_END)
+    rows_plain = card_rows(url, run_plain, ctx_start, DIAG_END)
     in_diag = lambda rs: [r for r in rs if DIAG_START[:7] <= str(r["month"])[:7] <= DIAG_END[:7]]  # noqa: E731
-    out: dict = {"window": f"{DIAG_START[:7]}..{DIAG_END[:7]}"}
+    out: dict = {"window": f"{DIAG_START[:7]}..{DIAG_END[:7]}", "run_calendar_on": run_cal, "run_calendar_off": run_plain}
 
     # 1. Signed error per product, both runs, diagnosis window only.
-    for name, rs in (("calendar_on_run11", rows_cal), ("calendar_off_run10", rows_plain)):
+    for name, rs in (("calendar_on", rows_cal), ("calendar_off", rows_plain)):
         t = signed_error_table(in_diag(rs))
         six = t[t.months == 6]
         p_over = float((pd.DataFrame(in_diag(rs)).astype({"forecast_pieces": float, "actual_pieces": float})
@@ -174,8 +206,8 @@ def main() -> int:
         }
     flagged = over_run_set(in_diag(rows_cal), DIAG_START, DIAG_END)
     flagged_plain = over_run_set(in_diag(rows_plain), DIAG_START, DIAG_END)
-    out["flagged_card_run11"] = len(flagged)
-    out["flagged_card_run10_calendar_off"] = len(flagged_plain)
+    out["flagged_card_calendar_on"] = len(flagged)
+    out["flagged_card_calendar_off"] = len(flagged_plain)
     out["flagged_in_both"] = len(set(flagged) & set(flagged_plain))
 
     # Chance baseline for the flag.
@@ -187,10 +219,10 @@ def main() -> int:
     out["eligible_products_3plus_months"] = eligible
 
     # 2. Recompute the flagged products' months through route(), with parts.
-    demand = read_demand(url)
+    demand, contexts = read_demand(url)
     latest = demand.calendar_month.max()
     series = {int(k): build_series(g, latest) for k, g in demand.groupby("product_key")}
-    totals = company_totals(demand)
+    totals = calendar_basis(demand)
     tier = read_tier_a(url, abc_method("unilever"))
     cal_df = pd.DataFrame(rows_cal).astype({"forecast_pieces": float, "actual_pieces": float})
     cal_df["month"] = cal_df.month.astype(str).str[:7]
@@ -205,7 +237,7 @@ def main() -> int:
         prev = ym(t - pd.offsets.MonthBegin(1))
         fc = gm.GlobalForecaster({k: series[k] for k in sorted(tier.get(prev, set())) if k in series})
         for r in need[need.month == mo].itertuples():
-            c = components(series[int(r.product_key)], t, fc, totals)
+            c = components(series[int(r.product_key)], t, fc, for_product(totals, int(r.product_key)), contexts.get(int(r.product_key)))
             # The mart stores the dead-rule value (0) for a dead product-month; route() does not know the rule.
             stored = float(r.forecast_pieces)
             if stored == 0.0 and c["value"] != 0.0:
@@ -269,7 +301,7 @@ def main() -> int:
     import backend.marts as M
     acc = {}
     for label, (a, b) in (("2025-09..2026-02", (DIAG_START[:7], DIAG_END[:7])), ("2023-10..2026-02", ("2023-10", "2026-02"))):
-        for name, rs in (("calendar_on_run11", rows_cal), ("calendar_off_run10", rows_plain)):
+        for name, rs in (("calendar_on", rows_cal), ("calendar_off", rows_plain)):
             sub = [r for r in rs if a <= str(r["month"])[:7] <= b]
             x = M.accuracy_summary(sub, a, b, REVIEW_OVER_RUN_MONTHS, review_limit=0)
             err = sum(float(r["forecast_pieces"]) - float(r["actual_pieces"]) for r in sub)
@@ -283,7 +315,7 @@ def main() -> int:
     if not args.skip_mase:
         from scripts.accuracy_as_served import mase_pass_rate
         for name, ct in (("calendar_on", totals), ("calendar_off", None)):
-            r = mase_pass_rate(url, demand, latest, ct)
+            r = mase_pass_rate(url, demand, latest, ct, contexts)
             out[f"mase_pass_{name}"] = {"passes": r["passes"], "scored": r["scored"], "median_mase": round(r["median_mase"], 4),
                                        "stored_forecast_result": r["stored"]}
     print(json.dumps(out, indent=2, default=str))

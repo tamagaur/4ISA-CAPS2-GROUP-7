@@ -1094,7 +1094,7 @@ const Dashboard = () => {
       + `when the range ends there. How forecasts did in ${periodLabel(startPeriod)} – ${periodLabel(period)}: `
       + '"How far off were the forecasts?" below.'
     : null;
-  // The company calendar factor inside the forecast (GET /dashboard's
+  // The calendar factor inside the forecast (GET /dashboard's
   // portfolio_forecast.calendar_adjustment, 2026-10-19): the forecast card,
   // the error card and the order plan's cards all say it, from this one block.
   const calendarAdj = portfolioForecast.calendar_adjustment?.applied ? portfolioForecast.calendar_adjustment : null;

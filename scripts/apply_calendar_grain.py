@@ -1,5 +1,10 @@
 """scripts/apply_calendar_grain.py - the calendar factor at product grain (2026-11-12) put live, as ONE command, rehearsed first.
 
+APPLIED to live 2026-11-13 08:05 UTC from 163b42f (backup backups/full_backup_20261113T075729Z, PASS). SPENT: do not re-run; its
+preflight now refuses (lp_run 10 is the newest plan and the product-calendar runs are stored). Every step exited 0; its comparison
+stopped on grain_runs_md5 alone, a collation artefact of the hash (apply_final_bundle._md5, fixed to byte order the same day):
+re-measured byte-ordered, live equals the rehearsal copy on every result key (STATE.md).
+
 analytics.params.CALENDAR_GRAIN = "product" and DECEMBER_DIP_RULE = True are already set in the code
 (analytics/forecasting/calendar.py ProductCalendar: each product's own month ratios pulled toward the typical product's, halfway
 to 1; December takes last December's typical-product dip in full when it was a dip). This writes what they change:
