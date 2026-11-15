@@ -502,7 +502,27 @@ def _attach_avg_pieces(db: Session, rows: list[dict]) -> None:
             r["avg_monthly_pieces"] = got.get(r["sku_id"])
 
 
-def _to_item(r, present: dict | None = None) -> RecommendationItem:
+_PLAN_CYCLE_UNKNOWN = object()
+
+
+def _outside_plan(r, plan_cycle=_PLAN_CYCLE_UNKNOWN) -> tuple[bool, bool]:
+    """(outside the current plan, no LP run produced it). A13 (2026-10-31) labelled a decided row with no run; it now
+    labels every row the plan clauses (backend/lp_cycle.PLAN_STATUS_SQL, CURRENT_CYCLE_CLAUSE) leave out, so cycle=all
+    returns none of them unlabelled: a row of any other cycle than `plan_cycle` (the current plan's), and a decided row
+    no run produced. The join path computes the second in SQL (`outside_plan`); a planning-mart row carries lp_run_key
+    instead. `plan_cycle` omitted = unknown (the first test only); None = no current plan, so every row is outside."""
+    get = r.get if hasattr(r, "get") else (lambda key, default=None: default)
+    if get("outside_plan") is not None:
+        no_run = bool(get("outside_plan"))
+    else:
+        no_run = get("status") not in (None, "pending") and "lp_run_key" in r and r["lp_run_key"] is None
+    earlier = False
+    if plan_cycle is not _PLAN_CYCLE_UNKNOWN:
+        earlier = plan_cycle is None or str(r["planning_cycle_date"])[:10] != str(plan_cycle)[:10]
+    return no_run or earlier, no_run
+
+
+def _to_item(r, present: dict | None = None, plan_cycle=_PLAN_CYCLE_UNKNOWN) -> RecommendationItem:
     # current_stock is PIECES (backend/stock_units.py), the same unit as
     # rop_i. Until 2026-09-23 this read quantity_on_hand — CASES — straight
     # off the snapshot and compared it with a piece-scale ROP, which made
@@ -571,6 +591,7 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
     on_order, on_order_cases, on_order_reason = _on_order(r, in_count, stock_not_in_count, present)
     reasons = r.get("review_reasons") if hasattr(r, "get") else None
 
+    outside, no_run = _outside_plan(r, plan_cycle)
     return RecommendationItem(
         recommendation_key=r["recommendation_key"],
         sku_id=r["sku_id"] or "",
@@ -612,10 +633,11 @@ def _to_item(r, present: dict | None = None) -> RecommendationItem:
         decision_reason=r.get("decision_reason") if hasattr(r, "get") else None,
         decided_at=r.get("decided_at") if hasattr(r, "get") else None,
         decided_by=r.get("decided_by") if hasattr(r, "get") else None,
-        outside_plan=bool(r.get("outside_plan")) if hasattr(r, "get") else False,
-        plan_note=(f"{str(r['status']).capitalize()} recommendation outside the current plan: no LP run produced it, "
-                   "so it is not in the plan count or the plan total.")
-        if hasattr(r, "get") and r.get("outside_plan") else None,
+        outside_plan=outside,
+        plan_note=((f"{str(r['status']).capitalize()} recommendation outside the current plan: no LP run produced it, "
+                    "so it is not in the plan count or the plan total.") if no_run else
+                   (f"{str(r['status']).capitalize()} recommendation outside the current plan: it belongs to an earlier "
+                    "planning cycle, so it is not in the plan count or the plan total.")) if outside else None,
     )
 
 
@@ -935,7 +957,7 @@ def get_recommendations(
         principals = sorted({r["principal"] for r in cycle_rows})
         counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle,
                                    run=current_run if planning_cycle == freshness["cycle_date"] else None))
-    items = [_to_item(r, present) for r in rows]
+    items = [_to_item(r, present, freshness["cycle_date"]) for r in rows]
     return _attach_demo_unilever(_with_data_mode(RecommendationsResponse(
         items=items,
         count=len(items),
@@ -998,7 +1020,7 @@ def _from_mart(db: Session, status: str | None, cycle: str, from_date: str | Non
     for r in rows:
         r.update(details.get(r["recommendation_key"], {}))
     _attach_avg_pieces(db, rows)
-    items = [_to_item(r, _MART_PRESENT) for r in rows]
+    items = [_to_item(r, _MART_PRESENT, head["cycle"]) for r in rows]
     # Same anchor as the join path (recommendations.py's own loop above): the newest
     # displayed cycle's own month, never the mart's stored (unanchored) tier_period —
     # that column is missing for any principal with no pending rows this cycle.

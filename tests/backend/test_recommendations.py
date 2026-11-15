@@ -951,3 +951,23 @@ def test_not_planned_is_absent_when_there_is_no_cycle(sample_rows):
     session = FakeSession(sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
                           abc_period_by_scope={"unilever": "2026-02"}, cycle_by_scope={"unilever": None, None: None})
     assert _get(session, "/recommendations?principal=unilever")["not_planned"] is None
+
+
+def test_every_row_outside_the_current_plan_is_labelled_in_cycle_all():
+    """2026-11-16: the label A13 gave a decided row with no run now covers every row the plan clauses leave out (live:
+    the accepted row 4 and 179 pending rows of 33 earlier cycles), on the join path (`outside_plan` from SQL) and the
+    planning-mart path (lp_run_key). Rows of the current plan stay unlabelled."""
+    from backend.routers import recommendations as rec
+    cur, old = "2026-03-01", "2025-11-01"
+    # Join path: SQL says outside_plan only for a decided row with no run.
+    assert rec._outside_plan({"outside_plan": False, "planning_cycle_date": cur, "status": "pending"}, cur) == (False, False)
+    assert rec._outside_plan({"outside_plan": True, "planning_cycle_date": cur, "status": "accepted"}, cur) == (True, True)
+    assert rec._outside_plan({"outside_plan": False, "planning_cycle_date": old, "status": "pending"}, cur) == (True, False)
+    # Mart path: no outside_plan column, lp_run_key instead.
+    assert rec._outside_plan({"planning_cycle_date": cur, "status": "pending", "lp_run_key": 10}, cur) == (False, False)
+    assert rec._outside_plan({"planning_cycle_date": cur, "status": "accepted", "lp_run_key": None}, cur) == (True, True)
+    assert rec._outside_plan({"planning_cycle_date": old, "status": "pending", "lp_run_key": None}, cur) == (True, False)
+    # A legacy cycle that IS the current plan keeps its pending rows (lp_cycle: a pending row is always plan).
+    assert rec._outside_plan({"planning_cycle_date": cur, "status": "pending", "lp_run_key": None}, cur) == (False, False)
+    # No current plan at all: nothing is in it.
+    assert rec._outside_plan({"planning_cycle_date": old, "status": "pending", "lp_run_key": None}, None)[0] is True

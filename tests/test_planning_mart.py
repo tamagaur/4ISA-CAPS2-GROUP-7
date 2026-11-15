@@ -171,7 +171,7 @@ def test_packed_rows_unpack_under_the_names_the_endpoint_reads():
     sql, _ = planning_mart.rows_query(None, None, "all", None, None)
     assert "json_build_array(" in sql and " AS r" in sql
     values = [1, "S1", "Product 1", "unilever", 12, "2026-03-01", 100, 300, 120, "pending", 240, 20, 2400, True,
-              0.02, "A", "2026-02", 3000, 40, None, None, 1, True, ["collapse"], 0, 0.4]
+              0.02, "A", "2026-02", 3000, 40, None, None, 1, True, ["collapse"], 0, 0.4, 10]
     (row,) = planning_mart.unpack([{"r": values}])
     assert list(row) == [name for name, _ in planning_mart.ROW_COLUMNS] and len(values) == len(row)
     assert row["planning_cycle_date"] == datetime.date(2026, 3, 1) and row["q_i"] == 100

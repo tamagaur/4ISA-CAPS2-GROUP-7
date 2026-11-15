@@ -136,6 +136,8 @@ class RecommendationItem(BaseModel):
     # q_i for every undecided row, so with nothing decided the plan total is unchanged.
     plan_q_i: float | None = None
     decision_reason: str | None = None
+    # 2026-11-16: also every row of a cycle other than the current plan's (cycle=all: the 179 pending rows of 33 earlier
+    # cycles), labelled the same way. The plan clauses already leave them out of every count and total.
     # A13 (2026-10-31): a decided row that no LP run produced (lp_run_key NULL: row 4 of cycle 2026-03, accepted
     # 2026-08-24, before runs were recorded). Shown by cycle=all, labelled; never in the plan count or total
     # (backend/lp_cycle.PLAN_STATUS_SQL), which is why 109 and 435,988 do not move.

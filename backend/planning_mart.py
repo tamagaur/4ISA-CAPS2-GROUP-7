@@ -93,6 +93,8 @@ ROW_COLUMNS = (
     ("on_order_unparsed", "pm.on_order_unparsed"),
     ("needs_review", "pm.needs_review"), ("review_reasons", "pm.review_reasons"),
     ("review_over_run_months", "pm.review_over_run_months"), ("review_collapse_ratio", "pm.review_collapse_ratio"),
+    # Which LP run produced the row (NULL = none): recommendations._to_item labels a row outside the plan from it.
+    ("lp_run_key", "pm.lp_run_key"),
 )
 # Read only by scripts/rehearse_planning_mart.py, to check the mart's stored status columns.
 STORED_STATUS_COLUMNS = (("mart_stock_status", "pm.stock_status"), ("mart_urgency", "pm.urgency"))

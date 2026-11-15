@@ -291,6 +291,8 @@ export const UNCHECKABLE_COLUMNS = [
 //                                  the forecast in pesos is actual + net miss
 //   surplus_pesos / shortage_pesos the over- and under-forecast totals
 const wholePct = (share) => `${Math.round(share * 100)}%`;
+// A share under 1% keeps a decimal: a one- or two-month company total can net to 0.2%, which "0%" would read as perfect.
+const wholeOrTenthPct = (share) => (share > 0 && share < 0.01 ? `${(share * 100).toFixed(1)}%` : wholePct(share));
 const onePct = (share) => `${(share * 100).toFixed(1)}%`;   // MAPE figures: one decimal so 32.4% and 31.8% stay distinct
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
 
@@ -457,6 +459,10 @@ export const ForecastErrorSummaryCard = ({
   const ticks = pesoTicks(months.flatMap((m) => [m.actual, m.forecast]));
   const varianceTicks = months.length ? missTicks(months.map((m) => m.variance)) : null;
   const lastIndex = months.length - 1;
+  // The window the line's figures are taken over, from the months the card draws (never "today").
+  const windowText = months.length
+    ? (months.length === 1 ? formatMonth(months[0].period) : `${formatMonth(months[0].period)} – ${formatMonth(months[lastIndex].period)}`)
+    : null;
   // null when the backend sent no total: shown as — with no share or bar, never ₱0 (utils/missTotals).
   const over = accuracy.surplus_pesos;
   const under = accuracy.shortage_pesos;
@@ -484,31 +490,32 @@ export const ForecastErrorSummaryCard = ({
           label="How these figures are measured"
           trigger={(
             <>
+              {windowText && <>Tier A, {windowText}: </>}
               {company != null && (
-                <>Company-total WAPE (pesos): <strong>{wholePct(company)}</strong></>
+                <>Company-total WAPE, all scored products (pesos): <strong>{wholeOrTenthPct(company)}</strong></>
               )}
               {typical != null && (
                 <>
-                  {' '}· Pooled product WAPE (pieces): <strong>{wholePct(typical)}</strong>
+                  {' '}· Pooled product WAPE, all scored products (pieces): <strong>{wholeOrTenthPct(typical)}</strong>
                 </>
               )}
               {mape && (
                 <>
-                  {' '}· MAPE, {mape.products.toLocaleString()} forecastable products (typical product): <strong>{onePct(mape.value)}</strong>
+                  {' '}· MAPE, {mape.products.toLocaleString()} Tier A products with no near-zero month (typical product): <strong>{onePct(mape.value)}</strong>
                   {mapeVariant && (
                     <>{' '}(<strong>{onePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
                   )}
                   {mapeAll && nearZero && (
-                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} products with the {nearZero.products.toLocaleString()} near-zero ones included: <strong>{onePct(mapeAll.value)}</strong></>
+                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} Tier A products that sold in the window, the {nearZero.products.toLocaleString()} near-zero ones included:<strong>{onePct(mapeAll.value)}</strong></>
                   )}
                   {nearZero && (
-                    <>{' '}· {nearZero.products.toLocaleString()} near-zero products scored in pieces (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
+                    <>{' '}· {nearZero.products.toLocaleString()} near-zero Tier A products scored in pieces instead (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
                   )}
                 </>
               )}
               {entry && (
                 <>
-                  {' '}· MASE: <strong>{entry.mase_passed} of {entry.mase_scored}</strong> under {entry.mase_gate}
+                  {' '}· MASE, plan entry test on the latest forecast, not this range: <strong>{entry.mase_passed} of {entry.mase_scored}</strong> under {entry.mase_gate}
                   {' '}(median {entry.median_mase.toFixed(2)})
                 </>
               )}
