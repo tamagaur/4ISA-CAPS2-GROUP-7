@@ -3,7 +3,7 @@
     python -m scripts.score_stock_limited_rule [--json]
 
 Scores today's rule (mart.accuracy_mart.possibly_stock_limited, migration 0043/0050) against the candidate in backend/stock_signal
-("absent_at_close"), and the card's MAPE under each setting of backend/stock_signal.MAPE_APART. Writes nothing anywhere: the switches
+("absent_at_close"), and the card's MAPE headline (nothing set apart, Chapter 3) and its stock-limited variant, under each rule. Writes nothing anywhere: the switches
 are flipped in this process only, the database is read in READ ONLY transactions, and the card's figures are read through the API
 in-process (FastAPI TestClient, the auth dependency overridden: no token, no secret).
 
@@ -96,24 +96,25 @@ def card_under_each_setting() -> dict:
     app.dependency_overrides[get_current_user] = lambda: reader
     app.dependency_overrides[get_token_payload] = lambda: reader
     client = TestClient(app)
-    saved = (stock_signal.RULE, stock_signal.MAPE_APART)
+    saved = stock_signal.RULE
     out = {}
     try:
-        for rule, apart in ((stock_signal.CURRENT_RULE, "either_count"), (stock_signal.CANDIDATE_RULE, "closing_count"),
-                            (stock_signal.CANDIDATE_RULE, "none")):
-            stock_signal.RULE, stock_signal.MAPE_APART = rule, apart
+        for rule in (stock_signal.CURRENT_RULE, stock_signal.CANDIDATE_RULE):
+            stock_signal.RULE = rule
             for start, end in WINDOWS:
                 response_cache.invalidate()
                 body = client.get(f"/dashboard/accuracy?principal=unilever&start_period={start}&period={end}").json()
                 mape = body.get("mape") or {}
-                out[f"{rule} / MAPE apart: {apart} / {start}..{end}"] = {
-                    "mape": mape.get("value"), "mape_products": mape.get("products"),
-                    "months_set_apart": mape.get("zero_stock_months_apart"),
+                var = mape.get("stock_limited_variant") or {}
+                out[f"{rule} / {start}..{end}"] = {
+                    "mape_headline": mape.get("value"), "mape_products": mape.get("products"),
+                    "mape_stock_limited_variant": var.get("value"), "variant_products": var.get("products"),
+                    "months_set_apart_by_variant": var.get("months_set_apart"),
                     "stock_limited_product_months": body.get("possibly_stock_limited"),
                     "company_total": (body.get("company_total") or {}).get("value"),
                     "typical_product_weighted": (body.get("typical_product_weighted") or {}).get("value")}
     finally:
-        stock_signal.RULE, stock_signal.MAPE_APART = saved
+        stock_signal.RULE = saved
         response_cache.invalidate()
         app.dependency_overrides.clear()
     return out

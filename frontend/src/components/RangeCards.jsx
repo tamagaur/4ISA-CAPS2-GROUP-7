@@ -424,8 +424,10 @@ export const ForecastErrorSummaryCard = ({
   const runs = accuracy.over_forecast_runs || {};
   const company = accuracy.company_total?.value;
   const typical = accuracy.typical_product_weighted?.value;
-  // Chapter 3's MAPE (backend/marts.mape_summary): rule-ordered products and zero-stock months counted apart, never dropped.
+  // Chapter 3's MAPE (backend/marts.mape_summary): the headline sets no month apart; beside it the same measure leaving out the
+  // stock-limited months (absent from the month-end count), which Chapter 3 does not mention.
   const mape = accuracy.mape?.value != null ? accuracy.mape : null;
+  const mapeVariant = mape?.stock_limited_variant?.value != null ? mape.stock_limited_variant : null;
   // The plan's entry test on the latest forecast (GET /dashboard forecast_accuracy.entry_test): not this range's months.
   const entry = showingBefore ? null : served?.entry_test;
   const months = [...(accuracy.by_month || [])]
@@ -489,7 +491,10 @@ export const ForecastErrorSummaryCard = ({
               )}
               {mape && (
                 <>
-                  {' '}· MAPE (typical product): <strong>{wholePct(mape.value)}</strong>
+                  {' '}· MAPE (typical product, Chapter 3): <strong>{wholePct(mape.value)}</strong>
+                  {mapeVariant && (
+                    <>{' '}(<strong>{wholePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
+                  )}
                 </>
               )}
               {entry && (
@@ -513,9 +518,14 @@ export const ForecastErrorSummaryCard = ({
               {' '}{mape.at_or_above_100_pct.toLocaleString()} at 100% or more.
               {mape.rule_ordered_products > 0 && (
                 <>{' '}{mape.rule_ordered_products.toLocaleString()} products ({mape.rule_ordered_product_months.toLocaleString()} product-months)
-                  {' '}were served an ordering rule, not a forecast, and are counted apart.</>
-              )}
-              {' '}{mape.zero_stock_months_apart.toLocaleString()} months with a zero stock count are counted apart.</span>
+                  {' '}were served an ordering rule, not a forecast, and are left out.</>
+              )}</span>
+          )}
+          {mapeVariant && (
+            <span className="fc-tip-line"><strong>MAPE leaving out stock-limited months ({pct(mapeVariant.value)}).</strong>{' '}{mapeVariant.label}{' '}
+              {mapeVariant.months_set_apart.toLocaleString()} product-months are left out;
+              {' '}{mapeVariant.products.toLocaleString()} products scored, {mapeVariant.under_20_pct.toLocaleString()} under 20%,
+              {' '}{mapeVariant.at_or_above_100_pct.toLocaleString()} at 100% or more.</span>
           )}
           {entry && (
             <span className="fc-tip-line"><strong>MASE ({entry.mase_passed} of {entry.mase_scored} under {entry.mase_gate},
@@ -530,8 +540,8 @@ export const ForecastErrorSummaryCard = ({
           </span>
           {accuracy.possibly_stock_limited > 0 && (
             <span className="fc-tip-line">
-              {accuracy.possibly_stock_limited.toLocaleString()} product-months may be stock-limited (stock may have run
-              out), so their sales may understate demand.
+              {accuracy.possibly_stock_limited.toLocaleString()} product-months may be stock-limited (the product was missing
+              from the stock count taken at the end of that month, so stock may have run out): their sales may understate demand.
             </span>
           )}
         </InfoTip>

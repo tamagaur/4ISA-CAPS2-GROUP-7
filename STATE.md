@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-13.
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-15.
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -16,20 +16,21 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0081 (ledger ends at 0080, 81 rows, live 2026-11-13 after backup full_backup_20261113T112358Z). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
-THE STOCK-LIMITED FLAG (recon, 2026-11-13; nothing applied, nothing on screen changed). Rule: mart.accuracy_mart.possibly_stock_limited
-  (0043, kept by 0050; 3226cc4 Part 0.1, adopted by Yuan 2026-10-04): opening or closing count 0 (a product absent from a count reads 0)
-  or below 1 week of its 12-month average. Never validated: the experiment that wrote it found flagged months sell at their usual level
-  and called a sub-week count "the normal low point between deliveries" (3226cc4 README Part 0.2). Measured on live (Tier A run 21,
-  4,370 product-months; scripts/score_stock_limited_rule.py): fires on 59.6% (37-89% a month; Tier B 70.3%, C 63.0%). Branches:
-  listed below 1 week 1,517 (sold 0.93x average vs 0.95x unflagged; no threshold 0.1-4 weeks separates them: 0.85x-0.97x) = noise;
-  absent at the opening count only 276 (0.93x) = noise; absent at the closing count 811 (absent at both: median sales 0; closing only:
-  0.75x, 62% over-forecast) = the only signal. It reaches no figure as a filter: it is a count on the error card (1,169 product-months
-  in the default range), a column in its table, and the product chart's "Stock may have run out" shading (forecastHighlights' line
-  is not called by any page). BUT the card's MAPE sets apart months with a zero opening OR closing count (the same "absent" input),
-  from ae196dc (forecastability-gate branch, not adopted) via 163b42f, no decision on record: MAPE 34.0% / 35.2% / 32.8% (card
-  default / Sep-Feb / 2024-01..2025-08) would be 38.7% / 40.7% / 37.9% with nothing set apart, 36.7% / 39.8% / 33.6% setting apart
-  only a zero closing count. Built, NOT applied: backend/stock_signal.py (RULE "count_or_week" = today, candidate "absent_at_close";
-  MAPE_APART "either_count" = today, "closing_count", "none"); at today's values the card's SQL is byte-identical to before.
+THE STOCK-LIMITED FLAG AND THE MAPE BASIS (APPLIED 2026-11-15 at read time, no database write; recon 2026-11-13). Label: backend/stock_signal
+  RULE = "absent_at_close": a product-month is possibly stock-limited when the product is missing from the month-end count (unknown with no
+  count or a possibly partial one). Was mart.accuracy_mart.possibly_stock_limited (0043/0050, 3226cc4 Part 0.1; opening or closing count 0,
+  or below 1 week of the 12-month average), which fired on 59.6% of Tier A product-months and whose "below 1 week" branch sold 0.93x vs
+  0.94-0.95x unflagged (no threshold 0.1-4 weeks separates them); the stored column is untouched and CURRENT_RULE stays selectable.
+  Card: 1,169 / 538 / 2,066 flagged product-months -> 257 / 149 / 559 (Mar 2025-Feb 2026 / Sep 2025-Feb 2026 / 2024-01..2025-08).
+  MAPE: the HEADLINE is Chapter 3's measure with no month set apart: 38.7% / 40.7% / 37.9%. Beside it, labelled as what it does, the same
+  leaving out the stock-limited months: 36.7% / 39.8% / 33.6% (mape.stock_limited_variant). Until 2026-11-15 the card's single MAPE
+  (34.0% / 35.2% / 32.8%) set apart a zero opening OR closing count and said "as Chapter 3 defines it" (from ae196dc via 163b42f, no
+  decision on record): that wording and figure are gone. PERFECT-AVERAGE FLOOR (scripts/mape_floor.py; each product forecast with its own
+  true mean over the window, scored with the card's own MAPE on the card's own rows; an oracle): Chapter 3 basis 37.4% / 36.5% / 36.9%
+  against the headline 38.7 / 40.7 / 37.9; stock-limited basis, level over all months 36.5 / 35.0 / 33.2, level over the months that
+  count 35.5 / 33.6 / 29.9, against the variant 36.7 / 39.8 / 33.6. A mean is not the MAPE-optimal constant, so it is the floor for a
+  perfect average only. WAPE, the plan, every breakdown and every pinned chapter figure: unchanged (read through the card's own route).
+  Old/new for each figure: docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md section 9 and 9.1.
 
 THE 2 MARCH 2026 COUNT (recon, 2026-11-13; read only, nothing changed). The count the live plan opens on (Unilever, period 2026-02,
   PHP 46,576,778.51) is NOT shown to be wrong. Per product against 3 Feb (PHP 24.34M) and 6 Apr (PHP 22.70M): 0 duplicate rows, 1 file;

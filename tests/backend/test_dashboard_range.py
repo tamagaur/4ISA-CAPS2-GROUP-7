@@ -224,7 +224,7 @@ def _acc(key, month, forecast, actual, cat="CAT"):
             "ma3_pieces": actual, "miss_pieces": miss, "abs_miss_pieces": abs(miss),
             "direction": "over" if miss > 0 else "under", "run_length": 1, "price_per_piece": 2.0,
             "miss_pesos": miss * 2.0, "abs_miss_pesos": abs(miss) * 2.0, "surplus_pesos": max(miss, 0) * 2.0,
-            "shortage_pesos": max(-miss, 0) * 2.0, "opening_pieces": 5.0, "closing_pieces": 0.0,
+            "shortage_pesos": max(-miss, 0) * 2.0, "opening_pieces": 5.0, "closing_pieces": 0.0 if miss > 0 else 5.0,
             "possibly_stock_limited": miss > 0, "method": "ma3", "bin": "short"}
 
 

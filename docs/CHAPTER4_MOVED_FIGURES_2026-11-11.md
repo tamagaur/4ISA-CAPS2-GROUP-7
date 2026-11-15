@@ -234,12 +234,15 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | Critical / Urgent / Planned: products, ordering, pieces | 14/14/62,604; 6/6/67,300; 90/47/248,796 | **15/15/58,832; 5/5/33,328; 95/44/238,052** |
 | Categories (products / ordering / pieces) | Hair 29/19/138,516; Fabric Cleaning 25/12/86,122; Deo 13/11/58,248; Fabric Enh 8/7/50,040; Cooking Aids 20/13/35,142; Condiments 7/3/9,288; Oral 4/1/912; Skin Cleansing 4/1/432 | **Hair 30/19/130,116; Fabric Cleaning 25/12/72,368; Deo 14/11/50,256; Fabric Enh 8/5/36,600; Cooking Aids 19/12/32,364; Condiments 11/3/7,296; Oral 4/1/876; Skin Cleansing 4/1/336** |
 | Error card Sep 2025-Feb 2026 (208 products, 1,078 product-months): company-total / pooled product WAPE | 13.30% / 38.27% | **7.22% / 36.53%** |
-| Error card Sep 2025-Feb 2026: MAPE (183 products scored both sides) / under 20% / at 100%+ | 41.0% / 24 / 39 | **35.2% / 31 / 34** |
+| Error card Sep 2025-Feb 2026: MAPE, **Chapter 3 basis, no month set apart** (192 products) | 41.0% (basis not recorded; the earlier 183-product set had zero-count months set apart) | **40.7%** |
+| Error card Sep 2025-Feb 2026: MAPE, **stock-limited months set apart** (months absent from the month-end count; 149 months, 189 products) | was printed 35.2% (183 products, under 20% 31, at 100%+ 34; set apart a zero OPENING or closing count, 2026-11-12 to 2026-11-15) | **39.8%** (the same months-apart set is now the closing count only) |
 | Error card Sep 2025-Feb 2026: surplus / shortage pesos | PHP 35.34M / 25.84M | **PHP 28.58M / 28.29M** |
 | Error card 2024-01..2025-08 (270 products, 3,292 product-months): company / pooled WAPE | 10.23% / 27.88% | **9.07% / 27.25%** |
-| Error card 2024-01..2025-08: MAPE (237 products both sides) / under 20% / at 100%+ | 34.6% / 27 / 45 | **32.8% / 38 / 42** |
+| Error card 2024-01..2025-08: MAPE, **Chapter 3 basis, no month set apart** (255 products) | 34.6% (basis not recorded) | **37.9%** |
+| Error card 2024-01..2025-08: MAPE, **stock-limited months set apart** (559 months, 242 products) | was printed 32.8% (237 products, under 20% 38, at 100%+ 42; zero opening or closing count set apart) | **33.6%** |
 | Error card 2024-01..2025-08: surplus / shortage pesos | PHP 100.84M / 76.70M | **PHP 93.69M / 79.54M** |
-| Error card Mar 2025-Feb 2026 (the card's default range; 233 products): company / pooled / MAPE (210) | 10.29% / 32.28% / 38.2% | **8.52% / 32.04% / 34.0%** |
+| Error card Mar 2025-Feb 2026 (the card's default range; 233 products): company / pooled / **MAPE, Chapter 3 basis (218 products)** | 10.29% / 32.28% / 38.2% | **8.52% / 32.04% / 38.7%** |
+| Error card Mar 2025-Feb 2026: MAPE, **stock-limited months set apart** (257 months, 217 products) | was printed 34.0% (210 products; zero opening or closing count set apart) | **36.7%** |
 | Products at 50%+ MAPE (as-served frame, 183 / 237 products) | 73 / 76 | **63 / 74** |
 | Backtest pooled WAPE (as-served frame), 95% interval of the change: Sep-Feb / earlier | 38.07% / 27.86% | **36.33% [-3.43, -0.19] / 27.24% [-0.91, -0.34]** |
 | Backtest median MASE, interval: Sep-Feb / earlier | 0.731 / 0.901 | **0.646 [-0.132, -0.019] / 0.869 [-0.080, +0.016]** |
@@ -258,7 +261,7 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | count 2 Mar over 3 Feb / over 6 Apr; requirement at 3 Feb / 6 Apr (M pcs) | 3.7 / 3.0; 1.53 / 1.47 | **3.7 / 2.9; 1.47 / 1.40** |
 | single delivery requirement (sensitivity) / before rounding | 240,236 / 237,360 | **213,062 / 210,825** |
 | Chart 10: measured monthly exceedance at Z = 1.28 (95% CI) | 9.1% (7.9-10.5) | **9.0% (7.7-10.3)** |
-| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,845 / 2,827; 2,839 / 2,818** (2026-11-13, +1 test for the month-load gate; passed counts derived by chapter_figures --write) |
+| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,853 / 2,835; 2,847 / 2,826** (2026-11-15: 2,845 / 2,827; 2,839 / 2,818 on 2026-11-13, +1 test for the month-load gate; passed counts derived by chapter_figures --write) |
 
 Manuscript figure checks: Tables 4.2.19 and 4.2.20 pass on the new plan; figures h-l and o-q stay "held" against older manuscript
 values (chapter work), but NOT exactly as before: drawn from live on 2026-11-13 (163b42f's re-pin had not redrawn figures h-k, p and
@@ -266,3 +269,17 @@ q, which still showed lp_run 9's data), seven manuscript statements that agreed 
 The served forecast's backtest moved with the method, so no code change reconciles them; the chapter text is the author's. This is
 the 2026-11-13 brief's second gate (STATE.md). DEC-41's text in ARCHITECTURE.md describes the per-product factor since
 2026-11-13. Stored run descriptions of runs 21-23 corrected by migration 0079 (they said "x the company calendar factor").
+
+### 9.1 The MAPE basis and the stock-limited label, applied 2026-11-15 (no database write)
+
+Only the basis of the MAPE and the definition of the stock-limited label changed; WAPE (company 8.52% / 7.22% / 9.07%, pooled 32.04% / 36.53% / 27.25%), every plan figure, every breakdown and every other row above are the same on live (read through the card's own route, `scripts/score_stock_limited_rule.py`, 2026-11-15).
+
+| Figure (Tier A, Unilever; windows Mar 2025-Feb 2026 / Sep 2025-Feb 2026 / 2024-01..2025-08) | Before (card as deployed) | After |
+|---|---|---|
+| Card headline MAPE | 34.0% / 35.2% / 32.8% (set apart a zero opening OR closing count; labelled "as Chapter 3 defines it") | **38.7% / 40.7% / 37.9%** (Chapter 3's measure, nothing set apart) |
+| MAPE beside it, stock-limited months set apart | none | **36.7% / 39.8% / 33.6%** (257 / 149 / 559 product-months) |
+| Product-months labelled possibly stock-limited | 1,169 / 538 / 2,066 | **257 / 149 / 559** (absent from the month-end count) |
+| Perfect-average floor, MAPE, Chapter 3 basis | not computed on this basis (the error hunt's floor was WAPE: 34.53% / 26.79%, main / earlier) | **37.4% / 36.5% / 36.9%** |
+| Perfect-average floor, MAPE, stock-limited basis (level = all months / level = months that count) | n/a | **36.5% / 35.5%; 35.0% / 33.6%; 33.2% / 29.9%** |
+
+The floor is `scripts/mape_floor.py`: every month of a product forecast with the product's own true mean over the window (an oracle, not a forecast), scored with the card's own MAPE function on the card's own rows. A mean is not the MAPE-optimal constant (MAPE rewards a lower level), so it is the floor for "a perfect average", not for every constant.

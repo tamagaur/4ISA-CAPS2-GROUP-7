@@ -1,40 +1,35 @@
-"""backend.stock_signal - read-time switches for the "possibly stock-limited" label and for the months MAPE sets apart.
+"""backend.stock_signal - the "possibly stock-limited" label and the MAPE variant that sets those months apart.
 
-BOTH SWITCHES ARE AT TODAY'S BEHAVIOUR, and with them nothing any route serves changes (built 2026-11-13, recon brief "whether the
-stock-limited flag means anything"; not applied: changing either value is the team's decision, not this module's).
+APPLIED 2026-11-15 (Kelvin's brief of that date; the recon of 2026-11-13 measured it). The label is now the CANDIDATE RULE
+("absent_at_close"): a product-month is possibly stock-limited when the product is MISSING FROM THE COUNT TAKEN AT THE MONTH'S END
+(a product absent from a count that was taken reads 0: Unilever's files never list a zero row); unknown when there is no count, or
+the count is on record as possibly partial (analytics.params.POSSIBLY_PARTIAL_COUNTS, row flag count_possibly_partial). The stored
+column mart.accuracy_mart.possibly_stock_limited (migration 0043/0050; opening or closing count 0, or below 1 week of the product's
+12-month average; kelvin/surplus-bias-experiment 3226cc4 Part 0.1, adopted by Yuan 2026-10-04) is NOT changed (no database write):
+the rule is applied at read time, and CURRENT_RULE stays selectable.
 
-WHAT TODAY'S LABEL IS. mart.accuracy_mart.possibly_stock_limited (migration 0043, kept by 0050; kelvin/surplus-bias-experiment
-3226cc4 Part 0.1, adopted by Yuan 2026-10-04): the opening or closing count is 0, or below 1 week of the product's 12-month average
-sales. A product missing from a count that was taken counts as 0 (Unilever's files never list a zero row), so "count is 0" means
-"absent from the count".
-
-WHAT THE RECON MEASURED (scripts/score_stock_limited_rule.py, live, 2026-11-13; Tier A run 21, 4,370 product-months):
-  - It fires on 59.6% of product-months (16%-50% "absent" plus a "below 1 week" branch, 37%-89% a month in all).
-  - "Below 1 week" (1,517 product-months): those months sell 0.93x the product's average, the unflagged 0.94-0.95x. No threshold
-    from 0.1 to 4 weeks separates them (0.85x-0.97x in every band). It is the normal low point between weekly deliveries seen in a
-    monthly snapshot, as the experiment that wrote the rule said itself (3226cc4 README Part 0.2), and the yardstick is La Union's
-    sales against an Ilocos Sur count.
+WHY (scripts/score_stock_limited_rule.py, live, 2026-11-13; Tier A run 21, 4,370 product-months):
+  - The old rule fired on 59.6% of product-months (37%-89% a month). Its "below 1 week" branch (1,517 product-months) sold 0.93x
+    the product's average against 0.94-0.95x unflagged, and no threshold from 0.1 to 4 weeks separates them: the normal low point
+    between weekly deliveries in a monthly snapshot (3226cc4 README Part 0.2). "Absent at the opening count only" (276): 0.93x,
+    restocked: no signal.
   - "Absent from the closing count" (811): median sales 0 when absent at both counts, 0.75x and 62% over-forecast when absent at the
-    close only. That is what a stock-out looks like. "Absent from the opening count only" (276): 0.93x, restocked; no signal.
+    close only: what a stock-out looks like. Tier A: 59.6% -> about 17% of product-months.
 
-THE CANDIDATE RULE ("absent_at_close"): possibly stock-limited = the product is absent from the count taken at the month's end; unknown
-when there is no count, or the count is on record as possibly partial (analytics.params.POSSIBLY_PARTIAL_COUNTS, row flag
-count_possibly_partial). Tier A: 59.6% -> about 17% of product-months, and the flagged months sell a median 0x-0.75x their average.
-
-MAPE. The card's MAPE (the Chapter 3 measure) sets apart product-months with a zero opening OR closing count (MAPE_APART
-"either_count", from ae196dc of 2026-11-12, the forecastability-gate branch, carried to live in 163b42f; no decision on record). That
-also sets apart the "absent at the opening only" months, which sold normally. "closing_count" sets apart only the months the candidate
-rule flags; "none" sets nothing apart. The scores per window are in the scoring script's output.
+MAPE. Chapter 3 (3.4.4.2.2.2) defines MAPE and sets no month apart, so the card's HEADLINE sets none apart. Beside it a VARIANT
+leaves out the stock-limited months (MAPE_VARIANT_APART = "closing_count", the same months the label flags). From ae196dc (the
+forecastability-gate branch, carried into live by 163b42f) the card's single MAPE had set apart months with a zero opening OR closing
+count and called itself "as Chapter 3 defines it": that is gone.
 """
 from __future__ import annotations
 
 CURRENT_RULE = "count_or_week"            # the stored column, as mart.refresh wrote it
 CANDIDATE_RULE = "absent_at_close"
 RULES = (CURRENT_RULE, CANDIDATE_RULE)
-RULE = CURRENT_RULE                       # the switch: today's behaviour
+RULE = CANDIDATE_RULE                     # the switch: applied 2026-11-15
 
 MAPE_APART_MODES = ("either_count", "closing_count", "none")
-MAPE_APART = "either_count"               # the switch: today's behaviour
+MAPE_VARIANT_APART = "closing_count"      # the months the card's stock-limited MAPE variant sets apart (the headline sets none apart)
 
 
 def _check(value: str, allowed: tuple[str, ...], name: str) -> str:
@@ -53,7 +48,7 @@ def candidate_flag(row: dict) -> bool | None:
 
 
 def apply_to_rows(rows: list[dict], rule: str | None = None) -> list[dict]:
-    """The rows as served. Under today's rule they are returned untouched (the same list)."""
+    """The rows as served. Under the stored rule they are returned untouched (the same list)."""
     rule = _check(rule or RULE, RULES, "RULE")
     if rule == CURRENT_RULE:
         return rows
@@ -63,24 +58,24 @@ def apply_to_rows(rows: list[dict], rule: str | None = None) -> list[dict]:
 
 
 def flag_sql(rule: str | None = None) -> str:
-    """The SQL for the label inside a query over accuracy_mart's columns: the stored column under today's rule."""
+    """The SQL for the label inside a query over accuracy_mart's columns: the stored column under the old rule."""
     rule = _check(rule or RULE, RULES, "RULE")
     if rule == CURRENT_RULE:
         return "possibly_stock_limited"
     return "(CASE WHEN closing_pieces IS NULL OR count_possibly_partial THEN NULL ELSE closing_pieces = 0 END)"
 
 
-def zero_stock_sql(mode: str | None = None) -> str:
-    """The months MAPE sets apart, as SQL over accuracy_mart's columns (today: a zero opening or closing count)."""
-    mode = _check(mode or MAPE_APART, MAPE_APART_MODES, "MAPE_APART")
+def zero_stock_sql(mode: str) -> str:
+    """The months a MAPE basis sets apart, as SQL over accuracy_mart's columns."""
+    mode = _check(mode, MAPE_APART_MODES, "MAPE_APART")
     return {"either_count": "(opening_pieces = 0 OR closing_pieces = 0)",
             "closing_count": "(closing_pieces = 0 AND NOT COALESCE(count_possibly_partial, false))",
             "none": "false"}[mode]
 
 
-def zero_stock_row(row: dict, mode: str | None = None) -> bool:
-    """The same test on one row (backend/marts._zero_stock)."""
-    mode = _check(mode or MAPE_APART, MAPE_APART_MODES, "MAPE_APART")
+def zero_stock_row(row: dict, mode: str) -> bool:
+    """The same test on one row (backend/marts._stock_limited_month)."""
+    mode = _check(mode, MAPE_APART_MODES, "MAPE_APART")
     if mode == "none":
         return False
     keys = ("opening_pieces", "closing_pieces") if mode == "either_count" else ("closing_pieces",)
