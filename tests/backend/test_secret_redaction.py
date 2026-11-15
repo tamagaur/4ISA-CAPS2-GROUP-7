@@ -1,6 +1,7 @@
 """A password, token, secret or key never appears in a response body or a log line (QA 2026-10-24, finding 16)."""
 from __future__ import annotations
 
+import ast
 import logging
 import pathlib
 import re
@@ -102,11 +103,46 @@ def test_an_ordinary_field_keeps_its_input():
     assert out["input"] == "abc"
 
 
-def test_the_server_never_logs_a_request_or_a_validation_error():
-    """The logger calls in backend/ name an object or an address; none passes a request, a body or a validation error."""
+_LOG_LEVELS = {"debug", "info", "warning", "warn", "error", "exception", "critical", "log"}
+_LOGGED_NAME = re.compile(r"password|passwd|token|secret|email|errors|^(body|payload|request|req|to)$", re.I)
+
+
+def _logged_values(call: ast.Call):
+    """Names a logger call passes after its message, wherever the call is split across lines. A value wrapped in
+    mask_email(...) is allowed: it is the one way an address may be logged."""
+    stack = list(call.args[1:]) + [k.value for k in call.keywords]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Call) and getattr(node.func, "id", getattr(node.func, "attr", "")) == "mask_email":
+            continue
+        if isinstance(node, ast.Name) and _LOGGED_NAME.search(node.id):
+            yield node.id
+        elif isinstance(node, ast.Attribute) and _LOGGED_NAME.search(node.attr):
+            yield node.attr
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _log_offenders(source: str, label: str = "") -> list[str]:
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in _LOG_LEVELS
+                and "log" in ast.unparse(node.func.value).lower() and list(_logged_values(node))):
+            out.append(f"{label}:{node.lineno}")
+    return out
+
+
+def test_the_scan_sees_a_call_split_over_several_lines():
+    """The old scan read one line at a time and missed these (auth.py sign-in lockouts, 2026-11-16)."""
+    split = ('logger.warning(' + chr(10) + '    "locked %s",' + chr(10) + '    body.email,' + chr(10) + ')')
+    assert _log_offenders(split, "x") == ["x:1"]
+    assert _log_offenders('logger.warning("sent to %s", mask_email(email))') == []
+    assert _log_offenders('logger.warning("no values here")') == []
+
+
+def test_the_server_never_logs_a_request_a_validation_error_or_an_address():
+    """Every logger call in backend/, however many lines it spans: none passes a request, a body, a validation error, a
+    secret, or an e-mail address that is not wrapped in mask_email."""
     offenders = []
     for path in (REPO / "backend").rglob("*.py"):
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(r"\blogger\.\w+\(", line) and re.search(r"\b(body|payload|request(?=[.,)])|exc\.errors|\.errors\(\)|password|token|secret)\b", line, re.I):
-                offenders.append(f"{path.relative_to(REPO).as_posix()}:{n}")
+        offenders += _log_offenders(path.read_text(encoding="utf-8"), path.relative_to(REPO).as_posix())
     assert offenders == []

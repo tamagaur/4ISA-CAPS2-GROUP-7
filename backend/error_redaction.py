@@ -5,8 +5,8 @@ response, and so in any proxy or client log that records bodies (QA 2026-10-24, 
 mentions password, token, secret, key (api/private/encryption key, or a field called key) or a sign-in code never has its value in an error body; nor does a value nested inside a
 larger input, nor a whole body that failed to parse (the text may hold any of them).
 
-Logs: no handler logs a request body or a validation error. The few logger calls in backend/ name an object or an
-e-mail address, never a field value; tests/backend/test_secret_redaction.py fails if one starts to log a request.
+Logs: no handler logs a request body or a validation error, and none logs an e-mail address in full (mask_email keeps the first
+letter and the domain). The few logger calls in backend/ name an object or a masked address, never a field value; tests/backend/test_secret_redaction.py fails if one starts to log a request.
 """
 from __future__ import annotations
 
@@ -19,6 +19,12 @@ from fastapi.responses import JSONResponse
 
 SECRET_NAME = re.compile(r"password|passwd|token|secret|api_?key|private_?key|encryption_?key|^key$|authorization|credential|otp|recovery|^code$", re.I)
 REDACTED = "[hidden]"
+
+
+def mask_email(address) -> str:
+    """'a***@domain' for a log line: enough to tell which mail host, not who. Anything that is not an address becomes '[hidden]'."""
+    local, at, domain = str(address or "").partition("@")
+    return f"{local[:1]}***@{domain}" if at and local and domain else REDACTED
 
 
 def _redact(value):

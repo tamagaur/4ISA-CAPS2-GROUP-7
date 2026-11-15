@@ -23,6 +23,8 @@ from email.utils import formataddr, formatdate, make_msgid
 
 from dotenv import load_dotenv
 
+from backend.error_redaction import mask_email
+
 logger = logging.getLogger(__name__)
 
 _SETTINGS = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM")
@@ -100,7 +102,7 @@ def send(to: str, subject: str, body: str, html: str | None = None,
     inside it for <img src="cid:..."> (backend/email_templates.py). Raises
     MailError when it can't."""
     if not is_configured():
-        logger.warning("Email to %s not sent: the SMTP_* settings are missing.", to)
+        logger.warning("Email to %s not sent: the SMTP_* settings are missing.", mask_email(to))
         raise MailError("Email isn't set up on the server yet, so nothing was sent.")
     user = os.environ["SMTP_USER"]
     msg = EmailMessage()
@@ -128,5 +130,5 @@ def send(to: str, subject: str, body: str, html: str | None = None,
             # Gmail account vanished: refused, with no valid address to bounce to.
             smtp.send_message(msg, from_addr=user, to_addrs=[to])
     except (smtplib.SMTPException, OSError) as exc:
-        logger.warning("Could not send email to %s: %s", to, exc)
+        logger.warning("Could not send email to %s: %s", mask_email(to), type(exc).__name__)
         raise MailError("The email couldn't be sent, so share the link another way.") from exc

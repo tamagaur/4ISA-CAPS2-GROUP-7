@@ -87,6 +87,7 @@ from backend.auth_utils import (
     verify_password,
 )
 from backend.deps import TokenPayload, get_current_user, get_db
+from backend.error_redaction import mask_email
 from backend.permissions import (
     NOT_READY, permissions_for, permissions_ready, require_admin_for, require_permission,
 )
@@ -322,8 +323,8 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
         _record_failed_sign_in(db, body.email, client_ip)
         if lock is not None:
             logger.warning(
-                "Sign-in locked (%s limit) for %r from %s after repeated failures.",
-                "+".join(lock.limits), body.email, client_ip,
+                "Sign-in locked (%s limit) for %s from %s after repeated failures.",
+                "+".join(lock.limits), mask_email(body.email), client_ip,
             )
             _record_lockout(db, body.email, client_ip, lock)
             raise _too_many_attempts(lock.seconds)
@@ -399,8 +400,8 @@ def _wrong_code(db: Session, email: str, client_ip: str, message: str = WRONG_CO
     lock = login_limiter.record_failure(email, client_ip)
     if lock is not None:
         logger.warning(
-            "Sign-in locked (%s limit) for %r from %s after repeated wrong codes.",
-            "+".join(lock.limits), email, client_ip,
+            "Sign-in locked (%s limit) for %s from %s after repeated wrong codes.",
+            "+".join(lock.limits), mask_email(email), client_ip,
         )
         _record_lockout(db, email, client_ip, lock)
         return _too_many_attempts(lock.seconds)

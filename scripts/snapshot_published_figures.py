@@ -20,8 +20,9 @@ Writes
 --verify recomputes the headline WAPE, the MASE pass rate and median, the error-decomposition split, the
 17.14% exceedance and the peso figure from the FROZEN rows (not the live database), checks the input hashes,
 and compares with the JSON. It also reads the live actuals version and says whether the data has moved since;
-a moved version never fails the figures (they are pinned to the frozen rows), it only says they are no longer
-what a fresh computation would give.
+a moved actuals version, or a live MASE / error-decomposition figure that differs from the pinned one, FAILS (2026-11-16): the pinned figures
+are then no longer what the system serves, and re-pinning (--write) is a decision, not a side effect. The headline WAPE is not compared to live:
+its as-served rows come from a backtest and are not stored in the database.
 """
 from __future__ import annotations
 
@@ -48,6 +49,7 @@ FROZEN = {  # frozen file -> where it is read from (local/, git-ignored), then t
     "demand_money.csv": REPO / "local" / "error_direction_money.csv",
 }
 FIGURE_TOLERANCE = 1e-9
+LIVE_TOLERANCE = 1e-7     # live is summed by the database, the frozen rows were round-tripped through CSV
 # The only columns of each frozen file that --verify, --march-impact, scripts/manuscript_figures.py or a test reads. Anything
 # else the source carries (prices, safety-stock values, run ids, model bins) is not committed.
 KEEP_COLUMNS = {
@@ -233,17 +235,45 @@ def cmd_verify() -> int:
         conn, cur = connect()
         try:
             live = actuals_version.read(cur)
+            live_fig = live_figures(cur)
         finally:
             conn.rollback()
             conn.close()
-        if live["key"] == snap["actuals_version"]["key"]:
-            print("live actuals are unchanged since the snapshot")
-        else:
-            print(f"live actuals have MOVED: snapshot {snap['actuals_version']['key']}, now {live['key']} "
-                  "(a fresh computation would differ; the pinned figures do not)")
-    except Exception as exc:  # no database: the figures were still verified
+    except Exception as exc:  # no database: the figures were verified from the frozen rows, but not against live
         print(f"live actuals version not read: {exc}")
+        return 0
+    drift = []
+    if live["key"] != snap["actuals_version"]["key"]:
+        drift.append(f"actuals version: snapshot {snap['actuals_version']['key']}, live {live['key']}")
+    pinned = dict(flatten({k: snap["figures"][k] for k in live_fig}))
+    for k, v in flatten(live_fig):
+        if k not in pinned or not np.isclose(v, pinned[k], rtol=LIVE_TOLERANCE, atol=LIVE_TOLERANCE):
+            drift.append(f"live {k}: pinned {pinned.get(k)!r}, live {v!r}")
+    for d in drift:
+        print("FAIL", d)
+    if drift:
+        print("FAIL: live no longer matches the pinned figures. Decide whether the manuscript or the snapshot is stale "
+              "(python -m scripts.snapshot_published_figures --write re-pins; the manuscript must follow).")
+        return 1
+    print(f"OK: live matches the pinned figures: actuals version {live['key']}, MASE and the error decomposition "
+          f"({len(pinned)} figures read from live now)")
+    print("not compared to live: headline_wape (it comes from the as-served backtest rows, which are not stored in the database)")
     return 0
+
+
+def live_figures(cur) -> dict:
+    """The pinned figures that can be recomputed from the database as it is now: the stored MASE of the latest forecast and the
+    error decomposition. Same queries as --write."""
+    cur.execute("""SELECT product_key, forecast_date, status, mase FROM forecast_result
+                   WHERE forecast_date = (SELECT MAX(forecast_date) FROM forecast_result)""")
+    mase = pd.DataFrame(cur.fetchall(), columns=["product_key", "forecast_date", "status", "mase"])
+    mase["mase"] = mase["mase"].astype(float)
+    cur.execute("SELECT * FROM mart.error_decomposition_row")
+    dec = pd.DataFrame(cur.fetchall(), columns=[d[0] for d in cur.description])
+    for c in dec.columns:
+        if dec[c].dtype == object and c not in ("principal", "tier", "month", "forecast_source", "ss_method"):
+            dec[c] = pd.to_numeric(dec[c], errors="coerce")
+    return {"mase": mase_figures(mase), "error_decomposition": decomposition_figures(dec)}
 
 
 def cmd_march_impact() -> int:

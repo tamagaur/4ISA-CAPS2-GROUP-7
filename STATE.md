@@ -13,8 +13,13 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    110 / 381,484, lp_run 7 110 / 419,344, lp_run 6 109 / 435,988. A re-plan rewrites the cycle's rows in place: lp_run 9's row values
    are in backups/full_backup_20261113T075729Z, its three products that left in reports/lp_runs/retired_2026-03-01_20261113T080859Z.csv
    (git-ignored).)
-  Next migration: 0081 (ledger ends at 0080, 81 rows, live 2026-11-13 after backup full_backup_20261113T112358Z). kelvin-be is the
+  Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+SMALL FIXES (2026-11-16): log lines no longer carry an e-mail address in full (backend/error_redaction.mask_email: 5 calls, 2 of them multi-line in routers/auth.py; the
+  secret-redaction test now reads whole calls with ast, so a split call is seen); tests/test_published_snapshot / scripts.snapshot_published_figures --verify now also compares the
+  pinned MASE and error-decomposition figures (37) and the actuals version to live and FAILS on divergence (headline WAPE stays from frozen rows: its backtest rows are not in the
+  database); CLAUDE.md route count corrected to 95. Plan unchanged 115 / 330,212.
 
 THE CALENDAR ADJUSTMENT UNDER AN OUT-OF-SAMPLE PROTOCOL (2026-11-16, recon only: no database write, nothing applied; plan still 115 / 330,212). Protocol
   committed first (docs/CALENDAR_SELECTION_PROTOCOL_2026-11-16.md, sha256 27ae3eef...); report docs/CALENDAR_SELECTION_2026-11-16.md. NOTHING BEATS LIVE: choose-on-past,

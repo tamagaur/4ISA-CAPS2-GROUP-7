@@ -21,3 +21,39 @@ def test_snapshot_json_names_its_actuals_version_and_inputs():
 
 def test_figures_reproduce_from_the_frozen_rows(capsys):
     assert sp.cmd_verify() in (0,)  # the live actuals line may not print without a database; the figures must match
+
+
+class _Conn:
+    def rollback(self): pass
+    def close(self): pass
+
+
+def _fake_live(monkeypatch, key=None, mase_below_1=None):
+    """cmd_verify against a stand-in for the database: the pinned figures, optionally with one thing changed."""
+    snap = json.loads(sp.SNAP_JSON.read_text(encoding="utf-8"))
+    fig = {k: json.loads(json.dumps(snap["figures"][k])) for k in ("mase", "error_decomposition")}
+    if mase_below_1 is not None:
+        fig["mase"]["mase_below_1"] = mase_below_1
+    stamp = dict(snap["actuals_version"], key=key or snap["actuals_version"]["key"])
+    import analytics.actuals_version as av
+    monkeypatch.setattr(sp, "connect", lambda: (_Conn(), None))
+    monkeypatch.setattr(av, "read", lambda cur: stamp)
+    monkeypatch.setattr(sp, "live_figures", lambda cur: fig)
+
+
+def test_verify_passes_when_live_matches_the_pinned_figures(monkeypatch, capsys):
+    _fake_live(monkeypatch)
+    assert sp.cmd_verify() == 0
+    assert "live matches the pinned figures" in capsys.readouterr().out
+
+
+def test_verify_fails_when_a_live_figure_differs_from_the_pinned_one(monkeypatch, capsys):
+    _fake_live(monkeypatch, mase_below_1=110)
+    assert sp.cmd_verify() == 1
+    assert "live mase.mase_below_1" in capsys.readouterr().out
+
+
+def test_verify_fails_when_the_actuals_have_moved(monkeypatch, capsys):
+    _fake_live(monkeypatch, key="actuals-2026-03-000000000000")
+    assert sp.cmd_verify() == 1
+    assert "actuals version" in capsys.readouterr().out

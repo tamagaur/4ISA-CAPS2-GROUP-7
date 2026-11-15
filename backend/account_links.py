@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from backend import email_templates, mailer
 from backend.auth_utils import hash_link_token, new_link_token
+from backend.error_redaction import mask_email
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ def send_link_email(
         sign_in_url = mailer.app_link("/login")
         hero_url = mailer.app_link(email_templates.HERO_IMAGE_PATH)
     except mailer.FrontendUrlMissing as exc:
-        logger.warning("Email to %s not sent: %s", email, exc)
+        logger.warning("Email to %s not sent: %s", mask_email(email), exc)
         return str(exc)
     if purpose == "invite":
         from backend import mfa  # imports this module's neighbours; kept local

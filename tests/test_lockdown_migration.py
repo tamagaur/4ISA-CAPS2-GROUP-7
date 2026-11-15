@@ -44,3 +44,30 @@ def test_0078_enables_rls_on_every_demo_table_from_the_catalog_and_names_none():
     for name in ("dm_category_sales", "unilever_sku_lp", "run"):     # catalog-driven: no table named
         assert f"demo.{name}" not in low, name
     assert database_wide_statements(sql) == []                      # no default-privilege statement, nothing database-wide
+
+
+# 0081: the same lockdown for every schema the role owns (read 2026-11-16: 8 functions still granted EXECUTE to PUBLIC, 1 in app, 7 in mart)
+F81 = F.parent / "0081_lock_down_every_schema.sql"
+
+
+def test_0081_names_no_live_schema_and_no_table_and_adds_nothing_database_wide():
+    sql = _strip_sql_file(F81.read_text(encoding="utf-8"))
+    assert _LIVE_SCHEMA_REF_RE.findall(sql) == []
+    assert database_wide_statements(sql) == []
+    low = sql.lower()
+    for name in ("audit_log", "users", "sales_fact", "refresh", "month_add", "data_kind"):
+        assert name not in low, name
+
+
+def test_0081_reads_the_catalog_for_every_owned_schema_and_leaves_extensions_and_supabase_alone():
+    low = _strip_sql_file(F81.read_text(encoding="utf-8")).lower()
+    assert "pg_namespace" in low and "nspowner" in low and "pg_extension" in low and "pg_depend" in low
+    assert "revoke execute on function" in low and "from public" in low
+    assert "revoke select, insert, update, delete on all tables" in low and "service_role" in low
+    assert "enable row level security" in low and "force" not in low and "create policy" not in low
+
+
+def test_0081_does_nothing_outside_the_live_schema():
+    """A scratch build runs in a scratch schema of the same database as live; the loop would reach live's schemas from it."""
+    low = _strip_sql_file(F81.read_text(encoding="utf-8")).lower()
+    assert "current_schema() <> 'public'" in low and "return" in low.split("current_schema() <> 'public'")[1][:200]
