@@ -261,7 +261,7 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | count 2 Mar over 3 Feb / over 6 Apr; requirement at 3 Feb / 6 Apr (M pcs) | 3.7 / 3.0; 1.53 / 1.47 | **3.7 / 2.9; 1.47 / 1.40** |
 | single delivery requirement (sensitivity) / before rounding | 240,236 / 237,360 | **213,062 / 210,825** |
 | Chart 10: measured monthly exceedance at Z = 1.28 (95% CI) | 9.1% (7.9-10.5) | **9.0% (7.7-10.3)** |
-| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,853 / 2,835; 2,847 / 2,826** (2026-11-15: 2,845 / 2,827; 2,839 / 2,818 on 2026-11-13, +1 test for the month-load gate; passed counts derived by chapter_figures --write) |
+| Tests collected / passed (with data/raw); clean clone | 2,828 / 2,810; 2,822 / 2,801 | **2,854 / 2,836; 2,848 / 2,827** (2026-11-15 after the near-zero flag; 2,853 / 2,835; 2,847 / 2,826 before it; 2,845 / 2,827; 2,839 / 2,818 on 2026-11-13, +1 test for the month-load gate; passed counts derived by chapter_figures --write) |
 
 Manuscript figure checks: Tables 4.2.19 and 4.2.20 pass on the new plan; figures h-l and o-q stay "held" against older manuscript
 values (chapter work), but NOT exactly as before: drawn from live on 2026-11-13 (163b42f's re-pin had not redrawn figures h-k, p and
@@ -283,3 +283,42 @@ Only the basis of the MAPE and the definition of the stock-limited label changed
 | Perfect-average floor, MAPE, stock-limited basis (level = all months / level = months that count) | n/a | **36.5% / 35.5%; 35.0% / 33.6%; 33.2% / 29.9%** |
 
 The floor is `scripts/mape_floor.py`: every month of a product forecast with the product's own true mean over the window (an oracle, not a forecast), scored with the card's own MAPE function on the card's own rows. A mean is not the MAPE-optimal constant (MAPE rewards a lower level), so it is the floor for "a perfect average", not for every constant.
+
+### 9.2 The near-zero flag and the worst 50 (2026-11-15; read-only on live, no forecast, order or plan changed)
+
+**What drives the mean.** On the card's default range (Mar 2025-Feb 2026, 218 products with a sale) the mean of the product MAPEs is 1,057% and the median 38.7%. 46 product-months (2.5% of the 1,839 months a product sold) carry 94% of the sum of the percentage errors: months where a product sold under 5% of its usual level (its 12-month mean), against a forecast near that usual level (forecast 5,000, sold 2). 38 of the 46 are the first low month of a collapse that nothing computed from the earlier months can see. Of the 25 highest-MAPE products and the next 25 by contribution to the product-month mean (50 in all), the cause by data, one each: 12 promo-bundle waves or short-lived promo packs (months of a few pieces between waves of thousands), 17 run-outs of a code that was re-coded or replaced (the successor launches 0-3 months earlier; the old code's collapse month is the miss), 13 one-month gaps or dips where demand resumes the next month and the forecast is right (many with a zero or near-zero month-end count), 2 one-off bulk orders (the month after is forecast on the bulk), 6 ordinary over-forecasts of a soft month. The named list is in the git-ignored `local/WORST_50_2026-11-15.md` (hard rule 9).
+
+**The flag** (`backend/marts.NEAR_ZERO_SHARE` = 5%): a product with any scored month where 0 < sold < 5% of its usual monthly level is labelled, counted, and scored on MAE and RMSE (pieces, over all its scored months) instead of a percentage. It is a measurement rule, not tuned: 2% and 10% are in the table. Forecasts, orders and stock-outs are untouched; the card shows the forecastable products' MAPE, the flagged count, and the flagged MAE and RMSE, and keeps the every-product MAPE in the tooltip.
+
+| Window | Population | State | Products | Mean | Median | at 50%+ | at 100%+ | Flagged |
+|---|---|---|---|---|---|---|---|---|
+| 2025-03..2026-02 | all | before | 218 | 1057.1% | 38.7% | 75 | 53 | - |
+| 2025-03..2026-02 | all | after, 2% | 190 | 94.7% | 34.1% | 47 | 26 | 28 flagged (264 months; MAE 4789, RMSE 12044 pieces) |
+| 2025-03..2026-02 | all | after, 5% | 179 | 51.7% | 32.4% | 36 | 15 | 39 flagged (368 months; MAE 4280, RMSE 10696 pieces) |
+| 2025-03..2026-02 | all | after, 10% | 173 | 42.3% | 31.7% | 30 | 10 | 45 flagged (427 months; MAE 4908, RMSE 13015 pieces) |
+| 2025-03..2026-02 | planned | before | 114 | 821.3% | 29.9% | 21 | 14 | - |
+| 2025-03..2026-02 | planned | after, 2% | 105 | 59.6% | 28.4% | 12 | 5 | 9 flagged (79 months; MAE 9514, RMSE 20147 pieces) |
+| 2025-03..2026-02 | planned | after, 5% | 100 | 30.7% | 27.2% | 7 | 0 | 14 flagged (128 months; MAE 6870, RMSE 15994 pieces) |
+| 2025-03..2026-02 | planned | after, 10% | 100 | 30.7% | 27.2% | 7 | 0 | 14 flagged (128 months; MAE 6870, RMSE 15994 pieces) |
+| 2025-09..2026-02 | all | before | 192 | 938.1% | 40.7% | 77 | 46 | - |
+| 2025-09..2026-02 | all | after, 2% | 175 | 108.7% | 35.6% | 60 | 29 | 17 flagged (85 months; MAE 4216, RMSE 8544 pieces) |
+| 2025-09..2026-02 | all | after, 5% | 164 | 66.5% | 33.7% | 49 | 18 | 28 flagged (145 months; MAE 3745, RMSE 7848 pieces) |
+| 2025-09..2026-02 | all | after, 10% | 158 | 51.0% | 32.7% | 43 | 12 | 34 flagged (177 months; MAE 4807, RMSE 13278 pieces) |
+| 2025-09..2026-02 | planned | before | 112 | 383.5% | 29.0% | 27 | 15 | - |
+| 2025-09..2026-02 | planned | after, 2% | 105 | 72.6% | 27.8% | 20 | 8 | 7 flagged (37 months; MAE 5995, RMSE 11307 pieces) |
+| 2025-09..2026-02 | planned | after, 5% | 100 | 35.1% | 27.2% | 15 | 3 | 12 flagged (67 months; MAE 4429, RMSE 8767 pieces) |
+| 2025-09..2026-02 | planned | after, 10% | 100 | 35.1% | 27.2% | 15 | 3 | 12 flagged (67 months; MAE 4429, RMSE 8767 pieces) |
+| 2024-01..2025-08 | all | before | 255 | 1610.3% | 37.9% | 109 | 75 | - |
+| 2024-01..2025-08 | all | after, 2% | 207 | 77.9% | 30.6% | 62 | 28 | 48 flagged (576 months; MAE 3345, RMSE 6278 pieces) |
+| 2024-01..2025-08 | all | after, 5% | 201 | 70.5% | 29.9% | 56 | 23 | 54 flagged (639 months; MAE 3132, RMSE 5982 pieces) |
+| 2024-01..2025-08 | all | after, 10% | 194 | 45.5% | 29.4% | 49 | 16 | 61 flagged (698 months; MAE 2916, RMSE 5733 pieces) |
+| 2024-01..2025-08 | planned | before | 95 | 2074.8% | 29.9% | 23 | 12 | - |
+| 2024-01..2025-08 | planned | after, 2% | 87 | 37.0% | 29.1% | 15 | 4 | 8 flagged (102 months; MAE 3489, RMSE 5215 pieces) |
+| 2024-01..2025-08 | planned | after, 5% | 87 | 37.0% | 29.1% | 15 | 4 | 8 flagged (102 months; MAE 3489, RMSE 5215 pieces) |
+| 2024-01..2025-08 | planned | after, 10% | 86 | 36.1% | 29.0% | 14 | 3 | 9 flagged (119 months; MAE 3019, RMSE 4829 pieces) |
+
+Population "planned" = the 116 products with a row in the live cycle (115 plan rows and legacy row 4), as scored by the card.
+
+**Tested and not holding (not applied; would move the plan):** a launch handover (halve a forecast for 3 months after a same brand x category, same-content or same-family code first sells, the existing succession context, `analytics/forecasting/treatments.build_contexts`), one rule fixed before scoring, on the card's rows: Mar 2025-Feb 2026 pooled WAPE 32.00% -> 32.26%, median MAPE 38.7% -> 40.6% (407 rows, 106 products moved); Sep-Feb 36.43% -> 38.17%; 2024-01..2025-08 27.25% -> 30.30%. It fires on far more products than die. The served succession and fading rules already act from the month after a collapse; only 2 product-months in the default range were scored after an already-low month with a forecast still above 20% of usual.
+
+**Still above 100% among the forecastable products (15 on the default range):** each is one or two months at 5-25% of usual (December and January dips, promo-bundle waves, a soft month after a delivery), where the level forecast is right on average and wrong in that month; they are real errors, not hidden.

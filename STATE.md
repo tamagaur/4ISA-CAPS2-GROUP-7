@@ -32,6 +32,16 @@ THE STOCK-LIMITED FLAG AND THE MAPE BASIS (APPLIED 2026-11-15 at read time, no d
   perfect average only. WAPE, the plan, every breakdown and every pinned chapter figure: unchanged (read through the card's own route).
   Old/new for each figure: docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md section 9 and 9.1.
 
+THE NEAR-ZERO FLAG (2026-11-15, read side only: no forecast, order, plan or database row changed; plan still 115 / 330,212). The card's
+  mean MAPE was 1,057% (median 38.7%) on Mar 2025-Feb 2026 because 46 product-months where a product sold under 5% of its usual level carry
+  94% of the percentage errors (38 are the first month of a collapse). backend/marts.NEAR_ZERO_SHARE = 5%: such a product is labelled, counted
+  and scored on MAE / RMSE (pieces); the card's headline MAPE is the forecastable products', with the every-product MAPE in the tooltip.
+  Default range: 39 flagged products (368 months, MAE 4,280, RMSE 10,696 pieces); 179 forecastable: mean 51.7%, median 32.4%, 36 at 50%+,
+  15 at 100%+. Planned products: mean 30.7%, median 27.2%, 0 at 100%+. Variant leaving out stock-limited months: 31.8%. Windows, 2% / 10%
+  sensitivity, the worst-50 causes: docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md 9.2 (names in git-ignored local/WORST_50_2026-11-15.md).
+  A launch-handover forecast fix was tested and does NOT hold (WAPE worse in all windows); not applied. scripts/mape_floor.py floors on the
+  forecastable set: 32.0 / 32.5 / 27.0.
+
 THE 2 MARCH 2026 COUNT (recon, 2026-11-13; read only, nothing changed). The count the live plan opens on (Unilever, period 2026-02,
   PHP 46,576,778.51) is NOT shown to be wrong. Per product against 3 Feb (PHP 24.34M) and 6 Apr (PHP 22.70M): 0 duplicate rows, 1 file;
   price effect PHP 0.07M of the +PHP 22.24M (23 products changed price); 4 products whose cases jump by about their pack size

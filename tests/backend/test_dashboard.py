@@ -2513,3 +2513,21 @@ def test_error_card_mape_follows_chapter_3_and_counts_what_it_sets_apart():
     agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
     assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3) == acc
     assert marts.accuracy_summary([], "2024-01", "2024-02", 3)["mape"] is None   # no block at all when nothing is scored
+
+
+def test_error_card_flags_products_with_a_near_zero_month_and_scores_them_in_pieces():
+    """A product with a month under 5% of its usual level (avg_monthly_pieces) is left out of the MAPE, counted, and scored on
+    MAE and RMSE over all its scored months; the plain MAPE stays beside it. Forecasts are untouched."""
+    def row(k, m, f, a, avg):
+        return {**_accuracy_row(k, m, f, a), "avg_monthly_pieces": avg}
+    rows = [row(1, "2024-01", 110, 100, 100), row(1, "2024-02", 90, 100, 100),          # product 1: 10%, forecastable
+            row(2, "2024-01", 150, 100, 100), row(2, "2024-02", 150, 100, 100),          # product 2: 50%, forecastable
+            row(3, "2024-01", 5000, 2, 5000), row(3, "2024-02", 4000, 4000, 5000)]       # product 3: a near-zero month
+    m = marts.accuracy_summary(rows, "2024-01", "2024-02", 3)["mape"]
+    assert m["products"] == 2 and m["value"] == pytest.approx(0.30) and m["at_or_above_100_pct"] == 0
+    assert m["all_products"]["products"] == 3 and m["all_products"]["at_or_above_100_pct"] == 1
+    z = m["near_zero_flag"]
+    assert z["products"] == 1 and z["product_months"] == 2 and z["threshold_share"] == 0.05
+    assert z["mae_pieces"] == pytest.approx((4998 + 0) / 2) and z["rmse_pieces"] == pytest.approx((4998 ** 2 / 2) ** 0.5, rel=1e-6)
+    agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
+    assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3)["mape"] == m

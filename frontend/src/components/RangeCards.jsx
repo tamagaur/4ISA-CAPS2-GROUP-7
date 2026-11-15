@@ -428,6 +428,8 @@ export const ForecastErrorSummaryCard = ({
   // stock-limited months (absent from the month-end count), which Chapter 3 does not mention.
   const mape = accuracy.mape?.value != null ? accuracy.mape : null;
   const mapeVariant = mape?.stock_limited_variant?.value != null ? mape.stock_limited_variant : null;
+  const mapeAll = mape?.all_products?.value != null ? mape.all_products : null;
+  const nearZero = mape?.near_zero_flag?.products > 0 ? mape.near_zero_flag : null;
   // The plan's entry test on the latest forecast (GET /dashboard forecast_accuracy.entry_test): not this range's months.
   const entry = showingBefore ? null : served?.entry_test;
   const months = [...(accuracy.by_month || [])]
@@ -491,9 +493,12 @@ export const ForecastErrorSummaryCard = ({
               )}
               {mape && (
                 <>
-                  {' '}· MAPE (typical product, Chapter 3): <strong>{wholePct(mape.value)}</strong>
+                  {' '}· MAPE (typical product): <strong>{wholePct(mape.value)}</strong>
                   {mapeVariant && (
                     <>{' '}(<strong>{wholePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
+                  )}
+                  {nearZero && (
+                    <>{' '}· {nearZero.products.toLocaleString()} near-zero products scored in pieces (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
                   )}
                 </>
               )}
@@ -515,11 +520,16 @@ export const ForecastErrorSummaryCard = ({
           {mape && (
             <span className="fc-tip-line"><strong>MAPE ({pct(mape.value)}).</strong>{' '}{mape.label}{' '}
               {mape.products.toLocaleString()} products scored; {mape.under_20_pct.toLocaleString()} under 20%,
-              {' '}{mape.at_or_above_100_pct.toLocaleString()} at 100% or more.
+              {' '}{mape.at_or_above_50_pct.toLocaleString()} at 50% or more, {mape.at_or_above_100_pct.toLocaleString()} at 100% or more.
+              {mapeAll && <>{' '}Mean over those products {pct(mape.mean)}; with the near-zero products included the typical product is {pct(mapeAll.value)} and the mean {pct(mapeAll.mean)}.</>}
               {mape.rule_ordered_products > 0 && (
                 <>{' '}{mape.rule_ordered_products.toLocaleString()} products ({mape.rule_ordered_product_months.toLocaleString()} product-months)
                   {' '}were served an ordering rule, not a forecast, and are left out.</>
               )}</span>
+          )}
+          {nearZero && (
+            <span className="fc-tip-line"><strong>Near-zero products ({nearZero.products.toLocaleString()}; {nearZero.product_months.toLocaleString()} product-months).</strong>{' '}{nearZero.label}
+              {' '}MAE {Math.round(nearZero.mae_pieces).toLocaleString()} pieces, RMSE {Math.round(nearZero.rmse_pieces).toLocaleString()} pieces a product-month.</span>
           )}
           {mapeVariant && (
             <span className="fc-tip-line"><strong>MAPE leaving out stock-limited months ({pct(mapeVariant.value)}).</strong>{' '}{mapeVariant.label}{' '}

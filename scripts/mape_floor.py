@@ -86,16 +86,24 @@ def measure(start: str, end: str) -> dict:
     agg = marts.accuracy_aggregates(rows)
     served = marts.mape_summary(agg["products"])
     flagged = lambda r: stock_signal.zero_stock_row(r, stock_signal.MAPE_VARIANT_APART)   # noqa: E731
-    ch3 = _floor(rows, lambda r: True)
-    sl = _floor(rows, lambda r: not flagged(r))
+    nz = {int(r["product_key"]) for r in rows if r.get("method") != marts.RULE_ORDER_METHOD and marts._near_zero_month(r)}
+    ok_rows = [r for r in rows if int(r["product_key"]) not in nz]       # the products a percentage can score (the card's headline set)
+    ch3 = _floor(ok_rows, lambda r: True)
+    ch3_all = _floor(rows, lambda r: True)
+    sl = _floor(ok_rows, lambda r: not flagged(r))
     return {
         "product_months": len(rows), "products": len({r["product_key"] for r in rows}),
         "served": {"chapter3_mape": served["value"], "chapter3_products": served["products"],
+                   "every_product_mape": served["all_products"]["value"], "every_product_mean": served["all_products"]["mean"],
+                   "forecastable_mean": served["mean"], "ge50": served["at_or_above_50_pct"], "ge100": served["at_or_above_100_pct"],
+                   "near_zero": served["near_zero_flag"],
                    "stock_limited_mape": served["stock_limited_variant"]["value"],
                    "stock_limited_products": served["stock_limited_variant"]["products"],
                    "months_set_apart": served["stock_limited_variant"]["months_set_apart"]},
-        "floor_chapter3_basis": {"level_all_months": ch3["all"], "note": "no month set apart: level over all months = level over kept"},
-        "floor_stock_limited_basis": {"level_all_months": sl["all"], "level_kept_months": sl["kept"]},
+        "near_zero_products": len(nz),
+        "floor_forecastable_products": {"level_all_months": ch3["all"], "note": "no month set apart: level over all months = level over kept"},
+        "floor_every_product": {"level_all_months": ch3_all["all"]},
+        "floor_stock_limited_basis_forecastable": {"level_all_months": sl["all"], "level_kept_months": sl["kept"]},
     }
 
 
