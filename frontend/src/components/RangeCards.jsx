@@ -493,9 +493,12 @@ export const ForecastErrorSummaryCard = ({
               )}
               {mape && (
                 <>
-                  {' '}· MAPE (typical product): <strong>{wholePct(mape.value)}</strong>
+                  {' '}· MAPE, {mape.products.toLocaleString()} forecastable products (typical product): <strong>{wholePct(mape.value)}</strong>
                   {mapeVariant && (
                     <>{' '}(<strong>{wholePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
+                  )}
+                  {mapeAll && nearZero && (
+                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} products with the {nearZero.products.toLocaleString()} near-zero ones included: <strong>{wholePct(mapeAll.value)}</strong></>
                   )}
                   {nearZero && (
                     <>{' '}· {nearZero.products.toLocaleString()} near-zero products scored in pieces (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
