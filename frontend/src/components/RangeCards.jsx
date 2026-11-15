@@ -291,6 +291,7 @@ export const UNCHECKABLE_COLUMNS = [
 //                                  the forecast in pesos is actual + net miss
 //   surplus_pesos / shortage_pesos the over- and under-forecast totals
 const wholePct = (share) => `${Math.round(share * 100)}%`;
+const onePct = (share) => `${(share * 100).toFixed(1)}%`;   // MAPE figures: one decimal so 32.4% and 31.8% stay distinct
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
 
 // The chart's colours: actual sales in the card's teal, the forecast in the
@@ -493,12 +494,12 @@ export const ForecastErrorSummaryCard = ({
               )}
               {mape && (
                 <>
-                  {' '}· MAPE, {mape.products.toLocaleString()} forecastable products (typical product): <strong>{wholePct(mape.value)}</strong>
+                  {' '}· MAPE, {mape.products.toLocaleString()} forecastable products (typical product): <strong>{onePct(mape.value)}</strong>
                   {mapeVariant && (
-                    <>{' '}(<strong>{wholePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
+                    <>{' '}(<strong>{onePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
                   )}
                   {mapeAll && nearZero && (
-                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} products with the {nearZero.products.toLocaleString()} near-zero ones included: <strong>{wholePct(mapeAll.value)}</strong></>
+                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} products with the {nearZero.products.toLocaleString()} near-zero ones included: <strong>{onePct(mapeAll.value)}</strong></>
                   )}
                   {nearZero && (
                     <>{' '}· {nearZero.products.toLocaleString()} near-zero products scored in pieces (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
