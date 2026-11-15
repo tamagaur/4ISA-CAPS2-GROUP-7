@@ -19,8 +19,11 @@ Its sha256 is printed and stored by `scripts/calendar_selection.py` before any s
 - December rule: off; on (last December's product median in full when below 1).
 - Consistency gate (per target month): factor 1 unless every earlier year's ratio is on the same side of 1; and the variant
   "factor 1 when the company ratio and the product median disagree in direction".
-- Mechanism B (seasonal index): month / mean of its calendar year (complete years only), product median; factor = index(target
-  month) / mean(index of the 3 months before it), earlier complete years only.
+- Mechanism C (seasonal-naive blend; replaces a "seasonal index" mechanism dropped before any scoring because it is algebraically the
+  current ratio with a different normaliser): value = (1 - a) * base + a * SN, where SN = the product's own actual in the same calendar
+  month a year earlier x (mean of its last 3 months before the target / mean of the 3 months before that year-ago month); a in
+  {0, 0.1, ..., 1.0}; base used where SN is undefined (a missing, blank or zero input). Combined with the company-grain factor on
+  `base` only through the grid below (C alone, or C after the chosen ratio factor is NOT tried: one change at a time).
 - Prior-months window fixed at 3 (the trailing level MA3 uses). Not tuned.
 
 ## Selection and test (forward chaining; the score is the system's own measure, pooled WAPE on identical product-months)
