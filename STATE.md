@@ -16,6 +16,12 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0081 (ledger ends at 0080, 81 rows, live 2026-11-13 after backup full_backup_20261113T112358Z). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
+THE CALENDAR ADJUSTMENT UNDER AN OUT-OF-SAMPLE PROTOCOL (2026-11-16, recon only: no database write, nothing applied; plan still 115 / 330,212). Protocol
+  committed first (docs/CALENDAR_SELECTION_PROTOCOL_2026-11-16.md, sha256 27ae3eef...); report docs/CALENDAR_SELECTION_2026-11-16.md. NOTHING BEATS LIVE: choose-on-past,
+  test-on-next pooled WAPE 31.85% against live 31.93% and none 33.39% (2025-03..2026-02). Shrink 0.5 survives out of sample (flat 0.4-0.8). No grain is right
+  throughout; March is the open case (company 1.136 / 1.169, product median 0.906 / 1.033; live moves March 2025 -13.9% -> -15.6%). The December rule is 31.8% of
+  the factor's gain and cannot be tested out of sample (first honest test: December 2026). March 2026 has two usable earlier years, not three. Seasonal-naive blend fails.
+
 THE STOCK-LIMITED FLAG AND THE MAPE BASIS (APPLIED 2026-11-15 at read time, no database write; recon 2026-11-13). Label: backend/stock_signal
   RULE = "absent_at_close": a product-month is possibly stock-limited when the product is missing from the month-end count (unknown with no
   count or a possibly partial one). Was mart.accuracy_mart.possibly_stock_limited (0043/0050, 3226cc4 Part 0.1; opening or closing count 0,
