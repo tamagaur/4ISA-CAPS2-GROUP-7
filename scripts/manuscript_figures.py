@@ -740,18 +740,22 @@ def fig_j(plt, d) -> Fig:
 
 
 def fig_k(plt, d) -> Fig:
+    # The pinned figure is read from the pin: this source line said "109 of 175" (the manuscript's Table 4.2.15) for four
+    # days after the pin, and live, had moved to 115 of 175 (2026-11-16).
+    pin = json.loads(SNAP_JSON.read_text(encoding="utf-8"))["figures"]["mase"]
     f = Fig("k", "fig_k_mase_distribution.png", "MASE Distribution of the 175 Forecast Products, Unilever Tier A "
             "(as of 2026-02)", "Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/"
-            "mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175')", "forecast month March 2026 (served model's "
+            f"mase_rows.csv; pinned figure 'MASE < 1 for {pin['mase_below_1']} of {pin['products_scored']}')", "forecast month March 2026 (served model's "
             "rolling one-step holdout, DEC-25)",
             "the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size "
             "of each product's sales")
     mm = d["mase"]
     ok = mm[(mm.status == "ok") & mm.mase.notna()].mase.astype(float)
     passed, failed = int((ok < 1).sum()), int((ok >= 1).sum())
-    f.check("products with a MASE", len(ok), 175, basis="Table 4.2.15 / pinned")
-    f.check("MASE below 1", passed, 109, basis="Table 4.2.15 / pinned")
-    f.check("median MASE", round(float(ok.median()), 3), 0.827, tol=0.0005, basis="§4.2.2.1.3 / pinned")
+    f.check("products with a MASE", len(ok), 175, basis="Table 4.2.15")
+    # The manuscript's own values, not the pin's: the pin and live moved with the product-grain calendar (2026-11-13).
+    f.check("MASE below 1", passed, 109, basis="Table 4.2.15 (the manuscript's value)")
+    f.check("median MASE", round(float(ok.median()), 3), 0.827, tol=0.0005, basis="§4.2.2.1.3 (the manuscript's value)")
     cap = 3.0
     fig, ax = plt.subplots(figsize=(6.5, 3.6))
     edges = np.arange(0, cap + 0.1001, 0.1)
@@ -1412,13 +1416,111 @@ total. Year-over-year: `GET /dashboard/yoy?principal=unilever&start_period=2025-
 
 
 # --------------------------------------------------------------------------------------------------------------
+FIG_FUNCS = (fig_a, fig_b, fig_c, fig_d, fig_e, fig_f, fig_g, fig_h, fig_i, fig_j, fig_k, fig_l, fig_m, fig_n,
+             fig_o, fig_p, fig_q)
+
+# THE MANUSCRIPT'S STATEMENTS AGAINST LIVE, AS A CHECK (2026-11-16). Each figure compares what live gives with what the
+# manuscript states (Fig.check). Until this date that comparison ran only when someone regenerated the figures by hand, and
+# its exit 2 had been standing since 2026-11-13, so a NEW disagreement would have gone unnoticed among the known ones.
+# --verify runs every check read-only, writes nothing in the repository (the figures are drawn at low resolution into a
+# temporary folder and discarded) and compares the disagreements with HELD_PIN: the ones on record, each with live's value
+# and the manuscript's. It fails on a disagreement not on record, on a recorded one whose live value moved, and on a
+# recorded one that now agrees (the record is then stale). A recorded disagreement is NOT a pass: it is a statement of the
+# chapter text that live contradicts, kept visible until a person settles which is right. scripts/check.sh --full runs it.
+HELD_PIN = REPO / "docs" / "MANUSCRIPT_HELD_CHECKS.json"
+
+
+def _plain(v):
+    """A check's value as JSON keeps it: numpy numbers as Python ones, tuples as lists."""
+    if isinstance(v, (tuple, list)):
+        return [_plain(x) for x in v]
+    if isinstance(v, (bool, np.bool_)):
+        return bool(v)
+    if isinstance(v, (int, np.integer)):
+        return int(v)
+    if isinstance(v, (float, np.floating)):
+        return round(float(v), 6)
+    return v
+
+
+def run_checks() -> dict:
+    """{checks_total, held: [{figure, check, live, manuscript, basis}], table_problems} from live, nothing kept on disk."""
+    import tempfile
+    global FIG_DIR, MANIFEST, TABLE_DOC, DPI
+    keep = (FIG_DIR, MANIFEST, TABLE_DOC, DPI)
+    with tempfile.TemporaryDirectory() as tmp:
+        FIG_DIR, MANIFEST, TABLE_DOC, DPI = Path(tmp), Path(tmp) / "FIGURES.md", Path(tmp) / "TABLES.md", 40
+        try:
+            plt = style()
+            d = load()
+            total, held = 0, []
+            for fn in FIG_FUNCS:
+                f = fn(plt, d)
+                plt.close("all")
+                total += len(f.checks)
+                held += [{"figure": f.letter, "check": label, "live": _plain(got), "manuscript": _plain(exp), "basis": basis}
+                         for label, got, exp, ok, basis in f.checks if not ok]
+            _, problems = write_tables(d)
+        finally:
+            FIG_DIR, MANIFEST, TABLE_DOC, DPI = keep
+    return {"checks_total": total, "held": held, "table_problems": problems}
+
+
+def cmd_write_held() -> int:
+    now = run_checks()
+    HELD_PIN.write_text(json.dumps({
+        "what": "The manuscript statements that live contradicts, as scripts.manuscript_figures finds them. Not passed: each "
+                "is a sentence, table cell or figure of the chapter text whose value is not what the system gives.",
+        "rule": "python -m scripts.manuscript_figures --verify (scripts/check.sh --full) fails when this list and live part: a "
+                "new disagreement, a listed one whose live value moved, or a listed one that now agrees. Re-pin "
+                "(--write-held) only on purpose, in the commit that says why; settling an entry means correcting the "
+                "chapter text and the expected value in scripts/manuscript_figures.py together.",
+        **now}, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"wrote {HELD_PIN.relative_to(REPO)}: {now['checks_total']} checks, {len(now['held'])} held, "
+          f"{len(now['table_problems'])} table problem(s)")
+    return 0
+
+
+def cmd_verify() -> int:
+    pin = json.loads(HELD_PIN.read_text(encoding="utf-8"))
+    now = run_checks()
+    key = lambda h: (h["figure"], h["check"])
+    was, got = {key(h): h for h in pin["held"]}, {key(h): h for h in now["held"]}
+    bad = []
+    for k in sorted(set(was) | set(got)):
+        if k not in was:
+            bad.append(f"NEW disagreement, figure {k[0]}, {k[1]}: live {got[k]['live']!r}, manuscript {got[k]['manuscript']!r} ({got[k]['basis']})")
+        elif k not in got:
+            bad.append(f"figure {k[0]}, {k[1]}: on record as disagreeing, and live now agrees (or the check is gone): re-pin")
+        elif (was[k]["live"], was[k]["manuscript"]) != (got[k]["live"], got[k]["manuscript"]):
+            bad.append(f"figure {k[0]}, {k[1]}: on record live {was[k]['live']!r} / manuscript {was[k]['manuscript']!r}, "
+                       f"now live {got[k]['live']!r} / manuscript {got[k]['manuscript']!r}")
+    if now["checks_total"] != pin["checks_total"]:
+        bad.append(f"{now['checks_total']} checks ran, {pin['checks_total']} on record: a check was added or removed")
+    if now["table_problems"] != pin["table_problems"]:
+        bad.append(f"table problems {now['table_problems']} != on record {pin['table_problems']}")
+    for b in bad:
+        print("FAIL", b)
+    if bad:
+        print(f"FAIL: the manuscript's statements and live have moved apart from the record ({HELD_PIN.relative_to(REPO)}).")
+        return 1
+    agree = now["checks_total"] - len(got)
+    print(f"OK: {now['checks_total']} manuscript statements read against live: {agree} agree; {len(got)} disagree, each one "
+          f"on record in {HELD_PIN.relative_to(REPO)} with live's value unchanged (NOT passed: the chapter text and live "
+          f"differ there, figures {sorted({k[0] for k in got})}); {len(now['table_problems'])} table problem(s)")
+    return 0
+
+
 def main() -> int:
+    if "--verify" in sys.argv[1:]:
+        return cmd_verify()
+    if "--write-held" in sys.argv[1:]:
+        return cmd_write_held()
     plt = style()
     print("loading (live read-only GETs and SQL, frozen rows, stored reports) ...")
     d = load()
     figs = {}
-    for fn in (fig_a, fig_b, fig_c, fig_d, fig_e, fig_f, fig_g, fig_h, fig_i, fig_j, fig_k, fig_l, fig_m, fig_n,
-               fig_o, fig_p, fig_q):
+    for fn in FIG_FUNCS:
         f = fn(plt, d)
         figs[f.letter] = f
         print(f"  {f.letter}  {'HELD' if f.held else 'pass'}  {len(f.checks):3d} checks  {f.file}")

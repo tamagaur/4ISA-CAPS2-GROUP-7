@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-15.
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17.
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -16,10 +16,56 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
+ONE RULE FOR THE POOLED WAPE, AND THE SEED'S PLAN NAMED AS THE SEED'S (2026-11-17, Kelvin's brief; read side only: no database write, no
+  forecast, order or plan change; plan 115 / 330,212).
+  POOLED WAPE. The card's pooled product WAPE (typical_product_weighted, wape_pieces, and each month's wape_pieces) now counts a
+  net-negative month as 0 sold, the rule of scripts/accuracy_as_served.py and the manuscript (backend/marts.POOLED_WAPE_RULE; the two
+  sums it divides are in the answer, wape_abs_miss_pieces / wape_actual_pieces; the raw sums beside them are unchanged). Live, read-only,
+  before -> after: Mar 2025-Feb 2026 32.04% -> 31.95% (78 net-negative product-months of 2,052; the card shows 32% both ways);
+  Sep 2025-Feb 2026 36.53% -> 36.33% (59 of 1,078; 37% -> 36% on the card); 2024-01..2025-08 27.25% -> 27.24% (137 of 3,292; 27%).
+  Company total, median, MAPE, pesos and pieces totals did not move. NOT changed: accuracy_by_category's per-category wape_pieces
+  (level=category detail, not the card) still divides raw sums.
+  THE SEED'S PLAN. scripts/rollover_scratch_test.py pins no plan any more: check 6 reads the plan of the database it runs on before and
+  holds it equal after (it never runs on live; scripts/optin_guard.py). scripts/optin_run.py keeps (109, 435988.0), named as what it is:
+  the plan inside the seed backup full_backup_20261102T170343Z (lp_run 6), pinned on purpose to identify the seed, never the live plan;
+  it hands that figure to the rollover test. `check.sh --optin` was NOT re-run after this edit (see the session report). Other
+  current-tense "109 / 435,988" fixed: ARCHITECTURE.md DEC-42 and DEC-45 ("the plan invariant"), docs/MONTHLY_BATCH_REVIEW.md,
+  docs/MONTHLY_LOAD_PROCEDURE.md, a comment in ReorderRecommendations.jsx (51 of 115 order 0). Left as dated records: docs/TEST_PLAN.md
+  (the run at 4a80d41), docs/LOCAL_DEMO_RUNBOOK.md (it restores that same backup), KNOWN_ISSUES A12/A13, the CH4-5 edit files.
+
+BACKEND FINISH (2026-11-16, Kelvin's brief; read side and checks only: no database write, no forecast, order or plan change; plan 115 / 330,212).
+  THE PLANNED-PRODUCTS LINE. The error card's MAPE is over every scored Tier A product; the plan orders for 115. The card now carries the
+  plan's own line (backend/marts.planned_products_block, mape.planned_products; frontend RangeCards.jsx .fc-plan-line): the headline's
+  measure, near-zero treatment and window, on the products with a row in the current cycle's plan. Live, Mar 2025-Feb 2026: 27.2% over 100
+  of the 115 products of the March 2026 plan (lp_run 10), against 32.4% over all 179; mean 30.7%, 0 at 100%+; of the other 15, 14 have a
+  near-zero month and 1 has no scored month in the window. Sep 2025-Feb 2026: 27.2% over 100 (12 near-zero, 3 not scored); 2024-01..2025-08:
+  29.1% over 87 (8, 20). Backtest errors on past months, not the plan's quantities. No other card figure moved.
+  THE 233. The two WAPEs are over all 233 scored products, the MAPE figures over the 218 that sold in the window (179 + 39 near-zero); the 15
+  others sold nothing there. The card line did not say 233; it does now, and the tooltip says why 233 and 218 differ.
+  THE HEADLINE WAPE IS TIED TO LIVE. Its as-served backtest rows ARE stored: mart.accuracy_mart runs 20 and 21 (labels of
+  scripts.accuracy_as_served.AS_SERVED_RUNS), 4,370 rows each, the frozen file's product-months and forecasts to 6e-11. The one difference
+  is a scoring rule: as-served counts a net-negative month as 0 sold, the mart keeps the raw net quantity (196 rows of each run).
+  snapshot_published_figures.live_headline applies it and --verify now compares all 51 pinned figures to live (37 before) and fails on a
+  figure live cannot give.
+  CONSTANTS AGAINST LIVE. tests/invariants/test_g_constants_match_live.py (check.sh --fast): CLAUDE.md's numeric gate (rows, pieces, lp_run),
+  manuscript_figures.PLAN_TOTALS / TIER_B_URGENCY / TIER_B_CATEGORY (every cell of Tables 4.2.19 and 4.2.20), this file's plan note, next
+  migration and forecast figures, CLAUDE.md's Tier A count and calendar range. `python -m scripts.manuscript_figures --verify` (check.sh
+  --full; read-only, writes nothing in the repository): 265 manuscript statements against live, 193 agree, 72 disagree and are on record in
+  docs/MANUSCRIPT_HELD_CHECKS.json (figures h, i, j, k, l, o, p, q; NOT passed: the chapter text and live differ there). A new, moved or
+  settled disagreement fails.
+  THE PATH LIVE SERVES. tests/backend/test_recommendations.py ran only the per-request joins (a fake session is never asked for the mart).
+  Its response-level tests now run on both paths (`served`), A13's test is behavioural on both, and the fake applies the row query's cycle
+  clause. tests/invariants/test_f_reorder_served_path.py runs the real SQL on live: live serves the mart; mart = joins field by field for the
+  plan and for cycle=all over the plan's cycle; cycle=all flags exactly the rows the plan clauses leave out (row 4 and the 179 of earlier
+  cycles); /sku, /abc and /inventory/current show a target for the plan's 115 products and no others (was a source-text search,
+  test_every_plan_read_uses_the_plan_statuses). tests/invariants/test_h_error_card_populations.py recomputes the planned line by SQL.
+  SWEEP. Stale literals fixed: "MASE 109 of 175" in snapshot_published_figures --march-impact and in figure k's source line (the pin holds
+  115); the card's "included:38.7%" (missing space). The two items reported here on 2026-11-16 as not changed are closed below (ONE RULE).
+
 SMALL FIXES (2026-11-16): log lines no longer carry an e-mail address in full (backend/error_redaction.mask_email: 5 calls, 2 of them multi-line in routers/auth.py; the
   secret-redaction test now reads whole calls with ast, so a split call is seen); tests/test_published_snapshot / scripts.snapshot_published_figures --verify now also compares the
-  pinned MASE and error-decomposition figures (37) and the actuals version to live and FAILS on divergence (headline WAPE stays from frozen rows: its backtest rows are not in the
-  database); CLAUDE.md route count corrected to 95. Plan unchanged 115 / 330,212.
+  pinned MASE and error-decomposition figures (37) and the actuals version to live and FAILS on divergence (the headline WAPE was left on frozen rows that day on the belief that its backtest rows are not in the
+  database; they are, and it is compared to live too: BACKEND FINISH below); CLAUDE.md route count corrected to 95. Plan unchanged 115 / 330,212.
 
 THE CALENDAR ADJUSTMENT UNDER AN OUT-OF-SAMPLE PROTOCOL (2026-11-16, recon only: no database write, nothing applied; plan still 115 / 330,212). Protocol
   committed first (docs/CALENDAR_SELECTION_PROTOCOL_2026-11-16.md, sha256 27ae3eef...); report docs/CALENDAR_SELECTION_2026-11-16.md. NOTHING BEATS LIVE: choose-on-past,

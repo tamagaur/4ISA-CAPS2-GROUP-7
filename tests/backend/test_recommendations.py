@@ -146,8 +146,24 @@ class FakeSession:
             cycles = {datetime.date.fromisoformat(r["planning_cycle_date"])
                       for r in self.rows if scope is None or r["principal"] == scope}
             return FakeResult([{"d": d} for d in sorted(cycles)])
+        # The mart path's two reads beside the mart (rec._attach_avg_pieces, rec._decision_details).
+        if "pd.sku_code = ANY(:skus)" in sql:
+            return FakeResult([{"sku_id": r["sku_id"], "avg_monthly_pieces": r.get("avg_monthly_pieces")}
+                               for r in self.rows if r["sku_id"] in params["skus"]])
+        if "WHERE recommendation_key = ANY(:keys)" in sql:
+            return FakeResult([{"recommendation_key": r["recommendation_key"], "decided_q_i": r.get("decided_q_i"),
+                                "decision_reason": r.get("decision_reason"), "decided_at": r.get("decided_at"),
+                                "decided_by": r.get("decided_by")}
+                               for r in self.rows if r["recommendation_key"] in params["keys"]])
         if "FROM lp_recommendation lr" in sql:
             matched = [r for r in self.rows if scope is None or r["principal"] == scope]
+            # The row query's own cycle clause (lp_cycle.CURRENT_CYCLE_CLAUSE, or cycle=all's one cycle at a time), as the
+            # database applies it: until 2026-11-16 this fake returned every row whatever the clause said.
+            if ":current_cycle" in sql:
+                matched = [r for r in matched if str(r["planning_cycle_date"])[:10] == str(params["current_cycle"])[:10]
+                           and _is_plan_row(r)]
+            elif ":listed_cycle" in sql:
+                matched = [r for r in matched if str(r["planning_cycle_date"])[:10] == str(params["listed_cycle"])[:10]]
             out = []
             for r in matched:
                 stock = self.stock_by_period.get((r["product_key"], params.get("inv_period")))
@@ -155,6 +171,8 @@ class FakeSession:
                 out.append({
                     **r, "current_stock": stock, "stock_value_pesos": None,
                     "revenue_share": share, "avg_monthly_sales_pesos": None,
+                    # _SELECT_ONE: (lr.status <> 'pending' AND lr.lp_run_key IS NULL) AS outside_plan
+                    "outside_plan": r["status"] != "pending" and r.get("lp_run_key") is None,
                 })
             return FakeResult(out)
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
@@ -196,6 +214,83 @@ def user_token():
     return auth_utils.create_access_token(user_id=1, email="staff@ssmcapstone.com", role="staff", full_name="Staff")
 
 
+# ─── the path live serves: mart.planning_mart (2026-11-16) ───────────────
+# Live answers GET /recommendations from the planning mart (backend/planning_mart.py); the per-request joins run only
+# when the mart is stale or missing. A FakeSession is never asked for the mart (planning_mart.present wants a real
+# Session), so until 2026-11-16 every route test in this file ran the fallback and none ran the path live uses.
+# `served` runs a test once per path. On "mart" the fake's own rows reach the route through planning_mart.read, in the
+# mart's shape: planning_mart.ROW_COLUMNS' names, lp_run_key instead of the SQL-computed outside_plan, and the plan
+# clauses applied as planning_mart._where applies them. The mart's SQL itself is run against live by
+# tests/invariants/test_f_reorder_served_path.py.
+
+
+def _is_plan_row(r) -> bool:
+    """backend/lp_cycle.PLAN_STATUS_SQL: a pending row, or a decided row an LP run produced."""
+    return r["status"] == "pending" or r.get("lp_run_key") is not None
+
+
+def _mart_read(session):
+    from backend import planning_mart
+    from backend.stock_units import opening_period
+
+    def read(db, principal, status, cycle, from_date, to_date):
+        scope = (principal or "").strip().lower() or None
+        scope = None if scope == "all" else scope
+        current = session.cycle_by_scope.get(scope)
+        day = lambda r: str(r["planning_cycle_date"])[:10]
+        in_scope = [r for r in session.rows if scope is None or r["principal"] == scope]
+        plan_now = [r for r in in_scope if current is not None and day(r) == str(current)[:10] and _is_plan_row(r)]
+        listed = [r for r in in_scope
+                  if (not status or r["status"] == status)
+                  and (not (from_date and to_date) or from_date <= day(r) <= to_date)
+                  and (cycle == "all" or r in plan_now)]
+        listed.sort(key=lambda r: (day(r), float(r["rop_i"])), reverse=True)
+        names = [name for name, _ in planning_mart.ROW_COLUMNS]
+        rows, counts = [], []
+        for r in listed:
+            period = opening_period(r["planning_cycle_date"])
+            row = {name: r.get(name) for name in names}
+            row.update(planning_cycle_date=datetime.date.fromisoformat(day(r)),
+                       current_stock=session.stock_by_period.get((r["product_key"], period)),
+                       revenue_share=(r["revenue_share"]
+                                      if r["_abc_period"] == session.abc_period_by_scope.get(r["principal"]) else None))
+            if "in_stock_count" not in r:   # the join fake leaves the flag off the row; a mart row always carries it
+                row["in_stock_count"] = True if row["current_stock"] is not None else None
+            rows.append(row)
+            found = session.stock_counts.get((r["principal"], period))
+            count = {"planning_cycle_date": row["planning_cycle_date"], "principal": r["principal"], "opening_period": period,
+                     "row_count": found[0] if found else None, "first_date": found[1] if found else None,
+                     "last_date": found[2] if found else None}
+            if count not in counts:
+                counts.append(count)
+        lp_at, fc_at = session.lp_generated_at, session.forecast_generated_at
+        stale = lp_at is not None and fc_at is not None and lp_at < fc_at
+        head = {"cycle": current, "fc_at": fc_at, "lp_at": lp_at if plan_now else None, "row_count": len(plan_now),
+                "stale_count": len(plan_now) if stale else 0, "superseded": session.superseded_pending,
+                "planning_stale": False, "in_step": True, "basis_current": True}
+        return {"head": head, "rows": rows, "counts": counts, "run": session.lp_run}
+    return read
+
+
+@pytest.fixture(params=["joins", "mart"])
+def served(request, monkeypatch):
+    """served(session, url) -> the route's JSON: once from the per-request joins, once from the planning mart."""
+    def get(session, url):
+        if request.param == "mart":
+            from backend import planning_mart
+            from backend.data_mode import REAL
+            monkeypatch.setattr(planning_mart, "usable", lambda db, mode=REAL: mode == REAL)
+            monkeypatch.setattr(planning_mart, "read", _mart_read(session))
+        body = _get(session, url)
+        if request.param == "mart":
+            assert not _row_queries(session), "the planning-mart path ran the per-request row query"
+        else:
+            assert _row_queries(session) or not body["items"], "the join path did not run its row query"
+        return body
+    get.path = request.param
+    return get
+
+
 def test_requires_auth(session):
     app.dependency_overrides[get_db] = lambda: session
     with TestClient(app) as c:
@@ -204,21 +299,18 @@ def test_requires_auth(session):
     assert resp.status_code == 401
 
 
-def test_unilever_stock_resolves(client):
-    resp = client.get("/recommendations?principal=unilever")
-    assert resp.status_code == 200
-    items = resp.json()["items"]
+def test_unilever_stock_resolves(session, served):
+    items = served(session, "/recommendations?principal=unilever")["items"]
     assert len(items) == 1
     assert items[0]["current_stock"] == 120.0
     assert items[0]["urgency"] != "NO DATA"
 
 
-def test_delmonte_returns_empty_not_borrowed_rows(client):
+def test_delmonte_returns_empty_not_borrowed_rows(session, served):
     """Zero Del Monte LP rows live. The list must be honestly empty, never
     Unilever rows leaking through an unscoped anchor."""
-    resp = client.get("/recommendations?principal=delmonte")
-    assert resp.status_code == 200
-    assert resp.json()["count"] == 0
+    body = served(session, "/recommendations?principal=delmonte")
+    assert body["count"] == 0 and body["items"] == []
 
 
 def test_anchors_carry_the_principal_bind(client, session):
@@ -263,7 +355,7 @@ def test_cycle_all_is_the_explicit_audit_escape_hatch(client, session):
     assert ":current_cycle" not in row_sql
 
 
-def test_no_pending_cycle_returns_empty_not_every_decided_row(sample_rows):
+def test_no_pending_cycle_returns_empty_not_every_decided_row(sample_rows, served):
     """'current' with nothing pending has no cycle to scope to — returning
     the whole table there would contradict the filter."""
     session = FakeSession(
@@ -271,16 +363,12 @@ def test_no_pending_cycle_returns_empty_not_every_decided_row(sample_rows):
         abc_period_by_scope={"unilever": "2026-02"},
         cycle_by_scope={"unilever": None, None: None},
     )
-    app.dependency_overrides[get_db] = lambda: session
-    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
-    with TestClient(app) as c:
-        body = c.get("/recommendations?principal=unilever",
-                     headers={"Authorization": f"Bearer {user_token()}"}).json()
+    body = served(session, "/recommendations?principal=unilever")
     assert body["items"] == []
     assert body["planning_cycle_date"] is None
 
 
-def test_unconvertible_stock_is_no_data_not_a_false_critical(sample_rows):
+def test_unconvertible_stock_is_no_data_not_a_false_critical(sample_rows, served):
     """A product whose cases can't be converted to pieces (no usable pack
     size) must drop out of the comparison, not be judged with the wrong
     unit — which is what made 215 of 429 rows CRITICAL."""
@@ -292,11 +380,7 @@ def test_unconvertible_stock_is_no_data_not_a_false_critical(sample_rows):
         sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
         abc_period_by_scope={"unilever": "2026-02"},
     )
-    app.dependency_overrides[get_db] = lambda: session
-    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
-    with TestClient(app) as c:
-        body = c.get("/recommendations?principal=unilever",
-                     headers={"Authorization": f"Bearer {user_token()}"}).json()
+    body = served(session, "/recommendations?principal=unilever")
     item = body["items"][0]
     assert item["urgency"] == "NO DATA"
     assert item["current_stock"] is None
@@ -360,17 +444,13 @@ def test_missing_from_a_count_that_lists_zeros_stays_no_data():
     assert "lists zero-stock items" in item.stock_blocked_reason
 
 
-def test_not_in_count_reaches_the_response(sample_rows):
+def test_not_in_count_reaches_the_response(sample_rows, served):
     sample_rows[0].update(in_stock_count=False, forecast_units=40.0, pack_size=12)
     session = FakeSession(
         sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
         abc_period_by_scope={"unilever": "2026-02"},
     )
-    app.dependency_overrides[get_db] = lambda: session
-    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
-    with TestClient(app) as c:
-        item = c.get("/recommendations?principal=unilever",
-                     headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+    item = served(session, "/recommendations?principal=unilever")["items"][0]
     assert item["stock_not_in_count"] is True
     assert item["current_stock"] == 0.0
     assert item["urgency"] == "CRITICAL"
@@ -400,7 +480,7 @@ def test_pack_size_is_passed_through_or_none():
     assert _to_item(_item_row(current_stock=10.0, rop_i=50.0, q_i=10.0)).pack_size is None
 
 
-def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows):
+def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows, served):
     session = FakeSession(
         sample_rows, stock_by_period={}, inventory_period_by_scope={"unilever": "2026-03"},
         abc_period_by_scope={"unilever": "2026-02"},
@@ -408,11 +488,7 @@ def test_freshness_flags_an_lp_older_than_its_forecasts(sample_rows):
         forecast_generated_at=datetime.datetime(2026, 9, 21, 10, 8),
         superseded_pending=179,
     )
-    app.dependency_overrides[get_db] = lambda: session
-    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
-    with TestClient(app) as c:
-        body = c.get("/recommendations?principal=unilever",
-                     headers={"Authorization": f"Bearer {user_token()}"}).json()
+    body = served(session, "/recommendations?principal=unilever")
     assert body["freshness"]["is_stale"] is True
     assert body["superseded_count"] == 179
 
@@ -541,7 +617,7 @@ def test_forecast_is_the_cycle_months_own():
     assert "fr.forecast_value AS forecast_units" in sql
 
 
-def test_response_carries_forecast_and_short(sample_rows):
+def test_response_carries_forecast_and_short(sample_rows, served):
     sample_rows[0].update(forecast_units=40.0)  # need = 40 + 30 - 120 < 0 -> 0
     session = FakeSession(
         sample_rows,
@@ -549,11 +625,7 @@ def test_response_carries_forecast_and_short(sample_rows):
         inventory_period_by_scope={None: "2026-03", "unilever": "2026-03", "delmonte": "2025-12"},
         abc_period_by_scope={None: "2026-02", "unilever": "2026-02", "delmonte": None},
     )
-    app.dependency_overrides[get_db] = lambda: session
-    app.dependency_overrides[get_current_user] = lambda: auth_utils.decode_access_token(user_token())
-    with TestClient(app) as c:
-        item = c.get("/recommendations?principal=unilever",
-                     headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+    item = served(session, "/recommendations?principal=unilever")["items"][0]
     assert item["forecast_units"] == 40.0
     assert item["short_units"] == 0.0
 
@@ -609,7 +681,7 @@ def test_rows_are_checked_against_the_cycles_opening_count(session):
     }]
 
 
-def test_a_missing_opening_count_is_reported_not_replaced(sample_rows):
+def test_a_missing_opening_count_is_reported_not_replaced(sample_rows, served):
     """No 2026-02 count: the later 2026-03 one must not stand in. Each row
     and the response carry the reason the app shows."""
     sample_rows[0].update(in_stock_count=None)
@@ -618,7 +690,7 @@ def test_a_missing_opening_count_is_reported_not_replaced(sample_rows):
         inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"},
     )
     session.stock_counts = {("unilever", "2026-03"): (785, datetime.date(2026, 4, 6), datetime.date(2026, 4, 6))}
-    body = _get(session, "/recommendations?principal=unilever")
+    body = served(session, "/recommendations?principal=unilever")
     reason = "no opening stock count for March 2026: unilever has no stock count for February 2026"
     assert body["stock_counts"][0]["available"] is False and body["stock_counts"][0]["reason"] == reason
     item = body["items"][0]
@@ -732,7 +804,7 @@ def test_row_query_reads_0042_only_where_it_exists():
     assert "{_" not in on + off  # every placeholder filled
 
 
-def test_review_flag_reaches_the_response(sample_rows):
+def test_review_flag_reaches_the_response(sample_rows, served):
     sample_rows[0].update(needs_review=True, review_reasons=["collapse", "over_forecast_run"],
                           review_over_run_months=6, review_collapse_ratio=0.1836,
                           on_order_pieces=288.0, on_order_cases=1.0, on_order_unparsed=0, in_stock_count=True)
@@ -741,7 +813,7 @@ def test_review_flag_reaches_the_response(sample_rows):
         inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"},
     )
     session.present = {"review_flag": True, "on_order": True}
-    item = _get(session, "/recommendations?principal=unilever")["items"][0]
+    item = served(session, "/recommendations?principal=unilever")["items"][0]
     assert item["needs_review"] is True
     assert item["review_reasons"] == ["collapse", "over_forecast_run"]
     assert (item["review_over_run_months"], item["review_collapse_ratio"]) == (6, 0.1836)
@@ -749,9 +821,8 @@ def test_review_flag_reaches_the_response(sample_rows):
     assert "unverified" in item["on_order_note"]
 
 
-def test_not_assessed_is_none_not_false(client):
-    item = client.get("/recommendations?principal=unilever",
-                      headers={"Authorization": f"Bearer {user_token()}"}).json()["items"][0]
+def test_not_assessed_is_none_not_false(session, served):
+    item = served(session, "/recommendations?principal=unilever")["items"][0]
     assert item["needs_review"] is None and item["review_reasons"] == []
 
 
@@ -849,17 +920,51 @@ def test_reorder_sql_reads_shares_from_the_exact_run_and_the_tier_from_the_carri
     assert "ac.classification_period <= CASE ac.principal" in _SELECT_ONE  # carried: at or before, per principal
 
 
-def test_a_decided_row_no_lp_run_produced_is_labelled_outside_the_plan():
-    """A13 (2026-10-31): row 4 of cycle 2026-03 stays visible in cycle=all but is flagged and explained; the plan
-    clauses (lp_cycle.PLAN_STATUS_SQL) that exclude it, and so keep 109 / 435,988, are untouched."""
-    import inspect
-    from backend.routers import recommendations as rec
-    src = inspect.getsource(rec)
-    assert "(lr.status <> 'pending' AND lr.lp_run_key IS NULL) AS outside_plan" in src
-    assert "recommendation outside the current plan" in src
-    from backend import lp_cycle
-    assert "lr.lp_run_key IS NOT NULL" in lp_cycle.PLAN_STATUS_SQL
+def _a13_session(sample_rows):
+    """Live's shape in three rows: a plan row of the current cycle, the accepted row no LP run produced (row 4 of cycle
+    2026-03), and a pending row left behind by an earlier cycle."""
+    sample_rows[0].update(lp_run_key=10)
+    sample_rows.append({**sample_rows[0], "recommendation_key": 4, "product_key": 2, "sku_id": "U-4", "tier": "C",
+                        "status": "accepted", "lp_run_key": None, "rop_i": 20.0})
+    sample_rows.append({**sample_rows[0], "recommendation_key": 9, "product_key": 3, "sku_id": "U-9",
+                        "planning_cycle_date": "2025-11-01", "lp_run_key": None, "rop_i": 10.0})
+    return FakeSession(sample_rows, stock_by_period={(1, "2026-02"): 120.0},
+                       inventory_period_by_scope={"unilever": "2026-03"}, abc_period_by_scope={"unilever": "2026-02"})
+
+
+def test_a_decided_row_no_lp_run_produced_is_labelled_outside_the_plan(sample_rows, served):
+    """A13 (2026-10-31), tested by behaviour on both read paths since 2026-11-16 (it was a search of the router's source
+    text): the accepted row no LP run produced is not in the plan, so the plan neither lists nor counts it."""
+    plan = served(_a13_session(sample_rows), "/recommendations?principal=unilever")
+    assert [i["recommendation_key"] for i in plan["items"]] == [1] and plan["count"] == 1
+    assert plan["items"][0]["outside_plan"] is False and plan["items"][0]["plan_note"] is None
+
+
+def test_cycle_all_labels_every_row_outside_the_plan_and_only_those(sample_rows, served):
+    """In cycle=all that row is listed, flagged and explained, and so is a row of an earlier cycle; the plan's own row
+    is never flagged. Both read paths."""
+    everything = served(_a13_session(sample_rows), "/recommendations?principal=unilever&cycle=all")
+    by_key = {i["recommendation_key"]: i for i in everything["items"]}
+    assert set(by_key) == {1, 4, 9} and everything["count"] == 3
+    assert by_key[1]["outside_plan"] is False and by_key[1]["plan_note"] is None
+    assert by_key[4]["outside_plan"] is True and by_key[4]["status"] == "accepted"
+    assert by_key[4]["plan_note"].startswith("Accepted recommendation outside the current plan: no LP run produced it")
+    assert by_key[9]["outside_plan"] is True and "earlier planning cycle" in by_key[9]["plan_note"]
+    assert sum(1 for i in everything["items"] if not i["outside_plan"]) == 1, "the unflagged rows are exactly the plan"
+
+
+def test_the_plan_clauses_on_both_paths_leave_out_a_decided_row_with_no_run():
+    """The SQL each path sends, not the router's source text: the join path's clause and flag, the mart path's clause."""
+    from backend import lp_cycle, planning_mart
+    from backend.routers.recommendations import select_one
     from backend.schemas.recommendations import RecommendationItem
+    assert "(lr.status <> 'pending' AND lr.lp_run_key IS NULL) AS outside_plan" in select_one()[0]
+    for clause in (lp_cycle.PLAN_STATUS_SQL, lp_cycle.CURRENT_CYCLE_CLAUSE):
+        assert "(lr.status = 'pending' OR lr.lp_run_key IS NOT NULL)" in clause
+    mart_current, _ = planning_mart.rows_query("unilever", None, "current", None, None)
+    assert "(pm.decision_status = 'pending' OR pm.lp_run_key IS NOT NULL)" in mart_current
+    mart_all, _ = planning_mart.rows_query("unilever", None, "all", None, None)
+    assert "pm.lp_run_key IS NOT NULL" not in mart_all and "pm.lp_run_key" in mart_all   # listed, and labelled from the key
     assert RecommendationItem.model_fields["outside_plan"].default is False
 
 

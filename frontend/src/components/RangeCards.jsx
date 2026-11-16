@@ -433,6 +433,14 @@ export const ForecastErrorSummaryCard = ({
   const mapeVariant = mape?.stock_limited_variant?.value != null ? mape.stock_limited_variant : null;
   const mapeAll = mape?.all_products?.value != null ? mape.all_products : null;
   const nearZero = mape?.near_zero_flag?.products > 0 ? mape.near_zero_flag : null;
+  // The population the plan acts on (backend/marts.planned_products_block): the headline MAPE, same months and same near-zero
+  // treatment, on the products with a row in the current cycle's plan. Where the plan's other products went is said beside it.
+  const planned = mape?.planned_products?.value != null && mape.planned_products.planning_cycle_date ? mape.planned_products : null;
+  const plannedApart = planned ? [
+    [planned.near_zero_products, planned.near_zero_products === 1 ? 'has a near-zero month' : 'have a near-zero month'],
+    [planned.no_percentage_products, 'sold nothing in this window'],
+    [planned.not_scored_products, planned.not_scored_products === 1 ? 'has no scored month in this window' : 'have no scored month in this window'],
+  ].filter(([n]) => n > 0) : [];
   // The plan's entry test on the latest forecast (GET /dashboard forecast_accuracy.entry_test): not this range's months.
   const entry = showingBefore ? null : served?.entry_test;
   const months = [...(accuracy.by_month || [])]
@@ -492,11 +500,11 @@ export const ForecastErrorSummaryCard = ({
             <>
               {windowText && <>Tier A, {windowText}: </>}
               {company != null && (
-                <>Company-total WAPE, all scored products (pesos): <strong>{wholeOrTenthPct(company)}</strong></>
+                <>Company-total WAPE, all {accuracy.products.toLocaleString()} scored products (pesos): <strong>{wholeOrTenthPct(company)}</strong></>
               )}
               {typical != null && (
                 <>
-                  {' '}· Pooled product WAPE, all scored products (pieces): <strong>{wholeOrTenthPct(typical)}</strong>
+                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {accuracy.products.toLocaleString()} scored products (pieces): <strong>{wholeOrTenthPct(typical)}</strong>
                 </>
               )}
               {mape && (
@@ -506,7 +514,7 @@ export const ForecastErrorSummaryCard = ({
                     <>{' '}(<strong>{onePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
                   )}
                   {mapeAll && nearZero && (
-                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} Tier A products that sold in the window, the {nearZero.products.toLocaleString()} near-zero ones included:<strong>{onePct(mapeAll.value)}</strong></>
+                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} Tier A products that sold in the window, the {nearZero.products.toLocaleString()} near-zero ones included: <strong>{onePct(mapeAll.value)}</strong></>
                   )}
                   {nearZero && (
                     <>{' '}· {nearZero.products.toLocaleString()} near-zero Tier A products scored in pieces instead (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
@@ -533,6 +541,10 @@ export const ForecastErrorSummaryCard = ({
               {mape.products.toLocaleString()} products scored; {mape.under_20_pct.toLocaleString()} under 20%,
               {' '}{mape.at_or_above_50_pct.toLocaleString()} at 50% or more, {mape.at_or_above_100_pct.toLocaleString()} at 100% or more.
               {mapeAll && <>{' '}Mean over those products {pct(mape.mean)}; with the near-zero products included the typical product is {pct(mapeAll.value)} and the mean {pct(mapeAll.mean)}.</>}
+              {mapeAll && accuracy.products > mapeAll.products && (
+                <>{' '}The two WAPEs cover {accuracy.products.toLocaleString()} products; {(accuracy.products - mapeAll.products).toLocaleString()} of
+                  them sold nothing in these months, so no percentage exists for them and the MAPE figures cover {mapeAll.products.toLocaleString()}.</>
+              )}
               {mape.rule_ordered_products > 0 && (
                 <>{' '}{mape.rule_ordered_products.toLocaleString()} products ({mape.rule_ordered_product_months.toLocaleString()} product-months)
                   {' '}were served an ordering rule, not a forecast, and are left out.</>
@@ -567,6 +579,21 @@ export const ForecastErrorSummaryCard = ({
           )}
         </InfoTip>
       </p>
+
+      {planned && (
+        <p className="fc-plan-line" title={planned.label}>
+          Products in the order plan{windowText && <>, {windowText}</>}: MAPE, {planned.products.toLocaleString()} of
+          the {planned.plan_products.toLocaleString()} products in the {formatMonth(planned.planning_cycle_date.slice(0, 7))} order plan
+          {planned.lp_run_key != null && <> (LP run {planned.lp_run_key})</>} with no near-zero month (typical product):{' '}
+          <strong>{onePct(planned.value)}</strong>
+          {mape && <>, against {onePct(mape.value)} for all {mape.products.toLocaleString()} above</>}.
+          {plannedApart.length > 0 && (
+            <>{' '}Of the other {(planned.plan_products - planned.products).toLocaleString()} planned products,{' '}
+              {plannedApart.map(([n, text]) => `${n.toLocaleString()} ${text}`).join(', ')}.</>
+          )}
+          {' '}{planned.caveat}
+        </p>
+      )}
 
       {served.calendar_adjusted && served.calendar_adjusted !== 'no' && (
         <div className="fc-read">

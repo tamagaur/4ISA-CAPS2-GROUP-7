@@ -140,7 +140,7 @@ class RecommendationItem(BaseModel):
     # cycles), labelled the same way. The plan clauses already leave them out of every count and total.
     # A13 (2026-10-31): a decided row that no LP run produced (lp_run_key NULL: row 4 of cycle 2026-03, accepted
     # 2026-08-24, before runs were recorded). Shown by cycle=all, labelled; never in the plan count or total
-    # (backend/lp_cycle.PLAN_STATUS_SQL), which is why 109 and 435,988 do not move.
+    # (backend/lp_cycle.PLAN_STATUS_SQL), so it never moves the plan's rows or pieces (STATE.md's plan line).
     outside_plan: bool = False
     plan_note: str | None = None
     decided_at: datetime.datetime | None = None

@@ -19,7 +19,8 @@ scratch schema, where the isolation is the schema boundary and is proved, not as
    3  public (and mart, app) row counts and content hashes of 17 tables are identical before and after
    4  no row of any table in public, mart, app or demo contains the string rollover_test
    5  the planning mart and the mart refresh are never reached (planning_mart switched off, refresh_marts raises if called)
-   6  the live plan still reads 109 rows and 435,988 pieces afterwards
+   6  the plan of the database it runs on reads the same rows and pieces afterwards as before (read from that database both
+      times; no figure is pinned here. It never runs on live: scripts/optin_guard.py refuses anything but the throwaway server)
    7  the scratch schema is dropped afterwards and is gone
 Every statement of the scenario runs with search_path set to the scratch schema ALONE (transaction-local): a table that is
 missing there fails loudly instead of falling back to public.
@@ -39,9 +40,12 @@ SCHEMA = "ssm_rollover_test"
 TAG = "rollover_test"
 CYCLE = datetime.date(2026, 3, 1)
 NEXT_CYCLE = datetime.date(2026, 4, 1)
-EXPECTED_PLAN = (109, 435988.0)    # rows, pieces: the live plan, nothing decided (the hard constraint of 2026-10-24)
-# A restored backup older than the live plan reads a different (correct for its date) plan: scripts/local_pg.py runs set
-# ROLLOVER_EXPECTED_PLAN="rows,pieces" to say so. The default, and every run against live, stays the line above.
+# The plan this test holds still is the plan of the database it runs on, read before and compared after. Until 2026-11-17 a
+# literal (109, 435988.0) stood here and was called "the live plan": it is lp_run 6's, the plan inside the opt-in seed backup,
+# and live has re-planned four times since (STATE.md's plan line). The run never touches live, so no live figure belongs here.
+# A caller that knows which plan its copy must hold says so with ROLLOVER_EXPECTED_PLAN="rows,pieces" (scripts/optin_run.py
+# passes its seed's); then the plan before must also equal that.
+EXPECTED_PLAN: tuple[int, float] | None = None
 if os.environ.get("ROLLOVER_EXPECTED_PLAN"):
     _r, _p = os.environ["ROLLOVER_EXPECTED_PLAN"].split(",")
     EXPECTED_PLAN = (int(_r), float(_p))
@@ -101,7 +105,7 @@ def tag_scan(conn) -> list[str]:
 
 
 def plan_figures() -> tuple[int, float]:
-    """The live plan as GET /recommendations serves it: rows and pieces (read-only)."""
+    """The connected database's plan as GET /recommendations serves it: rows and pieces (read-only)."""
     from fastapi.encoders import jsonable_encoder
     from sqlalchemy import text
     from sqlalchemy.orm import Session
@@ -183,7 +187,10 @@ def main(keep: bool = False) -> int:
         before = fingerprints(pg)
         check("3 baseline fingerprints taken", len(before) == len(PUBLIC_FINGERPRINT_TABLES))
         n_rows, pieces = plan_figures()
-        check("6 the live plan before", (n_rows, round(pieces, 2)) == EXPECTED_PLAN, f"{n_rows} rows, {pieces:,.0f} pieces")
+        plan_before = (n_rows, round(pieces, 2))
+        check("6 this database's plan before: it has one" + (" and it is the one the caller named" if EXPECTED_PLAN else ""),
+              n_rows > 0 and EXPECTED_PLAN in (None, plan_before),
+              f"{n_rows} rows, {pieces:,.0f} pieces" + (f"; expected {EXPECTED_PLAN}" if EXPECTED_PLAN else ""))
 
         # ---- build ------------------------------------------------------------------------------------------------
         with engine.connect() as c:
@@ -485,7 +492,8 @@ def main(keep: bool = False) -> int:
         hits = tag_scan(pg)
         check("4 no table in public, mart, app or demo contains the scratch tag", hits == [], str(hits))
         n_rows2, pieces2 = plan_figures()
-        check("6 the live plan is unchanged", (n_rows2, round(pieces2, 2)) == EXPECTED_PLAN, f"{n_rows2} rows, {pieces2:,.0f} pieces")
+        check("6 this database's plan is unchanged", (n_rows2, round(pieces2, 2)) == plan_before,
+              f"{n_rows2} rows, {pieces2:,.0f} pieces (before: {plan_before[0]} rows, {plan_before[1]:,.0f} pieces)")
     finally:
         for n, f in real_refresh.items():
             setattr(analytics_marts, n, f)

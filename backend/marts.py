@@ -27,6 +27,7 @@ from analytics.classification.abc import TIER_A_CUTOFF, TIER_B_CUTOFF
 from backend import batch, stock_signal
 from backend.data_mode import PREVIEW, REAL
 from backend.demo_flag import demo_enabled
+from backend.lp_cycle import PLAN_STATUS_SQL
 
 PRINCIPALS = ("unilever", "delmonte")
 
@@ -1134,7 +1135,7 @@ def accuracy_headlines(company_total: float | None, typical_product_weighted: fl
             "unit": "pesos at selling price, VAT-inclusive"},
         "typical_product_weighted": {
             "value": typical_product_weighted, "label": ACCURACY_LABELS["typical_product_weighted"],
-            "measure": "sum over product-months of |forecast - actual| / actual",
+            "measure": "sum over product-months of |forecast - actual| / sum of actual, " + POOLED_WAPE_RULE,
             "unit": "pieces"},
     }
 
@@ -1189,7 +1190,59 @@ def _median_block(vals: list[float]) -> dict:
             "at_or_above_100_pct": sum(1 for v in vals if v >= 1.0)}
 
 
-def mape_summary(by_product: dict) -> dict:
+# THE POPULATION THE PLAN ACTS ON (2026-11-16). The card's MAPE is over every scored Tier A product, most of which the system
+# never orders (live: 179 scored on a percentage, 115 plan rows). The planned line is the SAME measure on the SAME rows of the
+# SAME window, kept to the products with a row in the current cycle's plan (backend/lp_cycle.PLAN_STATUS_SQL, Unilever: the only
+# principal with a plan and with forecasts to score): same MAPE definition, same near-zero treatment, no third basis. These are
+# backtest errors on past months. They are not the plan's quantities, and the plan's own month is not scored by them.
+PLAN_POPULATION_PRINCIPAL = "unilever"
+PLANNED_LABEL = ("Products in the current order plan only: the products with a row in the plan of the cycle named here. The same "
+                 "measure as the MAPE above, the same near-zero treatment and the same months, on those products alone. These "
+                 "are backtest errors on past months, not the plan's order quantities.")
+PLANNED_CAVEAT = "Backtest errors on past months, not the plan's quantities."
+
+
+def plan_population_query() -> tuple[str, dict]:
+    """One row (none when there is no plan): the current cycle, its LP run, its row count and its products' keys."""
+    plan = f"""FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key
+               WHERE {PLAN_STATUS_SQL} AND pd.principal = :plan_principal"""
+    return f"""
+        SELECT to_char(lr.planning_cycle_date, 'YYYY-MM-DD') AS planning_cycle_date, MAX(lr.lp_run_key) AS lp_run_key,
+               COUNT(*)::int AS plan_rows, array_agg(DISTINCT lr.product_key) AS product_keys
+        {plan} AND lr.planning_cycle_date = (SELECT MAX(lr.planning_cycle_date) {plan})
+        GROUP BY lr.planning_cycle_date
+    """, {"plan_principal": PLAN_POPULATION_PRINCIPAL}
+
+
+def plan_population(db: Session) -> dict | None:
+    row = batch.first(db, *plan_population_query())
+    return dict(row) if row else None
+
+
+def planned_products_block(by_product: dict, plan: dict | None) -> dict | None:
+    """mape_summary's headline on the plan's products alone; None when there is no plan to name."""
+    if not plan or not plan.get("product_keys"):
+        return None
+    keys = {int(k) for k in plan["product_keys"]}
+    scored = [p for k, p in by_product.items() if int(k) in keys]
+    ok = [p for p in scored if not p.get("near_zero_months")]
+    with_pct = [p for p in ok if p.get("ape_n")]
+    return {
+        **_median_block([p["ape_sum"] / p["ape_n"] for p in with_pct]),
+        "label": PLANNED_LABEL, "caveat": PLANNED_CAVEAT,
+        "measure": "the headline's: median over the plan's forecastable products of mean(|forecast - actual| / actual) over "
+                   "the product's months with actual > 0",
+        "population": "products with a row in the current cycle's order plan",
+        "planning_cycle_date": plan.get("planning_cycle_date"), "lp_run_key": plan.get("lp_run_key"),
+        "plan_rows": int(plan.get("plan_rows") or len(keys)), "plan_products": len(keys),
+        # Where every plan product went, so the counts on the line add up to the plan.
+        "near_zero_products": len(scored) - len(ok),
+        "no_percentage_products": len(ok) - len(with_pct),      # scored, but sold nothing in the window
+        "not_scored_products": len(keys) - len(scored),         # no scored month in the window
+    }
+
+
+def mape_summary(by_product: dict, plan: dict | None = None) -> dict:
     ok = [p for p in by_product.values() if not p.get("near_zero_months")]
     flagged = [p for p in by_product.values() if p.get("near_zero_months")]
     head = _median_block([p["ape_sum"] / p["ape_n"] for p in ok if p.get("ape_n")])
@@ -1201,6 +1254,10 @@ def mape_summary(by_product: dict) -> dict:
         "measure": "median over forecastable products of mean(|forecast - actual| / actual) over the product's months with actual > 0",
         "rule_ordered_products": sum(1 for p in by_product.values() if p.get("rule_rows")),
         "rule_ordered_product_months": sum(int(p.get("rule_rows") or 0) for p in by_product.values()),
+        # Every product with a scored month in the window: the population of the two WAPEs. It is larger than all_products'
+        # (the products a percentage can score) by the products that sold nothing in the window.
+        "scored_products": len(by_product),
+        "planned_products": planned_products_block(by_product, plan),
         "all_products": {**every, "label": "Every product scored, the near-zero ones included: the plain MAPE this card showed before the near-zero flag."},
         "stock_limited_variant": {
             **var, "label": MAPE_STOCK_LIMITED_LABEL,
@@ -1228,12 +1285,16 @@ def accuracy_aggregates(rows: list[dict]) -> dict:
         m = by_month.setdefault(r["month"], {
             "period": r["month"], "products": 0, "forecast_pieces": 0.0, "actual_pieces": 0.0,
             "net_miss_pieces": 0.0, "abs_miss_pieces": 0.0, "net_miss_pesos": 0.0, "abs_miss_pesos": 0.0,
-            "surplus_pesos": 0.0, "shortage_pesos": 0.0, "actual_pesos": 0.0, "sources": set()})
+            "surplus_pesos": 0.0, "shortage_pesos": 0.0, "actual_pesos": 0.0,
+            "wape_abs_miss_pieces": 0.0, "wape_actual_pieces": 0.0, "sources": set()})
         m["products"] += 1
         m["forecast_pieces"] += fc
         m["actual_pieces"] += act
         m["net_miss_pieces"] += fc - act
         m["abs_miss_pieces"] += abs(fc - act)
+        sold = max(act, 0.0)                       # POOLED_WAPE_RULE: a net-negative month counts as 0 sold
+        m["wape_abs_miss_pieces"] += abs(fc - sold)
+        m["wape_actual_pieces"] += sold
         m["sources"].add(r["forecast_source"])
         price = _num(r, "price_per_piece")
         if price is not None:
@@ -1284,7 +1345,15 @@ def accuracy_aggregates(rows: list[dict]) -> dict:
 # three times (Postgres computes it once). Three kinds of row, each {kind, d}: one per month,
 # one per product, one for the whole range.
 _SUM_KEYS = ("forecast_pieces", "actual_pieces", "net_miss_pieces", "abs_miss_pieces", "net_miss_pesos",
-             "abs_miss_pesos", "surplus_pesos", "shortage_pesos", "actual_pesos")
+             "abs_miss_pesos", "surplus_pesos", "shortage_pesos", "actual_pesos",
+             "wape_abs_miss_pieces", "wape_actual_pieces")
+# The pooled WAPE in pieces (typical_product_weighted, wape_pieces; each month's wape_pieces) is scored on the manuscript's
+# rule, the one scripts/accuracy_as_served.py and docs/ACCURACY_AS_SERVED.md state: a net-negative month (returns above
+# sales) counts as 0 sold. mart.accuracy_mart keeps the raw net quantity, so the rule is applied where the figure is
+# summed: wape_abs_miss_pieces / wape_actual_pieces, both in the answer. Until 2026-11-17 the card divided the raw
+# abs_miss_pieces by the raw actual_pieces instead (32.04% against 31.95% on its default window). The other sums on
+# the card (pieces, pesos, the median, the MAPE) are unchanged and stay on the mart's raw quantity.
+POOLED_WAPE_RULE = "a net-negative month counts as 0 sold"
 
 
 def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> tuple[str, dict]:
@@ -1295,6 +1364,7 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
     flag_col = flag if flag == "possibly_stock_limited" else f"{flag} AS possibly_stock_limited"
     zero = stock_signal.zero_stock_sql(stock_signal.MAPE_VARIANT_APART)
     zero_bare = zero[1:-1] if zero.startswith("(") and zero.endswith(")") else zero   # inside COALESCE( , false)
+    plan_sql, plan_params = plan_population_query()
     return f"""
         WITH scored AS ({sql})
         SELECT 'month' AS kind, row_to_json(x) AS d FROM (
@@ -1302,6 +1372,8 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
                    SUM(forecast_pieces) AS forecast_pieces, SUM(actual_pieces) AS actual_pieces,
                    SUM(forecast_pieces - actual_pieces) AS net_miss_pieces,
                    SUM(ABS(forecast_pieces - actual_pieces)) AS abs_miss_pieces,
+                   SUM(ABS(forecast_pieces - GREATEST(actual_pieces, 0))) AS wape_abs_miss_pieces,
+                   SUM(GREATEST(actual_pieces, 0)) AS wape_actual_pieces,
                    COALESCE(SUM((forecast_pieces - actual_pieces) * price_per_piece), 0) AS net_miss_pesos,
                    COALESCE(SUM(ABS(forecast_pieces - actual_pieces) * price_per_piece), 0) AS abs_miss_pesos,
                    COALESCE(SUM(GREATEST(forecast_pieces - actual_pieces, 0) * price_per_piece), 0) AS surplus_pesos,
@@ -1346,7 +1418,9 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
                    (COUNT(*) FILTER (WHERE direction = 'over' AND {flag} IS NULL))::int
                        AS possibly_stock_limited_unknown
             FROM scored) x
-    """, params
+        UNION ALL
+        SELECT 'plan', row_to_json(x) FROM ({plan_sql}) x
+    """, {**params, **plan_params}
 
 
 def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
@@ -1354,6 +1428,7 @@ def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
     months: dict[str, dict] = {}
     products: dict[int, dict] = {}
     total: dict = {}
+    plan: dict | None = None
     for r in rows:
         d = r["d"]
         if r["kind"] == "month":
@@ -1369,6 +1444,8 @@ def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
                 "rule_rows": int(d.get("rule_rows") or 0), "stockout_rows": int(d.get("stockout_rows") or 0),
                 "last": {k: d[k] for k in ("month", "direction", "run_length", "miss_pieces", "price_per_piece",
                                            "sku_code", "product_name", "possibly_stock_limited")}}
+        elif r["kind"] == "plan":
+            plan = d
         else:
             total = d
     return {
@@ -1376,16 +1453,18 @@ def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
         "sources": sorted(total.get("sources") or []), "run_labels": sorted(total.get("run_labels") or []),
         "possibly_stock_limited": int(total.get("possibly_stock_limited") or 0),
         "possibly_stock_limited_unknown": int(total.get("possibly_stock_limited_unknown") or 0),
-        "months": months, "products": dict(sorted(products.items())),
+        "months": months, "products": dict(sorted(products.items())), "plan": plan,
     }
 
 
-def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int, review_limit: int = 20) -> dict:
+def accuracy_summary(rows: list[dict], start: str, end: str, review_months: int, review_limit: int = 20,
+                     plan: dict | None = None) -> dict:
     """The forecast-error card for the scored rows of a range (accuracy_rows): pieces and
     pesos (selling price, VAT-inclusive), surplus against shortage, each month's direction
     (the colour chips), and the products to review before ordering: over-forecast
-    `review_months` months or more in a row as of their last scored month in the range."""
-    return accuracy_summary_from(accuracy_aggregates(rows), start, end, review_months, review_limit)
+    `review_months` months or more in a row as of their last scored month in the range.
+    `plan` is plan_population(db): the planned-products line needs it and the rows do not carry it."""
+    return accuracy_summary_from({**accuracy_aggregates(rows), "plan": plan}, start, end, review_months, review_limit)
 
 
 def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, review_limit: int = 20) -> dict:
@@ -1399,9 +1478,7 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
                                    "with a real actual in these months.")}
     by_month, by_product = agg["months"], agg["products"]
     months = sorted(by_month)
-    keys = ("forecast_pieces", "actual_pieces", "net_miss_pieces", "abs_miss_pieces", "net_miss_pesos",
-            "abs_miss_pesos", "surplus_pesos", "shortage_pesos", "actual_pesos")
-    totals = {k: sum(by_month[mo][k] for mo in months) for k in keys}
+    totals = {k: sum(by_month[mo][k] for mo in months) for k in _SUM_KEYS}
     wapes = sorted(v["abs"] / v["act"] for v in by_product.values() if v["act"] > 0)
     median = None
     if wapes:
@@ -1429,10 +1506,10 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
             **{k: (round(v, 2) if isinstance(v, float) else v) for k, v in m.items() if k != "sources"},
             "direction": "over" if net > 0 else "under" if net < 0 else "exact",
             "forecast_source": "/".join(sorted(m["sources"])),
-            "wape_pieces": _wape(m["abs_miss_pieces"], m["actual_pieces"]),
+            "wape_pieces": _wape(m["wape_abs_miss_pieces"], m["wape_actual_pieces"]),
         })
     net = totals["net_miss_pieces"]
-    pooled_wape = _wape(totals["abs_miss_pieces"], totals["actual_pieces"])
+    pooled_wape = _wape(totals["wape_abs_miss_pieces"], totals["wape_actual_pieces"])
     month_total_wape = _wape(sum(abs(by_month[mo]["net_miss_pesos"]) for mo in months), totals["actual_pesos"])
     return {
         "start_period": start, "end_period": end, "label": range_label(months[0], months[-1]), "months": months,
@@ -1449,8 +1526,8 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
         # company_total / typical_product_weighted are the labelled pair to show; wape_pieces
         # and total_wape_pesos are the same two numbers under their older names.
         **accuracy_headlines(month_total_wape, pooled_wape),
-        "mape": mape_summary(by_product),
-        "wape_pieces": pooled_wape,
+        "mape": mape_summary(by_product, agg.get("plan")),
+        "wape_pieces": pooled_wape, "wape_pieces_rule": POOLED_WAPE_RULE,
         "median_product_wape": round(median, 6) if median is not None else None,
         "total_wape_pesos": month_total_wape,
         "surplus_share_of_miss_pesos": (round(totals["surplus_pesos"] / totals["abs_miss_pesos"], 6)

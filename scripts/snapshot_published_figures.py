@@ -20,9 +20,10 @@ Writes
 --verify recomputes the headline WAPE, the MASE pass rate and median, the error-decomposition split, the
 17.14% exceedance and the peso figure from the FROZEN rows (not the live database), checks the input hashes,
 and compares with the JSON. It also reads the live actuals version and says whether the data has moved since;
-a moved actuals version, or a live MASE / error-decomposition figure that differs from the pinned one, FAILS (2026-11-16): the pinned figures
-are then no longer what the system serves, and re-pinning (--write) is a decision, not a side effect. The headline WAPE is not compared to live:
-its as-served rows come from a backtest and are not stored in the database.
+a moved actuals version, or any live figure that differs from the pinned one, FAILS (2026-11-16): the pinned figures
+are then no longer what the system serves, and re-pinning (--write) is a decision, not a side effect. Every pinned figure is
+compared to live, the headline WAPE included: its as-served backtest rows are stored (mart.accuracy_mart, the runs labelled
+in scripts.accuracy_as_served.AS_SERVED_RUNS) and live_headline recomputes it from them.
 """
 from __future__ import annotations
 
@@ -91,15 +92,49 @@ def doc_sections(text: str, headings: tuple[str, ...]) -> dict[str, str]:
     return out
 
 
+HEADLINE_RUNS = ("as_served", "as_served_calendar")
+HEADLINE_KEYS = ("median_product_wape_served", "pooled_wape_pcs_served", "total_wape_pesos_served",
+                 "surplus_share_of_miss_pesos", "surplus_share_of_miss_pieces", "products", "product_months")
+
+
 def headline_figures(rows: pd.DataFrame, money: pd.DataFrame) -> dict:
     from scripts.accuracy_as_served import metrics
     out = {}
-    for run in ("as_served", "as_served_calendar"):
+    for run in HEADLINE_RUNS:
         bt = rows[rows.run == run].reset_index(drop=True)
         m = metrics(bt, money)
-        out[run] = {k: m[k] for k in ("median_product_wape_served", "pooled_wape_pcs_served", "total_wape_pesos_served",
-                                      "surplus_share_of_miss_pesos", "surplus_share_of_miss_pieces", "products",
-                                      "product_months")}
+        out[run] = {k: m[k] for k in HEADLINE_KEYS}
+    return out
+
+
+def live_headline(cur) -> dict:
+    """The headline WAPE recomputed from the database as it is now (2026-11-16). Until this date it was verified against
+    the frozen rows only, on the belief that the as-served backtest rows are not stored. They are: scripts.accuracy_as_served
+    --write stores each run in mart.forecast_run / mart.accuracy_mart under the labels of AS_SERVED_RUNS (live: runs 20 and
+    21, 4,370 rows each, the same product-months and forecasts as the frozen file). One rule differs between the two
+    stores and is applied here: as-served scoring counts a net-negative month as 0 sold, while the mart keeps the raw net
+    quantity (196 rows of each run on 2026-11-16), so the actual is GREATEST(actual_pieces, 0). Prices come from
+    Unilever_SKU_Demand_Fact_Real, the query scripts.accuracy_as_served.read_inputs uses. A run that is not stored
+    contributes no figure, which --verify reports as a divergence."""
+    from scripts.accuracy_as_served import AS_SERVED_RUNS, metrics
+    cur.execute("""SELECT product_key, calendar_month, SUM(net_amount), SUM(quantity_sold)
+                   FROM Unilever_SKU_Demand_Fact_Real GROUP BY product_key, calendar_month""")
+    money = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "net_amount", "quantity_raw"])
+    for c in ("net_amount", "quantity_raw"):
+        money[c] = pd.to_numeric(money[c], errors="coerce").astype(float)
+    out = {}
+    for run in HEADLINE_RUNS:
+        cur.execute("""SELECT a.product_key, a.month, GREATEST(a.actual_pieces, 0), a.forecast_pieces, a.ma3_pieces
+                       FROM mart.accuracy_mart a JOIN mart.forecast_run r ON r.run_id = a.run_id
+                       WHERE r.label = %s AND a.actual_pieces IS NOT NULL AND a.forecast_pieces IS NOT NULL""",
+                    (AS_SERVED_RUNS[run][0],))
+        bt = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "actual", "value", "ma3"])
+        if bt.empty:
+            continue
+        for c in ("actual", "value", "ma3"):
+            bt[c] = pd.to_numeric(bt[c], errors="coerce").astype(float)
+        m = metrics(bt.sort_values(["product_key", "month"]).reset_index(drop=True), money)
+        out[run] = {k: m[k] for k in HEADLINE_KEYS}
     return out
 
 
@@ -245,25 +280,28 @@ def cmd_verify() -> int:
     drift = []
     if live["key"] != snap["actuals_version"]["key"]:
         drift.append(f"actuals version: snapshot {snap['actuals_version']['key']}, live {live['key']}")
-    pinned = dict(flatten({k: snap["figures"][k] for k in live_fig}))
-    for k, v in flatten(live_fig):
-        if k not in pinned or not np.isclose(v, pinned[k], rtol=LIVE_TOLERANCE, atol=LIVE_TOLERANCE):
-            drift.append(f"live {k}: pinned {pinned.get(k)!r}, live {v!r}")
+    # Every pinned figure, both ways: one live does not give (a group not recomputed, a stored run gone) is a divergence too.
+    pinned = dict(flatten(snap["figures"]))
+    now_live = dict(flatten(live_fig))
+    for k in sorted(set(pinned) | set(now_live)):
+        if k not in now_live:
+            drift.append(f"pinned {k}: {pinned[k]!r}, but live gives no such figure")
+        elif k not in pinned or not np.isclose(now_live[k], pinned[k], rtol=LIVE_TOLERANCE, atol=LIVE_TOLERANCE):
+            drift.append(f"live {k}: pinned {pinned.get(k)!r}, live {now_live[k]!r}")
     for d in drift:
         print("FAIL", d)
     if drift:
         print("FAIL: live no longer matches the pinned figures. Decide whether the manuscript or the snapshot is stale "
               "(python -m scripts.snapshot_published_figures --write re-pins; the manuscript must follow).")
         return 1
-    print(f"OK: live matches the pinned figures: actuals version {live['key']}, MASE and the error decomposition "
-          f"({len(pinned)} figures read from live now)")
-    print("not compared to live: headline_wape (it comes from the as-served backtest rows, which are not stored in the database)")
+    print(f"OK: live matches the pinned figures: actuals version {live['key']}, the headline WAPE (the stored as-served "
+          f"backtest runs), MASE and the error decomposition (all {len(pinned)} pinned figures read from live now)")
     return 0
 
 
 def live_figures(cur) -> dict:
-    """The pinned figures that can be recomputed from the database as it is now: the stored MASE of the latest forecast and the
-    error decomposition. Same queries as --write."""
+    """Every pinned figure recomputed from the database as it is now: the headline WAPE (live_headline), the stored MASE of
+    the latest forecast and the error decomposition (the same queries as --write)."""
     cur.execute("""SELECT product_key, forecast_date, status, mase FROM forecast_result
                    WHERE forecast_date = (SELECT MAX(forecast_date) FROM forecast_result)""")
     mase = pd.DataFrame(cur.fetchall(), columns=["product_key", "forecast_date", "status", "mase"])
@@ -273,7 +311,7 @@ def live_figures(cur) -> dict:
     for c in dec.columns:
         if dec[c].dtype == object and c not in ("principal", "tier", "month", "forecast_source", "ss_method"):
             dec[c] = pd.to_numeric(dec[c], errors="coerce")
-    return {"mase": mase_figures(mase), "error_decomposition": decomposition_figures(dec)}
+    return {"headline_wape": live_headline(cur), "mase": mase_figures(mase), "error_decomposition": decomposition_figures(dec)}
 
 
 def cmd_march_impact() -> int:
@@ -336,7 +374,9 @@ def cmd_march_impact() -> int:
     print(f"beyond-safety-stock pesos {beyond0:,.0f} -> {beyond_rng[0]:,.0f} .. {beyond_rng[1]:,.0f} (before re-pricing)")
     print(f"re-pricing: dropping one month from the price base moves the median product price {px_shift.median():.2%}, "
           f"max {px_shift.max():.2%}; the beyond-pesos total {b_full:,.0f} -> {b_drop:,.0f} ({b_drop / b_full - 1:+.2%})")
-    print("MASE 109 of 175: stored on Forecast_Result for 2026-03; unchanged by a sales load, changes only when the runner is rerun")
+    m = snap["figures"]["mase"]    # was a literal "109 of 175" until 2026-11-16, two re-pins after it stopped being true
+    print(f"MASE {m['mase_below_1']} of {m['products_scored']}: stored on Forecast_Result for 2026-03; unchanged by a sales load, "
+          "changes only when the runner is rerun")
     return 0
 
 

@@ -19,7 +19,7 @@ The Data Management panel now goes: upload, validate, run, review, close.
 | | |
 |---|---|
 | **Implemented** | Nothing about where `/batch` runs changed. The routes mount only with `MONTHLY_BATCH_ENABLED` on and the database at `127.0.0.1:55432`, and the three new routes sit behind the same check |
-| **Why** | A run on live replaces the 109-row plan. Uploaded files have nowhere to live on the deployed server, and no real new month exists |
+| **Why** | A run on live replaces the live plan (STATE.md's `plan:` line; 109 rows when this was written). Uploaded files have nowhere to live on the deployed server, and no real new month exists |
 | **Files** | `backend/routers/monthly_batch.py` |
 | **Limitations** | The deployed Data Management page still says ingestion is not connected. Jobs are held in one process's memory |
 | **Verify** | The deployed API stays at 84 routes (`check.sh --fast` pins it). Decide whether and when this should reach the deployed service |

@@ -2,9 +2,10 @@
 from backend import marts
 
 
-def accuracy_summary_rows(raw: list[dict]) -> list[dict]:
+def accuracy_summary_rows(raw: list[dict], plan: dict | None = None) -> list[dict]:
     """What marts.accuracy_summary_query returns for these scored rows: one row per month, one per
-    product, one for the range (the fake database has no SQL engine, so it sums them here)."""
+    product, one for the range (the fake database has no SQL engine, so it sums them here), and the current plan's row
+    (marts.plan_population_query) when the fake is given a plan."""
     agg = marts.accuracy_aggregates(raw)
     out = [{"kind": "month", "d": {**m, "sources": sorted(m["sources"])}} for m in agg["months"].values()]
     for key, p in agg["products"].items():
@@ -19,4 +20,6 @@ def accuracy_summary_rows(raw: list[dict]) -> list[dict]:
         "product_months": agg["product_months"], "sources": agg["sources"] or None, "run_labels": agg["run_labels"] or None,
         "possibly_stock_limited": agg["possibly_stock_limited"],
         "possibly_stock_limited_unknown": agg["possibly_stock_limited_unknown"]}})
+    if plan is not None:
+        out.append({"kind": "plan", "d": plan})
     return out

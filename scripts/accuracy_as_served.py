@@ -417,8 +417,9 @@ def render(res: dict, ver: dict, today: str) -> str:
         "- The dashboard card reads these forecasts from `mart.accuracy_mart` (runs stored by `--write-run`), which scores each "
         "month against the sales mart's raw net quantity: a net-negative month stays negative there, where this document floors it "
         "to 0. Over the full window the card therefore equals the **raw net quantity** sensitivity row above, not the headline row "
-        "(median, total WAPE in pesos and surplus share in pesos agree to the rounding shown; the card's pooled pieces WAPE divides by "
-        "net actual pieces, not absolute, so it differs in the second decimal). A shorter date range on the card is a different window.",
+        "(median, total WAPE in pesos and surplus share in pesos agree to the rounding shown). The one exception, since 2026-11-17, is "
+        "the card's pooled pieces WAPE: it applies this document's rule, a net-negative month counted as 0 sold "
+        "(`backend/marts.POOLED_WAPE_RULE`). A shorter date range on the card is a different window.",
         "- Per product-month rows are in the git-ignored `local/accuracy_as_served_rows.csv`.",
         "",
     ]

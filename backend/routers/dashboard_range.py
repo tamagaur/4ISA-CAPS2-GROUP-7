@@ -273,7 +273,8 @@ def get_range_accuracy(
         summary["entry_test"] = _range_entry_test(db)
         return _flag_counterfactual({**summary, "level": level, "rows": [], "coverage": ["unilever"]})
     rows = marts.accuracy_rows(db, start, end, run_id)
-    summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
+    summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000,
+                                     plan=marts.plan_population(db))
     # The unadjusted twin of a calendar-adjusted run (GET /dashboard's forecast_accuracy
     # carries the same), so a caller can fetch the same months before the adjustment.
     summary["compare_run"] = marts.accuracy_comparison(db, summary)

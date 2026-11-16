@@ -11,7 +11,7 @@ What each test needs, and what provides it:
   17 tests/etl/test_fills_db.py          FILLS_SCRATCH_SCHEMA: a filled rehearsal schema. scripts/rehearse_fills --build clones the
                                          database's public into ssm_fills, then scripts/fill_missing fills it.
    1 tests/etl/test_rollover_scratch.py  ROLLOVER_SCRATCH=1. It clones the connected database's public, so on a throwaway server it
-                                         needs a public worth cloning: real rows, the plan of 109 rows and 435,988 pieces, no pending
+                                         needs a public worth cloning: real rows, a plan (the seed's own, below), no pending
                                          migration. The SEED provides them.
 
 The seed is a database backup already on this machine (backups/, git-ignored, it holds client rows): scripts/local_pg.restore loads
@@ -40,7 +40,13 @@ REPO = Path(__file__).resolve().parents[1]
 OPTIN_DB = "ssm_optin"
 FILLS_SCHEMA = "ssm_fills"
 SEED = REPO / "backups" / "full_backup_20261102T170343Z"   # the newest database backup, taken just before 0073 was applied to live
-SEED_PLAN = (109, 435988.0)                                 # lp_run 6, cycle 2026-03: the plan the rollover test pins
+# The plan INSIDE THE SEED BACKUP, not the live plan: lp_run 6 of cycle 2026-03, 109 rows and 435,988 pieces, what live held on
+# 2026-11-02 when the backup was taken. Live has re-planned since (STATE.md's plan line is the current one). It is pinned on
+# purpose and must not follow STATE.md: these tests run on the restored seed, so the figure identifies the seed, and a restore
+# that reads anything else did not load the backup it claims to. It moves only when SEED is pointed at another backup, together
+# with the lp_run in _server_says. The rollover test is handed this figure (ROLLOVER_EXPECTED_PLAN) and pins none of its own.
+SEED_PLAN = (109, 435988.0)
+SEED_LP_RUN = 6
 KEPT_FROM_DOTENV = {"JWT_SECRET_KEY", "JWT_ALGORITHM", "JWT_EXPIRY_HOURS", "CORS_ALLOWED_ORIGINS"}   # no destination in them
 TEST_FILES = ("tests/etl/test_fills_db.py", "tests/etl/test_rollover_scratch.py")
 
@@ -80,7 +86,8 @@ def _server_says(env: dict) -> tuple:
         cur = conn.cursor()
         cur.execute("SELECT inet_server_port(), current_database()")
         where = cur.fetchone()
-        cur.execute("SELECT COUNT(*), SUM(q_i) FROM public.lp_recommendation WHERE planning_cycle_date = DATE '2026-03-01' AND lp_run_key = 6")
+        cur.execute("SELECT COUNT(*), SUM(q_i) FROM public.lp_recommendation WHERE planning_cycle_date = DATE '2026-03-01' AND lp_run_key = %s",
+                    (SEED_LP_RUN,))
         rows, pieces = cur.fetchone()
         return where, (rows, float(pieces or 0))
     finally:
@@ -117,7 +124,8 @@ def run(seed: Path, keep: bool) -> int:
                 print(f"FAIL: expected the server to be {local_pg.PORT}/{OPTIN_DB}")
                 return 1
             if plan != SEED_PLAN:
-                print(f"FAIL: the seed's plan is not {SEED_PLAN}, so the rollover test's pin does not describe it")
+                print(f"FAIL: the copy's plan is not the seed's own ({SEED_PLAN}, lp_run {SEED_LP_RUN}, as backed up 2026-11-02; not the live plan), "
+                      "so the copy is not the seed it claims to be")
                 return 1
             if _guarded(env, "scripts.rehearse_fills", "--schema", FILLS_SCHEMA, "--build") != 0:
                 print("FAIL: could not build the rehearsal schema")
@@ -126,7 +134,8 @@ def run(seed: Path, keep: bool) -> int:
                 print("FAIL: could not fill the rehearsal schema")
                 return 1
             junit = Path(tmp) / "optin.xml"
-            test_env = {**env, "FILLS_SCRATCH_SCHEMA": FILLS_SCHEMA, "ROLLOVER_SCRATCH": "1"}
+            test_env = {**env, "FILLS_SCRATCH_SCHEMA": FILLS_SCHEMA, "ROLLOVER_SCRATCH": "1",
+                        "ROLLOVER_EXPECTED_PLAN": f"{SEED_PLAN[0]},{SEED_PLAN[1]}"}
             _guarded(test_env, "pytest", "-q", "-p", "no:cacheprovider", "-rs", f"--junitxml={junit}", *TEST_FILES)
             if not junit.exists():
                 print("FAIL: pytest wrote no result file")

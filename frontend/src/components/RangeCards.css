@@ -238,6 +238,20 @@
   display: block;
 }
 
+/* The same MAPE on the products the order plan acts on: its own line under the answer. */
+.fc-plan-line {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-body);
+}
+
+.fc-plan-line strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
 .fc-tip-line + .fc-tip-line {
   margin-top: 6px;
 }

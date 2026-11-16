@@ -105,7 +105,7 @@ python scripts/run_baseline_forecast.py --calendar-factor            # report on
 python scripts/run_baseline_forecast.py --write --calendar-factor    # upsert Forecast_Result, refresh marts
 ```
 
-**Never drop `--calendar-factor`.** The runner's default is off, and the live forecast uses it (DEC-41). Measured on the copy, without it: total forecast 2,054,193.51 falls to 1,911,263.18, and the plan's dry run falls from 109 rows and 435,988 pieces to 100 rows and 324,826 pieces. `scripts.chapter_figures --verify` also fails. With it, all three return to the same values.
+**Never drop `--calendar-factor`.** The runner's default is off, and the live forecast uses it (DEC-41). Measured on the copy, without it: total forecast 2,054,193.51 falls to 1,911,263.18, and the plan's dry run falls from 109 rows and 435,988 pieces to 100 rows and 324,826 pieces (the plan of that date, lp_run 6; the current plan is STATE.md's `plan:` line, and the measurement was not repeated on it). `scripts.chapter_figures --verify` also fails. With it, all three return to the same values.
 
 The run exits 2 if the ABC period is older than the latest sales month, so step 6 comes first. The range of expected months is derived from the latest sales month: there is nothing to edit. The report-only form rewrites the tracked `reports/BASELINE_FORECAST_RUN.md` when run on live.
 

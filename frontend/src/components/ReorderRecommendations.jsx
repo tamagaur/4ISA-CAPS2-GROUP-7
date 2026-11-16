@@ -837,8 +837,9 @@ const ReorderRecommendations = () => {
   // Rows the allocation couldn't fully fund (short_units > 0) — the
   // allocation binds, so the total above is the allocation, not the need.
   const cutCount = cycleRows.filter((item) => item.shortUnits > 0).length;
-  // Rows whose suggested order is 0 pieces: 36 of the 109 in the Mar 2026 plan.
-  // "109 in the plan" reads as 109 orders without this. Over the whole plan, like
+  // Rows whose suggested order is 0 pieces: 51 of the 115 in the Mar 2026 plan
+  // (lp_run 10, STATE.md 2026-11-16; it was 36 of 109 under lp_run 6).
+  // "115 in the plan" reads as 115 orders without this. Over the whole plan, like
   // the total beside it.
   const { ordering: orderingCount, none: noOrderCount } = planOrderCounts(cycleRows);
   // The LP's own settings (backend/lp_cycle.lp_model_info), so the page's

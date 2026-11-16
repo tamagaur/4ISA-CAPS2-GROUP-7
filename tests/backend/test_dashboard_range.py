@@ -70,7 +70,9 @@ class FakeSession:
                        # the plan's entry test beside the error card's WAPEs (dashboard_range._range_entry_test)
                        ("AS entry_scored", [{"total_count": 175, "evaluated_count": 175, "unreliable_count": 65,
                                              "entry_scored": 175, "entry_passed": 110, "entry_median": 0.823,
-                                             "entry_forecast_date": "2026-03-01"}])] + routes
+                                             "entry_forecast_date": "2026-03-01"}])] + routes + [
+                           # marts.plan_population (the rows path asks for the plan apart): no plan unless a test routes one
+                           ("array_agg(DISTINCT lr.product_key) AS product_keys", [])]
         self.calls: list[tuple[str, dict]] = []
         self.info: dict = {}
 
@@ -238,6 +240,24 @@ def test_accuracy_by_category_and_by_product():
     body = get(session, "/dashboard/accuracy?principal=unilever&level=product")
     assert [(r["product_key"], r["direction"], r["possibly_stock_limited"]) for r in body["rows"]] == [
         (1, "over", True), (2, "under", False)]
+
+
+def test_the_pooled_wape_counts_a_net_negative_month_as_zero_sold():
+    """The manuscript's rule (scripts/accuracy_as_served.py): returns above sales in a month is 0 sold, not negative sales.
+    Product 2 sold -20 net: the miss is |30 - 0| = 30 and the sales 0, so (20 + 30) / (100 + 0), not (20 + 50) / (100 - 20).
+    The same on both paths: summed here from the rows, and summed as the database's own query answers (the fake's)."""
+    from backend import marts
+    rows = [_acc(1, "2025-12", 120, 100), _acc(2, "2025-12", 30, -20)]
+    from_rows = marts.accuracy_summary(rows, "2025-12", "2025-12", 3)
+    from_query = marts.accuracy_summary_from(marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows)), "2025-12", "2025-12", 3)
+    for card in (from_rows, from_query):
+        assert card["wape_pieces"] == card["typical_product_weighted"]["value"] == 0.5 == card["by_month"][0]["wape_pieces"]
+        assert (card["wape_abs_miss_pieces"], card["wape_actual_pieces"]) == (50.0, 100.0)
+        assert (card["abs_miss_pieces"], card["actual_pieces"]) == (70.0, 80.0), "the raw sums beside it are unchanged"
+        assert marts.POOLED_WAPE_RULE in card["typical_product_weighted"]["measure"]
+    sql, _ = marts.accuracy_summary_query("2025-12", "2025-12")
+    assert "SUM(ABS(forecast_pieces - GREATEST(actual_pieces, 0))) AS wape_abs_miss_pieces" in sql
+    assert "SUM(GREATEST(actual_pieces, 0)) AS wape_actual_pieces" in sql
 
 
 def test_accuracy_reads_a_chosen_run():

@@ -306,6 +306,11 @@ class FakeSession:
         params = params or {}
         self.calls.append((sql, dict(params)))
 
+        # marts.accuracy_summary_query: the database sums, a few hundred rows come back. First: since 2026-11-16 the
+        # statement also reads the plan's products (marts.plan_population_query), which the plan matchers below would take.
+        if "WITH scored AS" in sql:
+            return FakeResult(accuracy_summary_rows(self.accuracy_rows, getattr(self, "accuracy_plan", None)))
+
         # backend/marts.stock_detail_query (2026-10-19, kpis.above_policy): these
         # fixtures carry no per-product stock, so no product rows.
         if "WITH stock AS" in sql and "mart.inventory_mart_real" in sql:
@@ -388,9 +393,6 @@ class FakeSession:
             return FakeResult([{"product_key": r["product_key"], "pieces": r["current_stock"]}
                                for r in self.abc_rows
                                if r["product_key"] in keys and r.get("current_stock") is not None])
-
-        if "WITH scored AS" in sql:  # marts.accuracy_summary_query: the database sums, a few hundred rows come back
-            return FakeResult(accuracy_summary_rows(self.accuracy_rows))
 
         if "FROM mart.accuracy_mart a" in sql:
             return FakeResult(self.accuracy_rows)
@@ -2219,6 +2221,13 @@ def test_error_card_signed_miss_in_pieces_and_pesos_with_review_list():
     assert runs["items"][0]["possibly_stock_limited"] is True
     assert acc["possibly_stock_limited"] == 1
     assert acc["products_without_price"] == 0, "product 2 has a price in another month"
+    assert acc["mape"]["planned_products"] is None, "no plan in this fixture: no planned line"
+    # The route carries the plan's products to the card (GET /dashboard, one statement).
+    session = FakeSession(accuracy_rows=rows)
+    session.accuracy_plan = {"planning_cycle_date": "2026-03-01", "lp_run_key": 10, "plan_rows": 2, "product_keys": [2, 9]}
+    planned = _get(session, "principal=unilever")["forecast_accuracy"]["mape"]["planned_products"]
+    assert (planned["products"], planned["plan_products"], planned["not_scored_products"]) == (1, 2, 1)
+    assert planned["value"] == pytest.approx(0.15) and planned["planning_cycle_date"] == "2026-03-01"   # product 2: 20%, 10%
 
 
 def test_error_card_summed_by_the_database_equals_the_one_summed_from_rows():
@@ -2431,7 +2440,9 @@ def test_accepting_a_row_leaves_the_dashboard_and_the_reorder_page_in_agreement(
         with make_client(FakeSession(reco_preview_rows=dash_rows, recommendation_count=4)) as c:
             body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
         rec_rows = [{**r, "product_key": r["recommendation_key"], "tier": "A", "revenue_share": 0.03,
-                     "decided_at": None, "decided_by": None, "generated_at": None, "_abc_period": "2026-02"}
+                     "decided_at": None, "decided_by": None, "generated_at": None, "_abc_period": "2026-02",
+                     # rows of the cycle the reorder fake calls current, produced by a run: the fake applies the plan clauses
+                     "planning_cycle_date": "2026-03-01", "lp_run_key": 10}
                     for r in dash_rows]
         rec_session = rec_tests.FakeSession(
             rec_rows, stock_by_period={(k, "2026-02"): 0.0 for k in (1, 2, 3, 4)},
@@ -2469,7 +2480,9 @@ def test_changing_an_accepted_quantity_moves_the_dashboard_and_the_reorder_page_
         with make_client(FakeSession(reco_preview_rows=dash_rows, recommendation_count=4)) as c:
             body = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()
         rec_rows = [{**r, "product_key": r["recommendation_key"], "tier": "A", "revenue_share": 0.03,
-                     "decided_at": None, "decided_by": None, "generated_at": None, "_abc_period": "2026-02"}
+                     "decided_at": None, "decided_by": None, "generated_at": None, "_abc_period": "2026-02",
+                     # rows of the cycle the reorder fake calls current, produced by a run: the fake applies the plan clauses
+                     "planning_cycle_date": "2026-03-01", "lp_run_key": 10}
                     for r in dash_rows]
         rec_session = rec_tests.FakeSession(
             rec_rows, stock_by_period={(k, "2026-02"): 0.0 for k in (1, 2, 3, 4)},
@@ -2531,3 +2544,44 @@ def test_error_card_flags_products_with_a_near_zero_month_and_scores_them_in_pie
     assert z["mae_pieces"] == pytest.approx((4998 + 0) / 2) and z["rmse_pieces"] == pytest.approx((4998 ** 2 / 2) ** 0.5, rel=1e-6)
     agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
     assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3)["mape"] == m
+
+
+def test_error_card_planned_line_is_the_headline_measure_on_the_plans_products():
+    """2026-11-16: the population the plan acts on, on the headline's own basis: the same MAPE, the same near-zero
+    treatment, the same rows, kept to the products with a row in the current cycle's plan. Every plan product is
+    accounted for (scored on a percentage, near-zero, sold nothing, or not scored in the window)."""
+    def row(k, m, f, a, avg=100):
+        return {**_accuracy_row(k, m, f, a), "avg_monthly_pieces": avg}
+    rows = [row(1, "2024-01", 110, 100), row(1, "2024-02", 90, 100),                    # 10%, planned
+            row(2, "2024-01", 150, 100), row(2, "2024-02", 150, 100),                    # 50%, NOT planned
+            row(3, "2024-01", 5000, 2, 5000), row(3, "2024-02", 4000, 4000, 5000),       # near-zero month, planned
+            row(4, "2024-01", 130, 100), row(4, "2024-02", 130, 100),                    # 30%, planned
+            row(5, "2024-01", 10, 0), row(5, "2024-02", 10, 0)]                          # sold nothing, planned
+    plan = {"planning_cycle_date": "2026-03-01", "lp_run_key": 10, "plan_rows": 5, "product_keys": [1, 3, 4, 5, 6]}
+    m = marts.accuracy_summary(rows, "2024-01", "2024-02", 3, plan=plan)["mape"]
+    p = m["planned_products"]
+    # the headline is over products 1, 2, 4 (30%); the planned line over 1 and 4 only (20%), by the same arithmetic
+    assert (m["value"], m["products"]) == (pytest.approx(0.30), 3)
+    assert (p["value"], p["products"], p["mean"]) == (pytest.approx(0.20), 2, pytest.approx(0.20))
+    assert (p["plan_rows"], p["plan_products"], p["planning_cycle_date"], p["lp_run_key"]) == (5, 5, "2026-03-01", 10)
+    assert (p["near_zero_products"], p["no_percentage_products"], p["not_scored_products"]) == (1, 1, 1)
+    assert p["products"] + p["near_zero_products"] + p["no_percentage_products"] + p["not_scored_products"] == p["plan_products"]
+    assert "not the plan's" in p["caveat"] and "backtest" in p["caveat"].lower()
+    assert m["scored_products"] == 5          # the two WAPEs' population, product 5 included
+    # the database-summed path carries the plan in the same statement and gives the same block
+    agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows, plan))
+    assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3)["mape"] == m
+    # no plan: no line, and nothing else on the card changes
+    bare = marts.accuracy_summary(rows, "2024-01", "2024-02", 3)["mape"]
+    assert bare["planned_products"] is None and {**bare, "planned_products": p} == m
+
+
+def test_the_plan_population_is_the_current_cycles_plan_rows_read_in_the_cards_own_statement():
+    """The plan's products come from the plan clauses every other plan read uses (backend/lp_cycle.PLAN_STATUS_SQL),
+    for the principal the card scores, inside the summary statement (no extra round trip on the dashboard)."""
+    from backend import lp_cycle
+    sql, params = marts.plan_population_query()
+    assert sql.count(lp_cycle.PLAN_STATUS_SQL) == 2 and "MAX(lr.planning_cycle_date)" in sql
+    assert params == {"plan_principal": "unilever"} and "unilever" not in sql
+    summary_sql, summary_params = marts.accuracy_summary_query("2025-03", "2026-02")
+    assert " ".join(sql.split()) in " ".join(summary_sql.split()) and summary_params["plan_principal"] == "unilever"
