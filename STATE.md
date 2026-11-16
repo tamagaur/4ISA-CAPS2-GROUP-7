@@ -16,6 +16,15 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
+CATEGORY WAPE ON THE CARD'S RULE, ONE DECIMAL ON THE CARD LINE (2026-11-17, second brief; read side only: no database write; plan 115 / 330,212).
+  backend/marts.accuracy_by_category: wape_pieces = wape_abs_miss_pieces / wape_actual_pieces (net-negative month = 0 sold, POOLED_WAPE_RULE,
+  wape_pieces_rule in each row); raw sums unchanged. Live, read-only, Mar 2025-Feb 2026, before -> after: COOKING AIDS 31.79 -> 31.61%,
+  FABRIC ENHANCERS 43.95 -> 43.70, HAIR CARE 36.19 -> 36.15, CONDIMENTS 26.67 -> 26.66, ORAL CARE 37.17 -> 37.15; the other four unchanged
+  (SCRATCH COOKING AIDS has no sales there: null). The frontend does not render this field (the category table shows pieces and pesos).
+  RangeCards.jsx: both WAPEs on the card line show one decimal like the MAPEs (8.5% and 32.0% on Mar 2025-Feb 2026; were 9% and 32%).
+  docs/DEPLOY_AND_TEST_2026-11-13.md row 6 rewritten to the card line as read from live; the other rows' code and data have not changed.
+  check.sh --optin run once after this (seed full_backup_20261102T170343Z on 127.0.0.1:55432): 18 of 18 passed, guard refused 0, torn down.
+
 ONE RULE FOR THE POOLED WAPE, AND THE SEED'S PLAN NAMED AS THE SEED'S (2026-11-17, Kelvin's brief; read side only: no database write, no
   forecast, order or plan change; plan 115 / 330,212).
   POOLED WAPE. The card's pooled product WAPE (typical_product_weighted, wape_pieces, and each month's wape_pieces) now counts a
@@ -23,8 +32,8 @@ ONE RULE FOR THE POOLED WAPE, AND THE SEED'S PLAN NAMED AS THE SEED'S (2026-11-1
   sums it divides are in the answer, wape_abs_miss_pieces / wape_actual_pieces; the raw sums beside them are unchanged). Live, read-only,
   before -> after: Mar 2025-Feb 2026 32.04% -> 31.95% (78 net-negative product-months of 2,052; the card shows 32% both ways);
   Sep 2025-Feb 2026 36.53% -> 36.33% (59 of 1,078; 37% -> 36% on the card); 2024-01..2025-08 27.25% -> 27.24% (137 of 3,292; 27%).
-  Company total, median, MAPE, pesos and pieces totals did not move. NOT changed: accuracy_by_category's per-category wape_pieces
-  (level=category detail, not the card) still divides raw sums.
+  Company total, median, MAPE, pesos and pieces totals did not move. accuracy_by_category's per-category wape_pieces (level=category)
+  is on the same rule since the entry above.
   THE SEED'S PLAN. scripts/rollover_scratch_test.py pins no plan any more: check 6 reads the plan of the database it runs on before and
   holds it equal after (it never runs on live; scripts/optin_guard.py). scripts/optin_run.py keeps (109, 435988.0), named as what it is:
   the plan inside the seed backup full_backup_20261102T170343Z (lp_run 6), pinned on purpose to identify the seed, never the live plan;

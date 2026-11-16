@@ -1544,13 +1544,16 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
 
 
 def accuracy_by_category(rows: list[dict]) -> list[dict]:
-    """The same scored rows summed per product category, pieces and pesos."""
+    """The same scored rows summed per product category, pieces and pesos. wape_pieces is on the card's rule
+    (POOLED_WAPE_RULE: a net-negative month counts as 0 sold), from wape_abs_miss_pieces / wape_actual_pieces;
+    the raw sums beside them are unchanged. Until 2026-11-17 it divided the raw abs_miss_pieces / actual_pieces."""
     cats: dict[str, dict] = {}
     for r in rows:
         name = r.get("category_path") or "UNCLASSIFIED"
         c = cats.setdefault(name, {"category_path": name, "keys": set(), "product_months": 0,
                                    "forecast_pieces": 0.0, "actual_pieces": 0.0, "net_miss_pieces": 0.0,
-                                   "abs_miss_pieces": 0.0, "surplus_pesos": 0.0, "shortage_pesos": 0.0})
+                                   "abs_miss_pieces": 0.0, "wape_abs_miss_pieces": 0.0, "wape_actual_pieces": 0.0,
+                                   "surplus_pesos": 0.0, "shortage_pesos": 0.0})
         fc, act = float(r["forecast_pieces"]), float(r["actual_pieces"])
         c["keys"].add(r["product_key"])
         c["product_months"] += 1
@@ -1558,12 +1561,16 @@ def accuracy_by_category(rows: list[dict]) -> list[dict]:
         c["actual_pieces"] += act
         c["net_miss_pieces"] += fc - act
         c["abs_miss_pieces"] += abs(fc - act)
+        sold = max(act, 0.0)                       # POOLED_WAPE_RULE
+        c["wape_abs_miss_pieces"] += abs(fc - sold)
+        c["wape_actual_pieces"] += sold
         price = _num(r, "price_per_piece")
         if price is not None:
             c["surplus_pesos"] += max(fc - act, 0.0) * price
             c["shortage_pesos"] += max(act - fc, 0.0) * price
     out = [{**{k: (round(v, 2) if isinstance(v, float) else v) for k, v in c.items() if k != "keys"},
-            "products": len(c["keys"]), "wape_pieces": _wape(c["abs_miss_pieces"], c["actual_pieces"])}
+            "products": len(c["keys"]), "wape_pieces": _wape(c["wape_abs_miss_pieces"], c["wape_actual_pieces"]),
+            "wape_pieces_rule": POOLED_WAPE_RULE}
            for c in cats.values()]
     return sorted(out, key=lambda c: -(c["surplus_pesos"] + c["shortage_pesos"]))
 

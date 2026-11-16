@@ -291,9 +291,9 @@ export const UNCHECKABLE_COLUMNS = [
 //                                  the forecast in pesos is actual + net miss
 //   surplus_pesos / shortage_pesos the over- and under-forecast totals
 const wholePct = (share) => `${Math.round(share * 100)}%`;
-// A share under 1% keeps a decimal: a one- or two-month company total can net to 0.2%, which "0%" would read as perfect.
-const wholeOrTenthPct = (share) => (share > 0 && share < 0.01 ? `${(share * 100).toFixed(1)}%` : wholePct(share));
-const onePct = (share) => `${(share * 100).toFixed(1)}%`;   // MAPE figures: one decimal so 32.4% and 31.8% stay distinct
+// Every percentage on the card's line (both WAPEs and every MAPE) has one decimal, so 32.4% and 31.8% stay distinct and
+// a one- or two-month company total of 0.2% never reads as a perfect 0% (until 2026-11-17 the WAPEs were whole percents).
+const onePct = (share) => `${(share * 100).toFixed(1)}%`;
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
 
 // The chart's colours: actual sales in the card's teal, the forecast in the
@@ -500,11 +500,11 @@ export const ForecastErrorSummaryCard = ({
             <>
               {windowText && <>Tier A, {windowText}: </>}
               {company != null && (
-                <>Company-total WAPE, all {accuracy.products.toLocaleString()} scored products (pesos): <strong>{wholeOrTenthPct(company)}</strong></>
+                <>Company-total WAPE, all {accuracy.products.toLocaleString()} scored products (pesos): <strong>{onePct(company)}</strong></>
               )}
               {typical != null && (
                 <>
-                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {accuracy.products.toLocaleString()} scored products (pieces): <strong>{wholeOrTenthPct(typical)}</strong>
+                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {accuracy.products.toLocaleString()} scored products (pieces): <strong>{onePct(typical)}</strong>
                 </>
               )}
               {mape && (

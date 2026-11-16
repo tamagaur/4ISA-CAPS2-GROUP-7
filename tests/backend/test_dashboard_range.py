@@ -255,6 +255,11 @@ def test_the_pooled_wape_counts_a_net_negative_month_as_zero_sold():
         assert (card["wape_abs_miss_pieces"], card["wape_actual_pieces"]) == (50.0, 100.0)
         assert (card["abs_miss_pieces"], card["actual_pieces"]) == (70.0, 80.0), "the raw sums beside it are unchanged"
         assert marts.POOLED_WAPE_RULE in card["typical_product_weighted"]["measure"]
+    cats = {c["category_path"]: c for c in marts.accuracy_by_category([_acc(1, "2025-12", 120, 100, "SOAP"), _acc(2, "2025-12", 30, -20, "SOAP")])}
+    soap = cats["SOAP"]
+    assert soap["wape_pieces"] == 0.5 and (soap["wape_abs_miss_pieces"], soap["wape_actual_pieces"]) == (50.0, 100.0), (
+        "the category detail view divides on the card's rule too")
+    assert (soap["abs_miss_pieces"], soap["actual_pieces"]) == (70.0, 80.0) and soap["wape_pieces_rule"] == marts.POOLED_WAPE_RULE
     sql, _ = marts.accuracy_summary_query("2025-12", "2025-12")
     assert "SUM(ABS(forecast_pieces - GREATEST(actual_pieces, 0))) AS wape_abs_miss_pieces" in sql
     assert "SUM(GREATEST(actual_pieces, 0)) AS wape_actual_pieces" in sql
