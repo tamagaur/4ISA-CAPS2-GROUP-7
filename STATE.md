@@ -16,6 +16,28 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
+ERROR CARD AFTER MARCH, MEASURED (2026-11-17, recon; read-only: ssm_rehearsal on 127.0.0.1:55432, the restored copy with March loaded
+  (cycle 2026-04, 131 / 1,016,754), every connection default_transaction_read_only, the whole app in-process on 7355b6f, no sign-in row written; no live access).
+  Range Mar 2025-Feb 2026 after March: WAPEs and MAPEs equal live's (8.5 / 32.0 / 32.4 (31.8) / 38.7, near-zero 39, MAE 4,280, RMSE 10,696). Order-plan line:
+  28.7% over 105 of 131 (Apr 2026 plan, the copy's LP run 11; 14 near-zero, 12 not scored). MASE: entry_test withheld (passed/scored/median null).
+  The defect this recon found (RangeCards.jsx:527 and :565 called entry.median_mase.toFixed on that withheld entry, so the SKU Forecast page fell to its
+  error boundary after a month load) is FIXED: entry below.
+
+ERROR CARD RENDERS A WITHHELD ANSWER; ACCURACY QUERIES FILTER THE PRINCIPAL (2026-11-17, Kelvin's brief; read side only: no database write; plan 115 / 330,212).
+  CARD. RangeCards.jsx ForecastErrorSummaryCard: every figure on both lines goes through a guard (onePct, formatCount, wholeCount, decimals), and the MASE
+  entry test has three states (entryTestState): figures; withheld (the line reads "MASE, plan entry test on the latest forecast, not this range: withheld",
+  the "?" gives the answer's own reason); empty (—). The order-plan line guards its counts and its "Of the other N" sentence. InfoTip renders in place when
+  there is no document (server render), so the card can be rendered in a test. frontend/src/components/ForecastErrorSummaryCard.test.js renders the card
+  (Vite SSR + react-dom/server) against a full, a withheld and an empty answer: fails on 7355b6f's card (toFixed of null), passes now. check.sh --full now
+  runs the frontend unit tests (npm test); no step ran them before.
+  PRINCIPAL. backend/marts.accuracy_rows_query (both branches, and the month and run choice inside it) filters product_dimension.principal =
+  ACCURACY_PRINCIPAL ('unilever'); accuracy_summary_query inherits it. coverage on GET /dashboard/accuracy and GET /dashboard forecast_accuracy comes from
+  the scored rows (marts.accuracy_coverage over the mart's principal column), no longer written in by the routes ([] for an empty range). The MASE entry test
+  (dashboard._forecast_counts_query) takes Unilever's own latest forecast date and rows; before, every principal's latest date. Live, read-only: all 88,809
+  mart.accuracy_mart rows and all 189 forecast_result rows are Unilever. Before/after on live, 5 ranges x (default + 22 runs) = 115 combinations: every
+  summary (both paths), category row, product row (hash) and the entry test identical; the only difference is the new coverage field.
+  Chapter 4 pins re-pinned for 6 new backend tests (2895 -> 2901 collected with real data; 2889 -> 2895 clean clone).
+
 CATEGORY WAPE ON THE CARD'S RULE, ONE DECIMAL ON THE CARD LINE (2026-11-17, second brief; read side only: no database write; plan 115 / 330,212).
   backend/marts.accuracy_by_category: wape_pieces = wape_abs_miss_pieces / wape_actual_pieces (net-negative month = 0 sold, POOLED_WAPE_RULE,
   wape_pieces_rule in each row); raw sums unchanged. Live, read-only, Mar 2025-Feb 2026, before -> after: COOKING AIDS 31.79 -> 31.61%,

@@ -18,6 +18,7 @@ def accuracy_summary_rows(raw: list[dict], plan: dict | None = None) -> list[dic
                                               "sku_code", "product_name", "possibly_stock_limited")}}})
     out.append({"kind": "total", "d": {
         "product_months": agg["product_months"], "sources": agg["sources"] or None, "run_labels": agg["run_labels"] or None,
+        "principals": agg["coverage"] or None,
         "possibly_stock_limited": agg["possibly_stock_limited"],
         "possibly_stock_limited_unknown": agg["possibly_stock_limited_unknown"]}})
     if plan is not None:

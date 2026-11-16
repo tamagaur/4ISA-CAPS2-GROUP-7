@@ -5,7 +5,7 @@
 #       backend lint, frontend lint, the pinned-figure verification, the Chapter 4 code figures
 #       (docs/CHAPTER4_CODE_FIGURES.json: route count and sign-in split, @cached GET routes, opt-in list size), the cross-endpoint invariants
 #   scripts/check.sh --full   everything above + the whole pytest suite + its pinned totals + the manuscript's statements against
-#       live (scripts.manuscript_figures --verify) + the frontend production build
+#       live (scripts.manuscript_figures --verify) + the frontend unit tests + the frontend production build
 #   scripts/check.sh --optin  ONLY the 18 opt-in database tests (marked in scripts/known_opt_in_skips.txt), on a disposable database
 #       on 127.0.0.1:55432 seeded from a local backup; pass or fail for each; then tears it down. Never touches live, not even
 #       to check it is reachable (scripts/optin_run.py, scripts/optin_guard.py). The other modes do not run it.
@@ -75,6 +75,12 @@ chapter_totals() { "$PY" -m scripts.chapter_figures --verify-junit "$TMP/invaria
 manuscript()    { "$PY" -m scripts.manuscript_figures --verify; }
 invariants()    { pytest_strict invariants tests/invariants; }
 full_suite()    { pytest_strict full tests --ignore=tests/invariants; }
+# The frontend's own tests (node --test over src/**/*.test.js; the error card's render test among them). Not run by any step
+# until 2026-11-17, so a card that threw on a withheld answer passed every check.
+frontend_tests(){
+  [ -d frontend/node_modules ] || { echo "FAIL: frontend/node_modules is missing (run: cd frontend && npm ci)"; return 1; }
+  (cd frontend && npm test)
+}
 frontend_build(){
   [ -d frontend/node_modules ] || { echo "FAIL: frontend/node_modules is missing (run: cd frontend && npm ci)"; return 1; }
   (cd frontend && npm run build)
@@ -91,6 +97,7 @@ if [ "$MODE" = "--full" ]; then
   step "whole pytest suite (skips fail)" full_suite
   step "Chapter 4 pytest totals (collected, skipped, failed)" chapter_totals
   step "manuscript statements against live (disagreements on record are listed, never passed)" manuscript
+  step "frontend unit tests (node --test)" frontend_tests
   step "frontend production build" frontend_build
 fi
 

@@ -1033,24 +1033,40 @@ def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
     return f"""
             WITH latest AS (
                 SELECT MAX(forecast_date) AS forecast_date FROM {fc_src}
+            ),
+            -- The plan's entry test on Unilever's latest forecast (scripts/run_lp.py CANDIDATE_QUERY: status 'ok'
+            -- AND mase < MASE_GATE), for the error card: products with a holdout MASE, how many pass, the median.
+            -- Its own latest date and its own rows, both Unilever's (2026-11-17): before, the date was every principal's
+            -- latest and entry_forecast_date was taken over every row of it, so a newer forecast of another principal
+            -- would have emptied the test or dated it wrong. Live holds Unilever forecasts only (189 rows, read 2026-11-17).
+            entry_latest AS (
+                SELECT MAX(f.forecast_date) AS forecast_date
+                FROM {fc_src} f JOIN Product_Dimension p ON p.product_key = f.product_key
+                WHERE p.principal = :entry_principal
+            ),
+            entry AS (
+                SELECT COUNT(f.mase) FILTER (WHERE f.status = 'ok') AS entry_scored,
+                       COUNT(*) FILTER (WHERE f.status = 'ok' AND f.mase < :mase_gate) AS entry_passed,
+                       percentile_cont(0.5) WITHIN GROUP (ORDER BY f.mase)
+                           FILTER (WHERE f.status = 'ok' AND f.mase IS NOT NULL) AS entry_median,
+                       MAX(f.forecast_date) AS entry_forecast_date
+                FROM {fc_src} f JOIN Product_Dimension p ON p.product_key = f.product_key
+                JOIN entry_latest el ON f.forecast_date = el.forecast_date
+                WHERE p.principal = :entry_principal
             )
             SELECT
                 COUNT(*) AS total_count,
                 COUNT(fr.mase) AS evaluated_count,
                 COUNT(*) FILTER (WHERE fr.mase >= :mase_gate) AS unreliable_count,
-                -- The plan's entry test on Unilever's latest forecast (scripts/run_lp.py CANDIDATE_QUERY: status 'ok'
-                -- AND mase < MASE_GATE), for the error card: products with a holdout MASE, how many pass, the median.
-                COUNT(fr.mase) FILTER (WHERE pd.principal = 'unilever' AND fr.status = 'ok') AS entry_scored,
-                COUNT(*) FILTER (WHERE pd.principal = 'unilever' AND fr.status = 'ok' AND fr.mase < :mase_gate)
-                    AS entry_passed,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY fr.mase)
-                    FILTER (WHERE pd.principal = 'unilever' AND fr.status = 'ok' AND fr.mase IS NOT NULL) AS entry_median,
-                MAX(fr.forecast_date) AS entry_forecast_date
+                (SELECT entry_scored FROM entry) AS entry_scored,
+                (SELECT entry_passed FROM entry) AS entry_passed,
+                (SELECT entry_median FROM entry) AS entry_median,
+                (SELECT entry_forecast_date FROM entry) AS entry_forecast_date
             FROM {fc_src} fr
             JOIN Product_Dimension pd ON pd.product_key = fr.product_key
             JOIN latest ON fr.forecast_date = latest.forecast_date
             WHERE 1=1 {_principal_filter(scope)}
-        """, {"mase_gate": MASE_GATE, **fc_params}
+        """, {"mase_gate": MASE_GATE, "entry_principal": "unilever", **fc_params}
 
 
 ENTRY_TEST_MEASURE = ("MASE: the served model's mean absolute one-step error over its holdout months (the last 20% of the "
@@ -2450,7 +2466,7 @@ def get_dashboard(
             marts.accuracy_aggregates_from_query(batch.rows(db, *marts.accuracy_summary_query(range_start, range_end))),
             range_start, range_end, REVIEW_OVER_RUN_MONTHS,
         )
-    forecast_accuracy["coverage"] = [] if scope == "delmonte" else ["unilever"]
+    # coverage (the principals the figures cover) comes with the summary, from the scored rows (marts.accuracy_coverage).
     # Which actuals the figures were computed on (analytics/actuals_version.py): a published figure moves when a
     # month loads or is corrected, so it names the data behind it.
     forecast_accuracy["actuals_version"] = None if scope == "delmonte" else marts.actuals_version(db)

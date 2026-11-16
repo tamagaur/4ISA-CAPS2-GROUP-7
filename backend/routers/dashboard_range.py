@@ -271,7 +271,7 @@ def get_range_accuracy(
         summary = marts.accuracy_summary_from(agg, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000)
         summary["compare_run"] = marts.accuracy_comparison(db, summary)
         summary["entry_test"] = _range_entry_test(db)
-        return _flag_counterfactual({**summary, "level": level, "rows": [], "coverage": ["unilever"]})
+        return _flag_counterfactual({**summary, "level": level, "rows": []})   # coverage: from the scored rows (marts.accuracy_coverage)
     rows = marts.accuracy_rows(db, start, end, run_id)
     summary = marts.accuracy_summary(rows, start, end, REVIEW_OVER_RUN_MONTHS, review_limit=1000,
                                      plan=marts.plan_population(db))
@@ -288,7 +288,7 @@ def get_range_accuracy(
                 "run_length", "price_per_piece", "miss_pesos", "abs_miss_pesos", "surplus_pesos",
                 "shortage_pesos", "opening_pieces", "closing_pieces", "possibly_stock_limited", "method", "bin")
         detail = [{k: (float(r[k]) if hasattr(r.get(k), "is_finite") else r.get(k)) for k in keep} for r in rows]
-    return _stamped(db, _flag_counterfactual({**summary, "level": level, "rows": detail, "coverage": ["unilever"]}))
+    return _stamped(db, _flag_counterfactual({**summary, "level": level, "rows": detail}))   # coverage: from the scored rows
 
 
 @router.get("/error-decomposition", dependencies=[Depends(require_permission("dashboard.view"))])

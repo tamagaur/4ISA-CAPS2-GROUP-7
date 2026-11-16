@@ -26,6 +26,10 @@ import { createPortal } from 'react-dom';
 import { HelpCircle, X } from 'lucide-react';
 import './InfoTip.css';
 
+// The popover goes to <body> (above). With no document (react-dom/server: the card's render test,
+// src/components/ForecastErrorSummaryCard.test.js) it stays in place, so its text is still rendered.
+const toBody = (node) => (typeof document === 'undefined' ? node : createPortal(node, document.body));
+
 const GAP = 6;
 const MARGIN = 8;
 // A note with more text than this opens as a card, not a bubble: about
@@ -137,7 +141,7 @@ const InfoTip = ({ label, children, size = 13, className = '', trigger = null, t
       >
         {trigger ?? <HelpCircle size={size} aria-hidden="true" />}
       </button>
-      {createPortal(
+      {toBody(
         long ? (
           // A click or a scroll in the card pins it; a click in it stops
           // here, not at whatever row or card the "?" sits in.
@@ -167,7 +171,6 @@ const InfoTip = ({ label, children, size = 13, className = '', trigger = null, t
             {children}
           </span>
         ),
-        document.body,
       )}
     </span>
   );

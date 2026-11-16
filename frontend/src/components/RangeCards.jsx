@@ -293,8 +293,20 @@ export const UNCHECKABLE_COLUMNS = [
 const wholePct = (share) => `${Math.round(share * 100)}%`;
 // Every percentage on the card's line (both WAPEs and every MAPE) has one decimal, so 32.4% and 31.8% stay distinct and
 // a one- or two-month company total of 0.2% never reads as a perfect 0% (until 2026-11-17 the WAPEs were whole percents).
-const onePct = (share) => `${(share * 100).toFixed(1)}%`;
+// Every figure on the card's two lines goes through one of these, so an empty value (a withheld answer sets a stored figure to
+// null, backend/practice_copy._withhold_stored) prints — and never throws: until 2026-11-17 entry.median_mase.toFixed on the
+// withheld MASE took the SKU Forecast page down (src/components/ForecastErrorSummaryCard.test.js).
+const onePct = (share) => (isMissing(share) ? NOT_COLLECTED : `${(share * 100).toFixed(1)}%`);
+const wholeCount = (v) => (isMissing(v) ? NOT_COLLECTED : Math.round(v).toLocaleString());
+const decimals = (v, places) => (isMissing(v) ? NOT_COLLECTED : Number(v).toFixed(places));
 const exactPesos = (v) => `₱${Math.round(v).toLocaleString('en-PH')}`;
+// The MASE entry test as the card can show it: 'figures' (passed and scored present), 'withheld' (the answer withholds it:
+// a newest forecast resting on generated sales; accuracy_withheld is the reason) or 'empty' (no figures and no reason).
+export const entryTestState = (entry) => {
+  if (!entry) return null;
+  if (entry.accuracy_withheld) return 'withheld';
+  return isMissing(entry.mase_passed) || isMissing(entry.mase_scored) ? 'empty' : 'figures';
+};
 
 // The chart's colours: actual sales in the card's teal, the forecast in the
 // app's forecast violet (solid against dashed). The miss between them
@@ -443,6 +455,11 @@ export const ForecastErrorSummaryCard = ({
   ].filter(([n]) => n > 0) : [];
   // The plan's entry test on the latest forecast (GET /dashboard forecast_accuracy.entry_test): not this range's months.
   const entry = showingBefore ? null : served?.entry_test;
+  const entryState = entryTestState(entry);
+  const entryMonth = entry?.forecast_date ? formatMonth(String(entry.forecast_date).slice(0, 7)) : null;
+  // The plan's products not in the MAPE above; null when either count is missing (never a count made from a missing one).
+  const otherPlanned = planned && !isMissing(planned.plan_products) && !isMissing(planned.products)
+    ? planned.plan_products - planned.products : null;
   const months = [...(accuracy.by_month || [])]
     .filter((m) => m.actual_pesos != null && m.net_miss_pesos != null)
     .sort((a, b) => (a.period < b.period ? -1 : 1))
@@ -500,32 +517,38 @@ export const ForecastErrorSummaryCard = ({
             <>
               {windowText && <>Tier A, {windowText}: </>}
               {company != null && (
-                <>Company-total WAPE, all {accuracy.products.toLocaleString()} scored products (pesos): <strong>{onePct(company)}</strong></>
+                <>Company-total WAPE, all {formatCount(accuracy.products)} scored products (pesos): <strong>{onePct(company)}</strong></>
               )}
               {typical != null && (
                 <>
-                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {accuracy.products.toLocaleString()} scored products (pieces): <strong>{onePct(typical)}</strong>
+                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {formatCount(accuracy.products)} scored products (pieces): <strong>{onePct(typical)}</strong>
                 </>
               )}
               {mape && (
                 <>
-                  {' '}· MAPE, {mape.products.toLocaleString()} Tier A products with no near-zero month (typical product): <strong>{onePct(mape.value)}</strong>
+                  {' '}· MAPE, {formatCount(mape.products)} Tier A products with no near-zero month (typical product): <strong>{onePct(mape.value)}</strong>
                   {mapeVariant && (
                     <>{' '}(<strong>{onePct(mapeVariant.value)}</strong> leaving out stock-limited months)</>
                   )}
                   {mapeAll && nearZero && (
-                    <>{' '}· MAPE, all {mapeAll.products.toLocaleString()} Tier A products that sold in the window, the {nearZero.products.toLocaleString()} near-zero ones included: <strong>{onePct(mapeAll.value)}</strong></>
+                    <>{' '}· MAPE, all {formatCount(mapeAll.products)} Tier A products that sold in the window, the {formatCount(nearZero.products)} near-zero ones included: <strong>{onePct(mapeAll.value)}</strong></>
                   )}
                   {nearZero && (
-                    <>{' '}· {nearZero.products.toLocaleString()} near-zero Tier A products scored in pieces instead (MAE <strong>{Math.round(nearZero.mae_pieces).toLocaleString()}</strong>, RMSE <strong>{Math.round(nearZero.rmse_pieces).toLocaleString()}</strong>)</>
+                    <>{' '}· {formatCount(nearZero.products)} near-zero Tier A products scored in pieces instead (MAE <strong>{wholeCount(nearZero.mae_pieces)}</strong>, RMSE <strong>{wholeCount(nearZero.rmse_pieces)}</strong>)</>
                   )}
                 </>
               )}
-              {entry && (
+              {entryState === 'figures' && (
                 <>
-                  {' '}· MASE, plan entry test on the latest forecast, not this range: <strong>{entry.mase_passed} of {entry.mase_scored}</strong> under {entry.mase_gate}
-                  {' '}(median {entry.median_mase.toFixed(2)})
+                  {' '}· MASE, plan entry test on the latest forecast, not this range: <strong>{formatCount(entry.mase_passed)} of {formatCount(entry.mase_scored)}</strong> under {entry.mase_gate}
+                  {!isMissing(entry.median_mase) && <>{' '}(median {decimals(entry.median_mase, 2)})</>}
                 </>
+              )}
+              {entryState === 'withheld' && (
+                <>{' '}· MASE, plan entry test on the latest forecast, not this range: <strong>withheld</strong></>
+              )}
+              {entryState === 'empty' && (
+                <>{' '}· MASE, plan entry test on the latest forecast, not this range: <strong>{NOT_COLLECTED}</strong></>
               )}
             </>
           )}
@@ -538,42 +561,50 @@ export const ForecastErrorSummaryCard = ({
             {accuracy.typical_product_weighted?.label} ({accuracy.typical_product_weighted?.unit}).</span>
           {mape && (
             <span className="fc-tip-line"><strong>MAPE ({pct(mape.value)}).</strong>{' '}{mape.label}{' '}
-              {mape.products.toLocaleString()} products scored; {mape.under_20_pct.toLocaleString()} under 20%,
-              {' '}{mape.at_or_above_50_pct.toLocaleString()} at 50% or more, {mape.at_or_above_100_pct.toLocaleString()} at 100% or more.
+              {formatCount(mape.products)} products scored; {formatCount(mape.under_20_pct)} under 20%,
+              {' '}{formatCount(mape.at_or_above_50_pct)} at 50% or more, {formatCount(mape.at_or_above_100_pct)} at 100% or more.
               {mapeAll && <>{' '}Mean over those products {pct(mape.mean)}; with the near-zero products included the typical product is {pct(mapeAll.value)} and the mean {pct(mapeAll.mean)}.</>}
-              {mapeAll && accuracy.products > mapeAll.products && (
-                <>{' '}The two WAPEs cover {accuracy.products.toLocaleString()} products; {(accuracy.products - mapeAll.products).toLocaleString()} of
-                  them sold nothing in these months, so no percentage exists for them and the MAPE figures cover {mapeAll.products.toLocaleString()}.</>
+              {mapeAll && !isMissing(mapeAll.products) && accuracy.products > mapeAll.products && (
+                <>{' '}The two WAPEs cover {formatCount(accuracy.products)} products; {formatCount(accuracy.products - mapeAll.products)} of
+                  them sold nothing in these months, so no percentage exists for them and the MAPE figures cover {formatCount(mapeAll.products)}.</>
               )}
               {mape.rule_ordered_products > 0 && (
-                <>{' '}{mape.rule_ordered_products.toLocaleString()} products ({mape.rule_ordered_product_months.toLocaleString()} product-months)
+                <>{' '}{formatCount(mape.rule_ordered_products)} products ({formatCount(mape.rule_ordered_product_months)} product-months)
                   {' '}were served an ordering rule, not a forecast, and are left out.</>
               )}</span>
           )}
           {nearZero && (
-            <span className="fc-tip-line"><strong>Near-zero products ({nearZero.products.toLocaleString()}; {nearZero.product_months.toLocaleString()} product-months).</strong>{' '}{nearZero.label}
-              {' '}MAE {Math.round(nearZero.mae_pieces).toLocaleString()} pieces, RMSE {Math.round(nearZero.rmse_pieces).toLocaleString()} pieces a product-month.</span>
+            <span className="fc-tip-line"><strong>Near-zero products ({formatCount(nearZero.products)}; {formatCount(nearZero.product_months)} product-months).</strong>{' '}{nearZero.label}
+              {' '}MAE {wholeCount(nearZero.mae_pieces)} pieces, RMSE {wholeCount(nearZero.rmse_pieces)} pieces a product-month.</span>
           )}
           {mapeVariant && (
             <span className="fc-tip-line"><strong>MAPE leaving out stock-limited months ({pct(mapeVariant.value)}).</strong>{' '}{mapeVariant.label}{' '}
-              {mapeVariant.months_set_apart.toLocaleString()} product-months are left out;
-              {' '}{mapeVariant.products.toLocaleString()} products scored, {mapeVariant.under_20_pct.toLocaleString()} under 20%,
-              {' '}{mapeVariant.at_or_above_100_pct.toLocaleString()} at 100% or more.</span>
+              {formatCount(mapeVariant.months_set_apart)} product-months are left out;
+              {' '}{formatCount(mapeVariant.products)} products scored, {formatCount(mapeVariant.under_20_pct)} under 20%,
+              {' '}{formatCount(mapeVariant.at_or_above_100_pct)} at 100% or more.</span>
           )}
-          {entry && (
-            <span className="fc-tip-line"><strong>MASE ({entry.mase_passed} of {entry.mase_scored} under {entry.mase_gate},
-              median {entry.median_mase.toFixed(3)}).</strong>{' '}{entry.measure} On the forecast of {formatMonth(entry.forecast_date.slice(0, 7))},
-              not on the months of this range.</span>
+          {entryState === 'figures' && (
+            <span className="fc-tip-line"><strong>MASE ({formatCount(entry.mase_passed)} of {formatCount(entry.mase_scored)} under {entry.mase_gate}
+              {!isMissing(entry.median_mase) && <>, median {decimals(entry.median_mase, 3)}</>}).</strong>{entry.measure && <>{' '}{entry.measure}</>}
+              {entryMonth ? <>{' '}On the forecast of {entryMonth}, not on the months of this range.</> : <>{' '}Not on the months of this range.</>}</span>
+          )}
+          {entryState === 'withheld' && (
+            <span className="fc-tip-line"><strong>MASE (withheld).</strong>{' '}{entry.accuracy_withheld}
+              {entryMonth && <>{' '}It is the entry test on the forecast of {entryMonth}, not on the months of this range.</>}</span>
+          )}
+          {entryState === 'empty' && (
+            <span className="fc-tip-line"><strong>MASE ({NOT_COLLECTED}).</strong>{' '}No entry test figures came with this answer
+              {entryMonth && <> for the forecast of {entryMonth}</>}.</span>
           )}
           <span className="fc-tip-line">
             The two WAPEs (weighted absolute percentage error) are the size of the misses as a share of what actually sold.
-            {' '}{accuracy.products.toLocaleString()} products, {accuracy.product_months.toLocaleString()} product-months;
+            {' '}{formatCount(accuracy.products)} products, {formatCount(accuracy.product_months)} product-months;
             {' '}{accuracy.forecast_source === 'backtest_recreated' ? 'forecasts as made at the time (backtest)' : 'stored forecast runs'}
             {accuracy.run_labels?.length ? `: ${accuracy.run_labels.join('; ')}` : ''}.
           </span>
           {accuracy.possibly_stock_limited > 0 && (
             <span className="fc-tip-line">
-              {accuracy.possibly_stock_limited.toLocaleString()} product-months may be stock-limited (the product was missing
+              {formatCount(accuracy.possibly_stock_limited)} product-months may be stock-limited (the product was missing
               from the stock count taken at the end of that month, so stock may have run out): their sales may understate demand.
             </span>
           )}
@@ -582,16 +613,16 @@ export const ForecastErrorSummaryCard = ({
 
       {planned && (
         <p className="fc-plan-line" title={planned.label}>
-          Products in the order plan{windowText && <>, {windowText}</>}: MAPE, {planned.products.toLocaleString()} of
-          the {planned.plan_products.toLocaleString()} products in the {formatMonth(planned.planning_cycle_date.slice(0, 7))} order plan
+          Products in the order plan{windowText && <>, {windowText}</>}: MAPE, {formatCount(planned.products)} of
+          the {formatCount(planned.plan_products)} products in the {formatMonth(String(planned.planning_cycle_date).slice(0, 7))} order plan
           {planned.lp_run_key != null && <> (LP run {planned.lp_run_key})</>} with no near-zero month (typical product):{' '}
           <strong>{onePct(planned.value)}</strong>
-          {mape && <>, against {onePct(mape.value)} for all {mape.products.toLocaleString()} above</>}.
-          {plannedApart.length > 0 && (
-            <>{' '}Of the other {(planned.plan_products - planned.products).toLocaleString()} planned products,{' '}
-              {plannedApart.map(([n, text]) => `${n.toLocaleString()} ${text}`).join(', ')}.</>
+          {mape && <>, against {onePct(mape.value)} for all {formatCount(mape.products)} above</>}.
+          {otherPlanned > 0 && plannedApart.length > 0 && (
+            <>{' '}Of the other {formatCount(otherPlanned)} planned products,{' '}
+              {plannedApart.map(([n, text]) => `${formatCount(n)} ${text}`).join(', ')}.</>
           )}
-          {' '}{planned.caveat}
+          {planned.caveat && <>{' '}{planned.caveat}</>}
         </p>
       )}
 

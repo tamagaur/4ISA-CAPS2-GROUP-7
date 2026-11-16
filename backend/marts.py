@@ -1051,6 +1051,20 @@ def accuracy_runs(db: Session) -> list[dict]:
     ]
 
 
+# The principal the error card and the category view score: the only one with product-level forecasts (Del Monte's sales are
+# category grain, so none exists to score; its routes answer blocked_reason before reading). Until 2026-11-17 the queries below
+# filtered by month and run only, so "Unilever only" held because of what mart.accuracy_mart happened to contain (88,809 rows,
+# all Unilever, read 2026-11-17), not because anything enforced it. The filter is on the product master
+# (product_dimension.principal); the coverage a response reports is the scored rows' own principal column (accuracy_coverage),
+# so a disagreement between the two would show instead of being hidden.
+ACCURACY_PRINCIPAL = "unilever"
+
+
+def accuracy_coverage(principals) -> list[str]:
+    """A response's coverage: the principals of its scored rows, sorted; [] when nothing was scored. Never written in by hand."""
+    return sorted({str(p) for p in (principals or []) if p})
+
+
 def accuracy_rows(db: Session, start: str, end: str, run_id: int | None = None) -> list[dict]:
     """Scored product-months (actual known) in start..end. With no run_id: each month from
     the default backtest when it covers the month, else from the newest stored run that
@@ -1063,11 +1077,11 @@ def accuracy_rows_query(start: str, end: str, run_id: int | None = None) -> tupl
     if run_id is not None:
         return f"""
             SELECT a.*, pd.sku_code, pd.product_name
-            FROM mart.accuracy_mart a LEFT JOIN product_dimension pd ON pd.product_key = a.product_key
+            FROM mart.accuracy_mart a JOIN product_dimension pd ON pd.product_key = a.product_key
             WHERE a.run_id = :run_id AND a.month BETWEEN :start AND :end AND a.actual_pieces IS NOT NULL
-                  AND a.forecast_pieces IS NOT NULL
+                  AND a.forecast_pieces IS NOT NULL AND pd.principal = :principal
             ORDER BY a.product_key, a.month
-        """, {"run_id": run_id, "start": start, "end": end}
+        """, {"run_id": run_id, "start": start, "end": end, "principal": ACCURACY_PRINCIPAL}
     # The run_id each month resolves to (the default backtest when it covers the month,
     # else the newest stored run that forecast it) is the SAME for every row of that
     # month, so it is resolved ONCE per DISTINCT month in range here, not re-evaluated as
@@ -1076,17 +1090,25 @@ def accuracy_rows_query(start: str, end: str, run_id: int | None = None) -> tupl
     # run's rows in the month range because accuracy_mart_month's index is (run_id, month)
     # and the old WHERE had no run_id to seek on). month_run is bounded by the number of
     # months in the range (at most a few dozen), not by accuracy_mart's row count.
+    # The principal applies at every step, not only to the rows returned: which months exist and which run a month resolves to
+    # are decided on ACCURACY_PRINCIPAL's rows alone, so another principal's rows could not pick a month's run.
     return f"""
-        WITH months AS (
-            SELECT DISTINCT month FROM mart.accuracy_mart WHERE month BETWEEN :start AND :end
+        WITH scoped AS (
+            SELECT product_key FROM product_dimension WHERE principal = :principal
+        ),
+        months AS (
+            SELECT DISTINCT a.month FROM mart.accuracy_mart a JOIN scoped USING (product_key)
+            WHERE a.month BETWEEN :start AND :end
         ),
         month_run AS (
             SELECT m.month,
                    CASE WHEN EXISTS (SELECT 1 FROM mart.accuracy_mart b
                                      JOIN mart.forecast_run r ON r.run_id = b.run_id
+                                     JOIN scoped sb ON sb.product_key = b.product_key
                                      WHERE r.label = :default_label AND b.month = m.month)
                         THEN (SELECT run_id FROM mart.forecast_run WHERE label = :default_label)
                         ELSE (SELECT MAX(s.run_id) FROM mart.accuracy_mart s
+                              JOIN scoped ss ON ss.product_key = s.product_key
                               WHERE s.forecast_source = 'stored_run' AND s.month = m.month
                                 AND s.actual_pieces IS NOT NULL)
                    END AS run_id
@@ -1095,11 +1117,11 @@ def accuracy_rows_query(start: str, end: str, run_id: int | None = None) -> tupl
         SELECT a.*, pd.sku_code, pd.product_name
         FROM mart.accuracy_mart a
         JOIN month_run mr ON mr.month = a.month AND mr.run_id = a.run_id
-        LEFT JOIN product_dimension pd ON pd.product_key = a.product_key
+        JOIN product_dimension pd ON pd.product_key = a.product_key
         WHERE a.month BETWEEN :start AND :end AND a.actual_pieces IS NOT NULL
-              AND a.forecast_pieces IS NOT NULL
+              AND a.forecast_pieces IS NOT NULL AND pd.principal = :principal
         ORDER BY a.product_key, a.month
-    """, {"default_label": DEFAULT_BACKTEST_LABEL, "start": start, "end": end}
+    """, {"default_label": DEFAULT_BACKTEST_LABEL, "start": start, "end": end, "principal": ACCURACY_PRINCIPAL}
 
 
 def _wape(abs_miss: float, actual: float) -> float | None:
@@ -1332,6 +1354,7 @@ def accuracy_aggregates(rows: list[dict]) -> dict:
         "product_months": len(rows),
         "sources": sorted({r["forecast_source"] for r in rows}),
         "run_labels": sorted({r["run_label"] for r in rows}),
+        "coverage": accuracy_coverage(r.get("principal") for r in rows),
         "possibly_stock_limited": sum(1 for r in rows if r.get("possibly_stock_limited") is True),
         "possibly_stock_limited_unknown": sum(1 for r in rows if r["direction"] == "over"
                                               and r.get("possibly_stock_limited") is None),
@@ -1413,7 +1436,7 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
         UNION ALL
         SELECT 'total', row_to_json(x) FROM (
             SELECT COUNT(*)::int AS product_months, array_agg(DISTINCT forecast_source) AS sources,
-                   array_agg(DISTINCT run_label) AS run_labels,
+                   array_agg(DISTINCT run_label) AS run_labels, array_agg(DISTINCT principal) AS principals,
                    (COUNT(*) FILTER (WHERE {flag} IS TRUE))::int AS possibly_stock_limited,
                    (COUNT(*) FILTER (WHERE direction = 'over' AND {flag} IS NULL))::int
                        AS possibly_stock_limited_unknown
@@ -1451,6 +1474,7 @@ def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
     return {
         "product_months": int(total.get("product_months") or 0),
         "sources": sorted(total.get("sources") or []), "run_labels": sorted(total.get("run_labels") or []),
+        "coverage": accuracy_coverage(total.get("principals")),
         "possibly_stock_limited": int(total.get("possibly_stock_limited") or 0),
         "possibly_stock_limited_unknown": int(total.get("possibly_stock_limited_unknown") or 0),
         "months": months, "products": dict(sorted(products.items())), "plan": plan,
@@ -1471,7 +1495,7 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
     """accuracy_summary from aggregates (accuracy_aggregates or accuracy_aggregates_from_query)."""
     if not agg["product_months"]:
         return {"start_period": start, "end_period": end, "label": None, "months": [], "forecast_source": None,
-                "run_labels": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
+                "run_labels": [], "coverage": [], "calendar_adjusted": None, "products": 0, "product_months": 0, "by_month": [],
                 **accuracy_headlines(None, None), "mape": None,   # nothing scored: no MAPE block (a withheld range is built from this)
                 "over_forecast_runs": {"run_months": review_months, "count": 0, "items": [], "rule": OVER_RUN_RULE.format(n=review_months)},
                 "blocked_reason": (f"No scored forecasts for {range_label(start, end)}: no forecast "
@@ -1518,6 +1542,8 @@ def accuracy_summary_from(agg: dict, start: str, end: str, review_months: int, r
         # Whether those runs' forecasts carry the calendar factor (2026-10-19; per product since 2026-11-13):
         # 'yes' / 'partly' / 'no' (calendar_adjusted_state).
         "calendar_adjusted": calendar_adjusted_state(agg["run_labels"]),
+        # The principals the figures cover, from the scored rows (accuracy_coverage), never written in by a route.
+        "coverage": agg.get("coverage", []),
         "products": len(by_product), "product_months": agg["product_months"],
         **{k: round(v, 2) for k, v in totals.items()},
         "direction": "over" if net > 0 else "under" if net < 0 else "exact",
