@@ -39,8 +39,8 @@ Evidence (`Unilever_SKU_Demand_Fact_Real`, 419-543 products per month-year, 35 m
 | Median MASE, interval | Sep-Feb | 0.731 | **0.646** [-0.132, -0.019] | 192 |
 | | Jan 2024-Aug 2025 | 0.901 | **0.869** [-0.080, +0.016] | 188 |
 | Company-total WAPE (the card) | Sep-Feb / earlier | 13.30% / 10.23% | **7.22% / 9.07%** | 208 / 270 |
-| Pooled product WAPE (the card) | Sep-Feb / earlier | 38.27% / 27.88% | **36.53% / 27.25%** | 208 / 270 |
-| MAPE, median product (the card) | Sep-Feb / earlier | 41.0% / 34.6% | **35.2% / 32.8%** | 183 / 237 |
+| Pooled product WAPE (the card, raw net quantity; on the backtest's rule, a net-negative month = 0 sold, the row above and the card since 2026-11-17: 36.33% / 27.24%) | Sep-Feb / earlier | 38.27% / 27.88% | **36.53% / 27.25%** | 208 / 270 |
+| MAPE, median product (the card's basis of 2026-11-12, retired 2026-11-15; on today's card 40.7% / 37.9%) | Sep-Feb / earlier | 41.0% / 34.6% | **35.2% / 32.8%** | 183 / 237 |
 | Products under 20% / at 100%+ MAPE | Sep-Feb | 24 / 39 | **31 / 34** | 183 |
 | Planned products' pooled WAPE | Sep-Feb / earlier | 32.63% / 28.47% | **31.07% / 27.82%** (intervals below 0 in both) | 107 / 90 |
 | Products passing MASE < 1 (enter the plan) | March 2026 | 110 of 175 | **115 of 175** | |

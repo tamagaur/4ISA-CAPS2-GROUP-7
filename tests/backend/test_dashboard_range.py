@@ -409,7 +409,8 @@ def test_accuracy_returns_both_headline_figures_with_plain_labels():
     assert company["value"] == pytest.approx(30 / 200)      # |170 - 200| x price / (200 x price)
     assert typical["value"] == pytest.approx(70 / 200)      # (20 + 50) / 200
     assert company["label"].startswith("Company total:") and "added up first" in company["label"]
-    assert typical["label"].startswith("Typical product, weighted by sales:")
+    assert typical["label"].startswith("Pooled product WAPE, every scored product:")
+    assert "Not the typical product's MAPE" in typical["label"], "the WAPE is named apart from the MAPE (2026-11-17)"
     assert "pesos" in company["unit"] and typical["unit"] == "pieces"
     assert "total" not in body, "never a bare total"
     # The old names carry the same two numbers; 'total' is still accepted as the level and read as 'summary'.

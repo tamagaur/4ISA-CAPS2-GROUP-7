@@ -2558,6 +2558,21 @@ def test_error_card_flags_products_with_a_near_zero_month_and_scores_them_in_pie
     assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3)["mape"] == m
 
 
+def test_near_zero_mae_and_rmse_count_a_net_negative_month_as_zero_sold():
+    """The near-zero line's MAE and RMSE are on POOLED_WAPE_RULE, the WAPE's basis and the pinned set's
+    (docs/EVALUATION_METRICS.json), on both paths (2026-11-17: they were on the raw net quantity, 4,280 / 10,696 against
+    4,241 / 10,676 on the card's default range)."""
+    def row(k, m, f, a, avg):
+        return {**_accuracy_row(k, m, f, a), "avg_monthly_pieces": avg}
+    rows = [row(1, "2024-01", 110, 100, 100), row(1, "2024-02", 90, 100, 100),
+            row(3, "2024-01", 50, 2, 1000), row(3, "2024-02", 40, -30, 1000)]        # a near-zero month, then returns
+    z = marts.accuracy_summary(rows, "2024-01", "2024-02", 3)["mape"]["near_zero_flag"]
+    assert z["mae_pieces"] == pytest.approx((48 + 40) / 2), "the -30 month counts as 0 sold, not as -30"
+    assert z["rmse_pieces"] == pytest.approx(((48 ** 2 + 40 ** 2) / 2) ** 0.5, abs=0.005)   # served to 2 decimals
+    agg = marts.accuracy_aggregates_from_query(accuracy_summary_rows(rows))
+    assert marts.accuracy_summary_from(agg, "2024-01", "2024-02", 3)["mape"]["near_zero_flag"] == z
+
+
 def test_error_card_planned_line_is_the_headline_measure_on_the_plans_products():
     """2026-11-16: the population the plan acts on, on the headline's own basis: the same MAPE, the same near-zero
     treatment, the same rows, kept to the products with a row in the current cycle's plan. Every plan product is

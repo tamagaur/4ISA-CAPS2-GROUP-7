@@ -521,7 +521,7 @@ export const ForecastErrorSummaryCard = ({
               )}
               {typical != null && (
                 <>
-                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {formatCount(accuracy.products)} scored products (pieces): <strong>{onePct(typical)}</strong>
+                  {' '}· Pooled product WAPE, {company != null ? 'the same' : 'all'} {formatCount(accuracy.products)} scored products (pieces{nearZero ? ', near-zero ones included' : ''}): <strong>{onePct(typical)}</strong>
                 </>
               )}
               {mape && (
@@ -534,13 +534,13 @@ export const ForecastErrorSummaryCard = ({
                     <>{' '}· MAPE, all {formatCount(mapeAll.products)} Tier A products that sold in the window, the {formatCount(nearZero.products)} near-zero ones included: <strong>{onePct(mapeAll.value)}</strong></>
                   )}
                   {nearZero && (
-                    <>{' '}· {formatCount(nearZero.products)} near-zero Tier A products scored in pieces instead (MAE <strong>{wholeCount(nearZero.mae_pieces)}</strong>, RMSE <strong>{wholeCount(nearZero.rmse_pieces)}</strong>)</>
+                    <>{' '}· {formatCount(nearZero.products)} near-zero Tier A products scored in pieces instead (MAE <strong>{wholeCount(nearZero.mae_pieces)}</strong>, RMSE <strong>{wholeCount(nearZero.rmse_pieces)}</strong>, those {formatCount(nearZero.products)} only)</>
                   )}
                 </>
               )}
               {entryState === 'figures' && (
                 <>
-                  {' '}· MASE, plan entry test on the latest forecast, not this range: <strong>{formatCount(entry.mase_passed)} of {formatCount(entry.mase_scored)}</strong> under {entry.mase_gate}
+                  {' '}· MASE, plan entry test on the latest forecast, not this range: <strong>{formatCount(entry.mase_passed)} of {formatCount(entry.mase_scored)}</strong> forecast products with a MASE under {entry.mase_gate}
                   {!isMissing(entry.median_mase) && <>{' '}(median {decimals(entry.median_mase, 2)})</>}
                 </>
               )}

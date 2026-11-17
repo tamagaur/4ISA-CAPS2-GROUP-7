@@ -11,20 +11,25 @@ rows); then for the error decomposition, which now reads the treated backtest (r
 calendar-adjusted") instead of the untreated runs 11, 12, 13 (27 decomposition figures moved). The March-impact table below is
 of 2026-10-24 and still describes run 11; rerun `--march-impact` for today's.
 
+As of 2026-11-17 the rows below are the JSON's, re-pinned 2026-11-12 (163b42f, the calendar factor per product; mart refresh
+74). Until 2026-11-17 this table still showed the 2026-11-10 values (110 of 175, median 0.823; 37.88% / 29.69% / 10.77%;
+17.44%), two re-pins behind its own JSON. `--verify` reads the JSON, never this table. The six evaluation metrics (MAE, RMSE,
+MAPE, WAPE, MASE on the backtest, R²) are pinned separately: `docs/EVALUATION_METRICS.md`.
+
 | Figure | Value | Source |
 |---|---|---|
-| MASE < 1, Tier A (2026-02, `t12m_new`) | 110 of 175 (62.9%) | `Forecast_Result` for 2026-03, status ok |
-| Median MASE | 0.823 | same |
-| Median product WAPE, as served / calendar-adjusted | 38.55% / 37.88% | frozen as-served rows (`ACCURACY_AS_SERVED.md`, headline) |
-| Pooled WAPE (pieces) | 30.12% / 29.69% | same |
-| Total WAPE (pesos) | 10.02% / 10.77% | same |
-| Error split, Tier A, pieces (over / absorbed by safety stock / beyond) | 10,397,753 / 4,966,558 / 2,705,595 | `mart.error_decomposition_row`, 4,370 product-months (run 16) |
-| Exceedance: product-months where demand beat the forecast by more than safety stock | **17.44%** (762 of 4,370) | same |
-| Pesos beyond safety stock, Tier A | **₱38,724,995** | same |
+| MASE < 1, Tier A (2026-02, `t12m_new`) | 115 of 175 (65.7%) | `Forecast_Result` for 2026-03, status ok: the stored holdout MASE (plan entry test), not the backtest MASE of `EVALUATION_METRICS.md` |
+| Median MASE | 0.755 | same |
+| Median product WAPE, as served / calendar-adjusted | 38.55% / 36.37% | as-served backtest rows, 310 products / 4,370 product-months (scored months 2024-01..2026-02) |
+| Pooled WAPE (pieces) | 30.12% / 28.87% | same; the calendar-adjusted figure is `EVALUATION_METRICS.md`'s full-span WAPE over every scored product |
+| Total WAPE (pesos) | 10.02% / 8.70% | same |
+| Error split, Tier A, pieces (over / absorbed by safety stock / beyond) | 9,389,241 / 5,083,650 / 3,096,724 | `mart.error_decomposition_row`, 4,370 product-months |
+| Exceedance: product-months where demand beat the forecast by more than safety stock | **19.50%** (852 of 4,370) | same |
+| Pesos beyond safety stock, Tier A | **₱43,767,343** | same |
 
 The verbatim headline, MASE and per-route tables of `ACCURACY_AS_SERVED.md` are stored in the JSON with the document's hash.
 
-Reproduce: `python -m scripts.snapshot_published_figures --verify` recomputes 51 figures from the frozen rows (no database write) and fails on any difference or on a changed input file. It also says whether the live actuals have moved since; a moved version never changes the pinned figures.
+Reproduce: `python -m scripts.snapshot_published_figures --verify` recomputes 51 figures from the frozen rows (no database write) and fails on any difference or on a changed input file. Since 2026-11-16 it also recomputes every pinned figure from live and FAILS on a moved actuals version or any live figure that differs (exit 3 when live cannot be read); re-pinning (`--write`) is a decision. `scripts/check.sh` runs it.
 
 ## What loading March 2026 would change (`--march-impact`, nothing loaded)
 

@@ -1139,15 +1139,18 @@ def _num(row: dict, key: str) -> float | None:
 # over-forecast `review_months` (REVIEW_OVER_RUN_MONTHS) months or more in a row as of its last
 # scored month in the range. The plan's own flag for the cycle is review_flag (GET /recommendations).
 # The two headline error figures, always returned together and always under these names
-# (Yuan, 2026-10-05): the same forecasts read 9.9% or 29.6% on the default backtest depending
-# on which is meant, so neither is ever called just "the total" or "the accuracy".
+# (Yuan, 2026-10-05): the same forecasts read 9.9% or 29.6% on the default backtest of THAT date depending
+# on which is meant, so neither is ever called just "the total" or "the accuracy". Those two figures are a dated record, not
+# current: the pinned set is docs/EVALUATION_METRICS.json (scripts/evaluation_metrics.py, checked against live by check.sh).
 ACCURACY_LABELS = {
     "company_total": (
         "Company total: every product's forecast and sales are added up first, month by month, then "
         "compared in pesos. Misses on different products cancel out, so this is the smaller figure."),
     "typical_product_weighted": (
-        "Typical product, weighted by sales: each product's own miss in pieces, with bigger sellers "
-        "counting more. Nothing cancels out, so this is what a planner sees product by product."),
+        "Pooled product WAPE, every scored product: each product's own miss in pieces, with bigger sellers "
+        "counting more. Nothing cancels out, so this is what a planner sees product by product. It covers every product "
+        "scored in the range, the near-zero ones and those that sold nothing there included, so its product count is larger "
+        "than the MAPE's. Not the typical product's MAPE."),
 }
 
 
@@ -1196,8 +1199,9 @@ def _stock_limited_month(row: dict) -> bool:
 NEAR_ZERO_SHARE = 0.05
 NEAR_ZERO_LABEL = ("Products with a month where sales were under 5% of their usual monthly level (their average of the 12 months "
                    "before). A percentage miss is not meaningful there, so they are left out of the MAPE above, counted here, and "
-                   "scored in pieces: MAE (mean absolute miss) and RMSE (root mean squared miss) over all their scored months. "
-                   "Their forecasts and the order plan are unchanged.")
+                   "scored in pieces: MAE (mean absolute miss) and RMSE (root mean squared miss) over all their scored months, "
+                   "these products only (not the MAE or RMSE of the forecastable products), a net-negative month counting as "
+                   "0 sold as in the WAPE. Their forecasts and the order plan are unchanged.")
 
 
 def _near_zero_month(row: dict) -> bool:
@@ -1290,7 +1294,7 @@ def mape_summary(by_product: dict, plan: dict | None = None) -> dict:
             "months_set_apart": sum(int(p.get("stockout_rows") or 0) for p in ok)},
         "near_zero_flag": {
             "products": len(flagged), "product_months": n_m, "threshold_share": NEAR_ZERO_SHARE, "label": NEAR_ZERO_LABEL,
-            "mae_pieces": round(sum(p["abs"] for p in flagged) / n_m, 2) if n_m else None,
+            "mae_pieces": round(sum(float(p.get("abs_sold") or 0) for p in flagged) / n_m, 2) if n_m else None,
             "rmse_pieces": round((sum(float(p.get("sq_miss") or 0) for p in flagged) / n_m) ** 0.5, 2) if n_m else None},
     }
 
@@ -1331,10 +1335,13 @@ def accuracy_aggregates(rows: list[dict]) -> dict:
         p = by_product.setdefault(int(r["product_key"]), {"abs": 0.0, "act": 0.0, "last": None, "priced": False,
                                                           "ape_sum": 0.0, "ape_n": 0, "ape_sum_sl": 0.0, "ape_n_sl": 0,
                                                           "rule_rows": 0, "stockout_rows": 0,
-                                                          "near_zero_months": 0, "n_months": 0, "sq_miss": 0.0})
+                                                          "near_zero_months": 0, "n_months": 0, "sq_miss": 0.0,
+                                                          "abs_sold": 0.0})
         p["abs"] += abs(fc - act)
         p["n_months"] += 1
-        p["sq_miss"] += (fc - act) ** 2
+        # The near-zero line's MAE and RMSE, on POOLED_WAPE_RULE like the WAPE beside them (2026-11-17)
+        p["abs_sold"] += abs(fc - sold)
+        p["sq_miss"] += (fc - sold) ** 2
         if r.get("method") != RULE_ORDER_METHOD and _near_zero_month(r):
             p["near_zero_months"] += 1
         p["act"] += abs(act)
@@ -1409,7 +1416,7 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
             FROM scored GROUP BY month) x
         UNION ALL
         SELECT 'product', row_to_json(x) FROM (
-            SELECT p.product_key, p.abs_miss, p.abs_actual, p.priced, p.rule_rows, p.stockout_rows, p.ape_sum, p.ape_n, p.ape_sum_sl, p.ape_n_sl, p.near_zero_months, p.n_months, p.sq_miss, l.month, l.direction, l.run_length,
+            SELECT p.product_key, p.abs_miss, p.abs_actual, p.priced, p.rule_rows, p.stockout_rows, p.ape_sum, p.ape_n, p.ape_sum_sl, p.ape_n_sl, p.near_zero_months, p.n_months, p.sq_miss, p.abs_miss_sold, l.month, l.direction, l.run_length,
                    l.miss_pieces, l.price_per_piece, l.sku_code, l.product_name, l.possibly_stock_limited
             FROM (SELECT product_key, SUM(ABS(forecast_pieces - actual_pieces)) AS abs_miss,
                          SUM(ABS(actual_pieces)) AS abs_actual, bool_or(price_per_piece IS NOT NULL) AS priced,
@@ -1419,7 +1426,9 @@ def accuracy_summary_query(start: str, end: str, run_id: int | None = None) -> t
                                           AND avg_monthly_pieces > 0
                                           AND actual_pieces < {NEAR_ZERO_SHARE} * avg_monthly_pieces) AS near_zero_months,
                          COUNT(*) AS n_months,
-                         COALESCE(SUM(POWER(forecast_pieces - actual_pieces, 2)), 0) AS sq_miss,
+                         -- the near-zero line's MAE and RMSE, on POOLED_WAPE_RULE like the WAPE beside them (2026-11-17)
+                         COALESCE(SUM(POWER(forecast_pieces - GREATEST(actual_pieces, 0), 2)), 0) AS sq_miss,
+                         SUM(ABS(forecast_pieces - GREATEST(actual_pieces, 0))) AS abs_miss_sold,
                          COUNT(*) FILTER (WHERE method IS DISTINCT FROM 'rule_order'
                                           AND {zero}) AS stockout_rows,
                          COALESCE(SUM(ABS(forecast_pieces - actual_pieces) / actual_pieces) FILTER (
@@ -1466,7 +1475,7 @@ def accuracy_aggregates_from_query(rows: list[dict]) -> dict:
                 "ape_sum": float(d.get("ape_sum") or 0), "ape_n": int(d.get("ape_n") or 0),
                 "ape_sum_sl": float(d.get("ape_sum_sl") or 0), "ape_n_sl": int(d.get("ape_n_sl") or 0),
                 "near_zero_months": int(d.get("near_zero_months") or 0), "n_months": int(d.get("n_months") or 0),
-                "sq_miss": float(d.get("sq_miss") or 0),
+                "sq_miss": float(d.get("sq_miss") or 0), "abs_sold": float(d.get("abs_miss_sold") or 0),
                 "rule_rows": int(d.get("rule_rows") or 0), "stockout_rows": int(d.get("stockout_rows") or 0),
                 "last": {k: d[k] for k in ("month", "direction", "run_length", "miss_pieces", "price_per_piece",
                                            "sku_code", "product_name", "possibly_stock_limited")}}

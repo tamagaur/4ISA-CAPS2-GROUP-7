@@ -1,9 +1,9 @@
 {
   "passed": true,
-  "code_hash": "1a6053d60426264f5620a5adb965237060f90cbf9d7b6a2fa2b31beadf3f44f1",
+  "code_hash": "587c664400683b997aba7241c23a87c92782346f15e6ec782697db5581ac4b5e",
   "target": "127.0.0.1/ssm_rehearsal",
   "backup": "full_backup_20261117T083516Z",
-  "when": "2026-11-17T09:02:40.570488+00:00",
+  "when": "2026-11-17T10:49:31.766133+00:00",
   "plan_start": [
     115,
     330212
@@ -12,7 +12,7 @@
     "load_first": {
       "exact": true,
       "exit": 0,
-      "seconds": 177,
+      "seconds": 160,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
@@ -26,7 +26,7 @@
     "load_second": {
       "exact": true,
       "exit": 0,
-      "seconds": 201,
+      "seconds": 210,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
@@ -41,7 +41,7 @@
     "rollback_second": {
       "exact": true,
       "exit": 0,
-      "seconds": 47,
+      "seconds": 44,
       "differences": [],
       "plan": {
         "rows": 131,
@@ -55,7 +55,7 @@
     "rollback_first": {
       "exact": true,
       "exit": 0,
-      "seconds": 51,
+      "seconds": 50,
       "differences": [],
       "plan": {
         "rows": 115,
@@ -67,7 +67,7 @@
     "load_first_again": {
       "exact": true,
       "exit": 0,
-      "seconds": 146,
+      "seconds": 165,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
@@ -81,7 +81,7 @@
     "load_second_again": {
       "exact": true,
       "exit": 0,
-      "seconds": 179,
+      "seconds": 394,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
@@ -96,7 +96,7 @@
     "rollback_first_with_second_loaded": {
       "exact": true,
       "exit": 0,
-      "seconds": 42,
+      "seconds": 67,
       "differences": [],
       "plan": {
         "rows": 115,
@@ -108,7 +108,7 @@
     "load_first_third": {
       "exact": true,
       "exit": 0,
-      "seconds": 123,
+      "seconds": 203,
       "tables_changed": 15,
       "loaded": [
         "2026-03"
@@ -122,7 +122,7 @@
     "load_second_third": {
       "exact": true,
       "exit": 0,
-      "seconds": 205,
+      "seconds": 261,
       "tables_changed": 14,
       "loaded": [
         "2026-03",
@@ -143,7 +143,7 @@
         "2026-04"
       ],
       "said": "the 2026-06 plan opens from the stock count of 2026-05 (or, projected from it, of 2026-04) and neither is in the system, so 2026-05 cannot be planned. The Data Management page loads sales only: that m",
-      "seconds": 1
+      "seconds": 2
     },
     "crash_mid_run_then_rollback": {
       "exact": true,
@@ -161,7 +161,7 @@
         "rows": 115,
         "pieces": 330212
       },
-      "seconds": 28
+      "seconds": 55
     }
   }
 }

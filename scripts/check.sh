@@ -2,7 +2,8 @@
 # scripts/check.sh - the project's one check command.
 #
 #   scripts/check.sh --fast   (target < 90 s; run constantly)
-#       backend lint, frontend lint, the pinned-figure verification, the Chapter 4 code figures
+#       backend lint, frontend lint, the pinned-figure verification, the six pinned evaluation metrics against live
+#       (scripts.evaluation_metrics --verify), the Chapter 4 code figures
 #       (docs/CHAPTER4_CODE_FIGURES.json: route count and sign-in split, @cached GET routes, opt-in list size), the cross-endpoint invariants
 #   scripts/check.sh --full   everything above + the whole pytest suite + its pinned totals + the manuscript's statements against
 #       live (scripts.manuscript_figures --verify) + the frontend unit tests + the frontend production build
@@ -69,6 +70,10 @@ pinned() {
   grep -q "not read" "$TMP/pinned.txt" && { echo "FAIL: the live actuals version could not be read, so the check was only partly run"; rc=1; }
   return $rc
 }
+# The six evaluation metrics (MAE, RMSE, MAPE, WAPE, MASE, R²) x 3 populations x 2 windows, pinned in docs/EVALUATION_METRICS.json
+# (2026-11-17): recomputed from live and compared; a divergence, a definition changed without a re-pin, a hand-edited
+# docs/EVALUATION_METRICS.md, a disagreement with the published headline WAPE, or live not read FAILS.
+evaluation()    { "$PY" -m scripts.evaluation_metrics --verify; }
 chapter_static() { "$PY" -m scripts.chapter_figures --verify; }
 chapter_totals() { "$PY" -m scripts.chapter_figures --verify-junit "$TMP/invariants.xml" "$TMP/full.xml"; }
 # Every statement of the manuscript that scripts/manuscript_figures.py checks, read against live (read-only, nothing written in
@@ -109,6 +114,7 @@ echo "    database read by every live check: $TARGET"
 step "backend lint (ruff, correctness rules)" lint_backend
 step "frontend lint (oxlint, errors)" lint_frontend
 step "pinned figures reproduce" pinned
+step "six evaluation metrics equal the pinned set (live)" evaluation
 step "Chapter 4 code figures (routes, sign-in split, cached GETs, opt-in list)" chapter_static
 step "cross-endpoint invariants (tests/invariants)" invariants
 if [ "$MODE" = "--full" ]; then

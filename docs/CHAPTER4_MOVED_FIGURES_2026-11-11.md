@@ -70,7 +70,7 @@ level (4,200 of 21,250 rows). Less safety stock is credited, so more of the unde
 | C: months beyond / rate | 1,705 / 14.59% | **1,782 / 15.25%** |
 | C: absorbed / beyond pieces | 167,047 / 154,277 | **153,426 / 167,898** |
 
-Did not move: headline pooled WAPE 30.12%, MASE below 1 for 110 of 175 (median 0.823), over-forecast pieces, the card's
+Did not move: pooled WAPE 30.12% of the run WITHOUT the calendar factor (run 20; the published headline is the calendar-adjusted run's, 28.87% since 2026-11-12), MASE below 1 for 110 of 175 (median 0.823; 115 / 0.755 since 2026-11-13), over-forecast pieces, the card's
 company-total and pooled WAPE (the forecasts are unchanged).
 
 ## 4. Charts 8, 9, 10 (`reports/evidence/ch08-10`, regenerated in this commit)
@@ -272,7 +272,7 @@ the 2026-11-13 brief's second gate (STATE.md). DEC-41's text in ARCHITECTURE.md 
 
 ### 9.1 The MAPE basis and the stock-limited label, applied 2026-11-15 (no database write)
 
-Only the basis of the MAPE and the definition of the stock-limited label changed; WAPE (company 8.52% / 7.22% / 9.07%, pooled 32.04% / 36.53% / 27.25%), every plan figure, every breakdown and every other row above are the same on live (read through the card's own route, `scripts/score_stock_limited_rule.py`, 2026-11-15).
+Only the basis of the MAPE and the definition of the stock-limited label changed; WAPE (company 8.52% / 7.22% / 9.07%, pooled 32.04% / 36.53% / 27.25%), every plan figure, every breakdown and every other row above are the same on live (read through the card's own route, `scripts/score_stock_limited_rule.py`, 2026-11-15). **Since 2026-11-17 the pooled WAPE counts a net-negative month as 0 sold: 31.95% / 36.33% / 27.24% on the same three ranges** (the company totals did not move; the pinned set is `docs/EVALUATION_METRICS.md`).
 
 | Figure (Tier A, Unilever; windows Mar 2025-Feb 2026 / Sep 2025-Feb 2026 / 2024-01..2025-08) | Before (card as deployed) | After |
 |---|---|---|

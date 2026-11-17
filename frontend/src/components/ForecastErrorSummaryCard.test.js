@@ -61,7 +61,8 @@ const fullAnswer = () => ({
     under_20_pct: 40, at_or_above_50_pct: 30, at_or_above_100_pct: 5, rule_ordered_products: 2, rule_ordered_product_months: 6,
     stock_limited_variant: { value: 0.318, label: 'Leaving out stock-limited months.', months_set_apart: 40, products: 179, under_20_pct: 41, at_or_above_100_pct: 4 },
     all_products: { value: 0.387, mean: 0.5, products: 218 },
-    near_zero_flag: { products: 39, product_months: 120, label: 'Near zero.', mae_pieces: 4280.2, rmse_pieces: 10696.4 },
+    // near-zero MAE and RMSE on the WAPE's basis (a net-negative month = 0 sold) since 2026-11-17: live 4,241 / 10,676 over 368 months
+    near_zero_flag: { products: 39, product_months: 368, label: 'Near zero.', mae_pieces: 4241.1, rmse_pieces: 10676.3 },
     planned_products: {
       value: 0.272, products: 100, plan_products: 115, planning_cycle_date: '2026-03-01', lp_run_key: 10,
       near_zero_products: 14, no_percentage_products: 0, not_scored_products: 1,
@@ -93,8 +94,8 @@ const EMPTY_AS_TEXT = /\bnull\b|\bundefined\b|\bNaN\b/;
 
 test('a full answer: every figure on both lines', () => {
   const out = text(render({ accuracy: fullAnswer() }));
-  for (const s of ['8.5%', '32.0%', '32.4%', '31.8%', '38.7%', '4,280', '10,696', '115 of 175', '(median 0.76)', '27.2%',
-    'LP run 10']) {
+  for (const s of ['8.5%', '32.0%', '32.4%', '31.8%', '38.7%', '4,241', '10,676', '115 of 175', '(median 0.76)', '27.2%',
+    'LP run 10', 'those 39 only', 'near-zero ones included', 'forecast products with a MASE']) {
     assert.ok(out.includes(s), `missing ${s}`);
   }
 });

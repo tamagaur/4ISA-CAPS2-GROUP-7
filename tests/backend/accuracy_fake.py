@@ -14,6 +14,7 @@ def accuracy_summary_rows(raw: list[dict], plan: dict | None = None) -> list[dic
             "rule_rows": p["rule_rows"], "stockout_rows": p["stockout_rows"], "ape_sum": p["ape_sum"], "ape_n": p["ape_n"],
             "ape_sum_sl": p["ape_sum_sl"], "ape_n_sl": p["ape_n_sl"],
             "near_zero_months": p["near_zero_months"], "n_months": p["n_months"], "sq_miss": p["sq_miss"],
+            "abs_miss_sold": p["abs_sold"],
             **{k: p["last"].get(k) for k in ("month", "direction", "run_length", "miss_pieces", "price_per_piece",
                                               "sku_code", "product_name", "possibly_stock_limited")}}})
     out.append({"kind": "total", "d": {

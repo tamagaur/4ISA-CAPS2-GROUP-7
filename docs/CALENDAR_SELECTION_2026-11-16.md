@@ -9,7 +9,7 @@ every factor reads only months before its target.
 
 ## Answer
 **Nothing beats what is live under this protocol.** Choosing on past months and testing on the next, the whole procedure scores 31.85%
-on 2025-03..2026-02 against 31.93% for live and 33.39% for no factor: a tie with live (0.08 points). The pick differs by fold
+on 2025-03..2026-02 against 31.93% for the live settings in this panel (the panel applies the factor before succession and fading, so this is not the card's live 31.95%, docs/EVALUATION_METRICS.md) and 33.39% for no factor: a tie with live (0.08 points). The pick differs by fold
 (T1 a median-grain setting 0.16 points worse than live; T2 and T3 a gated setting 0.41 and 0.19 points better, intervals include zero).
 No build and no rehearsal: nothing survives to rehearse. The live plan (115 rows, 330,212 pieces) is unchanged.
 

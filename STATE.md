@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17 (final sweep).
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17 (evaluation metrics pinned).
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -15,6 +15,34 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    (git-ignored).)
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+THE SIX EVALUATION METRICS ARE PINNED AND CHECKED AGAINST LIVE (2026-11-17, Kelvin's brief; live read only, in READ ONLY
+  transactions: no database write; plan 115 / 330,212 unchanged).
+  THE SET. docs/EVALUATION_METRICS.json (+ .md, its rendering), written by `python -m scripts.evaluation_metrics --write`: MAE, RMSE,
+  WAPE, MAPE, MASE, R² x forecastable / order plan / all scored x Mar 2025-Feb 2026 / Jan 2024-Feb 2026, each with its products and
+  product-months and its definition; mart.accuracy_mart run 21 (DEFAULT_BACKTEST_LABEL), Unilever, actual = max(net, 0) for every
+  metric. Mar 2025-Feb 2026: forecastable 179 / 1,647: MAE 3,881.6, RMSE 11,855.5, WAPE 29.38%, MAPE 32.42%, MASE 0.722 (145),
+  R² 0.272 (161); order plan 100 / 1,010: 3,351.5, 9,019.6, 28.17%, 27.21%, 0.626 (83), 0.331 (96); all scored 233 / 2,052: 3,898.1,
+  11,551.3, 31.95%, 38.70% (218), 0.718 (190), 0.299 (203). Jan 2024-Feb 2026 in the .md. MASE here is the backtest's (scale = the
+  product's naive month-to-month change before the window), not the stored entry-test MASE (115 of 175, median 0.755). R² benchmarks
+  month t against the product's mean over the months BEFORE t. The recon's in-window R² (each product against the mean of the scored
+  months themselves, median -0.03) is a hindsight benchmark: computed nowhere in the repo (tests/test_evaluation_metrics.py fails if
+  the benchmark reads month t or later), labelled as such in the two git-ignored scratch folders that hold it.
+  THE CHECK. `--verify` recomputes from live and FAILS on any figure or count that differs, a changed definition, a different run or
+  plan (cycle, LP run), a hand-edited .md, the full-span all-scored WAPE not equal to the published headline (28.866153988%: same 4,370
+  rows), or live not read (exit 3). scripts/check.sh runs it in --fast and --full. tests/invariants/test_j_evaluation_metrics.py runs
+  it and holds the error card's served figures equal to the pinned cell of the same population (pooled WAPE / all scored 233; MAPE /
+  forecastable 179; every-product MAPE / all scored 218; planned line / order plan 100).
+  CARD AND LABELS. Near-zero MAE / RMSE now count a net-negative month as 0 sold like the WAPE beside them: 4,280 / 10,696 -> 4,241 /
+  10,676 (39 products, 368 months, 42 net-negative). The card line says "those 39 only", the pooled WAPE "near-zero ones included",
+  the entry test "forecast products with a MASE"; the pooled WAPE's label no longer shares "typical product" with the MAPE. Every
+  other place a metric is stated, yes or no per figure, and what was fixed: docs/EVALUATION_METRICS_INVENTORY_2026-11-17.md.
+  MONTH-LOAD GATE. backend/marts.py is in the load's hashed closure, so the rehearsal was re-run (restore of
+  full_backup_20261117T083516Z into ssm_rehearsal on 127.0.0.1:55432; live not written): 11 of 11 steps EXACT, March 131 / 1,016,754,
+  April 138 / 985,960, every rollback back to the start; docs/MONTH_LOAD_REHEARSAL.json rewritten.
+  MEASURED on the final tree: check.sh --full GREEN against live, 719 s, 12 of 12 steps (the new one: 144 pinned figures equal live);
+  invariants 36 passed (10 files); suite 2873 passed, 18 opt-in not run, 0 failed; Chapter 4 totals re-pinned 2915 -> 2927 collected
+  (12 new tests); manuscript 265 statements, 193 agree, the same 72 held; frontend 260 tests from 24 files; build OK.
 
 FINAL SWEEP (2026-11-17, Kelvin's brief; read side only on live: no live write, plan 115 / 330,212 unchanged; backup of live
   backups/full_backup_20261117T083516Z, read-only, PASS, for the rehearsal below).
@@ -134,7 +162,7 @@ SMALL FIXES (2026-11-16): log lines no longer carry an e-mail address in full (b
 
 THE CALENDAR ADJUSTMENT UNDER AN OUT-OF-SAMPLE PROTOCOL (2026-11-16, recon only: no database write, nothing applied; plan still 115 / 330,212). Protocol
   committed first (docs/CALENDAR_SELECTION_PROTOCOL_2026-11-16.md, sha256 27ae3eef...); report docs/CALENDAR_SELECTION_2026-11-16.md. NOTHING BEATS LIVE: choose-on-past,
-  test-on-next pooled WAPE 31.85% against live 31.93% and none 33.39% (2025-03..2026-02). Shrink 0.5 survives out of sample (flat 0.4-0.8). No grain is right
+  test-on-next pooled WAPE 31.85% against 31.93% for the live settings in the panel (the panel applies the factor before succession and fading, so this is not the card's live 31.95%) and none 33.39% (2025-03..2026-02). Shrink 0.5 survives out of sample (flat 0.4-0.8). No grain is right
   throughout; March is the open case (company 1.136 / 1.169, product median 0.906 / 1.033; live moves March 2025 -13.9% -> -15.6%). The December rule is 31.8% of
   the factor's gain and cannot be tested out of sample (first honest test: December 2026). March 2026 has two usable earlier years, not three. Seasonal-naive blend fails.
 
@@ -158,7 +186,7 @@ THE NEAR-ZERO FLAG (2026-11-15, read side only: no forecast, order, plan or data
   mean MAPE was 1,057% (median 38.7%) on Mar 2025-Feb 2026 because 46 product-months where a product sold under 5% of its usual level carry
   94% of the percentage errors (38 are the first month of a collapse). backend/marts.NEAR_ZERO_SHARE = 5%: such a product is labelled, counted
   and scored on MAE / RMSE (pieces); the card's headline MAPE is the forecastable products', with the every-product MAPE in the tooltip.
-  Default range: 39 flagged products (368 months, MAE 4,280, RMSE 10,696 pieces); 179 forecastable: mean 51.7%, median 32.4%, 36 at 50%+,
+  Default range: 39 flagged products (368 months, MAE 4,280, RMSE 10,696 pieces on raw net pieces; 4,241 / 10,676 since 2026-11-17, a net-negative month counting as 0 sold); 179 forecastable: mean 51.7%, median 32.4%, 36 at 50%+,
   15 at 100%+. Planned products: mean 30.7%, median 27.2%, 0 at 100%+. Variant leaving out stock-limited months: 31.8%. Windows, 2% / 10%
   sensitivity, the worst-50 causes: docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md 9.2 (names in git-ignored local/WORST_50_2026-11-15.md).
   A launch-handover forecast fix was tested and does NOT hold (WAPE worse in all windows); not applied. scripts/mape_floor.py floors on the
@@ -200,7 +228,7 @@ DEPLOY + FIXES (2026-11-13, Kelvin's brief "finish the fix and make it deployabl
   Loading March on live, measured on a restored copy with the same file: default range moves to Apr 2025 - Mar 2026 (by design:
   the loaded month counts), the banner appears, the plan becomes cycle 2026-04 131 / 1,016,754 (it opens on the real count of
   2026-04-06, PHP 22.7M, against the flagged PHP 46.6M count of 2026-03-02), the error card is withheld in the default range and
-  shows 8.52 / 32.04 / 34.0% on Mar 2025 - Feb 2026. Every figure: docs/DEPLOY_AND_TEST_2026-11-13.md section 3.
+  showed 8.52 / 32.04 / 34.0% on Mar 2025 - Feb 2026 on 2026-11-13 (dated: since the MAPE basis of 2026-11-15 and the WAPE rule of 2026-11-17 the card reads 8.5 / 32.0 / 32.4 / 38.7). Every figure as it is now: docs/DEPLOY_AND_TEST_2026-11-13.md row 6.
   Deployed backend (fourisa-caps2-group-7.onrender.com) still serves 84 routes (no /batch/*): it must be redeployed from kelvin-be
   before a month can be loaded there. Which branch Render watches is not in the repo (no render.yaml).
   Security: no secret value in any of 70 remote refs, the unpushed commits, the tracked tree or the deployed bundle (exact-value and
@@ -285,7 +313,7 @@ SPIKE CAP + DECEMBER DIP RULE REFUSED (2026-11-12, Kelvin's recon brief; scored,
   MAPE gate (read 2026-11-12, not changed): run_lp.py gated plan entry on Forecast_Result.mape < 20 from its first commit a28560c
   (2026-08-28) to bf8a3a3 (Maica, 2026-09-06, MASE < 1); the dashboard's portfolio gate stayed mape < 20 until c63b1d9 (2026-09-29).
   DEC-46 recorded the MASE gate on 2026-11-03. Chapter 3 (CP-1 manuscript, 3.4.2.2) still states the MAPE gate; the Ch4-5 drafts
-  say it was replaced. Live forecast on the Chapter 3 reading (own 80/20 holdout): 17 of 170 products under 20%, median 39.6%.
+  say it was replaced. The forecast live on 2026-11-12 (lp_run 9's, replaced 2026-11-13) on the Chapter 3 reading (own 80/20 holdout): 17 of 170 products under 20%, median 39.6% (dated; not re-measured on today's forecast; why 170 and not 175 is unresolved).
 
 FINAL BUNDLE (2026-11-11, Kelvin's brief "last bundle before the code freeze"; APPLIED to live 2026-11-11, see the plan line; do not
 re-run: its preflight now refuses, the ledger ends at 0078). Verifier defect, not fixed (script is spent): it compares definitions_md5
@@ -373,7 +401,7 @@ Chapter 4 code figures (2026-11-02): docs/CHAPTER4_CODE_FIGURES.json pins route 
 Connection route (2026-11-04): SUPABASE_DIRECT_URL now holds the session pooler (aws-0-ap-south-1.pooler.supabase.com:5432); the name is historical. db.<ref>.supabase.co has an AAAA record and no A record, and this network has no IPv6 route. The API server reads only SUPABASE_DB_URL (6543, unchanged). Compared through the new route: all 104 tables match the baseline, plan unchanged. Proves the route from this laptop, not from Render. Three stale worktree .env files still name the direct host (dsd-blank-capture, dsd-e2e-audit, dsd-fe-merge).
 Singapore move, preparation only (2026-11-04): baseline, dump (session pooler, 13.4 MB, 63 tables, 547,449 rows, counts equal the baseline) and gap list are in local/sg_migration_2026-11-04/. Nothing restored, no new project. Any restore must lock the Data API default privileges first (GAP_LIST.md step 4).
 Practice path on the pages (2026-11-04, on Main-BE): scripts.local_app serves the pages from ssm_practice, gated by backend/practice_copy.confirmed() (the forecast's own connection test), every answer labelled X-Practice-Copy, a banner on every page. Copy-only mart.data_kind (scripts/local_pg.py) makes the marts count the generated month. Live and every other database: same SQL, no connection made for it. Pages move at Run, not at Close. Reorder page shows "0 accepted, 0 dismissed, 109 not decided" from GET /recommendations?cycle=current. /batch/files checks a file before keeping it (scripts/check_upload.py, the loader's own rules; docs/RAW_FILE_REQUIREMENTS.md). Body label (backend/practice_copy.PracticeBodyLabel, copy only): every 2xx JSON answer carries practice_copy, and dated objects say generated_sales_month or rests_on_generated_sales. practice_artefacts now reads the body and calls the routes with real identifiers (it had counted nine 404/422 answers as clean). Stock count slot: the loader reads an SSIS --file (scripts/load_slices.py extract_soh, run_incremental, and since 2026-11-04 run_full: a 324-sheet --all-slices dry run on the throwaway database staged the given workbook in place of data/raw's, 162 slices, 0 refused; not run as a write). The data/raw manifest for 2026-02 + 2026-03 is unchanged, sha256:241d07e1..., measured 2026-11-04 on this tree.
-  Forecast error on the copy (2026-11-04, hard rule 2): withheld with its reason, never labelled. backend/practice_copy.withhold_accuracy, in the copy-only middleware, no query changed: a range reaching a generated or uploaded month (/dashboard forecast_accuracy, /dashboard/accuracy at every level, the four /dashboard/error-decomposition routes), stored mase/mape/holdout metrics/confidence band dated on or after it, the undated evaluated and unreliable counts, "(MASE x)" in text, and error lines in the panel's job log. A range ending Feb 2026 still shows 10.29% and 32.28% (run 16 since 2026-11-10; it was 10.07% and 35.22% on run 11). Uploaded sales count because nothing can tell a real file from a made-up one (found by walking one: 11% and 37% and "Error 36.1%" on February relabelled March); scripts/cycle_feedback counts those rows too (0 of 37,149 on live). Stays on the page: which products are planned or left out by the MASE test, and the threshold.
+  Forecast error on the copy (2026-11-04, hard rule 2): withheld with its reason, never labelled. backend/practice_copy.withhold_accuracy, in the copy-only middleware, no query changed: a range reaching a generated or uploaded month (/dashboard forecast_accuracy, /dashboard/accuracy at every level, the four /dashboard/error-decomposition routes), stored mase/mape/holdout metrics/confidence band dated on or after it, the undated evaluated and unreliable counts, "(MASE x)" in text, and error lines in the panel's job log. A range ending Feb 2026 showed 10.29% and 32.28% at the time of this entry (now 8.5% and 32.0%, run 21; run 16 since 2026-11-10; it was 10.07% and 35.22% on run 11). Uploaded sales count because nothing can tell a real file from a made-up one (found by walking one: 11% and 37% and "Error 36.1%" on February relabelled March); scripts/cycle_feedback counts those rows too (0 of 37,149 on live). Stays on the page: which products are planned or left out by the MASE test, and the threshold.
   Live unchanged, 12 GET answers byte-identical between f965489 and this tree in a READ ONLY transaction, label not mounted, plan 109 / 435,988.
   Sign-off on the copy: the system signs (scripts/practice_signed_load.SYSTEM_SIGNER), audit_log and etl_load_event carry that name, _signoff_practice_auto.json keeps the record and who pressed Run; --practice-auto-sign is refused on any other connection. The dry run is gone from this path, so workbooks are read once. Measured in Chrome: one count 466 s (763 s before), a sales file 189 s and 200 s, no file 165 s and 141 s (112 s measured earlier).
   plan_state on GET /recommendations (copy only, so live's answer is unchanged): the Reorder page says "This plan (2026-04) is run, not closed. 2026-03 is closed." The panel names the same two months: "Last month's plan" and "On the Reorder page now". The two months differ on purpose: the page moves at Run, the panel at Close.
@@ -404,7 +432,7 @@ Opt-in tests (2026-11-03): scripts/check.sh --optin runs the 18 (marked in scrip
 Deployed Render backend (logincred.onrender.com, probed 2026-11-03): NOT redeployed. No security headers, GET /notifications 404, GET /recommendations/dismissal-requests 405; so it predates cd8988e (2026-10-31). Its data routes were not read (no token used).
 
 Pinned (published) figures: docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json, frozen rows in
-  docs/published_snapshot_2026-10-24/ (tracked, trimmed to the columns the check reads). Headline: MASE < 1 for 109 of 175; Tier A exceeds safety stock 749 months.
+  docs/published_snapshot_2026-10-24/ (tracked, trimmed to the columns the check reads). Headline as pinned now (the JSON, re-pinned 2026-11-12): MASE < 1 for 115 of 175, median 0.755 (the manuscript's 109 / 0.827 is a held disagreement); Tier A exceeds safety stock 852 of 4,370 months. Until 2026-11-17 this line said 109 of 175 and 749.
   Verify: python -m scripts.snapshot_published_figures --verify   (or scripts/check.sh --fast, which runs it)
   Loading March 2026 sales moves the live marts, never the pinned figures.
 
