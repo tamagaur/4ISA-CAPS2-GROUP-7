@@ -1,3 +1,5 @@
+> **Dated record (2026-10-24; last edited 2026-10-28), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Backend behaviour QA, 2026-10-24 (kelvin/freeze-package at d2664ec)
 
 Read-only QA pass. One pass, nothing fixed. 16 findings, ranked by severity, each reproduced. This is a behaviour pass; the consistency audit is `reports/AUDIT_2026-10-23.md` and is not repeated. Per-product plan quantities are left out (hard rule 9); SKU codes are named so each case can be reproduced.

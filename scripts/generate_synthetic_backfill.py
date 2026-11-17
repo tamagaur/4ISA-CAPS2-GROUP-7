@@ -1,4 +1,6 @@
 """
+Figures as of 2026-08-21: the counts and rates in the comments below are those of the run that day and its fixes to 2026-09-30.
+Figures as of 2026-08-21: the counts and rates in the comments below are those of the run that day and its fixes to 2026-09-30.
 scripts/generate_synthetic_backfill.py — additional synthetic coverage-gap
 backfill (see chat instructions, session continuing
 reports/SYNTHETIC_STAGING_CONVERSION.md). Adviser-sanctioned synthetic

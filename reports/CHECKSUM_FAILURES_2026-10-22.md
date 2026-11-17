@@ -1,3 +1,5 @@
+> **Dated record (2026-10-22), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # The six sheets that fail their checksum (2026-10-22)
 
 Source: `staging/_manifest.json` (git-ignored, built 14 Sep 2026): 1,286 staged sheets, 6 with `checksum_status = "mismatch"`, 1,113 rows between them. Staging was not re-run and the manifest was not modified. The raw workbooks under `data/raw/Del Monte/` were opened read-only (openpyxl, formulas and cached values), and the staged parquet files were read, to explain each mismatch.

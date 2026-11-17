@@ -1,3 +1,5 @@
+> **Dated record (2026-10-23; last edited 2026-10-24), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Worked example: derived February 2026 receipts (Unilever)
 
 > Published figures: its two products appear in the manuscript with their arithmetic, so these figures are published and the purpose of hard rule 9 (confidentiality of unpublished per-product data) does not apply to this file.

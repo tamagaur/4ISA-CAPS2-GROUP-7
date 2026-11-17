@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # FULL DATA AUDIT — Raw Corpus + Live Database (READ-ONLY)
 
 Generated 2026-08-26. SELECT-only queries against `SUPABASE_DB_URL`; read-only

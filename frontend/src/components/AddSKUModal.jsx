@@ -19,7 +19,7 @@ const initialFormState = {
 const DEFAULT_BRANDS = [];
 
 // Every real Unilever sku_code in Product_Dimension is exactly 8 numeric
-// characters (2,098/2,098 verified), and backend/routers/sku.py enforces
+// characters (2,098/2,098 verified), and backend/routers/sku.py enforces (as of 2026-09-06)
 // only uniqueness, not shape — so the format rule lives here.
 const SKU_CODE_LENGTH = 8;
 const SKU_CODE_PATTERN = /^\d{8}$/;
@@ -47,7 +47,7 @@ const AddSKUModal = ({ isOpen, onClose, onAdd, brands = DEFAULT_BRANDS }) => {
   };
 
   // Real Unilever sku_code values are all exactly 8 digits (verified against
-  // Product_Dimension: 2,098 rows, every one 8 numeric characters), so this
+  // Product_Dimension: 2,098 rows, every one 8 numeric characters), so this (as of 2026-09-06)
   // strips anything that isn't a digit and stops at 8 rather than
   // auto-prefixing "SKU-" — that older behavior mangled a genuine code as it
   // was typed ("20071069" became "SKU-20071..."), and the backend has no

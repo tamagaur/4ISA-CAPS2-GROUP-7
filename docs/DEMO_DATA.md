@@ -24,7 +24,11 @@ figures for the first pass were queried 2026-10-15 (migrations 0052-0055); every
 | Run | Principal | Grain | real_copy | interpolated | bridged | forward_filled | backcast |
 |---|---|---|---:|---:|---:|---:|---:|
 | 7 `demonstration` | Del Monte | category | 747 | 272 | 978 | 6 | 2,147 |
-| 8 `demonstration_unilever` | Unilever | SKU | 24,906 | 0 | 0 | 0 | 12,816 |
+| 10, 11, 12 `demonstration_unilever` (each) | Unilever | SKU | 4,786 | 0 | 0 | 0 | 1,584 |
+
+Read on live 2026-11-17 (`tests/invariants/test_g_constants_match_live.py` holds both rows to live). Until then the Unilever
+row read run 8, 24,906 real_copy and 12,816 backcast (written 2026-10-16); live holds no run 8, and runs 10, 11 and 12
+(written 2026-10-16 and twice on 2026-10-20, the same generator digest) hold 4,786 and 1,584 rows each.
 
 - **Del Monte:** 82 of the 87 real category paths are covered. 5 are left out entirely because they have one real
   month and so no coefficient of variation to generate from: `/FIBER/PROMO`, `/GOURMET SPAG SAUCE/PROMO`,
@@ -61,7 +65,7 @@ any growth or decline before or after the data would be invented direction. They
 only and are never a result.
 
 - **Jitter** is a multiplier on each series' own coefficient of variation: `sd = 0.25 x CV x level`. It is not a
-  fixed value. Measured: generated CV is 0.24 x the real CV (median; p10 0.20, p90 0.29) and correlates 0.96 with
+  fixed value. Measured (2026-10-15): generated CV is 0.24 x the real CV (median; p10 0.20, p90 0.29) and correlates 0.96 with
   it, so steady products wobble little and volatile ones more. The 0.25 damping is declared, not measured, and
   means generated series are about a quarter as volatile as the real ones.
 - **Anchor override (Del Monte only).** Unilever's back-cast requires the first real month to be 2023-01 (a SKU first
@@ -133,7 +137,7 @@ file's table above, and this session did not change it. Do not confuse the two: 
   `estimated_stock_by_period` always returns `{}`, same retirement as `estimated_sales_by_period` above. Neither
   returns/stock chart line has a `demo.*` replacement wired in — a gap just shows nothing, not a wrong number.
 
-## 6. Why Unilever is not filled
+## 6. Why Unilever is not filled (evidence queried 2026-10-15)
 
 Unilever's sales listing has no row for a month a product sold nothing. The evidence that these gaps are real
 zero-sale months and not missing records (`Unilever_SKU_Demand_Fact_Real`, 4,473 in-span gap-months across 714 of
@@ -157,7 +161,7 @@ the demonstration never calls `evaluate_sku` or `backtest`. Scoring a generated 
 actuals would not measure anything real, so there is no honest number to generate — this card has no demo value,
 on purpose, not an oversight.
 
-## 8. Del Monte stock on hand (migration 0056)
+## 8. Del Monte stock on hand (migration 0056; written 2026-10-16)
 
 There is **no real Del Monte stock count at category grain anywhere in SSM's data**, confirmed live 2026-10-16:
 `Inventory_Fact_Real` for Del Monte is SKU grain only (597 products, 5,541 rows, 2023-01..2025-12) and 0 of those
@@ -209,7 +213,7 @@ lived SKUs get MA3, medium TSB, long an XGBoost+MA3 average, `model_params.metho
 row uses a different method differ by a median 8.5%** — a model-routing difference, not a demo-generation bug.
 "Barely differs from real" holds exactly where the real path also used MA3, and only there.
 
-## 10. Del Monte demonstration order plan (migration 0056/0057)
+## 10. Del Monte demonstration order plan (migration 0056/0057; written 2026-10-16)
 
 `analytics/demo/prescriptive.py`: the real formulas (`analytics.optimization.lp.compute_safety_stock` /
 `target_stock`, the same `SERVICE_Z` and the same review/lead-day placeholders the real LP applies) over the
@@ -283,7 +287,7 @@ computed instead from the demonstration's own numbers (`backend/demo_data.dead_s
   are the SAME declared figure (`POLICY_COVER_WEEKS = 3`), so the two sides anchor to the same number by
   construction.
 
-## 13. Why DAIRY and the 77 pre-2025 paths differ
+## 13. Why DAIRY and the 77 pre-2025 paths differ (2026-10-16)
 
 Both are Del Monte categories whose real data does not reach the window end (2025-12), but only one is extended:
 

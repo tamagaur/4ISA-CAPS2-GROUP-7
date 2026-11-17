@@ -10,7 +10,7 @@ GS/BO. Grain = invoice (returns). Same invoice-level column vocabulary as
 Sales Register (Del Monte variant).
 
 Note: these sheets triggered a real fix to profiling.detect.trim_grid — a
-title banner repeated every 8th column out to ~col 490 (a print-layout
+title banner repeated every 8th column out to ~col 490 (a print-layout (as of 2026-07-10)
 artifact, present only in the title row) was defeating the old
 any-non-blank trailing-column trim and making that banner's raw cell count
 outscore the real 11-column header in detect_header. Fixed generically

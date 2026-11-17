@@ -114,3 +114,118 @@ def test_claude_md_tier_a_count_and_calendar_range_are_live(plan, sql):
                 FROM forecast_result WHERE forecast_date = '2026-03-01' AND status = 'ok'""")[0]
     assert int(cal[1]) == fr["ok"]
     assert (float(cal[2]), float(cal[3])) == (pytest.approx(float(fr["lo"]), abs=5e-5), pytest.approx(float(fr["hi"]), abs=5e-5))
+
+
+# ---- figures stated in the rules and the docs that live reproduces (2026-11-17, the figure-provenance audit). Each is named
+# ---- in docs/FIGURE_PROVENANCE.json `checked`, so scripts/figure_provenance.py --verify knows a live test reads it.
+DEMO = (REPO / "docs" / "DEMO_DATA.md").read_text(encoding="utf-8")
+GOVERNANCE = (REPO / "docs" / "DATA_GOVERNANCE.md").read_text(encoding="utf-8")
+
+# A month with any row (a blank capture included) counts as present: the definition the 4,473 was stated on (2026-10-15).
+GAP_SQL = """WITH m AS (SELECT product_key, left(calendar_month, 7) AS mo FROM unilever_sku_demand_fact_real GROUP BY 1, 2),
+                  s AS (SELECT product_key, MIN(mo) AS lo, MAX(mo) AS hi, COUNT(*) AS n FROM m GROUP BY 1),
+                  g AS (SELECT (left(hi, 4)::int * 12 + right(hi, 2)::int) - (left(lo, 4)::int * 12 + right(lo, 2)::int) + 1 - n AS gap FROM s)
+             SELECT SUM(gap) AS gap_months, COUNT(*) FILTER (WHERE gap > 0) AS with_gap, COUNT(*) AS products FROM g"""
+
+
+def test_unilever_gap_and_blank_capture_figures_are_live(sql):
+    """CLAUDE.md ("Why data is missing") and docs/DEMO_DATA.md section 6: Unilever's in-span gap months; CLAUDE.md's blank captures."""
+    g = sql(GAP_SQL)[0]
+    live = (int(g["gap_months"]), int(g["with_gap"]), int(g["products"]))
+    for where, text in (("CLAUDE.md", CLAUDE), ("docs/DEMO_DATA.md", DEMO)):
+        m = _found(r"([\d,]+) in-span gap-months across (\d+) of\s+([\d,]+) products", text, where)
+        assert (int(_num(m[1])), int(m[2]), int(_num(m[3]))) == live, f"{where} states {m[0]!r}; live gives {live}"
+    b = sql("""SELECT COUNT(*) AS n, COUNT(DISTINCT product_key) AS skus FROM unilever_sku_demand_fact_real
+               WHERE quantity_sold IS NULL""")[0]
+    after = sql("""SELECT COUNT(DISTINCT d.product_key) AS n FROM unilever_sku_demand_fact_real d
+                   JOIN (SELECT product_key, MIN(calendar_month) AS first FROM unilever_sku_demand_fact_real
+                         WHERE quantity_sold > 0 GROUP BY 1) s ON s.product_key = d.product_key
+                   WHERE d.quantity_sold IS NULL AND d.calendar_month > s.first""")[0]["n"]
+    m = _found(r"never read as zero \((\d+) rows, (\d+) SKUs\)", CLAUDE, "CLAUDE.md's NULL QUANTITY note")
+    assert (int(m[1]), int(m[2])) == (b["n"], b["skus"])
+    m = _found(r"a blank after its first sale \((\d+) of the (\d+)\)", CLAUDE, "CLAUDE.md's NULL QUANTITY note")
+    assert (int(m[1]), int(m[2])) == (after, b["skus"])
+
+
+def test_data_governance_inventory_counts_are_live(sql):
+    """docs/DATA_GOVERNANCE.md's data inventory: the counts of each personal or confidential column it names."""
+    cases = [
+        (r"`customer_dimension.customer_name` \(([\d,]+) distinct\)", "SELECT COUNT(DISTINCT customer_name) AS n FROM customer_dimension"),
+        (r"`salesreturn_fact.customer_name` \(([\d,]+)\)", "SELECT COUNT(DISTINCT customer_name) AS n FROM salesreturn_fact"),
+        (r"`salesman_dimension.salesman_name` \(([\d,]+) distinct\)", "SELECT COUNT(DISTINCT salesman_name) AS n FROM salesman_dimension"),
+        (r"`etl_quarantine.raw_values` \(([\d,]+) rows", "SELECT COUNT(*) AS n FROM etl_quarantine"),
+        (r"`invoice_num` on `sales_fact` \(([\d,]+) distinct\)", "SELECT COUNT(DISTINCT invoice_num) AS n FROM sales_fact"),
+        (r"`salesreturn_fact` \(([\d,]+)\), `purchase_fact`", "SELECT COUNT(DISTINCT invoice_num) AS n FROM salesreturn_fact"),
+        (r"`purchase_fact` \(([\d,]+)\) \| Confidential", "SELECT COUNT(DISTINCT invoice_num) AS n FROM purchase_fact"),
+    ]
+    for pattern, query in cases:
+        m = _found(pattern, GOVERNANCE, "docs/DATA_GOVERNANCE.md")
+        assert int(_num(m[1])) == sql(query)[0]["n"], f"docs/DATA_GOVERNANCE.md states {m[0]!r}; live differs"
+
+
+def test_demo_data_doc_counts_are_live(sql):
+    """docs/DEMO_DATA.md: the rows per origin of each demonstration run, Del Monte's generated stock, its demo order plan."""
+    origins = ("real_copy", "interpolated", "bridged", "forward_filled", "backcast")
+    dm = {r["origin"]: r["n"] for r in sql("SELECT origin, COUNT(*) AS n FROM demo.dm_category_sales WHERE run_id = 7 GROUP BY 1")}
+    m = _found(r"\| 7 `demonstration` \| Del Monte \| category \| ([\d,]+) \| ([\d,]+) \| ([\d,]+) \| ([\d,]+) \| ([\d,]+) \|", DEMO,
+               "docs/DEMO_DATA.md section 1")
+    assert tuple(int(_num(x)) for x in m.groups()) == tuple(dm.get(o, 0) for o in origins)
+    un = sql("SELECT run_id, origin, COUNT(*) AS n FROM demo.unilever_sku_sales GROUP BY 1, 2")
+    runs = sorted({r["run_id"] for r in un})
+    m = _found(r"\| ([\d, ]+) `demonstration_unilever` \(each\) \| Unilever \| SKU \| ([\d,]+) \| 0 \| 0 \| 0 \| ([\d,]+) \|", DEMO,
+               "docs/DEMO_DATA.md section 1")
+    assert [int(x) for x in m[1].split(",")] == runs
+    for run in runs:
+        got = {r["origin"]: r["n"] for r in un if r["run_id"] == run}
+        assert (got.get("real_copy", 0), got.get("backcast", 0)) == (int(_num(m[2])), int(_num(m[3]))), f"run {run}: {got}"
+    st = sql("SELECT COUNT(*) AS n, COUNT(DISTINCT category_path) AS cats, MIN(run_id) AS lo, MAX(run_id) AS hi FROM demo.dm_category_stock")[0]
+    m = _found(r"Live: ([\d,]+) rows, (\d+) categories, run_id (\d+)", DEMO, "docs/DEMO_DATA.md section 8")
+    assert (int(_num(m[1])), int(m[2]), int(m[3]), int(m[3])) == (st["n"], st["cats"], st["lo"], st["hi"])
+    lp = {r["category_path"]: float(r["q"]) for r in sql("SELECT category_path, ROUND(order_qty::numeric, 2) AS q FROM demo.dm_category_lp WHERE run_id = 7")}
+    m = _found(r"BEVERAGE ([\d,.]+),\s+CULINARY ([\d,.]+), DAIRY ([\d,.]+), FRUITS ([\d,.]+), INNOVATION ([\d,.]+) \(before", DEMO,
+               "docs/DEMO_DATA.md section 10")
+    stated = dict(zip(("BEVERAGE", "CULINARY", "DAIRY", "FRUITS", "INNOVATION"), (_num(x) for x in m.groups())))
+    assert stated == lp, f"docs/DEMO_DATA.md states {stated}; live demo.dm_category_lp run 7 is {lp}"
+
+
+def test_pinned_figure_count_stated_in_the_runbooks_is_the_pin():
+    """The runbooks' "51 pinned figures" is the count of figures in the published snapshot pin (static, no database)."""
+    import json
+    pin = json.loads((REPO / "docs" / "PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json").read_text(encoding="utf-8"))["figures"]
+
+    def leaves(d):
+        return sum(leaves(v) if isinstance(v, dict) else 1 for v in d.values())
+    n = leaves(pin)
+    for doc, pattern in (("docs/MONTHLY_LOAD_PROCEDURE.md", r"The (\d+) pinned figures \(docs/PUBLISHED_FIGURES_SNAPSHOT"),
+                         ("docs/MONTH_LOAD_RUNBOOK.md", r"runs the (\d+) pinned figures")):
+        m = _found(pattern, (REPO / doc).read_text(encoding="utf-8"), doc)
+        assert int(m[1]) == n, f"{doc} says {m[1]} pinned figures; the pin holds {n}"
+
+
+def test_chapter_figures_pre_rounding_plan_label_is_live(db):
+    """scripts/chapter_figures.py labels a pinned measure "against the live plan's N before rounding": N is the plan's need
+    before case-pack rounding, the `live` column of the measure's own SQL summed (lp_run 10: 326,491.32)."""
+    from sqlalchemy import text
+
+    from scripts import chapter_figures as cf
+    src = (REPO / "scripts" / "chapter_figures.py").read_text(encoding="utf-8")
+    m = _found(r"against the live plan's ([\d,]+) before rounding", src, "scripts/chapter_figures.py")
+    q = cf.SINGLE_DELIVERY_SQL.replace("SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces,",
+                                       "SELECT COUNT(*) AS products, SUM(q_i) AS plan_pieces, SUM(live) AS live_raw,")
+    assert "live_raw" in q, "the measure's SQL no longer has the shape this test reads"
+    live_raw = float(db.execute(text(q)).mappings().one()["live_raw"])
+    assert int(_num(m[1])) == round(live_raw), f"chapter_figures says {m[1]}; live gives {live_raw:,.2f}"
+
+
+def test_accuracy_as_served_quotes_stored_run_5(db):
+    """scripts/accuracy_as_served.py writes "Run 5 reproduces the N% median quoted before" into docs/ACCURACY_AS_SERVED.md:
+    N is stored mart.forecast_run 5's median product WAPE, scored by the generator's own stored_run_headline."""
+    from analytics.config import long_read_db_url
+    from scripts.accuracy_as_served import stored_run_headline
+    from scripts.snapshot_published_figures import live_money
+    src = (REPO / "scripts" / "accuracy_as_served.py").read_text(encoding="utf-8")
+    m = _found(r"Run 5 reproduces the ([\d.]+)% median quoted before", src, "scripts/accuracy_as_served.py")
+    cur = db.connection().connection.cursor()
+    s5 = stored_run_headline(long_read_db_url(), 5, live_money(cur))
+    assert float(m[1]) == pytest.approx(100 * s5["median_product_wape_served"], abs=0.005), \
+        f"accuracy_as_served says run 5's median is {m[1]}%; live run 5 gives {100 * s5['median_product_wape_served']:.4f}%"

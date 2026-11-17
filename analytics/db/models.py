@@ -313,7 +313,7 @@ class UnileverSkuDemandFact(Base):
     region: Mapped[str] = mapped_column(Text, nullable=False, default="la_union")
     # DEC-11: in pieces — set from the source's reported
     # sale_quantity_pieces column, not derived from sale_quantity_cases x
-    # pack_size (only ~84% consistent with reported pieces on real data;
+    # pack_size (only ~84% consistent with reported pieces on real data; (as of 2026-08-14)
     # see schema.sql for the full note).
     quantity_sold: Mapped[decimal.Decimal | None] = mapped_column(Numeric(14, 2))
     # Added 2026-08: classify_abc() needs total_revenue per SKU; this is

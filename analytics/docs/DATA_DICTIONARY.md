@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Data Dictionary — the 7 real document families
 
 ~175 real source files, but only 7 real shapes. This is one section per family, ordered by how much the DSD actually depends on it — not alphabetically.

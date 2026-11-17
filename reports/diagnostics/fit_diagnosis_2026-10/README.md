@@ -1,3 +1,5 @@
+> **Dated record (2026-10; last edited 2026-10-02), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Fit diagnosis 2026-10: overfit, underfit and bias (Unilever, real data only)
 
 **Unilever only. Del Monte has no product-level sales**, so it is not forecast and has no product-level fit to diagnose.

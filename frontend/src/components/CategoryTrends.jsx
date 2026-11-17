@@ -49,7 +49,7 @@ import { gapLabel } from '../utils/gapReasons';
 
 // formatCompactPesos is unsigned by design (callers such as "falling ₱42k a
 // month" supply the direction in words). Revenue itself can be negative when
-// returns outweigh sales in a month — Del Monte DAIRY, Apr 2025, read "₱925"
+// returns outweigh sales in a month — Del Monte DAIRY, Apr 2025, read "₱925" (as of 2026-09-29)
 // for -₱925 — so revenue figures carry their own sign.
 const formatRevenue = (value) => (value < 0 ? `−${formatCompactPesos(value)}` : formatCompactPesos(value));
 

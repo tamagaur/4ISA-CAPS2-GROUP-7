@@ -1,3 +1,5 @@
+> **Dated record (2026-10-07), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Fit diagnosis 2026-10-07 (exp/fit-diagnosis, not merged)
 
 **Cohort:** Unilever Tier A, basis `t12m_new` (via `abc_method()`), ABC period 2026-02 = 189 products. 175 are

@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14; last edited 2026-11-13), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Questions for Sir Catubag — SSM DSD re-check
 
 **Context:** The analytics-question mind map is approved and is now our spec. A

@@ -1,3 +1,5 @@
+> **Dated record (2026-09; last edited 2026-09-20), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # ABC Phase 2 — Unilever, single vs t3m (2026-09-17)
 
 Scope: Unilever only, scratch schema (`ssm_abc_phase2.abc_scratch`), no public writes.

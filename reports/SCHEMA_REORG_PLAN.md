@@ -1,3 +1,5 @@
+> **Dated record (2026-10-08), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Schema reorganisation — plan and critique (2026-10-08)
 
 **Status: PLAN ONLY.** No DDL, no migration file, no code edit, no schema created. Nothing here is decided.

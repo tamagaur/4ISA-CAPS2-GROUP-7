@@ -1,3 +1,5 @@
+> **Dated record (2026-10-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Safety-stock source comparison (2026-10-05, read-only)
 
 **Question.** The plan sizes each product's safety stock from how much its monthly **sales** move around. Would

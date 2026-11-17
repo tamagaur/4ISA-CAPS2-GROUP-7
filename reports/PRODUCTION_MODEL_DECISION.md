@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14; last edited 2026-11-13), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Production model decision — is MA3 the right forecaster for the dashboard?
 
 **Read-only. 2026-09-06. No code, model, or DB change.** Rolling-origin 1-step,

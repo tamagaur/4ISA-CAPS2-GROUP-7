@@ -1,3 +1,5 @@
+> **Dated record (2026-11-10; last edited 2026-11-11), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Error hunt, 2026-11-10
 
 Brief (Kelvin, 2026-11-10): lower forecast error by any means, with nothing in the design protected. Two rules: nothing is

@@ -141,7 +141,7 @@ The **Decision Support Dashboard (DSD)** — always "DSD", never "DSS" — repla
 
 ---
 
-## 6. Extract stage — current focus
+## 6. Extract stage (as written 2026-07-10; its file and sheet counts are that day's discovery pass)
 
 ### 6.1 Responsibility
 Faithfully pull every data sheet from every raw file into a typed staging table, preserving source truth and attaching enough metadata for Transform to do its job. **Extract never changes meaning.**
@@ -321,7 +321,7 @@ Rename/map columns · resolve vocab A/B/C to canonical fields · dedup or choose
 ### Still open
 - **DEC-02** (two-marts model) and **DEC-06** (SCD Type 1): move PROPOSED → DECIDED as Transform/Load work formally begins.
 - **DEC-08** (EOQ): verify the requirement's source before any model or manuscript change.
-- **DEC-10's `ssis_summary` question**: does Unilever sales ever need to be a fact table (not just SKU demand)? Costs ~694 MB if yes — an explicit scope/budget decision, not a default build.
+- **DEC-10's `ssis_summary` question**: does Unilever sales ever need to be a fact table (not just SKU demand)? Costs ~694 MB if yes (estimate of 2026-08-16) — an explicit scope/budget decision, not a default build.
 - `Unilever_SKU_Demand_Fact.quantity_sold` mapping (cases vs pieces) — evidence gathered (§7 item 4), not yet decided.
 - ~~DEC-09~~ — **CLOSED (2026-08).** Load-time lookup-or-insert.
 - ~~`ssis_summary` extraction~~ — **CLOSED (T3 Option A, 2026-07).** Extractor built; DEC-04 confirmed. (Its *load destination* is the still-open DEC-10 question above — extraction and destination are separate questions.)

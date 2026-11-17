@@ -1,3 +1,5 @@
+> **Dated record (2026-10-04), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Dashboard speed baseline — 2026-10-04
 
 READ-ONLY measurement. Base: `kelvin-etl` @ `1edf5cf`. Nothing here changes code,

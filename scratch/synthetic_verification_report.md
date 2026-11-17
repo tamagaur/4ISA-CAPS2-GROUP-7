@@ -1,3 +1,5 @@
+> **Dated record (2026-08-24), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Synthetic Inventory Coverage Verification
 
 This report verifies that the synthetic data generation script successfully populated the `Inventory_Fact_Real` table in Supabase. It checks coverage across both **Del Monte** and **Unilever** from **January 2023** to **June 2026**.

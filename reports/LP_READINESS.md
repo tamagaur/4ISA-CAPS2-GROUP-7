@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14; last edited 2026-11-13), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # LP Readiness — what is blocking a defensible optimization result
 
 **Read-only analysis, 2026-09-06, branch `kelvin-etl`.** No pipeline code or data

@@ -1,3 +1,5 @@
+> **Dated record (2026-10-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Tier A on the 12-month basis + full refresh (2026-10-05)
 
 **Decision, PENDING TA CONFIRMATION (DEC-38):** Unilever Tier A = products making 80% of revenue over the last 12 months, plus products first sold within those 12 months that are Class A on the last 3 months. Rule and measurements: `kelvin/tier-a-basis` f753f4e README §7. Del Monte is unchanged (its tiers stay on the single month).

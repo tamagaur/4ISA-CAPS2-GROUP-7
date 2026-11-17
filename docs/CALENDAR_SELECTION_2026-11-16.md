@@ -1,3 +1,5 @@
+> **Dated record (2026-11-16; last edited 2026-11-17), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # The calendar adjustment under an out-of-sample protocol (2026-11-16)
 
 Protocol, fixed and committed before any candidate was scored: `docs/CALENDAR_SELECTION_PROTOCOL_2026-11-16.md` (sha256

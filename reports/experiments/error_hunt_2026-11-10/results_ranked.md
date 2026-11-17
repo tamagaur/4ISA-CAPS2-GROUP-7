@@ -1,3 +1,5 @@
+> **Dated record (2026-11-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 S1 (served since 2026-11-10): main all 38.07 / MASE 0.731; earlier all 27.86 / 0.871; main planned 32.63 / 0.586; earlier planned 28.47 / 0.789.
 
 | approach | Main all WAPE (d) | Main all MASE | Earlier all WAPE (d) | Earlier all MASE | Main planned WAPE (d) | Main planned MASE | Earlier planned WAPE (d) | Earlier planned MASE | Verdict all | Verdict planned |

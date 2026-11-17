@@ -1,3 +1,5 @@
+> **Dated record (2026-11-11; last edited 2026-11-17), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Chapter 4 figures that move with the final bundle (2026-11-11)
 
 For: whoever rebuilds Chapter 4 after `python -m scripts.apply_final_bundle --target-public` has run on live.
@@ -245,7 +247,7 @@ and 2025). Chosen on criteria fixed before the results (STATE.md).
 | Error card Mar 2025-Feb 2026: MAPE, **stock-limited months set apart** (257 months, 217 products) | was printed 34.0% (210 products; zero opening or closing count set apart) | **36.7%** |
 | Products at 50%+ MAPE (as-served frame, 183 / 237 products) | 73 / 76 | **63 / 74** |
 | Backtest pooled WAPE (as-served frame), 95% interval of the change: Sep-Feb / earlier | 38.07% / 27.86% | **36.33% [-3.43, -0.19] / 27.24% [-0.91, -0.34]** |
-| Backtest median MASE, interval: Sep-Feb / earlier | 0.731 / 0.901 | **0.646 [-0.132, -0.019] / 0.869 [-0.080, +0.016]** |
+| Backtest median MASE, interval: Sep-Feb / earlier (scale: each product's month-to-month change before the window; 192 / 188 products) | 0.731 / 0.901 | **0.646 [-0.132, -0.019] / 0.869 [-0.080, +0.016]** |
 | Planned products (lp_run 9's 110): pooled WAPE Sep-Feb / earlier | 32.63% / 28.47% | **31.07% [-3.17, -0.10] / 27.82% [-0.91, -0.37]** |
 | Headline, calendar-adjusted (whole window): median product WAPE / pooled / pesos | 37.88% / 29.69% / 10.77% | **36.37% / 28.87% / 8.70%** |
 | Headline, no calendar factor | 38.55% / 30.12% / 10.02% | unchanged (that run has no calendar factor) |
@@ -319,6 +321,6 @@ The floor is `scripts/mape_floor.py`: every month of a product forecast with the
 
 Population "planned" = the 116 products with a row in the live cycle (115 plan rows and legacy row 4), as scored by the card.
 
-**Tested and not holding (not applied; would move the plan):** a launch handover (halve a forecast for 3 months after a same brand x category, same-content or same-family code first sells, the existing succession context, `analytics/forecasting/treatments.build_contexts`), one rule fixed before scoring, on the card's rows: Mar 2025-Feb 2026 pooled WAPE 32.00% -> 32.26%, median MAPE 38.7% -> 40.6% (407 rows, 106 products moved); Sep-Feb 36.43% -> 38.17%; 2024-01..2025-08 27.25% -> 30.30%. It fires on far more products than die. The served succession and fading rules already act from the month after a collapse; only 2 product-months in the default range were scored after an already-low month with a forecast still above 20% of usual.
+**Tested and not holding (not applied; would move the plan):** a launch handover (halve a forecast for 3 months after a same brand x category, same-content or same-family code first sells, the existing succession context, `analytics/forecasting/treatments.build_contexts`), one rule fixed before scoring, on the card's rows: Mar 2025-Feb 2026 pooled WAPE 32.00% -> 32.26%, median MAPE 38.7% -> 40.6% (407 rows, 106 products moved); Sep-Feb 36.43% -> 38.17%; 2024-01..2025-08 27.25% -> 30.30%. It fires on far more products than die. *(Traced 2026-11-17: these four baselines are the card's rows, mart.accuracy_mart run 21, scored as Σ|forecast − actual| ÷ Σ|actual| by the git-ignored script that ran the test, `local/q9.py`; that rule gives 32.00% / 36.43% / 27.25% on live today. The card's rule then (÷ Σ net actual) gave 32.04% / 36.53% / 27.25%, and its rule since 2026-11-17 (a net-negative month = 0 sold) gives 31.95% / 36.33% / 27.24%. Three rules on one set of rows, not three sets of rows.)* The served succession and fading rules already act from the month after a collapse; only 2 product-months in the default range were scored after an already-low month with a forecast still above 20% of usual.
 
 **Still above 100% among the forecastable products (15 on the default range):** each is one or two months at 5-25% of usual (December and January dips, promo-bundle waves, a soft month after a delivery), where the level forecast is right on average and wrong in that month; they are real errors, not hidden.

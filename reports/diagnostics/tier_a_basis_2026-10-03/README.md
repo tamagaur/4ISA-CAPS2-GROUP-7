@@ -1,3 +1,5 @@
+> **Dated record (2026-10-03; last edited 2026-10-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Tier A basis check (2026-10-03)
 
 **TA's question:** Tier A is the set of top-selling products that together make 80% of revenue. It is currently ranked on a single month, Feb 2026, and holds 132 products. Does that list match the products that matter over longer periods? (The period a list is ranked on is called its **basis** below.)

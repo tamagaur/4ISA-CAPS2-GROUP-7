@@ -7,7 +7,7 @@ Phase-2 segmentation layer (reports/BINNING_ROUND1_2026-09.md, migration
 0018): sku_traits holds the measured facts (history length, Mann-Kendall
 trend, coefficient of variation, stability group, restart flag) and
 sku_segment holds the bin each scheme put the SKU in, with a human-
-readable bin_reason. Both were fully populated (132 rows each) but had no
+readable bin_reason. Both were fully populated (132 rows each) but had no (as of 2026-09-18)
 endpoint, so nothing in the app could show them. This reads them for one
 SKU at a time — the SKU Forecast page and the Reorder detail modal each
 show one product, so a per-SKU read is the natural grain.

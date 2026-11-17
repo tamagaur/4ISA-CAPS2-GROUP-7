@@ -350,7 +350,7 @@ const useElementWidth = (ref) => {
   return width;
 };
 // The tooltip gives the exact peso amount (the axis and end labels stay
-// compact): ₱19,217,832 — whole pesos, the source rows carry centavos the
+// compact): ₱19,217,832 — whole pesos, the source rows carry centavos the (as of 2026-10-03)
 // reader never acts on.
 
 // Which metrics the chart shows. The table always holds both.
@@ -2009,7 +2009,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // The subtitle says what the card is FOR and how a tier is decided (the
 // 80 / 95% revenue cutoffs) and for which month — the ring alone answered
 // "how big is each slice" but not "why should I care", and without the
-// month the 132 here read as contradicting the ABC page's carried-forward
+// month the 132 here read as contradicting the ABC page's carried-forward (as of 2026-09-26)
 // total.
 // `coverage` names the principals the run covers when narrower than the
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is

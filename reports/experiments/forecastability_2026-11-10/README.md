@@ -1,3 +1,5 @@
+> **Dated record (2026-11-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Forecastability classes, 2026-11-10 (backtest only)
 
 Scripts: `checks.py` (the three checks) and `classify.py` (classes, treatments, scores). Both read only the throwaway copy

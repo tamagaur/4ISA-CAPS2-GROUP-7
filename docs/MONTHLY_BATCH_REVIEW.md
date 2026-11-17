@@ -1,3 +1,5 @@
+> **Dated record (2026-11-04; last edited 2026-11-17), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Monthly batch safeguard: review notes
 
 **Status, 2026-11-04.** Built by Audrey with Claude Code, on `thea-dashboardedits`, pushed to tamagaur/4ISA-CAPS2-GROUP-7 only, not the canonical repo: it has not reached `Main-BE` or any other branch of the group's repo. **Provisional: neither Yuan nor Kelvin has reviewed or verified any of it.** **No part has run against a PostgreSQL database end to end**, because the machine it was built on has no PostgreSQL, no `backups/` folder and an empty `data/raw`. The new read-only SQL did run against live.

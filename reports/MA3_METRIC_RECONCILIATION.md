@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # MA3 metric reconciliation — which number is THE number
 
 **Read-only. 2026-09-06. No code, model, or data changed.** Reconciles the

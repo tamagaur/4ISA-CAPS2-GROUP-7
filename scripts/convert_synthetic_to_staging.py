@@ -1,4 +1,6 @@
 """
+Figures as of 2026-08-21: the counts and rates in the comments below are that day's real files.
+Figures as of 2026-08-21: the counts and rates in the comments below are that day's real files.
 scripts/convert_synthetic_to_staging.py — Phase 2 of the synthetic-staging
 conversion (see reports/SYNTHETIC_STAGING_CONVERSION.md).
 

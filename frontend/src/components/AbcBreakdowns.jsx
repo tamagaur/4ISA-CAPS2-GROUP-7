@@ -110,7 +110,7 @@ export const ParetoCard = ({ principal, period, onSelectBrand = null, headingInf
   const topCount = rows.filter((r) => r.tier === 'A').length;
   // Read off the running total at Class A's last row (rounded once), not
   // summed from per-row shares each rounded to 4 dp — the same fix as GET
-  // /abc's class totals, where the sum read Class B 14.9% for 15.0%.
+  // /abc's class totals, where the sum read Class B 14.9% for 15.0%. (as of 2026-10-01)
   const aShare = rows.filter((r) => r.tier === 'A').reduce((top, r) => Math.max(top, r.cumulative_share), 0);
   // The bracket spans the maroon bars on the chart: Class A within the top 8.
   const bracketCount = chartRows.filter((r) => !r.isOthers && r.tier === 'A').length;

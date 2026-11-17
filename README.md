@@ -49,7 +49,7 @@ The client's source files are also git-ignored and are never committed. They go 
 | Command | Covers | Takes |
 |---|---|---|
 | `--fast` | Database reachable, backend and frontend lint, pinned figures reproduce, the cross-endpoint invariants in `tests/invariants/` | under a minute; run it constantly |
-| `--full` | All of `--fast`, the whole pytest suite and its pinned totals, the frontend production build | about 10 min |
+| `--full` | All of `--fast`, the whole pytest suite and its pinned totals, the frontend production build | about 12 min (719 s and 745 s on 2026-11-17, STATE.md) |
 | `--optin` | Only the database tests that are too destructive for anywhere else, on a disposable local database it creates and drops. Needs the local PostgreSQL and a backup folder | about 3 min |
 
 **A red run** ends with a table naming each failed step; every step still runs, so the table shows all the failures at once. Read a red run by step:

@@ -1,3 +1,5 @@
+> **Dated record (2026-11-02; last edited 2026-11-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Monthly batch and feedback loop: how to run it, and the rehearsal of 2026-11-02
 
 Written for: the team members who will run the month, or defend it.

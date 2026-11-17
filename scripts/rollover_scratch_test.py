@@ -16,7 +16,7 @@ scratch schema, where the isolation is the schema boundary and is proved, not as
    1  the scratch schema name starts ssm_ and is exactly ssm_rollover_test
    2  no migration is pending on public, and none about to be applied to scratch names app., public. or mart.
       (the hard guard in scripts/run_canonical_load.assert_scratch_migrations_safe, which also refuses the build itself)
-   3  public (and mart, app) row counts and content hashes of 17 tables are identical before and after
+   3  public (and mart, app) row counts and content hashes of 17 tables are identical before and after (as of 2026-10-24)
    4  no row of any table in public, mart, app or demo contains the string rollover_test
    5  the planning mart and the mart refresh are never reached (planning_mart switched off, refresh_marts raises if called)
    6  the plan of the database it runs on reads the same rows and pieces afterwards as before (read from that database both

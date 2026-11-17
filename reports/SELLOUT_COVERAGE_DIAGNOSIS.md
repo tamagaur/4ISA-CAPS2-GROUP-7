@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Diagnosis: Del Monte sell_out incomplete category coverage
 
 **My hypothesis going in — "the generator doesn't hold the category roster constant across months" — is WRONG.** All four questions were checked directly against the raw files/DB, not assumed. No fixes applied.

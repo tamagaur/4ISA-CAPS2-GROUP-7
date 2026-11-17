@@ -1,3 +1,5 @@
+> **Dated record (2026-09-29; last edited 2026-11-03), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Proposal: align the LP / reorder plan with how SSM actually orders
 
 > **Correction, 2026-11-03.** The weekly split this proposal describes was never built. No code splits the month's order into weekly purchase orders: the plan is one monthly quantity per product. The 8-business-day window assumes SSM's own stated practice of ordering weekly, which the system neither implements nor verifies.

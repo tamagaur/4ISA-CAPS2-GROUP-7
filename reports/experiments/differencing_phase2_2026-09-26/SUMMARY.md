@@ -1,3 +1,5 @@
+> **Dated record (2026-09-26; last edited 2026-11-03), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Differencing, repeated transforms and ARIMA — phase 2, 2026-09-26
 
 **Personal experiment.** It lives on local branch `experiment/target-transforms`

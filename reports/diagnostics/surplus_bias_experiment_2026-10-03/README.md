@@ -1,3 +1,5 @@
+> **Dated record (2026-10-03), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Surplus-bias fix experiment, stock-aware: Unilever Tier A as of 2026-02
 
 Read-only, offline experiment, 2026-10-03, branch `kelvin/surplus-bias-experiment`.

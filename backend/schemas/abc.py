@@ -119,7 +119,7 @@ class ABCResponse(BaseModel):
     # {principal display name: 'YYYY-MM'} — each principal's own run (they differ).
     tier_a_periods: dict[str, str] = {}
     tier_summary: list[TierSummary] = []
-    # Which Tier A basis the tiers were counted on, per principal (backend/abc_basis.py), so a count of 189 here
+    # Which Tier A basis the tiers were counted on, per principal (backend/abc_basis.py), so a count of 189 here (as of 2026-10-23)
     # and 175 on the Dashboard's tier cards each say what they are. None only on an empty response.
     basis: dict | None = None
     rules: ABCRules | None = None

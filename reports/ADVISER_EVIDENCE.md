@@ -1,3 +1,5 @@
+> **Dated record (2026-08-27), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Adviser Evidence Pack — SARIMA Replacement Discussion (Unilever Only)
 
 Read-only diagnosis. No model code changed, nothing refit, nothing

@@ -1,3 +1,5 @@
+> **Dated record (2026-11-17), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Where an evaluation metric is stated, and whether it agrees with the pinned set (2026-11-17)
 
 **The pinned set:** `docs/EVALUATION_METRICS.json` / `.md` (`scripts/evaluation_metrics.py`; checked against live by `scripts/check.sh`,
@@ -36,6 +38,14 @@ and window as a pinned cell, value equal to the precision shown; "n.a." = a diff
 | Dated records (reports/ experiment folders, STATE.md entries with a date, KNOWN_ISSUES A12 / P5b) | dated, labelled with their run; not current claims |
 | Comments with old counts (Charts.jsx :2624 / :2645, dashboard.py :105, abc.py :103) | each carries its date |
 | Company-total WAPE "all 233 scored products (pesos)" | 9 product-months of 2 products have no price on Mar 2025-Feb 2026 (live, read-only) and add nothing to the pesos; side finding, not changed |
+
+## Settled later the same day (the figure-provenance audit, docs/FIGURE_PROVENANCE.md)
+
+| Item left above | What it was |
+|---|---|
+| FIGURES.md "median product WAPE about 40%" beside "35.49%" | 35.49% is stored run 11's median product WAPE (raw per-product rule, 222 products), not the run the figures read. No stored Tier A run gives "about 40%" on the window. Both captions are now computed from the rows drawn: 33.2% over 222 products (run 21). |
+| CHAPTER4_MOVED baselines 32.00% / 36.43% | The card's rows (run 21) scored Σ|forecast − actual| ÷ Σ|actual| by `local/q9.py`: 32.00% / 36.43% / 27.25% on live. A third scoring rule beside the card's two, now named in place. |
+| Backtest MASE 0.871 vs 0.901, earlier window | Two MASE scales on one forecast (run 16): fixed 2023-01..2025-08 (error hunt; 0.871, 270 products, exact on live) and the change before the window (calendar grain; 188 products; 0.904 on live, so 0.003 unresolved). Labelled in place. |
 
 ## A. Code and the app
 

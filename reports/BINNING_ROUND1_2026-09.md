@@ -1,3 +1,5 @@
+> **Dated record (2026-09; last edited 2026-09-17), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Phase 2 Binning, Round 1 (2026-09-17)
 
 BINS ONLY. No forecasting model run, no bake-off, no MASE, no model

@@ -1,3 +1,5 @@
+> **Dated record (2026-09; last edited 2026-10-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Project state — 2026-09-09  (Phase 0 baseline)
 
 **The standing source of truth for the re-check.** Every number here is from a

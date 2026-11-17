@@ -1,3 +1,5 @@
+> **Dated record (2026-10-02; last edited 2026-10-03), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Two-step sign-in (authenticator app): 2026-10-02
 
 Branch `feat/2fa`. After the password, sign-in asks for the 6-digit code from Google Authenticator or Microsoft Authenticator (the TOTP standard).

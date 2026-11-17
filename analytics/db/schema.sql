@@ -457,7 +457,7 @@ CREATE TABLE IF NOT EXISTS Unilever_SKU_Demand_Fact (
     region                   TEXT NOT NULL DEFAULT 'la_union',
     -- DEC-11: in pieces — set from the source's reported
     -- sale_quantity_pieces column (transform.normalize_quantities()),
-    -- not derived from sale_quantity_cases x pack_size (only ~84%
+    -- not derived from sale_quantity_cases x pack_size (only ~84% (as of 2026-08-14)
     -- consistent with reported pieces on real data; that comparison is
     -- a QC cross-check only, never the value of record).
     quantity_sold             NUMERIC(14,2),

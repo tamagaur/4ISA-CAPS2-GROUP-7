@@ -1,3 +1,5 @@
+> **Dated record (2026-10-04), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # EXPLAIN (ANALYZE, BUFFERS) — top 12 slowest distinct statements (local)
 
 Run inside BEGIN; SET TRANSACTION READ ONLY; ... ROLLBACK. `seen` = slowest time the statement took during the timing runs (includes the round trip).

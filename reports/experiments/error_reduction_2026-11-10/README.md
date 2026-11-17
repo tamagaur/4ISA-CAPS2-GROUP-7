@@ -1,3 +1,5 @@
+> **Dated record (2026-11-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Error reduction, 2026-11-10
 
 Brief (Kelvin, 2026-11-10): make the error go down, measurably, in both windows. Switch on succession and fading (task 1,

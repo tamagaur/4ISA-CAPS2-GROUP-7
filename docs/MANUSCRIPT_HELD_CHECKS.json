@@ -492,28 +492,28 @@
     4847983,
     2669295
    ],
-   "basis": "docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md"
+   "basis": "manuscript as published 2026-10-24 (live and the pin moved since)"
   },
   {
    "figure": "p",
    "check": "months beyond safety stock",
    "live": 852,
    "manuscript": 749,
-   "basis": "STATE.md headline"
+   "basis": "manuscript as published 2026-10-24 (live and the pin moved since)"
   },
   {
    "figure": "p",
    "check": "pesos beyond safety stock",
    "live": 43767343,
    "manuscript": 38187551,
-   "basis": "pinned"
+   "basis": "manuscript as published 2026-10-24 (live and the pin moved since)"
   },
   {
    "figure": "q",
    "check": "pesos beyond safety stock",
    "live": 43767343,
    "manuscript": 38187551,
-   "basis": "pinned"
+   "basis": "manuscript as published 2026-10-24 (live and the pin moved since)"
   }
  ],
  "table_problems": []

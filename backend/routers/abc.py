@@ -59,13 +59,13 @@ categories per month in 2025 (5 in all; SellOut_Fact_Real, queried 2026-11-13), 
 
 METHOD FILTER (migration 0017): abc_classification's natural key widened
 to (product_key, classification_period, method), and a 't3m' run is now
-live alongside 'single' (25,437 + 23,223 rows). Every read here MUST pin
+live alongside 'single' (25,437 + 23,223 rows). Every read here MUST pin (as of 2026-09-17)
 the method or each SKU comes back once per basis and revenue_share sums to
 ~200%. Since migration 0044 the pin is each principal's Tier A basis
 (analytics.params.abc_method_sql: Unilever TIER_A_BASIS, Del Monte 'single').
 
 The method fix here was also made independently upstream in e6a7a13
-(same five sites, same verified 0.9986-vs-1.9973 evidence); this version
+(same five sites, same verified 0.9986-vs-1.9973 evidence); this version (as of 2026-09-17)
 supersedes it only by ALSO pinning method in the MAX(classification_period)
 lookups, which that commit left unfiltered.
 
@@ -160,7 +160,7 @@ router = APIRouter(prefix="/abc", tags=["abc"])
 # or fail would describe the biggest one or two items' share, not how revenue
 # spreads across many. Del Monte's runs since its Jan 2025 regrouping rank
 # 4-5 top-level categories (DEC-03), and the page called 4 categories a
-# failed 80/20 split ("1 of 4 earns 71.1%"). At 10 the top fifth is exactly
+# failed 80/20 split ("1 of 4 earns 71.1%"). At 10 the top fifth is exactly (as of 2026-10-01)
 # 20% of the items. Unilever ranks hundreds of SKUs a month, far above it.
 PARETO_MIN_ITEMS = 10
 
@@ -277,7 +277,7 @@ def _tier_shares(current: list[ABCItem]) -> dict[str, float] | None:
 def _pareto(current: list[ABCItem]) -> ParetoCheck | None:
     """pareto_check for one principal's run, or 'not_applicable' below
     PARETO_MIN_ITEMS. The cumulative shares go along so the check reads the
-    top items' share off one stored running total instead of summing ~140
+    top items' share off one stored running total instead of summing ~140 (as of 2026-10-01)
     separately rounded shares (see pareto_check)."""
     check = pareto_check([i.revenue_share for i in current], [i.cumulative_share for i in current])
     if check is None:

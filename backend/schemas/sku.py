@@ -81,7 +81,7 @@ class SKUListResponse(BaseModel):
 
 
 # The most a name, brand or note can hold, and the one shape a pack size can take. Names appear on every page and
-# GET /sku carries all of them (about 0.94 MB today); a pack size that is not a positive number silently turns off
+# GET /sku carries all of them (about 0.94 MB today); a pack size that is not a positive number silently turns off (as of 2026-10-25)
 # the whole-case check and the stock-in-pieces conversion for that SKU (backend/stock_units.PACK_SIZE_NUMERIC).
 NAME_MAX, BRAND_MAX, NOTES_MAX = 200, 100, 2000
 _PACK = re.compile(r"[0-9]+(\.[0-9]+)?")

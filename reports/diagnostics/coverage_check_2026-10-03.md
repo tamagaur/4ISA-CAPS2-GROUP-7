@@ -1,3 +1,5 @@
+> **Dated record (2026-10-03; last edited 2026-10-04), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Coverage check — both principals, 2021-01 → 2026-09 (read-only, 2026-10-03; re-run 2026-10-04 after the H2/H3 fill)
 
 Read-only: every database query ran as `BEGIN; SET TRANSACTION READ ONLY; …; ROLLBACK`, including the dashboard calls

@@ -328,7 +328,7 @@ const SKUManagement = () => {
   const isStaleCat = (s) => !!s.catPeriod && !isCurrentTier(s)
     && isStaleTier(s.catPeriod, latestPeriod(tierAPeriods, latestCatPeriodByPrincipal[s.principal]));
   // Category A's own carried-forward count — the card used to print every
-  // tier's (821 of them, 20 of which are A).
+  // tier's (821 of them, 20 of which are A). (as of 2026-09-29)
   const categoryACarried = skus.filter(s => s.cat === 'A' && !s.preRegroup && s.catPeriod && !isCurrentTier(s)).length;
   const noBrandSKUs = skus.filter(s => !s.brand).length;
   // Del Monte's product master mixes item codes with sell-out categories

@@ -1,3 +1,5 @@
+> **Dated record (2026-09-30), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Security audit — 2026-09-30 (read-only)
 
 Branch `kelvin-etl` @ c63b1d9. Remote `group7`. No fixes applied, nothing rotated or deleted, not committed.

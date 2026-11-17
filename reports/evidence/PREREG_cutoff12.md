@@ -1,3 +1,5 @@
+> **Dated record (2026-09-30), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Pre-registration — long-bin cutoff 24 → 12
 
 - Population: Unilever Tier A products (ABC 2026-02, single) in the medium bin (12–23 sales months at forecast time, DEC-26 length rule), same rolling one-step protocol, 5 half-year blocks 2023-10 → 2026-02, same two-condition WAPE test as the bake-off (95% bootstrap over SKUs, 1,000 resamples, seed 20260921), a block testable when ≥ 5 SKUs have ≥ 3 origins.

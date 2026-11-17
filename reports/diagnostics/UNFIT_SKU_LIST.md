@@ -1,3 +1,5 @@
+> **Dated record (2026-09-23), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Unfit SKU list -- Tier A as of 2026-02 (28 not-fit SKUs)
 
 Source: `reports/diagnostics/fit_review_common_2026-09-23.csv` (132 rows). Report only --

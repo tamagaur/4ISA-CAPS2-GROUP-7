@@ -1,7 +1,7 @@
 """
 backend.avatar — profile-picture upload: validate, re-encode, store.
 
-DESIGN CONSTRAINT: the Supabase project is on the free plan and was at 4.63 of
+DESIGN CONSTRAINT: the Supabase project is on the free plan and was at 4.63 of (as of 2026-10-17)
 5 GB monthly egress when this was written. Image bytes are never stored in
 Postgres and never served through the API from the database — only this
 module's output (a 128x128 WebP, ~6 KB) ever leaves the server, and it goes to

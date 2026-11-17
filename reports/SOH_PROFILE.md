@@ -1,3 +1,5 @@
+> **Dated record (2026-08-27), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # SOH Sheet Profile — Step 1 Discovery
 
 Scope: `data/raw/SSIS/**` and `data/raw/Unilever/**` (106 raw files scanned:

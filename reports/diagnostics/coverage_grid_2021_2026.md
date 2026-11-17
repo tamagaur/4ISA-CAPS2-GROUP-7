@@ -1,3 +1,5 @@
+> **Dated record (2026-09-28; last edited 2026-09-29), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Coverage grid, both principals, 2021-01 → 2026-09 (read-only recon, 2026-09-28)
 
 Read-only session (session pooler, `transaction_read_only = on`). Month = `_period` (`calendar_month` for Unilever demand).

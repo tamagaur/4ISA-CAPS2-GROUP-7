@@ -207,7 +207,7 @@ const UserManagement = () => {
       }
     }
     loadUsers();
-    // Short enough to read before the check mark closes (1.3 s). A failure
+    // Short enough to read before the check mark closes (1.3 s). A failure (as of 2026-10-01)
     // to store the page choices is not tucked in here: handleCreated raises
     // it as an error toast that stays until dismissed.
     return {

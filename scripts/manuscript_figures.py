@@ -165,6 +165,11 @@ def load() -> dict:
         # frozen files equal to live on every pinned figure.
         from scripts.snapshot_published_figures import live_inputs
         d["acc_rows"], d["money"], d["mase"], d["dec"] = live_inputs(cur)
+        # Del Monte's category vocabularies on either side of the January 2025 change (figure f's annotation)
+        d["dm_paths"] = sql(cur, """
+            SELECT COUNT(DISTINCT category_path) FILTER (WHERE _period::text < '2025-01') AS before,
+                   COUNT(DISTINCT category_path) FILTER (WHERE _period::text >= '2025-01') AS after
+            FROM sellout_fact_real WHERE category_path IS NOT NULL""").iloc[0].to_dict()
     finally:
         conn.rollback()
         conn.close()
@@ -187,6 +192,7 @@ class Fig:
     not_shown: str
     chart_note: str = ""                 # why the chart type differs from the one asked for, if it does
     checks: list = field(default_factory=list)
+    values: dict = field(default_factory=dict)   # figures computed from the rows, for sentences written about the figure
 
     def check(self, label: str, got, expected, tol: float = 0.0, basis: str = ""):
         ok = (abs(float(got) - float(expected)) <= tol) if isinstance(expected, (int, float)) else got == expected
@@ -260,16 +266,18 @@ TABLE_4_2_2 = {  # manuscript Table 4.2.2: products, pieces, sales (PHP), stock 
 
 
 def fig_a(plt, d) -> Fig:
+    sm = d["sales_month_u"].set_index("period").loc[WINDOW[0]:WINDOW[1]]
+    svs = pd.DataFrame(d["api"]["dashboard"]["sales_vs_stock"]).set_index("period")
+    # the count taken after the window's last month (2 March 2026), from the rows drawn; a literal "₱46.6 M" until 2026-11-17
+    last_count = f"₱{float(svs.loc[WINDOW[1], 'stock_on_hand']) / 1e6:.1f} M"
     f = Fig("a", "fig_a_monthly_sales_stock.png", "Monthly Pieces Sold and Stock on Hand, Unilever",
             "mart.sales_month (real rows, pieces sold); GET /dashboard sales_vs_stock (stock on hand at the count "
             "taken after each month, last purchase price)", "March 2025 – February 2026",
-            "stock in pieces; peso sales (Table 4.2.2); the 2 March 2026 count (₱46.6 M) is flagged as unusually "
+            f"stock in pieces; peso sales (Table 4.2.2); the 2 March 2026 count ({last_count}) is flagged as unusually "
             "high and SSM has not confirmed it; stock is counted at the Ilocos Sur warehouse while sales are La Union's",
             chart_note="Two panels on one month axis instead of one chart with two y-axes: pieces and pesos do not "
                        "share a scale, and a second axis makes the bar tops and the line appear to cross where "
                        "nothing meets.")
-    sm = d["sales_month_u"].set_index("period").loc[WINDOW[0]:WINDOW[1]]
-    svs = pd.DataFrame(d["api"]["dashboard"]["sales_vs_stock"]).set_index("period")
     months = list(sm.index)
     for m in months:
         prod, pcs, pesos, stock = TABLE_4_2_2[m]
@@ -291,7 +299,7 @@ def fig_a(plt, d) -> Fig:
     ygrid(ax2)
     ax2.set_ylim(0, stock.max() * 1.18)
     last = len(months) - 1
-    ax2.annotate("2 Mar 2026 count: ₱46.6 M,\nflagged unusually high,\nnot confirmed by SSM", (last, stock.iloc[-1]),
+    ax2.annotate(f"2 Mar 2026 count: {last_count},\nflagged unusually high,\nnot confirmed by SSM", (last, stock.iloc[-1]),
                  xytext=(last - 3.6, stock.iloc[-1] * 0.93), fontsize=6.5, arrowprops={"arrowstyle": "-", "lw": 0.6})
     ax2.set_xticks(x, [mlabel(m) for m in months])
     ax2.set_xlabel("Sales month (stock is the count taken at the start of the next month)")
@@ -552,7 +560,9 @@ def fig_f(plt, d) -> Fig:
                 color="#555555", bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.5})
     brk = months.index("2025-01")
     ax.axvline(brk - 0.5, color=INK, linewidth=0.8, linestyle="--")
-    ax.text(brk - 0.4, top * 1.01, "Jan 2025: category list changed (82 paths → 5)", fontsize=6.3, va="bottom")
+    paths = d["dm_paths"]   # distinct real category paths before 2025 and from 2025 (a literal "82 → 5" until 2026-11-17)
+    ax.text(brk - 0.4, top * 1.01, f"Jan 2025: category list changed ({paths['before']} paths → {paths['after']})",
+            fontsize=6.3, va="bottom")
     ax.yaxis.set_major_formatter(millions)
     ax.set_ylim(0, top * 1.08)
     ax.set_ylabel("Sales (₱ millions, ex-VAT)")
@@ -643,11 +653,32 @@ TABLE_4_2_18 = {  # forecast, actual, WAPE %, direction, surplus PHP, shortage P
 }
 
 
+def _window_rows(d) -> pd.DataFrame:
+    """The calendar-adjusted as-served rows of WINDOW with the net pieces sold (act) beside each forecast."""
+    r = d["acc_rows"]
+    c = r[r.run == "as_served_calendar"].merge(d["money"], on=["product_key", "month"], how="left")
+    c["act"] = c.quantity_raw.fillna(0.0)
+    return c[(c.month >= WINDOW[0]) & (c.month <= WINDOW[1])].copy()
+
+
+def median_product_wape(d) -> tuple[float, int]:
+    """(median over products of sum|forecast - net sold| / sum|net sold|, in %, and the number of products) on WINDOW: the
+    per-product rule of backend/marts (median_product_wape). Computed here so the captions of figures h and i state the
+    value of the rows they draw; until 2026-11-17 they carried two literals for this one measure, "about 40%" (no source
+    found: no stored Tier A run gives it on this window) and "35.49%" (stored mart.forecast_run 11, calendar-adjusted, on
+    this rule over 222 products: reproduced read-only on live 2026-11-17; these figures read run 21, not run 11)."""
+    w = _window_rows(d)
+    g = w.assign(e=(w.value - w.act).abs(), a=w.act.abs()).groupby("product_key")[["e", "a"]].sum()
+    per = (g.e / g.a)[g.a > 0]
+    return 100 * float(per.median()), int(len(per))
+
+
 def monthly_accuracy(d) -> pd.DataFrame:
-    """Table 4.2.18 from the frozen as-served rows (calendar-adjusted run), scored as the dashboard's accuracy card
-    scores it (backend/marts.accuracy_summary_from over mart.accuracy_mart): actual = net pieces sold (a month whose
-    returns exceed sales stays negative), price per piece = the product's pesos over pieces across all its scored
-    months, NULL when either sum is not positive (migration 0043)."""
+    """Table 4.2.18 from the stored as-served rows (calendar-adjusted run; live since 2026-11-17, scripts.
+    snapshot_published_figures.live_inputs), on the rule the dashboard's accuracy card used until 2026-11-17: actual = net
+    pieces sold (a month whose returns exceed sales stays negative; the card's monthly WAPE counts such a month as 0 sold since
+    then), price per piece = the product's pesos over pieces across all its scored months, NULL when either sum is not
+    positive (migration 0043). The rule is kept because Table 4.2.18 is stated on it."""
     r = d["acc_rows"]
     c = r[r.run == "as_served_calendar"].merge(d["money"], on=["product_key", "month"], how="left")
     c["act"] = c.quantity_raw.fillna(0.0)
@@ -679,15 +710,17 @@ def check_monthly(f: Fig, m: pd.DataFrame, cols: tuple[str, ...]):
                 f.check(f"{mo} {col}", round(got), exp[col], tol=1, basis="Table 4.2.18")
 
 
-ACC_SOURCE = ("docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by "
-              "docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them")
+ACC_SOURCE = ("the as-served backtest rows stored on live (mart.accuracy_mart, the calendar-adjusted run labelled in "
+              "scripts.accuracy_as_served.AS_SERVED_RUNS), scored on net pieces sold, the dashboard card's rule until 2026-11-17")
 
 
 def fig_h(plt, d) -> Fig:
+    med, n_med = median_product_wape(d)
     f = Fig("h", "fig_h_forecast_vs_actual.png", "Forecast against Actual Pieces by Month, Unilever (as-served backtest)",
             ACC_SOURCE, "March 2025 – February 2026",
             "live performance (this is a backtest: each month forecast from the months before it); per-product error, "
-            "which is far larger than the total's (median product WAPE about 40%); products not forecast that month")
+            f"which is far larger than the total's (median product WAPE {med:.1f}% over {n_med} products); products not "
+            "forecast that month")
     m = monthly_accuracy(d)
     check_monthly(f, m, ("forecast", "actual", "direction"))
     over = m.direction.eq("over")
@@ -715,10 +748,11 @@ def fig_h(plt, d) -> Fig:
 
 
 def fig_i(plt, d) -> Fig:
+    pmed, n_med = median_product_wape(d)
     f = Fig("i", "fig_i_monthly_wape.png", "Monthly WAPE in Pieces, Unilever (as-served backtest)", ACC_SOURCE,
             "March 2025 – February 2026",
-            "live performance (a backtest); the median product WAPE (35.49% for this window, a different measure); "
-            "error in pesos; months before March 2025")
+            f"live performance (a backtest); the median product WAPE ({pmed:.1f}% over {n_med} products for this window, a "
+            "different measure); error in pesos; months before March 2025")
     m = monthly_accuracy(d)
     check_monthly(f, m, ("wape",))
     med = float(np.median(m.wape))
@@ -772,13 +806,16 @@ def fig_k(plt, d) -> Fig:
     # The pinned figure is read from the pin: this source line said "109 of 175" (the manuscript's Table 4.2.15) for four
     # days after the pin, and live, had moved to 115 of 175 (2026-11-16).
     pin = json.loads(SNAP_JSON.read_text(encoding="utf-8"))["figures"]["mase"]
-    f = Fig("k", "fig_k_mase_distribution.png", "MASE Distribution of the 175 Forecast Products, Unilever Tier A "
-            "(as of 2026-02)", "Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/"
-            f"mase_rows.csv; pinned figure 'MASE < 1 for {pin['mase_below_1']} of {pin['products_scored']}')", "forecast month March 2026 (served model's "
-            "rolling one-step holdout, DEC-25)",
-            "the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size "
-            "of each product's sales")
     mm = d["mase"]
+    # the products without a MASE, by status, from the rows (until 2026-11-17 the caption said "the 9 insufficient-data and
+    # 5 dead" as a literal, and the source line named the frozen mase_rows.csv these rows no longer come from)
+    no_mase = mm[~((mm.status == "ok") & mm.mase.notna())].status.value_counts()
+    no_mase_txt = " and ".join(f"{int(n)} {s.replace('_', ' ')}" for s, n in sorted(no_mase.items())) or "no"
+    f = Fig("k", "fig_k_mase_distribution.png", "MASE Distribution of the 175 Forecast Products, Unilever Tier A "
+            "(as of 2026-02)", "Forecast_Result of the latest Unilever forecast date, status ok, read from live "
+            f"(scripts.snapshot_published_figures.live_inputs); pinned figure 'MASE < 1 for {pin['mase_below_1']} of "
+            f"{pin['products_scored']}'", "forecast month March 2026 (served model's rolling one-step holdout, DEC-25)",
+            f"the {no_mase_txt} Tier A products (no MASE); which model served each product; the size of each product's sales")
     ok = mm[(mm.status == "ok") & mm.mase.notna()].mase.astype(float)
     passed, failed = int((ok < 1).sum()), int((ok >= 1).sum())
     f.check("products with a MASE", len(ok), 175, basis="Table 4.2.15")
@@ -1079,8 +1116,11 @@ def fig_o(plt, d) -> Fig:
     return f
 
 
-DEC_SOURCE = ("docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, "
-              "Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json)")
+MANUSCRIPT_BASIS = "manuscript as published 2026-10-24 (live and the pin moved since)"
+
+DEC_SOURCE = ("mart.error_decomposition_row on live (Tier A, calendar-adjusted as-served backtest; read by "
+              "scripts.snapshot_published_figures.live_inputs since 2026-11-17, the frozen CSV before; its pinned figures "
+              "are compared to live by scripts.snapshot_published_figures --verify)")
 
 
 def tier_a_dec(d) -> pd.DataFrame:
@@ -1096,22 +1136,32 @@ def dec_period(a: pd.DataFrame) -> str:
 
 def fig_p(plt, d) -> Fig:
     pin = d["pinned"]
-    f = Fig("p", "fig_p_error_decomposition.png", "Forecast Error Decomposition by Month, Unilever Tier A (pieces)",
-            DEC_SOURCE, dec_period(tier_a_dec(d)) + ", 4,370 Tier A product-months",
-            "Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, "
-            "₱38,187,551, are a separate figure); observed stockouts (a miss beyond safety stock is potential "
-            "exposure, not a recorded stockout); live performance (a backtest)")
     a = tier_a_dec(d)
+    # The caption's figures are the rows' own (until 2026-11-17 it stated "4,370" and "₱38,187,551" as literals; the second
+    # was the manuscript's published value of 2026-10-24, which live and the pin no longer give).
+    f = Fig("p", "fig_p_error_decomposition.png", "Forecast Error Decomposition by Month, Unilever Tier A (pieces)",
+            DEC_SOURCE, dec_period(a) + f", {len(a):,} Tier A product-months",
+            "Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, "
+            f"₱{a.beyond_pesos.fillna(0).sum():,.0f}, are a separate figure); observed stockouts (a miss beyond safety "
+            "stock is potential exposure, not a recorded stockout); live performance (a backtest)")
     pinned_a = {k.rsplit(".", 1)[1]: v for k, v in _flatten(pin) if ".error_decomposition.A." in f".{k}"}
-    f.check("product-months", len(a), 4370, basis="pinned")
+    f.check("product-months", len(a), round(pinned_a.get("product_months", -1)), basis="pinned JSON")
     for col in ("over_pieces", "absorbed_pieces", "beyond_pieces"):
         f.check(f"{col} total", round(a[col].fillna(0).sum()), round(pinned_a.get(col, -1)), basis="pinned JSON")
+    # The three below hold the manuscript's values (Chapter 4 as published 2026-10-24); live and the pin moved since
+    # (the succession and fading rules of 2026-11-10, the product-grain calendar of 2026-11-13). Until 2026-11-17 their
+    # basis said "pinned", "STATE.md headline" and "docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md", none of which holds
+    # these values any more.
     f.check("over / absorbed / beyond as published", tuple(round(a[c].fillna(0).sum()) for c in
                                                            ("over_pieces", "absorbed_pieces", "beyond_pieces")),
-            (12242746, 4847983, 2669295), basis="docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md")
+            (12242746, 4847983, 2669295), basis=MANUSCRIPT_BASIS)
     f.check("months beyond safety stock", int(a.exceeds_safety_stock.fillna(False).astype(bool).sum()), 749,
-            basis="STATE.md headline")
-    f.check("pesos beyond safety stock", round(a.beyond_pesos.fillna(0).sum()), 38187551, basis="pinned")
+            basis=MANUSCRIPT_BASIS)
+    f.check("pesos beyond safety stock", round(a.beyond_pesos.fillna(0).sum()), 38187551, basis=MANUSCRIPT_BASIS)
+    beyond_months = int(a.exceeds_safety_stock.fillna(False).astype(bool).sum())
+    f.values = {"over": a.over_pieces.fillna(0).sum(), "absorbed": a.absorbed_pieces.fillna(0).sum(),
+                "beyond": a.beyond_pieces.fillna(0).sum(), "beyond_months": beyond_months, "months": len(a),
+                "beyond_share": 100 * beyond_months / len(a), "beyond_pesos": a.beyond_pesos.fillna(0).sum()}
     m = a.groupby("month")[["over_pieces", "absorbed_pieces", "beyond_pieces"]].sum()
     fig, ax = plt.subplots(figsize=(6.5, 3.9))
     x = np.arange(len(m))
@@ -1142,7 +1192,7 @@ def fig_q(plt, d) -> Fig:
     a = tier_a_dec(d)
     p = a.groupby("product_key").beyond_pesos.sum()
     p = p[p > 0].sort_values(ascending=False)
-    f.check("pesos beyond safety stock", round(p.sum()), 38187551, basis="pinned")
+    f.check("pesos beyond safety stock", round(p.sum()), 38187551, basis=MANUSCRIPT_BASIS)
     cum = p.cumsum() / p.sum()
     n50, n80 = int((cum < 0.5).sum() + 1), int((cum < 0.8).sum() + 1)
     rank = np.arange(1, len(p) + 1)
@@ -1156,7 +1206,9 @@ def fig_q(plt, d) -> Fig:
     ax2.spines["right"].set_visible(True)
     ax2.plot(rank, 100 * cum.to_numpy(), color=INK, linewidth=1.3)
     ax2.set_ylim(0, 102)
-    ax2.set_ylabel("Cumulative share of the ₱38.2 M (%)")
+    # the total the curve is a share of, from the rows drawn: a literal "₱38.2 M" until 2026-11-17, the value published on
+    # 2026-10-24, which live no longer gives
+    ax2.set_ylabel(f"Cumulative share of the ₱{p.sum() / 1e6:.1f} M (%)")
     for n, lvl in ((n50, 50), (n80, 80)):
         ax2.plot([0, n, n], [lvl, lvl, 0], color=INK, linewidth=0.7, linestyle="--")
         ax2.text(n + len(p) * 0.015, lvl - 6, f"{lvl}% reached by {n} products ({100 * n / len(p):.0f}%)",
@@ -1280,11 +1332,13 @@ def write_manifest(figs: dict[str, Fig]):
             "l": "\"(Figure {n})\" after \"…the blocks\" in §4.2.2.3.2's \"For each history segment…\" sentence — HELD, "
                  "see the gate",
             "h": "\"(Figures {n}, {n1} and {n2})\" after \"The monthly table shows when the error was largest\"",
+            # the suggested sentence states the figure's own rows (until 2026-11-17 it carried the values published on
+            # 2026-10-24 as literals: 12,242,746 / 4,847,983 / 2,669,295 pieces, 749 of 4,370, ₱38,187,551)
             "p": "new sentence at the end of §4.2.3.1.1: \"Figure {n} splits the backtest's forecast error for Tier A "
-                 "into over-buying (12,242,746 pieces), under-forecast absorbed by safety stock (4,847,983) and "
-                 "under-forecast beyond it (2,669,295); demand exceeded the forecast by more than the safety stock in "
-                 "749 of 4,370 product-months (17.14%), worth ₱38,187,551 at average selling price, and Figure {nq} "
-                 "shows how few products carry most of it.\"",
+                 "into over-buying ({over:,.0f} pieces), under-forecast absorbed by safety stock ({absorbed:,.0f}) and "
+                 "under-forecast beyond it ({beyond:,.0f}); demand exceeded the forecast by more than the safety stock "
+                 "in {beyond_months:,} of {months:,} product-months ({beyond_share:.2f}%), worth ₱{beyond_pesos:,.0f} at "
+                 "average selling price, and Figure {nq} shows how few products carry most of it.\"",
             "m": "\"(Figure {n})\" after the first sentence of the rewritten urgency paragraph",
             "n": "\"(Table 4.2.20, Figure {n})\" in place of the first mention of the category orders",
             "o": "\"(Figure {n})\" after \"…or 3.59 weeks of sales\""}
@@ -1293,7 +1347,7 @@ def write_manifest(figs: dict[str, Fig]):
               "| Figure | Add |", "|---|---|"]
     for ref, text in adds.items():
         lines.append(f"| Figure {num[ref]} | " + text.format(n=num[ref], n1=num.get("i"), n2=num.get("j"),
-                                                                 nq=num.get("q")) + " |")
+                                                                 nq=num.get("q"), **figs[ref].values) + " |")
     lines += ["", "## Captions and gate results", ""]
     for new, ref, title, place in nm:
         if place is None:
@@ -1482,21 +1536,31 @@ def run_checks() -> dict:
         try:
             plt = style()
             d = load()
-            total, held = 0, []
+            total, held, figs = 0, [], {}
             for fn in FIG_FUNCS:
                 f = fn(plt, d)
+                figs[f.letter] = f
                 plt.close("all")
                 total += len(f.checks)
                 held += [{"figure": f.letter, "check": label, "live": _plain(got), "manuscript": _plain(exp), "basis": basis}
                          for label, got, exp, ok, basis in f.checks if not ok]
             _, problems = write_tables(d)
+            write_manifest(figs)
+            # The two committed text outputs must be what this code writes from live now (2026-11-17). Until then --verify
+            # wrote them into this temporary folder and discarded them, so reports/figures/FIGURES.md kept the captions of
+            # 2026-11-13 (sources named as frozen files, "median product WAPE about 40%" beside "35.49%") with nothing failing.
+            # The figures' PNGs are not compared: --verify draws them at a lower resolution.
+            stale = [str(committed.relative_to(REPO)) for tmp_file, committed in
+                     ((MANIFEST, keep[1]), (TABLE_DOC, keep[2]))
+                     if tmp_file.read_text(encoding="utf-8") != (committed.read_text(encoding="utf-8") if committed.exists() else "")]
         finally:
             FIG_DIR, MANIFEST, TABLE_DOC, DPI = keep
-    return {"checks_total": total, "held": held, "table_problems": problems}
+    return {"checks_total": total, "held": held, "table_problems": problems, "stale_outputs": stale}
 
 
 def cmd_write_held() -> int:
     now = run_checks()
+    now.pop("stale_outputs")                    # a property of the working tree, not of the record
     HELD_PIN.write_text(json.dumps({
         "what": "The manuscript statements that live contradicts, as scripts.manuscript_figures finds them. Not passed: each "
                 "is a sentence, table cell or figure of the chapter text whose value is not what the system gives.",
@@ -1528,6 +1592,9 @@ def cmd_verify() -> int:
         bad.append(f"{now['checks_total']} checks ran, {pin['checks_total']} on record: a check was added or removed")
     if now["table_problems"] != pin["table_problems"]:
         bad.append(f"table problems {now['table_problems']} != on record {pin['table_problems']}")
+    for path in now["stale_outputs"]:
+        bad.append(f"{path} is not what `python -m scripts.manuscript_figures` writes from live now: regenerate it "
+                   "(read-only on live) and commit the result")
     for b in bad:
         print("FAIL", b)
     if bad:

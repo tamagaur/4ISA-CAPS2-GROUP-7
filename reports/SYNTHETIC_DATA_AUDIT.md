@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Synthetic Data Audit — SSM Decision Support Dashboard
 
 Read-only quality-control audit of the placeholder/synthetic data corpus. Branch `kelvin-etl`, audited 2026-08-20. Synthetic data's existence is a sanctioned exception to the project's anti-fabrication rule (adviser-approved, to prove the frontend/pipeline shape ahead of SSM's real-file delivery) — this report inventories what's there and what's still missing, it does not question whether it should exist.

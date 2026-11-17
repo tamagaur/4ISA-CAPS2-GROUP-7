@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Model bake-off under the 80/20 single-split protocol
 
 **Read-only. 2026-09-06. No code / model / DB change.** The existing bake-off

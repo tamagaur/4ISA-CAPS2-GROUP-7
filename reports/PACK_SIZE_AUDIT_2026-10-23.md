@@ -1,3 +1,5 @@
+> **Dated record (2026-10-23), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Case-pack audit, 2026-10-23
 
 Scope: `lp_run` 6 (planning cycle 2026-03-01, written 2026-10-22 14:25 UTC, code 3bd3201), 109 `lp_recommendation` rows, all Unilever.

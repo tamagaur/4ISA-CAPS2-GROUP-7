@@ -1,3 +1,5 @@
+> **Dated record (2026-10-22), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Claim check, 2026-10-22: four manuscript figures with no evidence behind them
 
 Each row says whether the figure can be regenerated from something that exists, what was run, and what the manuscript can say instead. Nothing here changes a model, a forecast or a plan.

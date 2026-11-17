@@ -11,7 +11,7 @@ SellOut_Fact_Real — then summed to the requested grain and ranked by the
 same classify_abc() with the same 80% / 95% cutoffs.
 
   grain=brand     Unilever only: Del Monte's product master carries no brand
-                  (0 / 15,308), so its answer is a reason, not rows.
+                  (0 / 15,308), so its answer is a reason, not rows. (as of 2026-09-22)
   grain=category  Unilever: Product_Dimension.category_path (380 SKUs sit in
                   'UNCLASSIFIED' and are kept as their own row, not dropped).
                   Del Monte: its category grain, the same rows its ABC ranks.

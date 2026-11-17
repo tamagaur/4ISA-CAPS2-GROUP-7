@@ -1,3 +1,5 @@
+> **Dated record (2026-11-02; last edited 2026-11-06), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Test plan and results: SSM Decision Support Dashboard
 
 Written for: the manuscript's testing section (§4.3) and the panel. Backend and pipeline at `kelvin/freeze-package`

@@ -1,3 +1,5 @@
+> **Dated record (2026-11-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Forecast horse race, 2026-11-10 (backtest only)
 
 Script: `run_horse_race.py` (reads only the throwaway copy `ssm_challenger`, a restore of the 2026-11-04 backup; writes

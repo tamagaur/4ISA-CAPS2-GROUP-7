@@ -1,3 +1,5 @@
+> **Dated record (2026-09; last edited 2026-11-13), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Chart design improvement plan — 2026-09
 
 **Goal:** make every chart in the dashboard clearer and more polished, one batch at a

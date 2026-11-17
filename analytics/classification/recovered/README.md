@@ -1,3 +1,5 @@
+> **Dated record (2026-09-20), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Recovered producer artifacts — DO NOT RUN
 
 These two files are **evidence, not pipeline code.** They are the provenance for

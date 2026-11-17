@@ -6,7 +6,7 @@
 
 **For the defence, the path shown is [LOCAL_DEMO_RUNBOOK.md](LOCAL_DEMO_RUNBOOK.md):** generated March sales on a local copy. It replaces steps 1 to 5 with generated rows, so it does not prove them.
 
-**On live this moves things on purpose.** A real month moves the live marts and creates a new plan for the month after, so the plan in STATE.md's `plan:` line stops being the current plan. Update STATE.md in the same commit. The 51 pinned figures read frozen rows and do not move.
+**On live this moves things on purpose.** A real month moves the live marts and creates a new plan for the month after, so the plan in STATE.md's `plan:` line stops being the current plan. Update STATE.md in the same commit. The 51 pinned figures (docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json) are compared to live by `scripts.snapshot_published_figures --verify` since 2026-11-16, not to frozen rows: its MASE figures read the latest Unilever forecast, which a real month replaces, so that check fails until they are re-pinned on purpose. (Until 2026-11-17 this line said they read frozen rows and do not move.)
 
 ## Before anything: this month's reorder decisions
 
@@ -80,7 +80,7 @@ python -m analytics.etl.transform_signoff --transform-dir transform/slices/<run 
 
 Without it every slice is refused as `fingerprint_unsigned`. A refused run still refreshes the marts and runs the fill step, so run step 5 only after signing.
 
-### 5. Load
+### 5. Load (its figures: the test load written up on 2026-11-04)
 
 The step 3 command without `--dry-run`. Each slice's real rows are deleted and re-inserted in one transaction. Then the fill step runs and the marts refresh.
 
@@ -105,7 +105,7 @@ python scripts/run_baseline_forecast.py --calendar-factor            # report on
 python scripts/run_baseline_forecast.py --write --calendar-factor    # upsert Forecast_Result, refresh marts
 ```
 
-**Never drop `--calendar-factor`.** The runner's default is off, and the live forecast uses it (DEC-41). Measured on the copy, without it: total forecast 2,054,193.51 falls to 1,911,263.18, and the plan's dry run falls from 109 rows and 435,988 pieces to 100 rows and 324,826 pieces (the plan of that date, lp_run 6; the current plan is STATE.md's `plan:` line, and the measurement was not repeated on it). `scripts.chapter_figures --verify` also fails. With it, all three return to the same values.
+**Never drop `--calendar-factor`.** The runner's default is off, and the live forecast uses it (DEC-41). Measured on the copy this procedure was rehearsed on (2026-11-04, commit 095a2ba; the commit does not name the backup), without it: total forecast 2,054,193.51 falls to 1,911,263.18, and the plan's dry run falls from 109 rows and 435,988 pieces to 100 rows and 324,826 pieces (the plan of that date, lp_run 6; the current plan is STATE.md's `plan:` line, and the measurement was not repeated on it). `scripts.chapter_figures --verify` also fails. With it, all three return to the same values.
 
 The run exits 2 if the ABC period is older than the latest sales month, so step 6 comes first. The range of expected months is derived from the latest sales month: there is nothing to edit. The report-only form rewrites the tracked `reports/BASELINE_FORECAST_RUN.md` when run on live.
 

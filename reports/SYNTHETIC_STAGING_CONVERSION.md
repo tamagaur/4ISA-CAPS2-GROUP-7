@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Synthetic Staging Conversion — SSM Decision Support Dashboard
 
 Branch `kelvin-etl`. Companion to `reports/SYNTHETIC_DATA_AUDIT.md` (prior audit, findings accepted as-is, not re-derived) and `reports/STAGING_CONTRACT.md` (Phase 0). This file covers Phase 1 (diagnosis + implemented fix) so far; Phases 2-6 not started.

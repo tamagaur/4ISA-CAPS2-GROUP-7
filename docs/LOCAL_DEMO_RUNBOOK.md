@@ -1,5 +1,9 @@
 # Local demo runbook: close a practice month from the browser
 
+> Figures as of 2026-11-05: every count, plan and row figure below is the seed backup `full_backup_20261102T170343Z` (lp_run 6,
+> 109 rows / 435,988 pieces) and the practice walkthroughs of 2026-11-03 to 2026-11-05 on it; none is live's ("Live holds 27"
+> was live's flag count on 2026-11-03). The provenance rules: docs/FIGURE_PROVENANCE.json.
+
 **What this shows:** the real monthly steps running on labelled generated sales, on a copy on this laptop, and the Dashboard and Reorder pages following them. **What to say about it:** the April plan it produces is practice, not a result. It does not show the deployed service, which has not been redeployed, and it does not show a real new monthly file running, because none has ever existed.
 
 Walked through in a browser on 2026-11-03, from `Main-BE`, with the commands below typed into PowerShell, and it took about 5 minutes then. **Sections 4 and 5 changed on 2026-11-04 and have not been walked through since**: the plan's decisions now come first, so expect it to take longer.

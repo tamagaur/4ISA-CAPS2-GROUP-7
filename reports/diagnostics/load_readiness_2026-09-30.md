@@ -1,3 +1,5 @@
+> **Dated record (2026-09-30), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Load readiness rehearsal — 2026-09-30 (kelvin-etl @ c63b1d9)
 
 Scratch `ssm_load_rehearsal` is KEPT for the loader-update session. It holds 17 tables and 9 views copied from public, with counts equal at copy time. Public untouched: all 14 table counts match the start, forecast `generated_at` is still 2026-09-21, and there are no rehearsal run_ids. Gap months (in scratch): Del Monte sales 2025-12 (934 rows / ₱25,779,220.77) replaced by 686 `GEN/2025-12/*` placeholders; Unilever demand 2026-02 (779 / ₱27,914,343.91) replaced by 644 placeholders, 569 of them sharing a key with a real row. Harness scripts live in the session scratchpad, not the repo.

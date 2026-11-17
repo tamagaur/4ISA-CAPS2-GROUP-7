@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Schema Reconciliation + ABC Orchestration Test
 
 Covers: merging `group7/kelvin-etl` and pushing to the new repo, reconciling the live Supabase schema against both sides' tracked migrations, and testing `analytics/classification/orchestrate_abc.py` against the loaded database.

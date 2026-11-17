@@ -1,3 +1,5 @@
+> **Dated record (2026-10-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # System coverage matrix: classification, predictive, prescriptive
 
 Generated: **2026-10-21** (UTC, read-only queries against the live `public` and `demo` schemas, `BEGIN; SET TRANSACTION READ ONLY; ... ROLLBACK`).

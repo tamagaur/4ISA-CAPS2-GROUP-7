@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # DASHBOARD_RECON.md — Read-only recon of DSD backend/frontend/DB state
 
 Scope: static code inspection (file:line evidence) + read-only SQL SELECT queries

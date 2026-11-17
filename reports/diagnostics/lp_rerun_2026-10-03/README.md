@@ -1,3 +1,5 @@
+> **Dated record (2026-10-03), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # LP rerun: March 2026 order plan at 103%, from the opening stock count (2026-10-03)
 
 The order plan for cycle 2026-03 (March 2026) was solved again, this time from the stock count that **opens** March:

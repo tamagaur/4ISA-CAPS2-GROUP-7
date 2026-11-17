@@ -4,7 +4,8 @@
 #   scripts/check.sh --fast   (target < 90 s; run constantly)
 #       backend lint, frontend lint, the pinned-figure verification, the six pinned evaluation metrics against live
 #       (scripts.evaluation_metrics --verify), the Chapter 4 code figures
-#       (docs/CHAPTER4_CODE_FIGURES.json: route count and sign-in split, @cached GET routes, opt-in list size), the cross-endpoint invariants
+#       (docs/CHAPTER4_CODE_FIGURES.json: route count and sign-in split, @cached GET routes, opt-in list size), the figure-provenance
+#       ledger (scripts.figure_provenance --verify), the cross-endpoint invariants
 #   scripts/check.sh --full   everything above + the whole pytest suite + its pinned totals + the manuscript's statements against
 #       live (scripts.manuscript_figures --verify) + the frontend unit tests + the frontend production build
 #   scripts/check.sh --optin  ONLY the 18 opt-in database tests (marked in scripts/known_opt_in_skips.txt), on a disposable database
@@ -75,6 +76,10 @@ pinned() {
 # docs/EVALUATION_METRICS.md, a disagreement with the published headline WAPE, or live not read FAILS.
 evaluation()    { "$PY" -m scripts.evaluation_metrics --verify; }
 chapter_static() { "$PY" -m scripts.chapter_figures --verify; }
+# Where every number in the repository comes from (2026-11-17): every tracked file has a class in docs/FIGURE_PROVENANCE.json, and
+# every figure in a current file or a code comment is dated, read against live or its source by a named test, a definition, or
+# marked UNTRACEABLE in place. A new undated figure, a stale ledger entry or an unlabelled dated record FAILS. No database.
+provenance()     { "$PY" -m scripts.figure_provenance --verify; }
 chapter_totals() { "$PY" -m scripts.chapter_figures --verify-junit "$TMP/invariants.xml" "$TMP/full.xml"; }
 # Every statement of the manuscript that scripts/manuscript_figures.py checks, read against live (read-only, nothing written in
 # the repository). The disagreements on record (docs/MANUSCRIPT_HELD_CHECKS.json) are listed as NOT passed; a new one, a moved
@@ -116,6 +121,7 @@ step "frontend lint (oxlint, errors)" lint_frontend
 step "pinned figures reproduce" pinned
 step "six evaluation metrics equal the pinned set (live)" evaluation
 step "Chapter 4 code figures (routes, sign-in split, cached GETs, opt-in list)" chapter_static
+step "figure provenance (every figure dated, checked, a definition or marked UNTRACEABLE)" provenance
 step "cross-endpoint invariants (tests/invariants)" invariants
 if [ "$MODE" = "--full" ]; then
   step "whole pytest suite (skips fail)" full_suite

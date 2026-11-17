@@ -410,7 +410,7 @@ const ABCClassification = () => {
       rawData.map((item) => ({
         // Row key. product_key is unique per item; sku_id is only a label and
         // was '' for every Del Monte (category-grain) row before the backend
-        // fell back to category_path — 85 rows sharing one React key.
+        // fell back to category_path — 85 rows sharing one React key. (as of 2026-09-21)
         id: item.product_key ?? `${item.principal}:${item.sku_id}`,
         sku: item.sku_id,
         productKey: item.product_key,
@@ -837,7 +837,7 @@ const ABCClassification = () => {
     : '';
   // How to read the table's faded rows and its boundary flag, now one item
   // of "About these numbers". The flag is the backend's boundary margin
-  // (rules.boundary_margin, in the row hover); measured, 42% of flagged
+  // (rules.boundary_margin, in the row hover); measured, 42% of flagged (as of 2026-11-06)
   // products change class the next month against 17% of unflagged ones.
   const tableLegend = (
     <>

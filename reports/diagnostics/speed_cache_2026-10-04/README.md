@@ -1,3 +1,5 @@
+> **Dated record (2026-10-04), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Fewer round trips + response cache — 2026-10-04
 
 Branch `kelvin/speed-cache`, started from `kelvin-etl` @ `282df97` and merged with

@@ -1,3 +1,5 @@
+> **Dated record (2026-07-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Grain Map
 
 Which files feed which fact/dim grain, derived from `profiling/sheet_profiles/*.json` `grain` field (regex/column-presence inference — see `profiling/detect.py::infer_grain`).

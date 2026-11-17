@@ -1,3 +1,5 @@
+> **Dated record (2026-09-30), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Result — long-bin cutoff 24 → 12
 
 Pre-registration: `reports/evidence/PREREG_cutoff12.md` (commit 14657c2, before any computation).

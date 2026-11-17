@@ -1,6 +1,6 @@
 // One dynamic import per routed page. App.jsx lazy-loads each page from
 // these, so the login screen no longer downloads every page's code (the
-// single bundle was 836 kB / 234 kB gzipped). DashboardLayout calls
+// single bundle was 836 kB / 234 kB gzipped). DashboardLayout calls (as of 2026-09-15)
 // preloadPages() once the user is in, so navigating still feels instant —
 // import() caches each module after its first call.
 export const pageLoaders = {

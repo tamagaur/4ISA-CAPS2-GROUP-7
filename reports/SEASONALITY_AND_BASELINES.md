@@ -1,3 +1,5 @@
+> **Dated record (2026-08-27), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Seasonality & Baseline Bake-off — Unilever Only
 
 Diagnosis only. No model code changed, nothing refit, nothing written to

@@ -1,3 +1,5 @@
+> **Dated record (2026-10-30), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Pipeline, rollover and API QA on a throwaway local database, 2026-10-30 (kelvin/freeze-package at 5507f41)
 
 Written for: the repo owner and the backend developers, who need to know what a monthly run does when it is run wrongly, and what the QA of 2026-10-24 did not cover.

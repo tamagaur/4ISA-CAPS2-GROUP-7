@@ -1,3 +1,5 @@
+> **Dated record (2026-09-28), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Unilever coverage grid, 2021-01 → 2026-08 (read-only recon, 2026-09-28)
 Read-only session on `SUPABASE_DB_URL` (`transaction_read_only = on`), filtered `principal = 'unilever'`; no Del Monte rows selected. R real in public · V synthetic in ssm_synth_v2 only · P synthetic in public only · **PV** public holds v1 AND ssm_synth_v2 holds v2 (different rows) · N neither. Inventory month = `_period` (stock at month close; `snapshot_date` falls 1-6 days into the next month).
 

@@ -1,3 +1,5 @@
+> **Dated record (2026-09-21; last edited 2026-09-23), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Experiment log
 
 `reports/experiment_log.csv` is the project's record of forecasting experiments:

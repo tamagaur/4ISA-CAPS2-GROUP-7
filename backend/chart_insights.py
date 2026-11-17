@@ -103,7 +103,7 @@ def kpi_trend(
     unusual (backend/data_notes.py). Such a month stays in `points` — it
     really was counted — but the walk-back passes over it, and `skipped`
     lists what it passed so the card can say so. The stock card read
-    "−51.3% vs Feb 2026" against Unilever's outlier count; it now compares
+    "−51.3% vs Feb 2026" against Unilever's outlier count; it now compares (as of 2026-10-01)
     Mar 2026 with Jan 2026. If the card's own month is the unusual one, no
     delta is given (latest_unusual says why): a change measured from an
     outlier is no more true than one measured to it."""
@@ -221,7 +221,7 @@ def portfolio_forecast_insight(series: list[dict]) -> dict | None:
     total against the last actual month — only when that month is the one
     right before the forecast's. With a picked range ending earlier the
     sentence used to compare Mar 2026's forecast with Jun 2024's sales
-    ("247.4% above"), which says nothing about demand now; the forecast is
+    ("247.4% above"), which says nothing about demand now; the forecast is (as of 2026-09-29)
     then stated on its own. None without a forecast bucket."""
     forecast_pts = [r for r in series if r.get("forecast") is not None and r.get("actual") is None]
     actual_pts = [r for r in series if r.get("actual") is not None]

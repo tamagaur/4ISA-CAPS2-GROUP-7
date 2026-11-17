@@ -1273,7 +1273,7 @@ def _range_periods(db: Session, period: str | None, start_period: str | None, sc
 
 
 def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_period: str | None) -> None:
-    """Every statement get_dashboard reads, in three round trips instead of ~29
+    """Every statement get_dashboard reads, in three round trips instead of ~29 (as of 2026-10-04)
     (backend/batch.py). Each wave holds the queries whose parameters the waves
     before it settle: wave 1 needs only the request, wave 2 the LP cycle, the
     range and the counts the month-level marts name, wave 3 the product keys wave
@@ -1924,7 +1924,7 @@ def get_dashboard(
         # the months they lack are fetched, in one call.
         # Unilever: stock and sales are both in PIECES. Stock was valued at purchase cost and
         # sales at selling price, so the peso ratio understated cover by the margin (freeze
-        # package 1a: 3.0285 -> 3.1321 weeks). Del Monte has no pack size, so no pieces: its
+        # package 1a: 3.0285 -> 3.1321 weeks). Del Monte has no pack size, so no pieces: its (as of 2026-10-20)
         # ratio stays in pesos (stock at cost / sales at selling price) and says so in `basis`.
         in_pieces = cover_scope == "unilever"
         if in_pieces:
@@ -2105,7 +2105,7 @@ def get_dashboard(
     # The card's own series, so its sparkline and delta cover the same
     # principals as its value — and the same principals' unusual counts,
     # which the delta skips: Mar 2026 vs Unilever's Feb 2026 outlier read
-    # "−51.3%"; against Jan 2026, the last ordinary count, it is −6.7%.
+    # "−51.3%"; against Jan 2026, the last ordinary count, it is −6.7%. (as of 2026-10-01)
     soh_trend = kpi_trend(
         {p: soh_card_by_period.get(p) for p in soh_periods}, inventory_period,
         unusual=unusual_stock_snapshots(card_scope, soh_periods),

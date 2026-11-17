@@ -1,3 +1,5 @@
+> **Dated record (2026-09-21; last edited 2026-09-22), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Project diagnosis — forecast-router UI alignment and follow-up
 
 **For:** Kelvin · **Date:** 2026-09-21 (updated after the follow-up work the same day)

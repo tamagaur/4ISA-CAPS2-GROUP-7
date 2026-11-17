@@ -1,3 +1,5 @@
+> **Dated record (2026-09-09; last edited 2026-09-14), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Phase 0 follow-up — five checks  (read-only, 2026-09-09)
 
 No code changed, no DB writes. Findings only.

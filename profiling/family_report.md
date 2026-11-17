@@ -1,3 +1,5 @@
+> **Dated record (2026-07-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Family Report
 
 Sheets clustered by exact header-token-set signature (SHA1 of sorted, lower-cased, non-blank header labels). Fuzzy tolerance is applied across clusters below via Jaccard similarity on the same token sets (>=0.7 noted as a probable-drift relationship, not merged automatically).

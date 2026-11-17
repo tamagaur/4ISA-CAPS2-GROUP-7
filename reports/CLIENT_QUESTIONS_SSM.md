@@ -1,3 +1,5 @@
+> **Dated record (2026-09-14; last edited 2026-09-18), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Questions for San San Marketing
 
 *Prepared for Thea to relay. Plain business language — none of this needs any

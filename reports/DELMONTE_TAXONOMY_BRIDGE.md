@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Del Monte Fine-Grained Taxonomy Bridge — 2025-01 through 2026-08
 
 Closes the gap documented in `reports/COMPLETENESS_DISCOVERY.md` §A/§E: no Del Monte `sell_out` category, fine-grained or coarse, spanned the full 2021-2026 window. This adds a second, coexisting fine-grained vocabulary for 2025-01→2026-08 alongside the real coarse-vocabulary rows already there — additive, not a replacement.

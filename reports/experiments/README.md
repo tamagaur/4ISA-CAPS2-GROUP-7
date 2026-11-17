@@ -1,3 +1,5 @@
+> **Dated record (2026-09-26; last edited 2026-11-03), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Target-transform experiments (2026-09-26)
 
 Recovered on 2026-11-03 from the local tag `archive/target-transforms-2026-09` (commits f0b0148 and fce007e), because `scripts/evidence/ch05_transforms.py` and `reports/evidence/ch05*` were built from them and the worktree they lived in no longer exists.

@@ -1510,7 +1510,7 @@ const SKUForecast = () => {
   // an actionable "demand is rising/falling" read. null when either side
   // is missing (no forecast yet, no sales history), the last actual was 0
   // or below (returns can make a month negative: against -1 unit a rise
-  // read "↓ 78,800%"), or the stored row isn't a forecast at all
+  // read "↓ 78,800%"), or the stored row isn't a forecast at all (as of 2026-09-29)
   // (provisional / no-order — no trend to read).
   const forecastTrendPct = useMemo(() => {
     if (!derivedForecast || servedModel?.kind !== 'forecast') return null;

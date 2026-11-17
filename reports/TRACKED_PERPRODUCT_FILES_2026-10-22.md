@@ -1,3 +1,5 @@
+> **Dated record (2026-10-22), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Tracked files that carry a per-product identifier (2026-10-22)
 
 Columns only; no values are reproduced here. Rule applied on 2026-10-22 (second pass): a file is untracked if it holds sales quantities, pesos or margins; files holding only product identifiers, accuracy ratios, shares, month counts or flags stay. Twenty-five files were untracked under it (listed in `.gitignore` under "Untracked 2026-10-22 (hard rule 9, second pass)"); this list is what is still tracked after that. Borderline files kept: those with only error ratios (WAPE, MASE), `revenue_share`, MAE/RMSE columns (error size, not sales), month counts, and `data/processed/inventory_fact_synthetic.csv` (synthetic stock quantities, no sales, prices or margins). Row counts are data rows (header excluded).

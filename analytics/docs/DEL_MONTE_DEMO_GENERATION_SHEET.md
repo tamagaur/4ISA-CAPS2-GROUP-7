@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Del Monte Demo Data — Generation Sheet
 
 Companion to `DEL_MONTE_DEMO_DATA_SPEC.md`. Open decisions skipped — wipe-and-reload plan, isolation design not load-bearing. This sheet is the thing to build from.

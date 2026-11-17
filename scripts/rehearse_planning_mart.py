@@ -42,7 +42,7 @@ SCRATCH = "ssm_planning_rehearsal"
 MOVED = r"\bmart\.(planning_mart|refresh_planning|refresh_status|refresh_log)\b"
 
 # (principal, cycle, status, from, to). 'current' is cheap either way; 'all' runs the joins
-# once per cycle (34 live), so it is asked only as often as it takes to cover every row.
+# once per cycle (34 live), so it is asked only as often as it takes to cover every row. (as of 2026-10-05)
 STATUSES = (None, "pending", "accepted", "dismissed")
 CASES = [(p, "current", s, None, None) for p in (None, "unilever", "delmonte") for s in STATUSES] + [
     (None, "all", None, None, None),

@@ -1,3 +1,5 @@
+> **Dated record (2026-10; last edited 2026-10-02), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Examples - SIMULATION — real + 2021–22 placeholder data; not served, not used in the LP or in accuracy claims
 
 **Scope.** Del Monte has no product-level sales, so it is not forecast. Product-level simulation and fit diagnosis are Unilever-only; Del Monte gets the category-level and coverage view.

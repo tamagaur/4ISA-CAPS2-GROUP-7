@@ -19,7 +19,7 @@ from backend.schemas.users import UserOut
 class LoginRequest(BaseModel):
     email: EmailStr
     # Capped so an absurd body never reaches bcrypt (passlib raises on
-    # anything over 4096 characters, which would surface as a 500).
+    # anything over 4096 characters, which would surface as a 500). (as of 2026-09-28)
     password: str = Field(max_length=1024)
     # What an earlier sign-in with "Remember me" ticked gave this browser
     # (backend/mfa.py, REMEMBER_DAYS). A valid one skips the code step; any

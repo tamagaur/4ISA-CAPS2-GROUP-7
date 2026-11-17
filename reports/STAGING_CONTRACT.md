@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Staging Contract — What Transform Actually Expects From `staging/`
 
 Read-only discovery pass. Branch `kelvin-etl`. Every claim below cites the file/line I actually opened or the exact command I ran to verify it.

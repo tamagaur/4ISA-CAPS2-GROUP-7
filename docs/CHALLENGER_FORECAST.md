@@ -1,3 +1,5 @@
+> **Dated record (2026-11-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Challenger forecast: diagnosis, choice, storage, comparison (2026-11-10)
 
 Aggregates only (rule 9). Per-product rows are in the git-ignored `local/`. Nothing here changes what is served: the plan,

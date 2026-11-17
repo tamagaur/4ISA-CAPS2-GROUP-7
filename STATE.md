@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17 (evaluation metrics pinned).
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17 (figure provenance; demo runs 10-12).
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -15,6 +15,47 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    (git-ignored).)
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+DEMO RUNS 10-12 (2026-11-17, Kelvin's brief; live read in READ ONLY transactions, nothing written or removed).
+  WHAT THEY ARE. Three demo.run rows labelled demonstration_unilever, the same generator digest (b7b5d938...). 10: written
+  2026-10-16 08:57 UTC by scripts/build_unilever_demo --write --replace; its order plan is 96 rows all 0 (the CBC false-Infeasible
+  of 136529e, scripts/run_lp.py refuse_empty_demo_plan docstring). 11: 2026-10-20 13:23 UTC, notes.cloned_from_run 10, by
+  `run_lp --source demo --principal unilever --write --new-run` (added in 4a8d389, committed the same minute): sales, back-cast
+  exclusions and forecast copied unchanged (EXCEPT ALL = 0 rows), a new plan of 106 rows, 300,556.74 pieces. 12: 14:00 UTC,
+  cloned from 11 the same way after the freeze package (090bba8), 106 rows, 301,979.21 pieces, 9 plan rows differ from 11.
+  NOT A LOAD OR A ROLLBACK. All three predate the month-load mechanism (2026-11-06); run_month calls run_lp without --source demo;
+  the rollback point copies schema demo and resets its sequences, and refuses unless every table fingerprints as before; live
+  holds no demo_revert_* schema; demo.run's id sequence stands at 12 (nothing inserted and removed since). A load and rollback
+  adds no fourth run. Only `run_lp ... --new-run` would; build_unilever_demo --replace deletes ONE row of its label (fetchone).
+  READERS. Every reader takes the newest Unilever run (backend/demo_data.py:60, data_mode.py:115, marts.py:115 and 226), so
+  10 and 11 are served by nothing. Removing them would cascade (ON DELETE CASCADE) to 12,740 sales, 360 forecast, 202 plan and
+  246 back-cast-exclusion rows; tests/invariants/test_g reads docs/DEMO_DATA.md's "10, 11, 12 (each)" row, which would have to
+  change with it. Not removed: a live write, not asked.
+
+FIGURE PROVENANCE (2026-11-17, Kelvin's brief; live read only, READ ONLY transactions: no database write; plan 115 / 330,212 unchanged).
+  THE CHECK. scripts/figure_provenance.py --verify (check.sh, both modes; no database) over docs/FIGURE_PROVENANCE.json: all 2,383
+  tracked files classed (current, code, record, generated, data, fixture, manuscript); every figure in a current file or a code comment
+  dated, read by a named test or constant, a definition, a ledger non-claim, or marked UNTRACEABLE (settle: ...). How to add a figure,
+  the limits, and the sweep: docs/FIGURE_PROVENANCE.md. Ledger: 40 rules, 34 checked, 74 not_claims, 33 ledger-side dates (files in the
+  month-load closure, not edited, so docs/MONTH_LOAD_REHEARSAL.json stays valid). tests/test_figure_provenance.py (12) tests the check.
+  scripts.manuscript_figures --verify now FAILS when the committed reports/figures/FIGURES.md or the tables file is not what the code
+  writes from live (it discarded them before; FIGURES.md had stayed at 2026-11-13). Six new live tests in test_g: the blank captures and
+  Unilever gap months (CLAUDE.md, DEMO_DATA), the governance inventory counts, DEMO_DATA's demo rows / stock / order plan, the runbooks'
+  51 pinned figures, chapter_figures' 326,491 before rounding, accuracy_as_served's run-5 38.72%.
+  THE BRIEF'S THREE. "about 40%": no stored Tier A run gives it: replaced by the computed 33.2% over 222 (run 21). "35.49%": stored
+  run 11's median product WAPE, replaced the same way. 32.00% / 36.43%: run 21's rows on Σ|f−a| ÷ Σ|a| (local/q9.py), now named in
+  place. MASE 0.871 vs 0.901: one forecast (run 16), two scales (fixed 2023-01..2025-08, 270 products, exact on live; the change before
+  the window, 188, 0.904 on live: 0.003 unresolved). The earlier sweep had listed all three as unresolved; it had not missed them.
+  FIXED. DEMO_DATA's Unilever demo row (run 8, 24,906 / 12,816: live holds runs 10-12, 4,786 / 1,584 each); MONTHLY_LOAD_PROCEDURE's
+  "51 pinned figures read frozen rows"; RENDER_SETUP's "21 files" (98); README's "about 10 min"; fig q's axis (PHP 38.2 M -> 43.8 M);
+  fig p's suggested sentence (749 of 4,370, PHP 38,187,551 -> 852, PHP 43,767,343); figure sources still naming frozen files; the basis
+  of four held checks (values and counts unchanged: 265 / 193 / 72). LABELLED: 106 records, LOCAL_DEMO_RUNBOOK, BASELINE_FORECAST_RUN
+  (it is 2026-10-21's forecast, not live's), 69 code comment lines. UNTRACEABLE: the 72-hour breach rule in DATA_GOVERNANCE.
+  Chapter 4 test totals re-pinned for the 18 new tests (2921 -> 2939 clean clone, 2927 -> 2945 with real data); nothing else moved.
+  MEASURED on the final tree: check.sh --full GREEN against live, 847 s, 13 of 13 steps (provenance 82 s inside the run, about 7 s
+  alone); suite 2927 passed, 18 opt-in not run, 0 failed of 2945; manuscript 265 / 193 / 72 held unchanged; frontend 260 tests from 24
+  files; build OK. Negative test: a tampered FIGURES.md fails manuscript_figures --verify. The four new files are untracked (no commit
+  asked at the time; committed with this sweep 2026-11-17); scanned directly, they have no residue. docs/MONTH_LOAD_REHEARSAL.json still valid (no closure file edited).
 
 THE SIX EVALUATION METRICS ARE PINNED AND CHECKED AGAINST LIVE (2026-11-17, Kelvin's brief; live read only, in READ ONLY
   transactions: no database write; plan 115 / 330,212 unchanged).

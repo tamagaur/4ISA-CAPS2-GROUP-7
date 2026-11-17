@@ -8,7 +8,7 @@ Never reads or writes live. Every connection goes to 127.0.0.1:55432, enforced b
 every child; a run in which anything tried to connect elsewhere fails, even if every test passed.
 
 What each test needs, and what provides it:
-  17 tests/etl/test_fills_db.py          FILLS_SCRATCH_SCHEMA: a filled rehearsal schema. scripts/rehearse_fills --build clones the
+  17 tests/etl/test_fills_db.py          FILLS_SCRATCH_SCHEMA: a filled rehearsal schema. scripts/rehearse_fills --build clones the (as of 2026-11-03)
                                          database's public into ssm_fills, then scripts/fill_missing fills it.
    1 tests/etl/test_rollover_scratch.py  ROLLOVER_SCRATCH=1. It clones the connected database's public, so on a throwaway server it
                                          needs a public worth cloning: real rows, a plan (the seed's own, below), no pending

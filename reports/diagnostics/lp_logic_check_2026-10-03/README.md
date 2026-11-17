@@ -1,3 +1,5 @@
+> **Dated record (2026-10-03; last edited 2026-10-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # LP logic check: order plan cycle 2026-03 and the policy card (2026-10-03)
 
 This was a read-only check: no database writes, no migrations, no application code changes. It was done on branch

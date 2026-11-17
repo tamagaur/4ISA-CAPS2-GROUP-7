@@ -1,3 +1,5 @@
+> **Dated record (2026-10-03; last edited 2026-10-05), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Forecast model audit — 2026-10-03
 
 Read-only and offline: one read-only database pull, then everything ran on the local copy. No production code

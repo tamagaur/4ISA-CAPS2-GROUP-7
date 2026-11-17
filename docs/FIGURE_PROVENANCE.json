@@ -1,0 +1,1359 @@
+{
+ "about": "The provenance ledger (2026-11-17). Read by scripts/figure_provenance.py --verify (scripts/check.sh --fast). Every tracked file gets the class of the first rule whose glob matches; the classes and what each requires are in the script's docstring. `checked` lists sentences of current files whose figures a named test reads against live (tests/invariants) or against the constant in the code (`param`).",
+ "rules": [
+  {
+   "globs": [
+    "docs/CH4-5_EDITS_2026-10-22.md",
+    "docs/CH4-5_EDITS_2026-10-22_corrected.md",
+    "docs/MANUSCRIPT_CORRECTIONS_2026-10-22.md",
+    "reports/MANUSCRIPT_HANDOFF_2026-09-21.md"
+   ],
+   "class": "manuscript",
+   "note": "Chapter edit lists and briefings: the manuscript text itself, out of scope (Kelvin's brief, 2026-11-17)."
+  },
+  {
+   "globs": [
+    "docs/EVALUATION_METRICS.json",
+    "docs/EVALUATION_METRICS.md"
+   ],
+   "class": "generated",
+   "generator": "scripts/evaluation_metrics.py --write",
+   "verifier": "scripts.evaluation_metrics --verify"
+  },
+  {
+   "globs": [
+    "docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json",
+    "docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md",
+    "docs/published_snapshot_2026-10-24/*"
+   ],
+   "class": "generated",
+   "generator": "scripts/snapshot_published_figures.py --write",
+   "verifier": "scripts.snapshot_published_figures --verify"
+  },
+  {
+   "globs": [
+    "docs/ACCURACY_AS_SERVED.md"
+   ],
+   "class": "generated",
+   "generator": "scripts/accuracy_as_served.py --write",
+   "verifier": "scripts.snapshot_published_figures --verify",
+   "note": "Its sections are pinned verbatim in the published snapshot, which --verify compares to live."
+  },
+  {
+   "globs": [
+    "docs/CHAPTER4_CODE_FIGURES.json"
+   ],
+   "class": "generated",
+   "generator": "scripts/chapter_figures.py --write",
+   "verifier": "scripts.chapter_figures --verify"
+  },
+  {
+   "globs": [
+    "docs/MANUSCRIPT_HELD_CHECKS.json",
+    "reports/figures/*"
+   ],
+   "class": "generated",
+   "generator": "scripts/manuscript_figures.py",
+   "verifier": "scripts.manuscript_figures --verify"
+  },
+  {
+   "globs": [
+    "docs/MONTH_LOAD_REHEARSAL.json"
+   ],
+   "class": "generated",
+   "generator": "scripts/month_load_rehearsal.py",
+   "verifier": "tests/invariants",
+   "note": "An attestation: tests/test_demo_rehearsal.py fails when the hashed files change (whole suite, check.sh --full)."
+  },
+  {
+   "globs": [
+    "docs/FIGURE_PROVENANCE.json"
+   ],
+   "class": "data",
+   "note": "This ledger."
+  },
+  {
+   "globs": [
+    "reports/preview/*"
+   ],
+   "class": "generated",
+   "generator": "scripts/build_preview_outputs.py",
+   "verifier": null,
+   "why_no_verifier": "Preview files for the demonstration path (CLAUDE.md hard rule 2, arrangement 1); served only with placeholder_source demo; never a result."
+  },
+  {
+   "globs": [
+    "docs/CALENDAR_GRAIN_REHEARSAL.json"
+   ],
+   "class": "record",
+   "dated": "2026-11-12, written by scripts/apply_calendar_grain.py --rehearse on ssm_grain (restore of full_backup_20261111T142748Z)"
+  },
+  {
+   "globs": [
+    "docs/FINAL_BUNDLE_REHEARSAL.json"
+   ],
+   "class": "record",
+   "dated": "2026-11-11, written by scripts/apply_final_bundle.py --rehearse"
+  },
+  {
+   "globs": [
+    "docs/CHAPTER4_MOVED_FIGURES_2026-11-11.md",
+    "docs/CALENDAR_SELECTION_2026-11-16.md",
+    "docs/CALENDAR_SELECTION_PROTOCOL_2026-11-16.md",
+    "docs/EVALUATION_METRICS_INVENTORY_2026-11-17.md",
+    "docs/COVERAGE_MATRIX.md",
+    "docs/CHALLENGER_FORECAST.md",
+    "docs/TEST_PLAN.md",
+    "docs/MONTHLY_BATCH_REVIEW.md"
+   ],
+   "class": "record"
+  },
+  {
+   "globs": [
+    "docs/MANUSCRIPT_TABLE_DATA_2026-10-30.md"
+   ],
+   "class": "generated",
+   "generator": "scripts/manuscript_figures.py",
+   "verifier": "scripts.manuscript_figures --verify",
+   "note": "Tables 4.2.19, 4.2.20 and 4.2.4 from live; --verify fails when the committed file is not what the generator writes now (2026-11-17)."
+  },
+  {
+   "globs": [
+    "analytics/docs/DEL_MONTE_DEMO_DATA_SPEC.md",
+    "analytics/docs/DEL_MONTE_DEMO_GENERATION_SHEET.md",
+    "analytics/docs/DATA_DICTIONARY.md",
+    "analytics/classification/recovered/README.md"
+   ],
+   "class": "record"
+  },
+  {
+   "globs": [
+    "BACKEND_GUIDE.md",
+    "SUPABASE_SETUP.md",
+    "DATABASE_ARCHITECTURE.md",
+    "COVERAGE_MAP.md",
+    "ROADMAP.md",
+    "Context-from-the-data-side.md"
+   ],
+   "class": "record"
+  },
+  {
+   "globs": [
+    "reports/BASELINE_FORECAST_RUN.md"
+   ],
+   "class": "record",
+   "dated": "2026-10-21: last written by scripts/run_baseline_forecast.py (git); the live forecast was rewritten on 2026-11-13 (scripts/apply_calendar_grain.py) without rewriting this report, so it describes the forecast of 2026-10-21, not live's"
+  },
+  {
+   "globs": [
+    "reports/*.md",
+    "reports/**/*.md"
+   ],
+   "class": "record"
+  },
+  {
+   "globs": [
+    "reports/diagnostics/*",
+    "reports/diagnostics/**"
+   ],
+   "class": "record",
+   "dated": "2026-09-23 to 2026-10-21: each folder's name or README carries its date; the scripts and outputs of that diagnosis"
+  },
+  {
+   "globs": [
+    "reports/experiments/**"
+   ],
+   "class": "record",
+   "dated": "2026-09-26 to 2026-11-10: each folder's name carries its date; experiment scripts and outputs"
+  },
+  {
+   "globs": [
+    "reports/experiment_artifacts/**"
+   ],
+   "class": "record",
+   "dated": "2026-09-21/22: routing and gate search artefacts (reports/PROJECT_STATE_2026-09.md)"
+  },
+  {
+   "globs": [
+    "reports/evidence/**"
+   ],
+   "class": "record",
+   "dated": "2026-09: chart evidence files written by scripts/evidence/ (ch = chart, not chapter)"
+  },
+  {
+   "globs": [
+    "reports/simulation/**"
+   ],
+   "class": "record",
+   "dated": "2026-10: labelled simulation on synthetic data (reports/simulation/synthetic_2026-10), never an accuracy claim"
+  },
+  {
+   "globs": [
+    "reports/archive/**",
+    "reports/run_logs/**",
+    "reports/lp_runs/**"
+   ],
+   "class": "record",
+   "dated": "2026-08 to 2026-10: archived reports and run logs"
+  },
+  {
+   "globs": [
+    "reports/*.csv",
+    "reports/*.json",
+    "reports/*.xlsx"
+   ],
+   "class": "record",
+   "dated": "2026-08 to 2026-10-22: bake-off, audit and coverage outputs of the 2026-08/09 re-check (reports/PROJECT_STATE_2026-09.md names each); per-SKU bake-off tables are Table 4.2.13's frozen source"
+  },
+  {
+   "globs": [
+    "scratch/*.md"
+   ],
+   "class": "record"
+  },
+  {
+   "globs": [
+    "scratch/*"
+   ],
+   "class": "record",
+   "dated": "2026-08: one-off scratch scripts of the SARIMA era, not run since"
+  },
+  {
+   "globs": [
+    "scripts/archive/**"
+   ],
+   "class": "record",
+   "dated": "2026-08 to 2026-10-21: archived scripts and dev viewers, not run"
+  },
+  {
+   "globs": [
+    "profiling/*.md"
+   ],
+   "class": "record"
+  },
+  {
+   "globs": [
+    "profiling/**"
+   ],
+   "class": "record",
+   "dated": "2026-07/08: raw-file profiling outputs (profiling/build_reports.py) and their scripts"
+  },
+  {
+   "globs": [
+    "tools/**"
+   ],
+   "class": "record",
+   "dated": "2026-09-21 to 2026-10-02: developer viewers built from the bake-off and viewer-simulation outputs"
+  },
+  {
+   "globs": [
+    "analytics/db/migrations/*"
+   ],
+   "class": "record",
+   "dated": "each migration is dated by its applied_at in public.schema_migrations (live ledger, 82 rows on 2026-11-16); never edited after it is applied (hard rule 8)"
+  },
+  {
+   "globs": [
+    "0001-transform-null-key-fix.patch"
+   ],
+   "class": "record",
+   "dated": "2026-09: a patch file kept for reference"
+  },
+  {
+   "globs": [
+    "tests/**",
+    "frontend/src/**/*.test.js",
+    "frontend/src/api/mocks/*"
+   ],
+   "class": "fixture"
+  },
+  {
+   "globs": [
+    "data/**",
+    "staging/**",
+    "config/**",
+    "frontend/public/**",
+    "frontend/src/assets/**",
+    "backend/assets/**",
+    "frontend/package-lock.json",
+    "frontend/package.json",
+    "frontend/.oxlintrc.json",
+    "frontend/vercel.json",
+    "**/*.css",
+    "**/*.png",
+    "**/*.webp",
+    "**/*.svg",
+    "**/*.gz",
+    "**/*.xlsx",
+    "**/*.xls",
+    "**/.gitkeep",
+    ".gitattributes",
+    ".gitignore",
+    "frontend/.gitignore",
+    ".python-version",
+    "requirements.txt",
+    "requirements-figures.txt",
+    "pyproject.toml",
+    ".env.example",
+    "frontend/.env.example",
+    "docs/erd/*",
+    "scripts/known_opt_in_skips.txt",
+    "analytics/notebooks/*"
+   ],
+   "class": "data"
+  },
+  {
+   "globs": [
+    "CLAUDE.md",
+    "STATE.md",
+    "ARCHITECTURE.md",
+    "KNOWN_ISSUES.md",
+    "README.md",
+    "frontend/README.md",
+    "docs/*.md",
+    "analytics/docs/*.md",
+    "scripts/sql/*.md"
+   ],
+   "class": "current"
+  },
+  {
+   "globs": [
+    "scripts/apply_dm_fix_to_public.py",
+    "scripts/apply_dm_fixes_to_public.py",
+    "scripts/apply_product_master_cleanup.py",
+    "scripts/apply_real_recovery_to_public.py",
+    "scripts/apply_synth_v2_cutover.py",
+    "scripts/apply_synth_v2_to_public.py",
+    "scripts/apply_migration_0035.py"
+   ],
+   "class": "record",
+   "dated": "2026-09-17 to 2026-10-03 (git log -- <file>): one-off applies to public, each run once; the counts in them are that run's expectations"
+  },
+  {
+   "globs": [
+    "scripts/sql/2026-09-18_*.sql"
+   ],
+   "class": "record",
+   "dated": "2026-09-18 (its file name): a one-off fix, its expected counts that day's"
+  },
+  {
+   "globs": [
+    "scripts/evidence/**"
+   ],
+   "class": "record",
+   "dated": "2026-09-30: the chart-evidence scripts that wrote reports/evidence"
+  },
+  {
+   "globs": [
+    "scripts/model_bakeoff.py",
+    "scripts/arima_bakeoff.py",
+    "scripts/xgboost_bakeoff.py",
+    "scripts/bakeoff_to_xlsx.py"
+   ],
+   "class": "record",
+   "dated": "2026-09-01 to 2026-09-21: the bake-off behind reports/MODEL_BAKEOFF_UNILEVER.md (Table 4.2.13's frozen source); not run by any check"
+  },
+  {
+   "globs": [
+    "**/*.py",
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.sql",
+    "**/*.sh",
+    "**/*.html",
+    "**/*.yaml",
+    "**/*.toml",
+    "**/*.md",
+    "**/*.json",
+    "**/*.txt"
+   ],
+   "class": "code"
+  }
+ ],
+ "checked": [
+  {
+   "file": "CLAUDE.md",
+   "pattern": "Plan invariant: \\d+ rows, [\\d,]+ pieces, .*?\\(lp_run \\d+,",
+   "figures": [
+    "115",
+    "330,212"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_claude_md_numeric_gate_is_the_live_plan"
+  },
+  {
+   "file": "CLAUDE.md",
+   "pattern": "in-span gap-months across \\d+ of [\\d,]+ products",
+   "figures": [
+    "4,473",
+    "714",
+    "1,807"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_unilever_gap_and_blank_capture_figures_are_live"
+  },
+  {
+   "file": "CLAUDE.md",
+   "pattern": "never read as zero \\(\\d+ rows, \\d+ SKUs\\)",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_unilever_gap_and_blank_capture_figures_are_live"
+  },
+  {
+   "file": "CLAUDE.md",
+   "pattern": "a blank after its first sale \\(\\d+ of the \\d+\\)",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_unilever_gap_and_blank_capture_figures_are_live"
+  },
+  {
+   "file": "CLAUDE.md",
+   "pattern": "ABC method `t12m_new`; \\d+ products as of",
+   "figures": [
+    "189"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_claude_md_tier_a_count_and_calendar_range_are_live"
+  },
+  {
+   "file": "CLAUDE.md",
+   "pattern": "all \\d+ `ok` `Forecast_Result` rows for March 2026 carry each product's own `calendar_factor`",
+   "figures": [
+    "175",
+    "0.7103",
+    "1.2608"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_claude_md_tier_a_count_and_calendar_range_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "in-span gap-months across \\d+ of$",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_unilever_gap_and_blank_capture_figures_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "^[\\d,]+ products\\):$",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_unilever_gap_and_blank_capture_figures_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "^\\| 7 `demonstration` \\| Del Monte \\| category \\|",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_demo_data_doc_counts_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "`demonstration_unilever` \\(each\\) \\| Unilever \\| SKU \\|",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_demo_data_doc_counts_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "^Live: [\\d,]+ rows, \\d+ categories, run_id \\d+",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_demo_data_doc_counts_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "\\*\\*all 5 order\\*\\*: BEVERAGE [\\d,.]+,$",
+   "figures": [
+    "2,761.35"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_demo_data_doc_counts_are_live"
+  },
+  {
+   "file": "docs/DEMO_DATA.md",
+   "pattern": "^CULINARY [\\d,.]+, DAIRY [\\d,.]+, FRUITS [\\d,.]+, INNOVATION [\\d,.]+ \\(before",
+   "figures": [
+    "10,997.05",
+    "0.06",
+    "2,274.01",
+    "31.27"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_demo_data_doc_counts_are_live"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "`customer_dimension.customer_name` \\([\\d,]+ distinct\\)",
+   "figures": [
+    "2,841",
+    "180"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_data_governance_inventory_counts_are_live"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "`salesman_dimension.salesman_name` \\([\\d,]+ distinct\\)",
+   "figures": [
+    "33"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_data_governance_inventory_counts_are_live"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "`etl_quarantine.raw_values` \\([\\d,]+ rows",
+   "figures": [
+    "8,224"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_data_governance_inventory_counts_are_live"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "`invoice_num` on `sales_fact` \\([\\d,]+ distinct\\)",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_data_governance_inventory_counts_are_live"
+  },
+  {
+   "file": "docs/MONTHLY_LOAD_PROCEDURE.md",
+   "pattern": "The \\d+ pinned figures \\(docs/PUBLISHED_FIGURES_SNAPSHOT",
+   "figures": [
+    "51"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_pinned_figure_count_stated_in_the_runbooks_is_the_pin"
+  },
+  {
+   "file": "docs/MONTH_LOAD_RUNBOOK.md",
+   "pattern": "runs the \\d+ pinned figures",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_pinned_figure_count_stated_in_the_runbooks_is_the_pin"
+  },
+  {
+   "file": "CLAUDE.md",
+   "pattern": "weights w1=([\\d.]+) purchase cost, w2=([\\d.]+) the revenue-weighted share of need met, w3=([\\d.]+) storage",
+   "params": [
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "cost"
+    },
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "service_level"
+    },
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "storage"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "ARCHITECTURE.md",
+   "pattern": "weights ([\\d.]+) purchase cost / ([\\d.]+) revenue-weighted need met / ([\\d.]+) storage",
+   "params": [
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "cost"
+    },
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "service_level"
+    },
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "storage"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "README.md",
+   "pattern": "weights \\(purchase cost ([\\d.]+), revenue-weighted need met ([\\d.]+), storage ([\\d.]+)\\)",
+   "params": [
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "cost"
+    },
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "service_level"
+    },
+    {
+     "name": "analytics.params.LP_WEIGHTS",
+     "key": "storage"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "(\\d+) failures per email and (\\d+) per IP per (\\d+) min, then a (\\d+)-minute lockout",
+   "params": [
+    {
+     "name": "backend.login_limiter.MAX_FAILURES_PER_EMAIL"
+    },
+    {
+     "name": "backend.login_limiter.MAX_FAILURES_PER_IP"
+    },
+    {
+     "name": "backend.login_limiter.WINDOW_SECONDS",
+     "scale": 0.016666666666666666
+    },
+    {
+     "name": "backend.login_limiter.LOCKOUT_SECONDS",
+     "scale": 0.016666666666666666
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "`JWT_SECRET_KEY` under (\\d+) characters, and refuses",
+   "params": [
+    {
+     "name": "backend.startup_checks.JWT_MIN_LENGTH"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "`JWT_SECRET_KEY` a long random string \\((\\d+)\\+ characters\\)",
+   "params": [
+    {
+     "name": "backend.startup_checks.JWT_MIN_LENGTH"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/DATA_GOVERNANCE.md",
+   "pattern": "refuses to start if `JWT_SECRET_KEY` is under (\\d+) characters",
+   "params": [
+    {
+     "name": "backend.startup_checks.JWT_MIN_LENGTH"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/RENDER_SETUP.md",
+   "pattern": "refuses to start under (\\d+) characters",
+   "params": [
+    {
+     "name": "backend.startup_checks.JWT_MIN_LENGTH"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/RENDER_SETUP.md",
+   "pattern": "enforces the (\\d+)-character JWT rule",
+   "params": [
+    {
+     "name": "backend.startup_checks.JWT_MIN_LENGTH"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/RENDER_SETUP.md",
+   "pattern": "with a (\\d+) s step timeout",
+   "params": [
+    {
+     "name": "backend.routers.monthly_batch.SCRIPT_TIMEOUT_S"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "docs/RENDER_SETUP.md",
+   "pattern": "`\\.python-version` at the repo root \\(tracked\\) says `([\\d.]+)`",
+   "params": [
+    {
+     "file": ".python-version"
+    }
+   ],
+   "by": "scripts/figure_provenance.py::_param_problem"
+  },
+  {
+   "file": "scripts/evaluation_metrics.py",
+   "pattern": "as_served_calendar: the same [\\d,]+ rows, so the two pins must agree",
+   "by": "scripts/evaluation_metrics.py::cross_pin"
+  },
+  {
+   "file": "scripts/evaluation_metrics.py",
+   "pattern": "the published headline's \\d+ products",
+   "by": "scripts/evaluation_metrics.py::cross_pin"
+  },
+  {
+   "file": "scripts/chapter_figures.py",
+   "pattern": "against the live plan's [\\d,]+ before rounding",
+   "figures": [
+    "326,491"
+   ],
+   "by": "tests/invariants/test_g_constants_match_live.py::test_chapter_figures_pre_rounding_plan_label_is_live"
+  },
+  {
+   "file": "scripts/accuracy_as_served.py",
+   "pattern": "Run 5 reproduces the [\\d.]+% median quoted before",
+   "by": "tests/invariants/test_g_constants_match_live.py::test_accuracy_as_served_quotes_stored_run_5"
+  }
+ ],
+ "not_claims": [
+  {
+   "file": "analytics/etl/extract/_shared.py",
+   "pattern": "\\(\"6,619\\.86\"\\)",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "analytics/etl/transform.py",
+   "pattern": "60764\\.48",
+   "kind": "example",
+   "note": "one number written three ways, to show what the comparison ignores"
+  },
+  {
+   "file": "analytics/forecasting/treatments.py",
+   "pattern": "'6X1\\.6L' -> \\(1600, 'ML'\\)",
+   "kind": "example",
+   "note": "the parser's output for a sample size string"
+  },
+  {
+   "file": "backend/chart_insights.py",
+   "pattern": "₱27\\.9M / ₱504k / ₱37",
+   "kind": "example",
+   "note": "the compact peso format, three sample values"
+  },
+  {
+   "file": "backend/data_notes.py",
+   "pattern": "₱46\\.6M / ₱812\\.3K / ₱950",
+   "kind": "example",
+   "note": "the compact peso format, three sample values"
+  },
+  {
+   "file": "backend/marts.py",
+   "pattern": "\\(0\\.099 = 9\\.9%\\)",
+   "kind": "example",
+   "note": "how a share is written, one sample value"
+  },
+  {
+   "file": "backend/mfa.py",
+   "pattern": "'123 456' and 'abcde-fghjk'",
+   "kind": "example",
+   "note": "two input forms the code accepts"
+  },
+  {
+   "file": "backend/mfa.py",
+   "pattern": "160 random bits, base32",
+   "kind": "definition",
+   "note": "pyotp.random_base32: 32 base32 characters of 5 bits each"
+  },
+  {
+   "file": "backend/routers/reorder_approval.py",
+   "pattern": "SKU x: ",
+   "kind": "example",
+   "note": "the audit-log message format with placeholder values (SKU x, a@x)"
+  },
+  {
+   "file": "backend/routers/reorder_approval.py",
+   "pattern": "\\[quantity decided: 390; applied directly\\]",
+   "kind": "example",
+   "note": "the audit-log note format, a placeholder quantity"
+  },
+  {
+   "file": "backend/routers/reorder_approval.py",
+   "pattern": "' \\(13 cases of 30\\)'",
+   "kind": "example",
+   "note": "the case-count suffix format, sample values"
+  },
+  {
+   "file": "backend/routers/reorder_requests.py",
+   "pattern": "SKU x: ",
+   "kind": "example",
+   "note": "the audit-log message format with placeholder values (SKU x, a@x)"
+  },
+  {
+   "file": "backend/schemas/abc.py",
+   "pattern": "\\(MASE 1\\.24\\)",
+   "kind": "example",
+   "note": "the reason text's format, a sample MASE"
+  },
+  {
+   "file": "backend/email_templates.py",
+   "pattern": "weight 800 stays on two lines",
+   "kind": "definition",
+   "note": "the font weight set in this template's CSS"
+  },
+  {
+   "file": "backend/email_templates.py",
+   "pattern": "4\\.6:1",
+   "kind": "definition",
+   "note": "a contrast ratio computed from the colour values in this file (WCAG formula)"
+  },
+  {
+   "file": "backend/email_templates.py",
+   "pattern": "WCAG AA's 4\\.5:1",
+   "kind": "definition",
+   "note": "WCAG 2.x AA minimum contrast, and ratios computed from this file's colours"
+  },
+  {
+   "file": "backend/email_templates.py",
+   "pattern": "padding is 488\\)",
+   "kind": "definition",
+   "note": "layout arithmetic on this template's widths"
+  },
+  {
+   "file": "frontend/src/components/ABCClassification.jsx",
+   "pattern": "\"80%\", \"18\\.6%\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/ABCClassification.jsx",
+   "pattern": "MASE 1\\.26",
+   "kind": "example",
+   "note": "the reason text's format, a sample MASE"
+  },
+  {
+   "file": "frontend/src/components/ABCClassification.jsx",
+   "pattern": "\"12 forecast not reliable yet",
+   "kind": "example",
+   "note": "the summary line's format, sample counts"
+  },
+  {
+   "file": "frontend/src/components/AtRiskProductsModal.jsx",
+   "pattern": "\"35 of 70\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/AuditLog.jsx",
+   "pattern": "5400 -> \"1h 30m\"",
+   "kind": "example",
+   "note": "the duration formatter, three sample inputs"
+  },
+  {
+   "file": "frontend/src/components/CategoryTrends.jsx",
+   "pattern": "\"₱97,385,224\\.18\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/Charts.jsx",
+   "pattern": "\"Wk 7 — 5\\.2 weeks",
+   "kind": "example",
+   "note": "the tooltip's format, sample values"
+  },
+  {
+   "file": "frontend/src/components/Charts.jsx",
+   "pattern": "own ticks land on 300000",
+   "kind": "example",
+   "note": "the tick-picking rule, sample values"
+  },
+  {
+   "file": "frontend/src/components/Charts.jsx",
+   "pattern": "a real 2-unit dead-stock count on an 800-unit",
+   "kind": "example",
+   "note": "why a floor width exists, sample values"
+  },
+  {
+   "file": "frontend/src/components/Charts.jsx",
+   "pattern": "^\\s*// 4\\.35; GET /dashboard",
+   "kind": "definition",
+   "note": "WEEKS_PER_MONTH = 365.25 / 12 / 7 (analytics/params.py), copied here as the comment says"
+  },
+  {
+   "file": "frontend/src/components/Charts.jsx",
+   "pattern": "CVD ΔE 19\\.9, normal 21\\.5",
+   "kind": "definition",
+   "note": "computed by the palette validator from this file's colours"
+  },
+  {
+   "file": "frontend/src/components/ClassProductsModal.jsx",
+   "pattern": "\"\\+12\\.4%\" / \"−8\\.0%\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/Dashboard.jsx",
+   "pattern": "\"6\\.2 weeks\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/DataDictionary.jsx",
+   "pattern": "÷ 4\\.35 weeks \\(365\\.25 ÷ 12 ÷ 7\\)\\. Blue under 2\\.5 weeks, grey 2\\.5 to 3\\.5",
+   "kind": "definition",
+   "note": "4.35 = WEEKS_PER_MONTH (365.25 / 12 / 7, analytics/params.py); the bands are the 3-week policy +/- Charts.jsx WEEKS_NEAR_BAND 0.5"
+  },
+  {
+   "file": "frontend/src/components/HeroKpis.jsx",
+   "pattern": "'\\+6\\.7%'",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/RangePicker.jsx",
+   "pattern": "\"Mar 25 – Feb 26\"",
+   "kind": "example",
+   "note": "the short range label; 25 and 26 are years"
+  },
+  {
+   "file": "frontend/src/components/ReorderRecommendations.jsx",
+   "pattern": "\"≈ 363 cases of 288\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/SKUForecast.jsx",
+   "pattern": "0\\.996 up to \"1\\.00\"",
+   "kind": "example",
+   "note": "why three decimals are shown, a sample value"
+  },
+  {
+   "file": "frontend/src/components/SKUManagement.jsx",
+   "pattern": "\"12\\.75 cases\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/SkuDemandPatternPanel.jsx",
+   "pattern": "0\\.43 reads \"about 43%\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/components/TwoStepSetup.jsx",
+   "pattern": "\"1234ABCD\\.\\.\\.\"",
+   "kind": "example",
+   "note": "the secret's display grouping, a sample value"
+  },
+  {
+   "file": "frontend/src/theme/colors.js",
+   "pattern": "chroma 0\\.099 < 0\\.10",
+   "kind": "definition",
+   "note": "computed by the palette validator from this file's colours"
+  },
+  {
+   "file": "frontend/src/theme/colors.js",
+   "pattern": "1\\.5:1 contrast",
+   "kind": "definition",
+   "note": "a contrast ratio computed from the old colour value named on the line"
+  },
+  {
+   "file": "frontend/src/theme/colors.js",
+   "pattern": "measures 2\\.16:1",
+   "kind": "definition",
+   "note": "a contrast ratio computed from this file's colour value"
+  },
+  {
+   "file": "frontend/src/theme/motion.js",
+   "pattern": "0\\.42, 0, 0\\.58, 1",
+   "kind": "definition",
+   "note": "the cubic-bezier CSS defines for ease-in-out"
+  },
+  {
+   "file": "frontend/src/utils/avatarCrop.js",
+   "pattern": "\\(0, 90, 180, 270\\)",
+   "kind": "identifier",
+   "note": "rotation angles in degrees"
+  },
+  {
+   "file": "frontend/src/utils/calendarAdjustment.js",
+   "pattern": "\"×1\\.0762 \\(\\+7\\.6%\\)\"",
+   "kind": "example",
+   "note": "the label's format; 1.0762 was the company factor of 2026-10-19 to 2026-11-13"
+  },
+  {
+   "file": "frontend/src/utils/formatNumber.js",
+   "pattern": "41,713\\.61 units",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/formatNumber.js",
+   "pattern": "9,818,339\\.99 with 9,818,340",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/formatters.js",
+   "pattern": "₱1,234,567",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/formatters.js",
+   "pattern": "3,800,930 -> 3\\.8M",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/formatters.js",
+   "pattern": "999,600 rounds",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/kpiMath.js",
+   "pattern": "\\(\"2\\.1× policy\"\\)",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/kpiMath.js",
+   "pattern": "\\(6\\.2 weeks against a 3-week policy",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/kpiMath.js",
+   "pattern": "at 2\\.07×\\)",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/kpiMath.js",
+   "pattern": "3,800,930 -> \"3\\.8M\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/kpiMath.js",
+   "pattern": "812 -> \"812\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/periodComparison.js",
+   "pattern": "one month at \\+235% would",
+   "kind": "example",
+   "note": "a hypothetical month, to explain the scale rule"
+  },
+  {
+   "file": "frontend/src/utils/reorderRequests.js",
+   "pattern": "\"≈ 4\\.5 cases\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/reorderRequests.js",
+   "pattern": "\"\\+120 pieces \\(\\+8\\.3%\\)\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/reorderView.js",
+   "pattern": "so 1\\.004 doesn't read",
+   "kind": "example",
+   "note": "why three decimals are shown, a sample value"
+  },
+  {
+   "file": "frontend/src/utils/reorderView.js",
+   "pattern": "\"131 cases × 360\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/reorderView.js",
+   "pattern": "\"≈ 363 cases of 288\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/reorderView.js",
+   "pattern": "\"131 × 360\", \"≈ 3 of 288\"",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "frontend/src/utils/reorderView.js",
+   "pattern": "\"surf 360\" finds",
+   "kind": "example",
+   "note": "a sample search"
+  },
+  {
+   "file": "scripts/run_canonical_load.py",
+   "pattern": "144\\.0 -> '144'",
+   "kind": "example",
+   "note": "illustrates a format the code reads or writes; not a statement about data"
+  },
+  {
+   "file": "scripts/load_slices.py",
+   "pattern": "chr\\(31\\)",
+   "kind": "identifier",
+   "note": "the ASCII unit separator, used as a join character"
+  },
+  {
+   "file": "scripts/local_pg.py",
+   "pattern": "PostgreSQL\\\\17\\\\bin",
+   "kind": "identifier",
+   "note": "a software version in an install path"
+  },
+  {
+   "file": "scripts/make_email_assets.py",
+   "pattern": "256-colour palette",
+   "kind": "definition",
+   "note": "the GIF palette size"
+  },
+  {
+   "file": "scripts/make_demo_sales_file.py",
+   "pattern": "between 0\\.8 and 1\\.2",
+   "kind": "definition",
+   "note": "the generator's factor range, set in that file"
+  },
+  {
+   "file": "scripts/rollover_scratch_test.py",
+   "pattern": "factor 0\\.8 to 1\\.2",
+   "kind": "definition",
+   "note": "the generator's factor range, set in that file"
+  },
+  {
+   "file": "backend/routers/dashboard.py",
+   "pattern": "recreated 29-month",
+   "kind": "definition",
+   "note": "the recreated backtest's window, 2023-10..2026-02 (its mart.forecast_run label)"
+  },
+  {
+   "file": "backend/routers/dashboard_range.py",
+   "pattern": "\\(the 29-month",
+   "kind": "definition",
+   "note": "the recreated backtest's window, 2023-10..2026-02 (its mart.forecast_run label)"
+  },
+  {
+   "file": "scripts/backtest_forecast_run.py",
+   "pattern": "regenerate the 29-month forecast backtest",
+   "kind": "definition",
+   "note": "the backtest's window, 2023-10..2026-02 (its mart.forecast_run label)"
+  },
+  {
+   "file": "scripts/backtest_forecast_run.py",
+   "pattern": "ABC-single 107",
+   "kind": "identifier",
+   "note": "the pinned cohort's name: mart.forecast_run 3, 'Tier A as of 2026-02 (107, survivor cohort)'"
+  },
+  {
+   "file": "scripts/manuscript_figures.py",
+   "pattern": "§4\\.2\\.[\\d.]+, after Table",
+   "kind": "manuscript-quote",
+   "note": "a manuscript sentence quoted to place a figure (the chapter text, out of scope)"
+  },
+  {
+   "file": "scripts/manuscript_figures.py",
+   "pattern": "\\\\\"\\(Figure \\{n\\}\\)\\\\\" after",
+   "kind": "manuscript-quote",
+   "note": "a manuscript sentence quoted to place a citation (the chapter text, out of scope)"
+  }
+ ],
+ "dated": [
+  {
+   "file": "analytics/classification/orchestrate_abc.py",
+   "pattern": "applying\\ single's\\ aggregate\\ clamp\\ to\\ a\\ 3\\-month\\ window\\ —\\ is\\ 25,215\\ rows",
+   "date": "2026-09-20",
+   "source": "git blame: commit f2cb309 wrote this line on 2026-09-20",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/classification/orchestrate_abc.py",
+   "pattern": "instead\\ of\\ 25,437:\\ 222\\ SKUs\\ short,\\ with\\ 64\\ tier\\ and\\ 596\\ revenue_share",
+   "date": "2026-09-20",
+   "source": "git blame: commit f2cb309 wrote this line on 2026-09-20",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/granularity.py",
+   "pattern": "is\\ kept\\ only\\ as\\ a\\ QC\\ cross\\-check\\ \\(\\~84%\\ agreement\\ on\\ real\\ data\\),\\ never",
+   "date": "2026-08-17",
+   "source": "git blame: commit 10c8896 wrote this line on 2026-08-17",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/load.py",
+   "pattern": "rejects\\ across\\ the\\ full\\ 161\\-file\\ corpus,\\ per\\ ARCHITECTURE\\.md\\ status\\)\\ \\-",
+   "date": "2026-08-14",
+   "source": "git blame: commit 7afda90 wrote this line on 2026-08-14",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/transform.py",
+   "pattern": "REAL\\ by\\ every\\ such\\ filter\\ —\\ confirmed:\\ 1,909\\ synthetic",
+   "date": "2026-09-14",
+   "source": "git blame: commit 8d5b109 wrote this line on 2026-09-14",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/transform.py",
+   "pattern": "SAUCE\\ \\(Royce\\)\"\\ \\->\\ code=\"9DMR56831\"\\.\\ Tested\\ against\\ \\~480\\ real\\ samples",
+   "date": "2026-07-27",
+   "source": "git blame: commit bec1e10 wrote this line on 2026-07-27",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/transform.py",
+   "pattern": "is\\ only\\ \\~84%\\-consistent\\ with\\ it\\ on\\ real\\ data\\ \\(profiled\\ evidence\\),\\ so",
+   "date": "2026-08-14",
+   "source": "git blame: commit 7afda90 wrote this line on 2026-08-14",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/transform.py",
+   "pattern": "data\\ \\(one\\ is\\ 2,535\\ cases\\ /\\ \\~2\\.6M\\ valuation\\ \\-\\ large\\ enough\\ to\\ look",
+   "date": "2026-09-14",
+   "source": "git blame: commit 8d5b109 wrote this line on 2026-09-14",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/etl/transform.py",
+   "pattern": "`purchase_order`\\ rows\\ and\\ 14,662\\ synthetic\\ `inventory_sign_off`\\ rows",
+   "date": "2026-09-14",
+   "source": "git blame: commit 8d5b109 wrote this line on 2026-09-14",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/forecasting/baseline.py",
+   "pattern": "CAVEAT\\ \\#1\\ \\(population\\):\\ this\\ mapping\\ is\\ derived\\ from\\ the\\ FULL\\ 1,807\\-SK",
+   "date": "2026-08-28",
+   "source": "git blame: commit 1182c05 wrote this line on 2026-08-28",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/forecasting/baseline.py",
+   "pattern": "zero\\-padded\\ gap\\ before\\ a\\ 2025\\ launch\\ took\\ the\\ short\\ bin\\ from\\ 0\\.265\\ to",
+   "date": "2026-09-21",
+   "source": "git blame: commit c7ca212 wrote this line on 2026-09-21",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/forecasting/baseline.py",
+   "pattern": "catalog\\ \\(1,096\\-SKU\\ evaluable\\ subset,\\ all\\ ABC\\ tiers\\ combined\\ \\-\\ the\\ larg",
+   "date": "2026-08-28",
+   "source": "git blame: commit 1182c05 wrote this line on 2026-08-28",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/forecasting/baseline.py",
+   "pattern": "0\\.430\\ median\\ WAPE\\);\\ the\\ router\\ enforces\\ real\\-only\\ history\\.",
+   "date": "2026-09-21",
+   "source": "git blame: commit c7ca212 wrote this line on 2026-09-21",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/optimization/lp.py",
+   "pattern": "solve_lp's\\ retry\\ only:\\ below\\ CBC's\\ own\\ 1e\\-6\\ feasibility\\ tolerance;\\ 1e\\-",
+   "date": "2026-10-22",
+   "source": "git blame: commit c70c88d wrote this line on 2026-10-22",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/params.py",
+   "pattern": "measured\\ p75\\ over\\ 119\\ scored\\ SKUs,\\ but\\ only\\ 92\\ rows\\ of",
+   "date": "2026-09-30",
+   "source": "git blame: commit 39f27f7 wrote this line on 2026-09-30",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/params.py",
+   "pattern": "66%\\ of\\ months\\ are\\ zero\\),\\ and\\ for\\ a\\ window\\ shorter\\ than\\ a\\ month\\ it\\ offe",
+   "date": "2026-09-30",
+   "source": "git blame: commit 39f27f7 wrote this line on 2026-09-30",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/params.py",
+   "pattern": "fit_review_common_2026\\-09\\-23\\.csv\\ carry\\ a\\ CV,\\ and\\ their\\ p75\\ is\\ 0\\.434\\-0\\.",
+   "date": "2026-09-30",
+   "source": "git blame: commit 39f27f7 wrote this line on 2026-09-30",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/params.py",
+   "pattern": "under\\ numpy's\\ eight\\ percentile\\ methods\\ \\(0\\.437\\ linear\\),\\ never\\ 0\\.4365\\.\\ T",
+   "date": "2026-09-30",
+   "source": "git blame: commit 39f27f7 wrote this line on 2026-09-30",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/params.py",
+   "pattern": "flag\\ count\\ is\\ 23\\ of\\ 92\\ at\\ either\\ 0\\.4365\\ or\\ 0\\.437\\.\\ A\\ cohort\\-relative",
+   "date": "2026-09-30",
+   "source": "git blame: commit 39f27f7 wrote this line on 2026-09-30",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/segmentation/traits.py",
+   "pattern": "Tier\\ A\\ in\\ all\\ 38\\ periods,\\ 28\\ more\\ in\\ 30\\-37,\\ then\\ a\\ drop\\ to\\ a\\ 366\\-produ",
+   "date": "2026-10-11",
+   "source": "git blame: commit 930792a wrote this line on 2026-10-11",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "analytics/segmentation/traits.py",
+   "pattern": "median\\ 7\\ periods\\)\\.\\ Carried\\ forward\\ as\\ a\\ ratio\\ so\\ a\\ shorter\\ basis\\ \\(t12m",
+   "date": "2026-10-11",
+   "source": "git blame: commit 930792a wrote this line on 2026-10-11",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "backend/data_notes.py",
+   "pattern": "used\\ as\\ the\\ month\\ a\\ change\\ is\\ measured\\ against\\ \\(\"−51\\.3%\\ vs\\ Feb\\ 2026\"\\ c",
+   "date": "2026-10-01",
+   "source": "git blame: commit 419506b wrote this line on 2026-10-01",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "backend/demo_data.py",
+   "pattern": "Del\\ Monte\\ demonstration\\ dead\\-stock\\ classification,\\ every\\ one\\ of\\ the\\ 82",
+   "date": "2026-10-16",
+   "source": "git blame: commit f58ff52 wrote this line on 2026-10-16",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "backend/demo_data.py",
+   "pattern": "5\\ with\\ a\\ forecast\\ —\\ this\\ needs\\ only\\ stock\\ \\+\\ demand,\\ which\\ all\\ 82\\ have\\)",
+   "date": "2026-10-16",
+   "source": "git blame: commit f58ff52 wrote this line on 2026-10-16",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "backend/lp_cycle.py",
+   "pattern": "remembers\\ 429\\ rows\\ should\\ be\\ told\\ where\\ the\\ other\\ 179\\ went\\.",
+   "date": "2026-09-24",
+   "source": "git blame: commit 09faf71 wrote this line on 2026-09-24",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/fill_missing.py",
+   "pattern": "Inputs\\ as\\ analyzed\\ temp\\ tables:\\ as\\ CTEs\\ the\\ planner\\ guessed\\ 1\\ row\\ for\\ ",
+   "date": "2026-10-02",
+   "source": "git blame: commit 3af60d2 wrote this line on 2026-10-02",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_baseline_forecast.py",
+   "pattern": "package\\ 1c;\\ 68212522\\ was\\ stored\\ 594\\ against\\ a\\ true\\ 0\\)\\.\\ Zeros\\ are\\ real\\ ",
+   "date": "2026-10-20",
+   "source": "git blame: commit 090bba8 wrote this line on 2026-10-20",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_baseline_forecast.py",
+   "pattern": "below\\ zero\\ \\(64957373:\\ Dec\\ \\-4,348\\ gave\\ MA3\\ =\\ \\-460,\\ floored\\ to\\ 0\\ for\\ a\\ p",
+   "date": "2026-10-21",
+   "source": "git blame: commit c0b2727 wrote this line on 2026-10-21",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_baseline_forecast.py",
+   "pattern": "rule_method's\\ class\\->method\\ mapping\\ was\\ DERIVED\\ from\\ the\\ full\\ 1,807\\-SK",
+   "date": "2026-08-28",
+   "source": "git blame: commit 1182c05 wrote this line on 2026-08-28",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_baseline_forecast.py",
+   "pattern": "catalog\\ \\(1,096\\-SKU\\ evaluable\\ subset,\\ all\\ ABC\\ tiers\\ combined\\)\\ and\\ is\\\\n",
+   "date": "2026-08-28",
+   "source": "git blame: commit 1182c05 wrote this line on 2026-08-28",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_baseline_forecast.py",
+   "pattern": "Derived from the full [\\d,]+-SKU catalog \\([\\d,]+ evaluable",
+   "date": "2026-08-28",
+   "source": "git blame: commit 1182c05 wrote this line on 2026-08-28",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_canonical_load.py",
+   "pattern": "\\~99\\.7%\\ populated\\ \\(53,261/53,320\\)\\.\\ Single\\-column\\ natural\\ key;\\ the\\ raw",
+   "date": "2026-09-15",
+   "source": "git blame: commit e2b2e1a wrote this line on 2026-09-15",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  },
+  {
+   "file": "scripts/run_canonical_load.py",
+   "pattern": "match\\ 79\\.0%,\\ keyword\\ rule\\ at\\ confidence\\ >=\\ 0\\.6\\ \\(validated\\ out\\-of\\-sampl",
+   "date": "2026-09-14",
+   "source": "git blame: commit 8d5b109 wrote this line on 2026-09-14",
+   "why_not_in_place": "the file is in the month-load attestation's hashed closure"
+  }
+ ]
+}

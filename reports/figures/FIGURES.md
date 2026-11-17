@@ -86,7 +86,7 @@ No paragraph of Chapter 4 or 5 cites a Figure 4.2.x by number (searched the full
 | Figure 4.2.22 | "(Figure 4.2.22)" after "…109 passed the quality gate (MASE below 1), with a median MASE of 0.827" |
 | Figure 4.2.24 | "(Figure 4.2.24)" after "…the blocks" in §4.2.2.3.2's "For each history segment…" sentence — HELD, see the gate |
 | Figure 4.2.26 | "(Figures 4.2.26, 4.2.27 and 4.2.28)" after "The monthly table shows when the error was largest" |
-| Figure 4.2.29 | new sentence at the end of §4.2.3.1.1: "Figure 4.2.29 splits the backtest's forecast error for Tier A into over-buying (12,242,746 pieces), under-forecast absorbed by safety stock (4,847,983) and under-forecast beyond it (2,669,295); demand exceeded the forecast by more than the safety stock in 749 of 4,370 product-months (17.14%), worth ₱38,187,551 at average selling price, and Figure 4.2.30 shows how few products carry most of it." |
+| Figure 4.2.29 | new sentence at the end of §4.2.3.1.1: "Figure 4.2.29 splits the backtest's forecast error for Tier A into over-buying (9,389,241 pieces), under-forecast absorbed by safety stock (5,083,650) and under-forecast beyond it (3,096,724); demand exceeded the forecast by more than the safety stock in 852 of 4,370 product-months (19.50%), worth ₱43,767,343 at average selling price, and Figure 4.2.30 shows how few products carry most of it." |
 | Figure 4.2.32 | "(Figure 4.2.32)" after the first sentence of the rewritten urgency paragraph |
 | Figure 4.2.33 | "(Table 4.2.20, Figure 4.2.33)" in place of the first mention of the category orders |
 | Figure 4.2.34 | "(Figure 4.2.34)" after "…or 3.59 weeks of sales" |
@@ -157,11 +157,11 @@ Gate: 34 of 34 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_k_mase_distribution.png`
 
-Caption: Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02). Source: Forecast_Result for March 2026, status ok (frozen in docs/published_snapshot_2026-10-24/mase_rows.csv; pinned figure 'MASE < 1 for 109 of 175'). Period: forecast month March 2026 (served model's rolling one-step holdout, DEC-25). Not shown: the 9 insufficient-data and 5 dead Tier A products (no MASE); which model served each product; the size of each product's sales.
+Caption: Figure 4.2.22 MASE Distribution of the 175 Forecast Products, Unilever Tier A (as of 2026-02). Source: Forecast_Result of the latest Unilever forecast date, status ok, read from live (scripts.snapshot_published_figures.live_inputs); pinned figure 'MASE < 1 for 115 of 175'. Period: forecast month March 2026 (served model's rolling one-step holdout, DEC-25). Not shown: the 5 dead sku and 9 insufficient data Tier A products (no MASE); which model served each product; the size of each product's sales.
 
 Gate: 1 of 3 checks agree with the manuscript or the edit list.
-- **Disagrees:** MASE below 1: data gives `115`, Table 4.2.15 / pinned states `109`.
-- **Disagrees:** median MASE: data gives `0.755`, §4.2.2.1.3 / pinned states `0.827`.
+- **Disagrees:** MASE below 1: data gives `115`, Table 4.2.15 (the manuscript's value) states `109`.
+- **Disagrees:** median MASE: data gives `0.755`, §4.2.2.1.3 (the manuscript's value) states `0.827`.
 
 ### Figure 4.2.24 Half-Year Block Results of 36 Challengers against MA3, by History Bin (HELD)
 
@@ -176,7 +176,7 @@ Gate: 2 of 3 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_h_forecast_vs_actual.png`
 
-Caption: Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (this is a backtest: each month forecast from the months before it); per-product error, which is far larger than the total's (median product WAPE about 40%); products not forecast that month.
+Caption: Figure 4.2.26 Forecast against Actual Pieces by Month, Unilever (as-served backtest). Source: the as-served backtest rows stored on live (mart.accuracy_mart, the calendar-adjusted run labelled in scripts.accuracy_as_served.AS_SERVED_RUNS), scored on net pieces sold, the dashboard card's rule until 2026-11-17. Period: March 2025 – February 2026. Not shown: live performance (this is a backtest: each month forecast from the months before it); per-product error, which is far larger than the total's (median product WAPE 33.2% over 222 products); products not forecast that month.
 
 Gate: 20 of 37 checks agree with the manuscript or the edit list.
 - **Disagrees:** 2025-03 forecast: data gives `2344756`, Table 4.2.18 states `2603372`.
@@ -201,7 +201,7 @@ Gate: 20 of 37 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_i_monthly_wape.png`
 
-Caption: Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: live performance (a backtest); the median product WAPE (35.49% for this window, a different measure); error in pesos; months before March 2025.
+Caption: Figure 4.2.27 Monthly WAPE in Pieces, Unilever (as-served backtest). Source: the as-served backtest rows stored on live (mart.accuracy_mart, the calendar-adjusted run labelled in scripts.accuracy_as_served.AS_SERVED_RUNS), scored on net pieces sold, the dashboard card's rule until 2026-11-17. Period: March 2025 – February 2026. Not shown: live performance (a backtest); the median product WAPE (33.2% over 222 products for this window, a different measure); error in pesos; months before March 2025.
 
 Gate: 0 of 12 checks agree with the manuscript or the edit list.
 - **Disagrees:** 2025-03 WAPE (%): data gives `21.6`, Table 4.2.18 states `20.3`.
@@ -221,7 +221,7 @@ Gate: 0 of 12 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_j_surplus_shortage.png`
 
-Caption: Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos). Source: docs/published_snapshot_2026-10-24 frozen as-served rows (calendar-adjusted run; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json), scored as GET /dashboard forecast_accuracy scores them. Period: March 2025 – February 2026. Not shown: observed stockouts or overstock (these are forecast misses valued at each product's average selling price, not stock outcomes); live performance; products with no price (net pesos or pieces not positive).
+Caption: Figure 4.2.28 Surplus against Shortage by Month, Unilever (as-served backtest, pesos). Source: the as-served backtest rows stored on live (mart.accuracy_mart, the calendar-adjusted run labelled in scripts.accuracy_as_served.AS_SERVED_RUNS), scored on net pieces sold, the dashboard card's rule until 2026-11-17. Period: March 2025 – February 2026. Not shown: observed stockouts or overstock (these are forecast misses valued at each product's average selling price, not stock outcomes); live performance; products with no price (net pesos or pieces not positive).
 
 Gate: 0 of 24 checks agree with the manuscript or the edit list.
 - **Disagrees:** 2025-03 surplus: data gives `1993512`, Table 4.2.18 states `3376570`.
@@ -253,23 +253,23 @@ Gate: 0 of 24 checks agree with the manuscript or the edit list.
 
 File: `reports/figures/fig_p_error_decomposition.png`
 
-Caption: Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces). Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months), 4,370 Tier A product-months. Not shown: Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, ₱38,187,551, are a separate figure); observed stockouts (a miss beyond safety stock is potential exposure, not a recorded stockout); live performance (a backtest).
+Caption: Figure 4.2.29 Forecast Error Decomposition by Month, Unilever Tier A (pieces). Source: mart.error_decomposition_row on live (Tier A, calendar-adjusted as-served backtest; read by scripts.snapshot_published_figures.live_inputs since 2026-11-17, the frozen CSV before; its pinned figures are compared to live by scripts.snapshot_published_figures --verify). Period: January 2024 – February 2026 (26 scored months), 4,370 Tier A product-months. Not shown: Tier B and C products (Tier A only); pesos (the split is in pieces; the pesos beyond safety stock, ₱43,767,343, are a separate figure); observed stockouts (a miss beyond safety stock is potential exposure, not a recorded stockout); live performance (a backtest).
 
 Gate: 4 of 7 checks agree with the manuscript or the edit list.
-- **Disagrees:** over / absorbed / beyond as published: data gives `(9389241, 5083650, 3096724)`, docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.md states `(12242746, 4847983, 2669295)`.
-- **Disagrees:** months beyond safety stock: data gives `852`, STATE.md headline states `749`.
-- **Disagrees:** pesos beyond safety stock: data gives `43767343`, pinned states `38187551`.
+- **Disagrees:** over / absorbed / beyond as published: data gives `(9389241, 5083650, 3096724)`, manuscript as published 2026-10-24 (live and the pin moved since) states `(12242746, 4847983, 2669295)`.
+- **Disagrees:** months beyond safety stock: data gives `852`, manuscript as published 2026-10-24 (live and the pin moved since) states `749`.
+- **Disagrees:** pesos beyond safety stock: data gives `43767343`, manuscript as published 2026-10-24 (live and the pin moved since) states `38187551`.
 
 ### Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A (HELD)
 
 File: `reports/figures/fig_q_exposure_concentration.png`
 
-Caption: Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A. Source: docs/published_snapshot_2026-10-24/error_decomposition_row.csv (frozen mart.error_decomposition_row, Tier A, calendar-adjusted as-served backtest; pinned by docs/PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json). Period: January 2024 – February 2026 (26 scored months). Not shown: Tier B and C products; products with no miss beyond safety stock (not ranked); observed stockouts (exposure is potential, not recorded); pieces.
+Caption: Figure 4.2.30 Concentration of Exposure beyond Safety Stock, Unilever Tier A. Source: mart.error_decomposition_row on live (Tier A, calendar-adjusted as-served backtest; read by scripts.snapshot_published_figures.live_inputs since 2026-11-17, the frozen CSV before; its pinned figures are compared to live by scripts.snapshot_published_figures --verify). Period: January 2024 – February 2026 (26 scored months). Not shown: Tier B and C products; products with no miss beyond safety stock (not ranked); observed stockouts (exposure is potential, not recorded); pieces.
 
 Chart note: 17 products carry half and 53 carry 80% of the ₱43,767,343 beyond safety stock (218 products have any).
 
 Gate: 0 of 1 checks agree with the manuscript or the edit list.
-- **Disagrees:** pesos beyond safety stock: data gives `43767343`, pinned states `38187551`.
+- **Disagrees:** pesos beyond safety stock: data gives `43767343`, manuscript as published 2026-10-24 (live and the pin moved since) states `38187551`.
 
 ### Figure 4.2.32 Order Plan by Urgency, Unilever (cycle March 2026) (gate: pass)
 

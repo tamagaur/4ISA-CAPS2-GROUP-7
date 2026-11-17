@@ -1,3 +1,5 @@
+> **Dated record (2026-11-12; last edited 2026-11-17), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # The calendar factor computed at the grain it is applied at (2026-11-12)
 
 For: the panel and the adviser, and whoever writes the chapter text. Status: LIVE since 2026-11-13 (`python -m
@@ -36,7 +38,7 @@ Evidence (`Unilever_SKU_Demand_Fact_Real`, 419-543 products per month-year, 35 m
 |---|---|---|---|---|
 | Pooled WAPE (backtest), 95% interval of the change | Sep 2025-Feb 2026 | 38.07% | **36.33%** [-3.43, -0.19] | 208 |
 | | Jan 2024-Aug 2025 | 27.86% | **27.24%** [-0.91, -0.34] | 270 |
-| Median MASE, interval | Sep-Feb | 0.731 | **0.646** [-0.132, -0.019] | 192 |
+| Median MASE, interval (scale: the change before the window; note below the table) | Sep-Feb | 0.731 | **0.646** [-0.132, -0.019] | 192 |
 | | Jan 2024-Aug 2025 | 0.901 | **0.869** [-0.080, +0.016] | 188 |
 | Company-total WAPE (the card) | Sep-Feb / earlier | 13.30% / 10.23% | **7.22% / 9.07%** | 208 / 270 |
 | Pooled product WAPE (the card, raw net quantity; on the backtest's rule, a net-negative month = 0 sold, the row above and the card since 2026-11-17: 36.33% / 27.24%) | Sep-Feb / earlier | 38.27% / 27.88% | **36.53% / 27.25%** | 208 / 270 |
@@ -46,6 +48,8 @@ Evidence (`Unilever_SKU_Demand_Fact_Real`, 419-543 products per month-year, 35 m
 | Products passing MASE < 1 (enter the plan) | March 2026 | 110 of 175 | **115 of 175** | |
 | Order plan rows / pieces | cycle 2026-03 | 110 / 378,700 | **115 / 330,212** (-12.8%) | |
 | March forecast, total pieces | | 1,952,313 | **1,837,121** (-5.9%) | 175 |
+
+*MASE scale, traced 2026-11-17 (read-only on live).* This table's MASE divides by each product's mean month-to-month change *before* the window. The error hunt of 2026-11-10 (`reports/experiments/error_hunt_2026-11-10/`, and STATE.md's entries of that day) fixed one scale per product on 2023-01..2025-08, which for the earlier window includes the window itself. The same served forecast (stored run 16) therefore reads 0.871 there (270 products, reproduced exactly on live) and 0.901 here (188 products; the before-the-window definition gives 0.904 on live run 16 today, a 0.003 gap not resolved). In the Sep 2025-Feb 2026 window the two scales coincide (0.731 both).
 
 **What it costs.** The old factor raised every product by the company's volume-weighted rise; the new one does not, so forecasts are
 lower for most products and more months run short. Over the 26 months the error decomposition covers (2024-01 to 2026-02), Tier A product-months whose demand exceeded forecast

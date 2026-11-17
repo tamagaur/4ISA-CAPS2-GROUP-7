@@ -1,3 +1,5 @@
+> **Dated record (2026-08-21), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Del Monte Demo Data — Generation Spec
 
 **Status: spec only. No data has been generated.** Audrey and Thea should be able to build the generator entirely from this document — every number below was re-derived from the real files today, not carried over from memory of earlier conversation.

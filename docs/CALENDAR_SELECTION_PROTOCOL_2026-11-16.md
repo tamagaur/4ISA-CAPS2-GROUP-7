@@ -1,3 +1,5 @@
+> **Dated record (2026-11-16), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Calendar adjustment: selection protocol (declared 2026-11-16, before any result for these candidates)
 
 Why: the live settings (shrink 0.5, product grain, own-years weight 2, December rule) were each chosen by scoring on the

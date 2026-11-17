@@ -1,3 +1,5 @@
+> **Dated record (2026-07-10), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Anomalies
 
 Every entry cites `file :: sheet :: row/col` (or column name) evidence observed directly in profiling/sheet_profiles/*.json or profiling/file_inventory.csv. Nothing here is inferred beyond the cited cells.

@@ -1,3 +1,5 @@
+> **Dated record (2026-09-23), not a maintained document.** Its figures are as of that date and have not been re-checked against live since; they are not current claims. Current state: STATE.md; the provenance rules: docs/FIGURE_PROVENANCE.json.
+
 # Why some SKUs are unfit
 
 *Unilever Tier A cohort as of 2026-02 · written 2026-09-23 · all numbers cite the file they come from*
