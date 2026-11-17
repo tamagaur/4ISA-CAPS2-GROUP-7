@@ -51,15 +51,25 @@ export function formatPercent(share) {
 // count after the others, so the parts always add up to the total; when the
 // counts disagree (more critical + urgent than pending) there is no honest
 // split, and the answer is null.
-export function urgencyParts({ pending, critical = 0, urgent = 0, noData = 0 }) {
+//
+// Out of stock comes first and outranks Critical (adviser feedback,
+// 2026-11-17): `outOfStock` is GET /dashboard's reorder_preview
+// .out_of_stock_count and `outOfStockBy` its out_of_stock_by_urgency, the
+// out-of-stock rows already inside critical/urgent/noData. They are taken out
+// of those parts, so each product is in one part only and the sum still holds.
+export function urgencyParts({ pending, critical = 0, urgent = 0, noData = 0, outOfStock = 0, outOfStockBy = null }) {
   const total = num(pending);
   if (total == null || total <= 0) return null;
-  const c = num(critical) ?? 0;
-  const u = num(urgent) ?? 0;
-  const n = num(noData) ?? 0;
-  const planned = total - c - u - n;
-  if (c < 0 || u < 0 || n < 0 || planned < 0) return null;
+  const o = num(outOfStock) ?? 0;
+  const by = outOfStockBy || {};
+  const c = (num(critical) ?? 0) - (num(by.critical) ?? 0);
+  const u = (num(urgent) ?? 0) - (num(by.urgent) ?? 0);
+  const n = (num(noData) ?? 0) - (num(by.no_data) ?? 0);
+  const planned = total - o - c - u - n;
+  if (o < 0 || c < 0 || u < 0 || n < 0 || planned < 0) return null;
   return [
+    // Shown only when there are any, like No stock data below.
+    ...(o > 0 ? [{ key: 'outofstock', label: 'Out of stock', value: o }] : []),
     { key: 'critical', label: 'Critical', value: c },
     { key: 'urgent', label: 'Urgent', value: u },
     { key: 'planned', label: 'Planned', value: planned },

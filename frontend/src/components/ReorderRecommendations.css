@@ -337,9 +337,12 @@
 }
 
 .reorder-actnow {
+  /* Every tile is a red: all three are Act Now. Out of stock (first, and
+     out of stock outside the plan) is the deepest, since a stock-out outranks
+     low stock (adviser feedback, 2026-11-17; the manual tile was amber). */
   --actnow-first: #A81C12;
   --actnow-now: #D92D20;
-  --actnow-manual: #C77A0A;
+  --actnow-manual: #7A1A10;
   container: reorder-actnow / inline-size;
   display: flex;
   flex-direction: column;
@@ -1475,17 +1478,18 @@
   gap: 4px;
   padding: 3px 9px;
   border-radius: 999px;
-  background: #FEF3DC;
+  /* Red: out of stock is Act Now (adviser feedback, 2026-11-17; was amber). */
+  background: #FDECEC;
   font-size: 11.5px;
   font-weight: 600;
   line-height: 1.3;
-  color: #7A4A07;
+  color: #912018;
   white-space: nowrap;
 }
 
 .reorder-count-flag svg {
   flex-shrink: 0;
-  color: #C77A0A;
+  color: #B42318;
 }
 
 .is-compact .reorder-count-flag,

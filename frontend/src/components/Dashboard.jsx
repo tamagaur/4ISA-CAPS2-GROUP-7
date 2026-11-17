@@ -1541,7 +1541,12 @@ const Dashboard = () => {
     critical: reorderPreview.critical_count,
     urgent: reorderPreview.urgent_count,
     noData: reorderPreview.no_data_count,
+    outOfStock: reorderPreview.out_of_stock_count,
+    outOfStockBy: reorderPreview.out_of_stock_by_urgency,
   });
+  // The one high-priority list (backend/act_now.py, the Reorder page's Act Now
+  // card): out of stock, below target, and out of stock outside the plan.
+  const actNow = lpHidden || noPlan ? null : reorderPreview.act_now || null;
   const openingCount = stockCountedLine(reorderPreview.stock_counts);
   const pendingTooltip = lpHidden ? null : [
     `Order recommendations in the ${planLabel || 'current plan'}: the whole plan, as the Reorder page counts it. `
@@ -1550,7 +1555,9 @@ const Dashboard = () => {
         ? `${reorderPreview.pending_count.toLocaleString()} of them still wait for a decision `
           + `(${(reorderPreview.pending_order_qty ?? 0).toLocaleString()} pieces). ` : '')
       + 'Undecided rows from earlier plans are not counted.',
-    'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
+    'Out of stock: missing from the stock count, so 0 on hand; it outranks every other row. '
+      + 'Critical: stock below safety stock. Urgent: below the target stock. Planned: at or above the target stock. '
+      + 'Each product is counted in one part only. '
       + `Stock is the count that opens the plan${openingCount ? ` (${openingCount})` : ''}; a SKU missing from that `
       + 'count is read as 0 on hand.',
     'Pieces to order: each pending row\'s order quantity, rounded up to a whole piece, added together.',
@@ -1907,6 +1914,7 @@ const Dashboard = () => {
               reason={noPlan ? noPlanNote : LP_HIDDEN_NOTE}
               asOf={planLabel}
               parts={pendingParts}
+              actNow={actNow}
               orderQty={pendingParts ? reorderPreview.total_order_qty : null}
               tooltip={pendingTooltip}
               to="/reorder"

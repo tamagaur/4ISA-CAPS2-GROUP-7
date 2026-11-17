@@ -65,6 +65,15 @@ test('rows without a stock figure are their own part, not counted as planned', (
   assert.deepEqual(parts.map((p) => [p.key, p.value]), [['critical', 2], ['urgent', 1], ['planned', 4], ['nodata', 3]]);
 });
 
+test('out of stock is its own part, first, and is not counted again as critical or urgent', () => {
+  // 115 in the plan: 15 critical and 5 urgent, 8 out of stock of which 3 are critical.
+  const parts = urgencyParts({
+    pending: 115, critical: 15, urgent: 5, noData: 0, outOfStock: 8, outOfStockBy: { critical: 3, urgent: 0, no_data: 0 },
+  });
+  assert.deepEqual(parts.map((p) => [p.key, p.value]), [['outofstock', 8], ['critical', 12], ['urgent', 5], ['planned', 90]]);
+  assert.equal(parts.reduce((sum, p) => sum + p.value, 0), 115);
+});
+
 test('no split when nothing is pending or the counts disagree', () => {
   assert.equal(urgencyParts({ pending: 0 }), null);
   assert.equal(urgencyParts({ pending: null, critical: 1 }), null);

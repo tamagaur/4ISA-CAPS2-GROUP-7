@@ -713,14 +713,58 @@
   color: #475467;
 }
 
-.hero-urgency .is-critical {
+.hero-urgency .is-critical,
+.hero-urgency .is-outofstock {
   background: #FDECEC;
 }
 
 .hero-urgency .is-critical strong,
-.hero-urgency .is-critical .hero-urgency-act {
+.hero-urgency .is-critical .hero-urgency-act,
+.hero-urgency .is-outofstock strong,
+.hero-urgency .is-outofstock .hero-urgency-act {
   font-weight: 600;
   color: #B42318;
+}
+
+/* Out of stock outranks Critical: a red edge on its row as well. */
+.hero-urgency .is-outofstock {
+  box-shadow: inset 3px 0 0 #B42318;
+}
+
+/* The Act Now line above the Priority list (adviser feedback, 2026-11-17). */
+.hero-actnow {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #FDECEC;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.hero-actnow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #B42318;
+  text-decoration: none;
+}
+
+.hero-actnow-link:hover,
+.hero-actnow-link:focus-visible {
+  text-decoration: underline;
+}
+
+.hero-actnow-parts {
+  font-size: 12.5px;
+  color: #7A271A;
+}
+
+.hero-actnow-confirm {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #7A271A;
 }
 
 .hero-urgency .is-urgent strong { color: #93370D; }

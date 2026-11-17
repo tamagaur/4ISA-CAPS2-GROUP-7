@@ -441,6 +441,14 @@ class FakeSession:
             # the range, whatever its sign — the fixture's range_revenue is exactly those rows.
             return FakeResult([{"present": bool(self.range_revenue.get(params["principal"]))}])
 
+        # backend/routers/recommendations._present: which optional tables exist (reorder_preview.act_now).
+        if "to_regclass('review_flag') IS NOT NULL AS review_flag" in sql:
+            return FakeResult([{"review_flag": False, "on_order": False}])
+
+        # backend/routers/recommendations.not_planned: Tier A products outside the plan (reorder_preview.act_now).
+        if "AS in_stock_count" in sql and "nop_cycle" in params:
+            return FakeResult(getattr(self, "not_planned_rows", []))
+
         raise AssertionError(f"Unexpected query in FakeSession: {sql}")
 
     def close(self):
@@ -1097,6 +1105,32 @@ def test_reorder_preview_critical_means_below_safety_stock_not_half_the_target()
     assert (preview["critical_count"], preview["low_count"], preview["urgent_count"]) == (1, 1, 1)
 
 
+def test_reorder_preview_puts_stock_outs_first_and_counts_one_act_now_list():
+    """Adviser feedback, 2026-11-17: a product missing from the stock count is
+    out of stock and outranks one that is only low; below-target and
+    out-of-stock products are one list, each product counted once."""
+    rows = [
+        _reco_row(1, urgency_stock=10, rop_i=100),   # CRITICAL
+        _reco_row(2, urgency_stock=20, rop_i=100),   # CRITICAL
+        _reco_row(3, urgency_stock=90, rop_i=100),   # URGENT (below target)
+        _reco_row(4, urgency_stock=150, rop_i=100),  # PLANNED
+        _reco_row(5, urgency_stock=30, rop_i=100),   # CRITICAL
+        _reco_row(6, urgency_stock=40, rop_i=100),   # CRITICAL
+        {**_reco_row(7, urgency_stock=None, rop_i=100), "in_stock_count": False},  # absent from the count: 0, out of stock
+    ]
+    session = FakeSession(reco_preview_rows=rows)
+    with make_client(session) as c:
+        preview = c.get("/dashboard?principal=unilever", headers={"Authorization": f"Bearer {user_token()}"}).json()["reorder_preview"]
+    assert preview["rows"][0]["recommendation_key"] == 7
+    assert preview["rows"][0]["stock_not_in_count"] is True
+    assert preview["out_of_stock_count"] == 1
+    assert preview["out_of_stock_by_urgency"] == {"critical": 1, "urgent": 0, "no_data": 0}
+    # 1 out of stock + 5 below target (4 critical, 1 urgent); the PLANNED row is not in it.
+    assert preview["act_now"]["out_of_stock"] == 1
+    assert preview["act_now"]["below_target"] == 5
+    assert preview["act_now"]["total"] == 6
+
+
 def test_reorder_preview_empty_when_no_pending_recommendations():
     session = FakeSession(reco_preview_rows=[])
     with make_client(session) as c:
@@ -1104,6 +1138,10 @@ def test_reorder_preview_empty_when_no_pending_recommendations():
     preview = resp.json()["reorder_preview"]
     assert preview == {
         "rows": [], "critical_count": 0, "low_count": 0, "urgent_count": 0, "no_data_count": 0, "total_order_qty": 0,
+        "out_of_stock_count": 0,
+        "out_of_stock_by_urgency": {"critical": 0, "urgent": 0, "no_data": 0},
+        "act_now": {"out_of_stock": 0, "below_target": 0, "check_manually": 0, "confirm": 0,
+                    "out_of_stock_no_order": 0, "total": 0},
         "plan_count": 0, "pending_count": 0, "pending_order_qty": 0,
         "lp_weights": {"cost": 0.45, "service_level": 0.35, "storage": 0.2},
         "lp_weights_source": "defaults",

@@ -3212,10 +3212,11 @@ export const ReorderRecommendationWidget = ({
     return { cost: read('cost'), service_level: read('service_level'), storage: read('storage') };
   }, [weights]);
 
-  // GET /dashboard already orders the rows most-urgent first and, within an
-  // urgency, by the Reorder page's own priority (revenue share x units below
-  // the reorder point), so the card and the page agree on what comes first.
-  // Re-sorting here by order quantity used to override that.
+  // GET /dashboard already orders the rows out of stock first, then most
+  // urgent, then by the Reorder page's own priority (revenue share x units
+  // below the reorder point; backend/act_now.act_now_sort_key), so the card
+  // and the page agree on what comes first. Re-sorting here by order
+  // quantity used to override that.
   const sortedRows = rows;
 
   // The strip above the table (Audrey, 2026-10-21): counts over the rows this
@@ -3226,7 +3227,7 @@ export const ReorderRecommendationWidget = ({
   // up to a whole piece), so it equals the rows listed (2026-10-24; rounding
   // the sum instead printed a total 2 pieces short of them).
   const shownCount = sortedRows.length;
-  const shownCritical = sortedRows.filter((r) => r.urgency === 'CRITICAL').length;
+  const shownCritical = sortedRows.filter((r) => r.urgency === 'CRITICAL' && !r.notInCount).length;
   const shownNotInCount = sortedRows.filter((r) => r.notInCount).length;
   const shownToCheck = sortedRows.filter((r) => r.needsReview).length;
   const shownPieces = shownPiecesTotal(sortedRows);
@@ -3299,11 +3300,14 @@ export const ReorderRecommendationWidget = ({
             title="These counts cover the products listed below only. The whole plan's totals are on the Pending reorders card."
           >
             <span className="reorder-mini-strip-scope">Of the {shownCount} shown</span>
+            {/* Out of stock first and red: it outranks critical (adviser
+                feedback, 2026-11-17). Critical counts the in-stock rows only,
+                so no product is counted twice. */}
             <span className="reorder-mini-strip-item">
-              <strong className={shownCritical > 0 ? 'is-critical' : undefined}>{shownCritical}</strong> critical
+              <strong className={shownNotInCount > 0 ? 'is-critical' : undefined}>{shownNotInCount}</strong> out of stock (not counted)
             </span>
             <span className="reorder-mini-strip-item">
-              <strong className={shownNotInCount > 0 ? 'is-caution' : undefined}>{shownNotInCount}</strong> out of stock (not counted)
+              <strong className={shownCritical > 0 ? 'is-critical' : undefined}>{shownCritical}</strong> critical
             </span>
             <span className="reorder-mini-strip-item">
               <strong className={shownToCheck > 0 ? 'is-caution' : undefined}>{shownToCheck}</strong> to check before ordering
@@ -3367,15 +3371,20 @@ export const ReorderRecommendationWidget = ({
                     <td role="cell">
                       {/* Why this urgency, on hover: the stock against the
                           safety stock it is judged by (2026-10-19). */}
+                      {/* Out of stock outranks every urgency (adviser feedback,
+                          2026-11-17): red "OUT OF STOCK", whatever the urgency
+                          its 0 on hand works out to (the hover still says it). */}
                       <span
-                        className={`urgency-badge-mini${URGENCY_CLASS[r.urgency] ? ` ${URGENCY_CLASS[r.urgency]}` : ''}`}
-                        title={r.safetyStock != null
-                          ? `${r.urgency === 'CRITICAL' ? 'Below' : r.urgency === 'URGENT' ? 'Above' : 'Well above'} its safety stock of ${formatUnits(r.safetyStock)} pieces`
-                            + `${r.notInCount ? '; out of stock (not counted): not in the stock count, so read as 0 on hand' : ''}`
-                          : undefined}
+                        className={`urgency-badge-mini${r.notInCount ? ' urgency-critical'
+                          : URGENCY_CLASS[r.urgency] ? ` ${URGENCY_CLASS[r.urgency]}` : ''}`}
+                        title={r.notInCount
+                          ? `Out of stock (not counted): not in the stock count, so read as 0 on hand${r.urgency ? `; by stock alone it would be ${r.urgency.toLowerCase()}` : ''}`
+                          : r.safetyStock != null
+                            ? `${r.urgency === 'CRITICAL' ? 'Below' : r.urgency === 'URGENT' ? 'Above' : 'Well above'} its safety stock of ${formatUnits(r.safetyStock)} pieces`
+                            : undefined}
                       >
-                        {r.urgency === 'CRITICAL' && <AlertTriangle size={11} strokeWidth={2.5} aria-hidden="true" />}
-                        {r.urgency}
+                        {(r.notInCount || r.urgency === 'CRITICAL') && <AlertTriangle size={11} strokeWidth={2.5} aria-hidden="true" />}
+                        {r.notInCount ? 'OUT OF STOCK' : r.urgency}
                       </span>
                     </td>
                     {/* The stock the urgency was judged on. A product missing

@@ -431,6 +431,9 @@ from backend.principals import (
 from backend.routers.recommendations import select_one as _recommendation_select_one
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
+from backend.routers.recommendations import _present as _recommendation_present
+from backend.routers.recommendations import not_planned as _recommendation_not_planned
+from backend.act_now import act_now_groups, act_now_sort_key
 from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
 from backend.stock_units import STOCK_COUNTS_SQL, opening_period, stock_counts
 from backend.response_cache import cached
@@ -2266,15 +2269,24 @@ def get_dashboard(
         stock_counts(db, rp_stock_period, sorted({r["principal"] for r in rp_rows}), cycle=lp_cycle, run=lp_run)
         if lp_cycle is not None else []
     )
-    # Within an urgency, highest priority first — the Reorder page's own
-    # ranking (revenue share x units below the reorder point). Urgency alone
+    # Out of stock first (adviser feedback, 2026-11-17: stock-outs outrank low
+    # stock), then urgency, then the Reorder page's own ranking within an
+    # urgency (revenue share x units below the reorder point). Urgency alone
     # left the order to the query, so the card showed an arbitrary five of
-    # the 183 CRITICAL rows (2026-09-29).
-    rp_items_sorted = sorted(
-        rp_items,
-        key=lambda it: (_URGENCY_RANK.get(it.urgency, 99), -(it.priority_score or 0)),
-    )
+    # the 183 CRITICAL rows (2026-09-29). backend/act_now.act_now_sort_key.
+    rp_items_sorted = sorted(rp_items, key=act_now_sort_key)
     rp_open_sorted = [it for it in rp_items_sorted if it.status == "pending"]
+    # Top sellers outside the plan, for the Act Now count's out-of-stock-but-
+    # not-planned group (the Reorder page reads the same list from GET
+    # /recommendations). Real data only, and only with a plan to be outside of.
+    rp_not_planned = (
+        _recommendation_not_planned(
+            db, lp_cycle, None if scope == "all" else scope,
+            abc_periods=_cycle_abc_periods(db, scope, lp_cycle),
+            review_flag_present=_recommendation_present(db)["review_flag"],
+        )
+        if mode == REAL and lp_cycle is not None else []
+    )
 
     reorder_preview = {
         # The five to act on first: open (pending) rows only. Every count and total below is the plan
@@ -2292,6 +2304,21 @@ def get_dashboard(
         # count reads as 0 on hand, as the LP treats it, and is ranked like
         # any other (recommendations._to_item, backend/stock_status.py).
         "no_data_count": sum(1 for it in rp_items if it.urgency == NO_DATA),
+        # In the plan and missing from the opening count (read as 0 on hand):
+        # out of stock. Counted over the whole plan, like critical_count.
+        "out_of_stock_count": sum(1 for it in rp_items if it.stock_not_in_count),
+        # The out-of-stock rows inside critical_count / urgent_count / no_data_count,
+        # so the card can show Out of stock as its own part first and the parts still
+        # add up to the plan (frontend utils/kpiMath.urgencyParts).
+        "out_of_stock_by_urgency": {
+            "critical": sum(1 for it in rp_items if it.stock_not_in_count and it.urgency == CRITICAL),
+            "urgent": sum(1 for it in rp_items if it.stock_not_in_count and it.urgency == URGENT),
+            "no_data": sum(1 for it in rp_items if it.stock_not_in_count and it.urgency == NO_DATA),
+        },
+        # The one high-priority list (backend/act_now.py): out of stock first,
+        # then below target, then out of stock but not in the plan. Undecided
+        # rows only, as on the Reorder page's Act Now card.
+        "act_now": act_now_groups(rp_items, rp_not_planned),
         # Whole units per row, summed over the PLAN (pending + accepted + dismissed, at q_i) — the Reorder
         # page's own total, so the two screens agree before and after a decision (they differed by 123.6
         # units 2026-09-29, and by one accepted row's pieces until 2026-10-23). A row the planner accepted at a

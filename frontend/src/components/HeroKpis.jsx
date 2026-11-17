@@ -868,6 +868,8 @@ export const BelowSafetyCard = ({
 // (`valueReason`, in its pop-up). `criticalTo` opens the Reorder page
 // filtered to critical rows.
 const URGENCY_ROWS = {
+  // Stock-outs outrank low stock (adviser feedback, 2026-11-17): red, first.
+  outofstock: { name: 'Out of stock', what: 'not in the stock count, so 0 on hand', act: 'Act now · first' },
   critical: { name: 'Critical', what: 'below safety stock', act: 'Act now' },
   urgent: { name: 'Urgent', what: 'below target stock', act: 'Next' },
   // "planned", the Reorder page's word (URGENCY_LABEL) and the Suggested
@@ -877,7 +879,7 @@ const URGENCY_ROWS = {
 };
 
 export const PendingReordersCard = ({
-  count = null, reason = null, asOf = null, parts = null, orderQty = null, tooltip = null, to = '/reorder',
+  count = null, reason = null, asOf = null, parts = null, actNow = null, orderQty = null, tooltip = null, to = '/reorder',
   criticalTo = null, valueReason = 'Waiting for SSM cost data',
   // Why the plan holds these products of all the top sellers (2026-10-19):
   // { total, evaluated, passed, failed, gate } from GET /dashboard's forecast
@@ -896,7 +898,8 @@ export const PendingReordersCard = ({
   }
   const value = (key) => parts?.find((p) => p.key === key)?.value ?? 0;
   const routineSum = parts
-    ? `${n(count)} − ${n(value('critical'))} critical − ${n(value('urgent'))} urgent`
+    ? `${n(count)}${value('outofstock') > 0 ? ` − ${n(value('outofstock'))} out of stock` : ''}`
+      + ` − ${n(value('critical'))} critical − ${n(value('urgent'))} urgent`
       + `${value('nodata') > 0 ? ` − ${n(value('nodata'))} no stock data` : ''} = ${n(value('planned'))}`
     : null;
   return (
@@ -932,6 +935,35 @@ export const PendingReordersCard = ({
           )}
         </span>
       </p>
+
+      {/* The one high-priority list (adviser feedback, 2026-11-17): out of
+          stock and below target together, each product once, counted by the
+          backend from the plan (backend/act_now.py); it opens the Reorder
+          page's Act Now card. */}
+      {actNow && actNow.total > 0 && (
+        <p className="hero-actnow">
+          <Link to={to} className="hero-actnow-link">
+            <strong>Act now: {n(actNow.total)} {actNow.total === 1 ? 'product' : 'products'}</strong>
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
+          <span className="hero-actnow-parts">
+            {[
+              actNow.out_of_stock > 0 && `${n(actNow.out_of_stock)} out of stock`,
+              actNow.below_target > 0 && `${n(actNow.below_target)} below target`,
+              actNow.check_manually > 0 && `${n(actNow.check_manually)} out of stock, not in the plan`,
+            ].filter(Boolean).join(' · ')}
+          </span>
+          {/* Stock-outs with no order to decide: outside the total, but never unmentioned. */}
+          {(actNow.out_of_stock_no_order > 0 || actNow.confirm > 0) && (
+            <span className="hero-actnow-confirm">
+              Also out of stock, nothing to order: {[
+                actNow.out_of_stock_no_order > 0 && `${n(actNow.out_of_stock_no_order)} with no demand forecast`,
+                actNow.confirm > 0 && `${n(actNow.confirm)} with no sale in 6 months`,
+              ].filter(Boolean).join(', ')}. Confirm with SSM.
+            </span>
+          )}
+        </p>
+      )}
 
       {parts ? (
         <div className="hero-block">
