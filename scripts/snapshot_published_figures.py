@@ -107,33 +107,53 @@ def headline_figures(rows: pd.DataFrame, money: pd.DataFrame) -> dict:
     return out
 
 
-def live_headline(cur) -> dict:
-    """The headline WAPE recomputed from the database as it is now (2026-11-16). Until this date it was verified against
-    the frozen rows only, on the belief that the as-served backtest rows are not stored. They are: scripts.accuracy_as_served
-    --write stores each run in mart.forecast_run / mart.accuracy_mart under the labels of AS_SERVED_RUNS (live: runs 20 and
-    21, 4,370 rows each, the same product-months and forecasts as the frozen file). One rule differs between the two
-    stores and is applied here: as-served scoring counts a net-negative month as 0 sold, while the mart keeps the raw net
-    quantity (196 rows of each run on 2026-11-16), so the actual is GREATEST(actual_pieces, 0). Prices come from
-    Unilever_SKU_Demand_Fact_Real, the query scripts.accuracy_as_served.read_inputs uses. A run that is not stored
-    contributes no figure, which --verify reports as a divergence."""
-    from scripts.accuracy_as_served import AS_SERVED_RUNS, metrics
+def live_money(cur) -> pd.DataFrame:
+    """Per product-month pesos and pieces from Unilever_SKU_Demand_Fact_Real (scripts.accuracy_as_served.read_inputs's query):
+    the live counterpart of the frozen demand_money.csv."""
     cur.execute("""SELECT product_key, calendar_month, SUM(net_amount), SUM(quantity_sold)
                    FROM Unilever_SKU_Demand_Fact_Real GROUP BY product_key, calendar_month""")
     money = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "net_amount", "quantity_raw"])
+    money["month"] = money["month"].astype(str)
     for c in ("net_amount", "quantity_raw"):
         money[c] = pd.to_numeric(money[c], errors="coerce").astype(float)
-    out = {}
+    return money
+
+
+def live_backtest_rows(cur) -> pd.DataFrame:
+    """The as-served backtest rows of every HEADLINE_RUN as stored on live (mart.accuracy_mart under the labels of
+    scripts.accuracy_as_served.AS_SERVED_RUNS; live: runs 20 and 21, 4,370 rows each, the same product-months and forecasts
+    as the frozen file). One rule differs between the two stores and is applied here: as-served scoring counts a net-negative
+    month as 0 sold, while the mart keeps the raw net quantity (196 rows of each run on 2026-11-16), so the actual is
+    GREATEST(actual_pieces, 0). Same columns as the frozen accuracy_as_served_rows.csv; a run that is not stored has no rows."""
+    from scripts.accuracy_as_served import AS_SERVED_RUNS
+    parts = []
     for run in HEADLINE_RUNS:
         cur.execute("""SELECT a.product_key, a.month, GREATEST(a.actual_pieces, 0), a.forecast_pieces, a.ma3_pieces
                        FROM mart.accuracy_mart a JOIN mart.forecast_run r ON r.run_id = a.run_id
                        WHERE r.label = %s AND a.actual_pieces IS NOT NULL AND a.forecast_pieces IS NOT NULL""",
                     (AS_SERVED_RUNS[run][0],))
         bt = pd.DataFrame(cur.fetchall(), columns=["product_key", "month", "actual", "value", "ma3"])
-        if bt.empty:
-            continue
+        bt["month"] = bt["month"].astype(str)
         for c in ("actual", "value", "ma3"):
             bt[c] = pd.to_numeric(bt[c], errors="coerce").astype(float)
-        m = metrics(bt.sort_values(["product_key", "month"]).reset_index(drop=True), money)
+        bt["run"] = run
+        parts.append(bt.sort_values(["product_key", "month"]).reset_index(drop=True))
+    return pd.concat(parts, ignore_index=True)
+
+
+def live_headline(cur, rows: pd.DataFrame | None = None, money: pd.DataFrame | None = None) -> dict:
+    """The headline WAPE recomputed from the database as it is now (2026-11-16): live_backtest_rows scored with
+    live_money. Until 2026-11-16 it was verified against the frozen rows only, on the belief that the as-served backtest
+    rows are not stored. A run that is not stored contributes no figure, which --verify reports as a divergence."""
+    from scripts.accuracy_as_served import metrics
+    rows = live_backtest_rows(cur) if rows is None else rows
+    money = live_money(cur) if money is None else money
+    out = {}
+    for run in HEADLINE_RUNS:
+        bt = rows[rows.run == run].reset_index(drop=True)
+        if bt.empty:
+            continue
+        m = metrics(bt, money)
         out[run] = {k: m[k] for k in HEADLINE_KEYS}
     return out
 
@@ -206,8 +226,12 @@ def cmd_write() -> int:
     conn, cur = connect()
     try:
         stamp = actuals_version.read(cur)
-        cur.execute("""SELECT product_key, forecast_date, status, mase, model_params ->> 'method' AS method
-                       FROM forecast_result WHERE forecast_date = (SELECT MAX(forecast_date) FROM forecast_result)""")
+        cur.execute("""SELECT f.product_key, f.forecast_date, f.status, f.mase, f.model_params ->> 'method' AS method
+                       FROM forecast_result f
+                       JOIN product_dimension p ON p.product_key = f.product_key AND p.principal = 'unilever'
+                       WHERE f.forecast_date = (SELECT MAX(f2.forecast_date) FROM forecast_result f2
+                                                JOIN product_dimension p2 ON p2.product_key = f2.product_key
+                                                WHERE p2.principal = 'unilever')""")
         mase = pd.DataFrame(cur.fetchall(), columns=["product_key", "forecast_date", "status", "mase", "method"])
         cur.execute("SELECT * FROM mart.error_decomposition_row")
         dec = pd.DataFrame(cur.fetchall(), columns=[d[0] for d in cur.description])
@@ -275,8 +299,10 @@ def cmd_verify() -> int:
             conn.rollback()
             conn.close()
     except Exception as exc:  # no database: the figures were verified from the frozen rows, but not against live
-        print(f"live actuals version not read: {exc}")
-        return 0
+        # The frozen rows reproduced, but nothing was compared to live: that is not a pass (until 2026-11-17 this returned
+        # 0, so a standalone --verify, the command CLAUDE.md quotes, was green having read only committed files).
+        print(f"FAIL: live actuals version not read, nothing compared to live: {exc}")
+        return 3
     drift = []
     if live["key"] != snap["actuals_version"]["key"]:
         drift.append(f"actuals version: snapshot {snap['actuals_version']['key']}, live {live['key']}")
@@ -299,19 +325,34 @@ def cmd_verify() -> int:
     return 0
 
 
-def live_figures(cur) -> dict:
-    """Every pinned figure recomputed from the database as it is now: the headline WAPE (live_headline), the stored MASE of
-    the latest forecast and the error decomposition (the same queries as --write)."""
-    cur.execute("""SELECT product_key, forecast_date, status, mase FROM forecast_result
-                   WHERE forecast_date = (SELECT MAX(forecast_date) FROM forecast_result)""")
+def live_inputs(cur):
+    """The four inputs of the pinned figures read from the database as it is now, in the shapes of read_frozen():
+    (backtest rows, money, MASE rows of the latest Unilever forecast, error decomposition rows). scripts/manuscript_figures.py
+    reads these, not the frozen CSVs (until 2026-11-17 its figures h-k read the committed files, so they could not move
+    with live)."""
+    rows, money = live_backtest_rows(cur), live_money(cur)
+    cur.execute("""SELECT f.product_key, f.forecast_date, f.status, f.mase FROM forecast_result f
+                   JOIN product_dimension p ON p.product_key = f.product_key AND p.principal = 'unilever'
+                   WHERE f.forecast_date = (SELECT MAX(f2.forecast_date) FROM forecast_result f2
+                                            JOIN product_dimension p2 ON p2.product_key = f2.product_key
+                                            WHERE p2.principal = 'unilever')""")
     mase = pd.DataFrame(cur.fetchall(), columns=["product_key", "forecast_date", "status", "mase"])
-    mase["mase"] = mase["mase"].astype(float)
+    mase["mase"] = pd.to_numeric(mase["mase"], errors="coerce").astype(float)
     cur.execute("SELECT * FROM mart.error_decomposition_row")
     dec = pd.DataFrame(cur.fetchall(), columns=[d[0] for d in cur.description])
     for c in dec.columns:
         if dec[c].dtype == object and c not in ("principal", "tier", "month", "forecast_source", "ss_method"):
             dec[c] = pd.to_numeric(dec[c], errors="coerce")
-    return {"headline_wape": live_headline(cur), "mase": mase_figures(mase), "error_decomposition": decomposition_figures(dec)}
+    dec["month"] = dec["month"].astype(str)
+    return rows, money, mase, dec
+
+
+def live_figures(cur) -> dict:
+    """Every pinned figure recomputed from the database as it is now: the headline WAPE (live_headline), the stored MASE of
+    the latest Unilever forecast and the error decomposition (the same queries as --write)."""
+    rows, money, mase, dec = live_inputs(cur)
+    return {"headline_wape": live_headline(cur, rows, money), "mase": mase_figures(mase),
+            "error_decomposition": decomposition_figures(dec)}
 
 
 def cmd_march_impact() -> int:

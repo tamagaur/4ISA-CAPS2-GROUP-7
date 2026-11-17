@@ -126,9 +126,14 @@ def test_a_refusal_and_a_non_json_answer_pass_through_untouched(monkeypatch):
 def test_gzip_really_wraps_it_in_the_app():
     """An outer position would hand the labeller compressed bytes."""
     assert gzip.compress(b"x")[:2] == b"\x1f\x8b"
-    from backend import main
-    source = open(main.__file__, encoding="utf-8").read()
-    assert source.index("app.add_middleware(PracticeBodyLabel)") < source.index("app.add_middleware(GZipMiddleware")
+    from starlette.middleware.gzip import GZipMiddleware
+
+    from backend.main import app
+    # app.user_middleware lists the stack outermost first (add_middleware inserts at 0). Read from the mounted stack, not the
+    # source text (until 2026-11-17 this compared two string positions in main.py).
+    order = [m.cls for m in app.user_middleware]
+    assert GZipMiddleware in order and pc.PracticeBodyLabel in order
+    assert order.index(GZipMiddleware) < order.index(pc.PracticeBodyLabel), order
 
 
 def test_the_deployed_api_mounts_only_the_data_keyed_form():

@@ -49,6 +49,22 @@ def cmd_env(full: bool = False) -> int:
     return 0
 
 
+def cmd_target() -> int:
+    """One line naming the database the live checks read: `live (host/db)` or `LOCAL COPY (host/db), not live`. check.sh
+    prints it under the env step and in its last line, so a run against a restored copy (allowed: rehearsals and clean
+    clones are checked that way) can never be read as a check against live (added 2026-11-17)."""
+    from urllib.parse import urlparse
+
+    from dotenv import load_dotenv
+    load_dotenv(REPO / ".env")
+    sys.path.insert(0, str(REPO))
+    from scripts.report_target import is_live_target
+    u = urlparse(os.environ.get("SUPABASE_DB_URL") or "")
+    where = f"{u.hostname or '?'}{u.path or ''}"
+    print(f"live ({where})" if is_live_target() else f"LOCAL COPY ({where}), not live")
+    return 0
+
+
 ALLOWED_SKIPS = REPO / "scripts" / "known_opt_in_skips.txt"
 
 
@@ -70,6 +86,21 @@ def covered_by_optin(path: Path = ALLOWED_SKIPS) -> list[str]:
     """The tests the list says scripts/check.sh --optin runs (third column), in the list's order."""
     return [line.split("	")[0].strip() for line in path.read_text(encoding="utf-8").splitlines()
             if not line.startswith("#") and line.count("	") >= 2 and line.split("	")[2].strip() == OPTIN_COMMAND]
+
+
+def cmd_every_file(path: str, folder: str) -> int:
+    """Fails when a test_*.py file of `folder` contributed no test case to the junit file: a file whose tests were renamed
+    away, or a class pytest cannot collect, passes a run it took no part in (found 2026-11-17: --fast pinned no count)."""
+    root = ET.parse(path).getroot()
+    seen = {c.get("classname", "").split(".")[-1] for c in root.iter("testcase")}
+    seen |= {c.get("classname", "").rsplit(".", 2)[-2] for c in root.iter("testcase") if c.get("classname", "").count(".") >= 2}
+    files = sorted(f.stem for f in (REPO / folder).glob("test_*.py"))
+    empty = [f for f in files if f not in seen]
+    if empty:
+        print(f"FAIL: {len(empty)} test file(s) in {folder} ran no test: {', '.join(empty)}")
+        return 1
+    print(f"every one of the {len(files)} test files in {folder} ran at least one test")
+    return 0
 
 
 def cmd_junit(path: str, allowed: dict[str, str] | None = None) -> int:
@@ -109,6 +140,10 @@ def cmd_junit(path: str, allowed: dict[str, str] | None = None) -> int:
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "env":
         sys.exit(cmd_env(full="--full" in sys.argv[2:]))
+    if len(sys.argv) == 2 and sys.argv[1] == "target":
+        sys.exit(cmd_target())
+    if len(sys.argv) == 4 and sys.argv[1] == "every-file":
+        sys.exit(cmd_every_file(sys.argv[2], sys.argv[3]))
     if len(sys.argv) in (3, 4) and sys.argv[1] == "junit":
         sys.exit(cmd_junit(sys.argv[2], load_allowed() if sys.argv[3:] == ["--allow-listed"] else None))
     print(__doc__)

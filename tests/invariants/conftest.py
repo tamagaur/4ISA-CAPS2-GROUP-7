@@ -58,9 +58,9 @@ def db(live_env):
 
 
 @pytest.fixture(scope="session")
-def get(db):
-    """get(path) -> parsed JSON of a GET against the real app (admin token, session check bypassed as in
-    scripts/smoke_api.py). Memoised: each path is requested once per run."""
+def api(db):
+    """(client, headers): the real app in-process on the read-only live session, admin token, session check bypassed
+    as in scripts/smoke_api.py. `get` below is the memoised JSON reader; test_i uses the client for status codes."""
     from fastapi.testclient import TestClient
 
     # The token below is signed and checked inside this process only, so it needs a secret but not the real one: a
@@ -78,6 +78,16 @@ def get(db):
     client = TestClient(app)
     headers = {"Authorization": "Bearer " + create_access_token(user_id=1, email="invariants@local",
                                                                 role="admin", full_name="Invariants")}
+    yield client, headers
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture(scope="session")
+def get(api):
+    """get(path) -> parsed JSON of a GET against the real app (admin token, session check bypassed as in
+    scripts/smoke_api.py). Memoised: each path is requested once per run."""
+    client, headers = api
     cache: dict[str, dict] = {}
 
     def _get(path: str) -> dict:
@@ -88,8 +98,6 @@ def get(db):
         return cache[path]
 
     yield _get
-    app.dependency_overrides.pop(get_db, None)
-    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture(scope="session")
@@ -104,3 +112,8 @@ def sql(db):
 @pytest.fixture(scope="session")
 def plan(get):
     return get("/recommendations?principal=unilever")
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow_live: a live invariant over a minute long; check.sh --full runs it, --fast "
+                                       "deselects it (a deselected test is not a skip and is not counted as passed)")

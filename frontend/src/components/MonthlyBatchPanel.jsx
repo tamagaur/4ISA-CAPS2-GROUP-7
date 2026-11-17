@@ -252,7 +252,7 @@ const LiveJobBanner = ({ job }) => {
       <div className="mb-result is-failed" role="alert">
         <h5><XCircle size={16} aria-hidden="true" /> {job.kind === 'rollback' ? `Rolling back ${label} did not finish` : `${label} did not finish loading`}</h5>
         <p>{job.kind === 'rollback'
-          ? 'Nothing was changed: the rollback only completes when every table matches the saved state. The reason is in the saved log.'
+          ? 'It stopped in one of two places, and the saved log says which. If the restore itself was refused (a table did not match the saved state), nothing was changed. If the restore went through and a check after it failed (the plan or the pinned figures), the tables are already back as they were before this month. Either way the rollback points are kept, so it can be run again.'
           : 'Run it again to continue where it stopped, or roll the month back to return to how things were.'}
         {took ? ` It ran for ${took}.` : ''}</p>
       </div>
@@ -649,7 +649,8 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
                   <>
                     <fieldset className="mb-choice" disabled={inputsLocked}>
                       <legend>Calendar factor</legend>
-                      {['on', 'off'].map((value) => (
+                      {/* Live loads run with the factor on only (the backend refuses off there: batch_calendar_factor_live). */}
+                      {(live ? ['on'] : ['on', 'off']).map((value) => (
                         <label key={value} className={`mb-choice-option${calendarFactor === value ? ' is-selected' : ''}`}>
                           <input type="radio" name="calendar-factor" value={value} checked={calendarFactor === value} onChange={() => setCalendarFactor(value)} />
                           {value === 'on' ? 'On (as the live forecast)' : 'Off'}

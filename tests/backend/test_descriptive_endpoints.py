@@ -111,6 +111,23 @@ def test_fsn_period_param_is_the_window_end():
     assert seen["end"] == "2025-06" and seen["n"] == 12
 
 
+def test_fsn_del_monte_window_starts_at_the_regrouping():
+    """Del Monte's window never reaches before the January 2025 regrouping (DEC-43): the old category paths would be
+    judged non-moving and the five current categories slow on the pre-2025 zeros."""
+    seen = {}
+
+    def months(params):
+        seen.update(params)
+        return [{"period": "2025-12"}]
+
+    session = FakeSession([
+        ("DISTINCT _period AS period", months),
+        ("SUM(s.quantity) AS qty", []),
+    ])
+    get(session, "/fsn?principal=delmonte")
+    assert seen["start"] == "2025-01"
+
+
 def test_brand_pareto_ranks_with_abc_cutoffs():
     session = FakeSession([
         # backend/marts.SNAPSHOT_SQL: Unilever's real sales end 2026-02.

@@ -327,6 +327,12 @@ class FakeSession:
             return FakeResult([{"present": self.lp_run is not None}])
         if "FROM lp_run r" in sql:
             return FakeResult([self.lp_run] if self.lp_run else [])
+        # recommendations._present: which migrations' tables and columns exist. The dashboard's reorder preview asks it
+        # since 2026-11-17 (so it reads the decided quantity); this fixture models a fully migrated database.
+        if "to_regclass('review_flag') IS NOT NULL AS review_flag" in sql:
+            return FakeResult([{"review_flag": True, "on_order": True, "decision_cols": True, "approval": True,
+                                "reversal": True, "receipts": True, "requests": True}])
+
         # LP cycle + freshness (backend/lp_cycle.py) — checked BEFORE the
         # _SELECT_ONE matcher below, which would otherwise claim these:
         # they read the same table with the same status predicate.
@@ -363,6 +369,11 @@ class FakeSession:
         # (reused verbatim by reorder_preview) embeds its own stock
         # subquery, which a stock matcher below would otherwise claim.
         if "FROM lp_recommendation lr" in sql and "WHERE (lr.status IN ('pending', 'accepted', 'dismissed')" in sql:
+            # Honour the SQL: when it selects the decision columns as NULL (select_one without `present`), the rows carry
+            # no decided quantity. Until 2026-11-17 the fixture returned it whatever the SQL said, so the test below that an
+            # accepted quantity moves both screens passed while the dashboard's real query never read it.
+            if "NULL::numeric AS decided_q_i" in sql:
+                return FakeResult([{**r, "decided_q_i": None} for r in self.reco_preview_rows])
             return FakeResult(self.reco_preview_rows)
 
         if "COUNT(*) AS product_count" in sql:
@@ -428,7 +439,8 @@ class FakeSession:
         if "fr.forecast_date = lr.planning_cycle_date" in sql:
             return FakeResult(self.policy_rows)
 
-        if sql.strip() == "SELECT MAX(forecast_date) AS d FROM Forecast_Result":
+        if sql.strip().startswith("SELECT MAX(f.forecast_date) AS d FROM Forecast_Result f"):
+            assert params.get("forecast_principal") == "unilever", "the latest forecast date is Unilever's"
             return FakeResult([{"d": self.latest_forecast_date}])
 
         if "fr.mase < :mase_gate" in sql:

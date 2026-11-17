@@ -181,5 +181,10 @@ def health() -> dict[str, str]:
     Two paths, same check: Render's health check uses /health; the
     sidebar's status light uses /status, because EasyPrivacy (Brave
     Shields, uBlock Origin, AdBlock) blocks ||onrender.com/health, which
-    showed SYS OFFLINE in those browsers while the app itself worked."""
-    return {"status": "ok"}
+    showed SYS OFFLINE in those browsers while the app itself worked.
+
+    `commit` (2026-11-17): the git commit this process was built from, from Render's RENDER_GIT_COMMIT (set on every Render
+    build), else "unknown". Nothing checked which commit the deployed API runs (on 2026-11-06 it was an older build than the
+    branch it was said to deploy); compare it with `git rev-parse team/kelvin-be`. A commit id is not a secret: the repo is public."""
+    commit = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()
+    return {"status": "ok", "commit": commit[:12] if commit else "unknown"}

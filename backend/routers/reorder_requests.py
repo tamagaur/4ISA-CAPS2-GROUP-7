@@ -77,7 +77,8 @@ _LOCK_ROW_SQL = """
            COALESCE(pd.sku_code, pd.category_path) AS sku, {PACK} AS pack,
            (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
             JOIN product_dimension p2 ON p2.product_key = l2.product_key
-            WHERE p2.principal = pd.principal) AS current_cycle
+            WHERE p2.principal = pd.principal
+              AND l2.status IN ('pending', 'accepted', 'dismissed') AND (l2.status = 'pending' OR l2.lp_run_key IS NOT NULL)) AS current_cycle
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     WHERE lr.recommendation_key = :key

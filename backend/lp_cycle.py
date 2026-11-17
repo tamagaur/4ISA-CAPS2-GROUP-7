@@ -82,6 +82,10 @@ CURRENT_CYCLE_CLAUSE = " AND lr.planning_cycle_date = :current_cycle AND (lr.sta
 PLAN_STATUSES = ("pending", "accepted", "dismissed")
 PLAN_STATUS_SQL = ("(lr.status IN ('pending', 'accepted', 'dismissed') "
                    "AND (lr.status = 'pending' OR lr.lp_run_key IS NOT NULL))")
+# The same rule on the alias l2: the decision and request routes' "current cycle" subqueries (recommendations.py,
+# reorder_approval.py, reorder_requests.py) carry it literally since 2026-11-17, so the cycle a decision is accepted on is
+# the cycle current_cycle() shows (before, their MAX took any row, a decided row no LP run produced included).
+PLAN_STATUS_SQL_L2 = PLAN_STATUS_SQL.replace("lr.", "l2.")
 PLAN_STATUS_SQL_BARE = ("(status IN ('pending', 'accepted', 'dismissed') "
                         "AND (status = 'pending' OR lp_run_key IS NOT NULL))")  # for subqueries with no `lr` alias
 

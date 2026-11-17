@@ -155,7 +155,8 @@ def check_file(conn, path: Path) -> dict:
             cur.execute("SELECT count(*) FROM inventory_fact_real WHERE principal = %s AND _period = ANY(%s)", (PRINCIPAL, [period, prev]))
             if not cur.fetchone()[0]:
                 problems.append(f"the {ds.next_month(period)} plan opens from the stock count of {period} (or, projected from it, of {prev}) and neither is in the system, "
-                                f"so {period} cannot be planned. Load that month's stock count first")
+                                f"so {period} cannot be planned. The Data Management page loads sales only: that month's stock count has to be "
+                                "loaded into the database first, outside this page")
         cur.execute(KNOWN_SKUS_SQL)
         known = {sku for sku, *_ in cur.fetchall()}
         unknown = [r["sku_code"] for r in mf.rows if r["sku_code"] not in known]
@@ -209,9 +210,13 @@ def accept_waiting(by: str, cycle: str, month: str) -> int:
     accepted = refused = 0
     reason = f"Accepted at the recommended quantity when {month} sales were loaded."
     with Session(engine) as db:
+        # The rows WAITING_SQL counts, and only those (2026-11-17: this query had no principal filter and no lp_run_key IS NOT NULL, so it
+        # could accept rows the refusal never counted; none such on live that day).
         keys = [r[0] for r in db.execute(text(
-            "SELECT recommendation_key FROM lp_recommendation WHERE planning_cycle_date = :cycle AND status = 'pending' AND q_i > 0 AND closed_at IS NULL"),
-            {"cycle": cycle}).all()]
+            "SELECT lr.recommendation_key FROM lp_recommendation lr JOIN product_dimension pd ON pd.product_key = lr.product_key "
+            "WHERE pd.principal = :principal AND lr.planning_cycle_date = :cycle AND lr.lp_run_key IS NOT NULL "
+            "AND lr.status = 'pending' AND lr.q_i > 0 AND lr.closed_at IS NULL"),
+            {"cycle": cycle, "principal": PRINCIPAL}).all()]
         present = rec._present(db)
         db.rollback()
         for key in keys:

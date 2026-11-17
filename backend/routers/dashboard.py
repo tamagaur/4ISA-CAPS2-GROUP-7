@@ -432,6 +432,7 @@ from backend.principals import (
     normalize_principal,
 )
 from backend.routers.recommendations import select_one as _recommendation_select_one
+from backend.routers.recommendations import _present as _recommendation_present
 from backend.routers.recommendations import _to_item as _to_recommendation_item
 from backend.routers.recommendations import whole_units
 from backend.stock_status import CRITICAL, NO_DATA, URGENCY_RANK, URGENT
@@ -1031,8 +1032,12 @@ def _product_count_query(scope: str, mode: str, lp_cycle) -> tuple[str, dict]:
 def _forecast_counts_query(scope: str, mode: str) -> tuple[str, dict]:
     fc_src, fc_params = forecast_source(mode)
     return f"""
+            -- The latest forecast date of the principals in scope (2026-11-17): before, every principal's latest, so a newer
+            -- forecast of another principal would have emptied these counts. Live holds Unilever forecasts only.
             WITH latest AS (
-                SELECT MAX(forecast_date) AS forecast_date FROM {fc_src}
+                SELECT MAX(lf.forecast_date) AS forecast_date
+                FROM {fc_src} lf JOIN Product_Dimension pd ON pd.product_key = lf.product_key
+                WHERE 1=1 {_principal_filter(scope)}
             ),
             -- The plan's entry test on Unilever's latest forecast (scripts/run_lp.py CANDIDATE_QUERY: status 'ok'
             -- AND mase < MASE_GATE), for the error card: products with a holdout MASE, how many pass, the median.
@@ -1121,8 +1126,12 @@ def _pending_keys_query(mode: str, lp_cycle) -> tuple[str, dict]:
 
 
 def _latest_forecast_date_query(mode: str) -> tuple[str, dict]:
+    """Unilever's latest forecast date (marts.ACCURACY_PRINCIPAL: the only principal with product forecasts). Before
+    2026-11-17 it was every principal's latest, so a newer forecast row of another principal would have emptied the
+    gated rows, the portfolio forecast and the calendar block. Live holds Unilever forecasts only."""
     fc_src, fc_params = forecast_source(mode)
-    return f"SELECT MAX(forecast_date) AS d FROM {fc_src}", fc_params
+    return (f"SELECT MAX(f.forecast_date) AS d FROM {fc_src} f JOIN Product_Dimension p ON p.product_key = f.product_key "
+            f"WHERE p.principal = :forecast_principal"), {"forecast_principal": marts.ACCURACY_PRINCIPAL, **fc_params}
 
 
 def _gated_rows_query(scope: str, mode: str, forecast_date) -> tuple[str, dict]:
@@ -1224,8 +1233,12 @@ def _action_counts(items) -> dict:
     }
 
 
-def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_periods: dict[str, str]) -> tuple[str, dict]:
-    rp_select, rp_select_params = _recommendation_select_one(mode)
+def _reorder_preview_query(scope: str, mode: str, lp_cycle, stock_period, abc_periods: dict[str, str],
+                           present: dict | None = None) -> tuple[str, dict]:
+    # `present` is recommendations._present(db). Without it select_one assumes migration 0062's decision columns are
+    # absent and reads the decided quantity as NULL, so until 2026-11-17 a row accepted at another quantity counted its q_i here
+    # while GET /recommendations counted the decided quantity (the two screens disagreed after such an accept).
+    rp_select, rp_select_params = _recommendation_select_one(mode, present)
     return rp_select + f" WHERE {PLAN_STATUS_SQL} {_principal_filter(scope)} {_lp_cycle_filter(lp_cycle)}", {
         "inv_period": stock_period,
         **abc_period_params(abc_periods),
@@ -1297,7 +1310,8 @@ def _prefetch(db: Session, scope: str, mode: str, period: str | None, start_peri
         freshness_query(lp_cycle, fc_at, scope, mode),
         _product_count_query(scope, mode, lp_cycle),
         _pending_keys_query(mode, lp_cycle),
-        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle)),
+        _reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle),
+                               _recommendation_present(db)),
         _policy_rows_query(scope, mode, lp_cycle),
     ]
     wave2 += [marts.pareto_query(range_start, range_end, who, mode)
@@ -2320,7 +2334,8 @@ def get_dashboard(
     # end month, and reorder_preview answers "order now".
     rp_stock_period = opening_period(lp_cycle) if lp_cycle is not None else None
     rp_rows = batch.rows(
-        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle))
+        db, *_reorder_preview_query(scope, mode, lp_cycle, rp_stock_period, _cycle_abc_periods(db, scope, lp_cycle),
+                                    _recommendation_present(db))
     )
     # The whole plan: a decided row stays in it (backend/lp_cycle.PLAN_STATUSES), so the total and the
     # count below agree with GET /recommendations after an accept. What is still open work is rp_open.

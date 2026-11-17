@@ -43,3 +43,10 @@ def test_the_steps_are_the_ones_the_driver_runs():
     src = Path(dr.REPO / "scripts" / "month_load_rehearsal.py").read_text(encoding="utf-8")
     for name in dr.STEPS:
         assert re.search(rf'"{name}"', src), name
+
+
+def test_the_committed_attestation_matches_this_code():
+    """Live month loading is switched off whenever the committed rehearsal does not match the code (dr.ok()). Nothing failed when an
+    edit made it stale, so a server could be deployed with loading off and nobody would find out until the panel (2026-11-17). Red
+    here means: run python -m scripts.month_load_rehearsal on a restored copy of live before deploying."""
+    assert dr.ok() == (True, ""), dr.ok()[1]

@@ -54,6 +54,8 @@ pytest_strict() {
   # only the whole suite may skip, and only the 21 named in scripts/known_opt_in_skips.txt; every other run allows none
   local allow=""; [ "$label" = "full" ] && allow="--allow-listed"
   "$PY" scripts/check_helpers.py junit "$xml" $allow || rc=1
+  # the invariants: every file must have run a test (one that collects nothing would otherwise pass --fast unnoticed)
+  [ "$label" = "invariants" ] && { "$PY" scripts/check_helpers.py every-file "$xml" tests/invariants || rc=1; }
   return $rc
 }
 
@@ -73,13 +75,27 @@ chapter_totals() { "$PY" -m scripts.chapter_figures --verify-junit "$TMP/invaria
 # the repository). The disagreements on record (docs/MANUSCRIPT_HELD_CHECKS.json) are listed as NOT passed; a new one, a moved
 # one or a settled one fails.
 manuscript()    { "$PY" -m scripts.manuscript_figures --verify; }
-invariants()    { pytest_strict invariants tests/invariants; }
+# --fast deselects the over-a-minute live invariants (marker slow_live: every GET route against live); --full runs them all.
+invariants()    { if [ "$MODE" = "--full" ]; then pytest_strict invariants tests/invariants; else pytest_strict invariants tests/invariants -m "not slow_live"; fi; }
 full_suite()    { pytest_strict full tests --ignore=tests/invariants; }
 # The frontend's own tests (node --test over src/**/*.test.js; the error card's render test among them). Not run by any step
 # until 2026-11-17, so a card that threw on a withheld answer passed every check.
+# Every *.test.js under src is passed BY NAME (not through the glob in package.json: node exits 0 with "tests 0" when a glob
+# matches nothing), each file must hold a test( call, and the run must report at least one test per file (2026-11-17).
 frontend_tests(){
   [ -d frontend/node_modules ] || { echo "FAIL: frontend/node_modules is missing (run: cd frontend && npm ci)"; return 1; }
-  (cd frontend && npm test)
+  local files out n rc nfiles
+  files=$(cd frontend && find src -name '*.test.js' -not -path '*/node_modules/*' | sort)
+  nfiles=$(echo "$files" | grep -c . )
+  [ "$nfiles" -gt 0 ] || { echo "FAIL: no frontend test files found under frontend/src"; return 1; }
+  for f in $files; do grep -qE '(^|[^.A-Za-z_])(test|it)\(' "frontend/$f" || { echo "FAIL: $f holds no test"; return 1; }; done
+  out=$(cd frontend && node --test $files 2>&1); rc=$?
+  echo "$out" | tail -12
+  n=$(echo "$out" | grep -E '^(#|ℹ) tests [0-9]+' | tail -1 | awk '{print $3}')
+  case "$n" in ''|*[!0-9]*) echo "FAIL: the frontend test run reported no test count"; return 1;; esac
+  [ "$n" -ge "$nfiles" ] || { echo "FAIL: $n tests ran from $nfiles test files"; return 1; }
+  echo "frontend: $n tests from $nfiles files"
+  return $rc
 }
 frontend_build(){
   [ -d frontend/node_modules ] || { echo "FAIL: frontend/node_modules is missing (run: cd frontend && npm ci)"; return 1; }
@@ -88,6 +104,8 @@ frontend_build(){
 
 ENV_ARGS=(); [ "$MODE" = "--full" ] && ENV_ARGS=(--full)
 step "live database configured and reachable, required variables set" "$PY" scripts/check_helpers.py env "${ENV_ARGS[@]}"
+TARGET="$("$PY" scripts/check_helpers.py target 2>/dev/null || echo "unknown target")"
+echo "    database read by every live check: $TARGET"
 step "backend lint (ruff, correctness rules)" lint_backend
 step "frontend lint (oxlint, errors)" lint_frontend
 step "pinned figures reproduce" pinned
@@ -110,5 +128,6 @@ for i in "${!NAMES[@]}"; do
 done
 echo "  total ${ELAPSED}s"
 if [ "$MODE" = "--fast" ] && [ "$ELAPSED" -gt 90 ]; then echo "  NOTE: over the 90 s target for --fast"; fi
-if [ "$FAILS" -gt 0 ]; then echo "RED: $FAILS check(s) failed"; exit 1; fi
-echo "GREEN: all checks ran and passed (no unlisted skips; in --full, the 21 opt-in tests in scripts/known_opt_in_skips.txt are NOT RUN wherever their inputs are absent; 18 of them run with --optin)"
+echo "  database: $TARGET"
+if [ "$FAILS" -gt 0 ]; then echo "RED: $FAILS check(s) failed (database: $TARGET)"; exit 1; fi
+echo "GREEN against $TARGET: all checks ran and passed (no unlisted skips; in --full, the 21 opt-in tests in scripts/known_opt_in_skips.txt are NOT RUN wherever their inputs are absent; 18 of them run with --optin)"

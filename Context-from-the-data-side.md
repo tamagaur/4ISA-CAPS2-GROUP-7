@@ -1,3 +1,5 @@
+> **Dated record (2026-09-18), not a maintained guide.** Wrong now: the Unilever cohort of record is ABC method t12m_new, read through abc_method() / abc_method_sql() (DEC-38 / DEC-42), not method = 'single' (Del Monte stays on 'single'). Current state: [STATE.md](STATE.md); rules: [CLAUDE.md](CLAUDE.md); trust the code where this disagrees.
+
 Context from the data side (Yuan). Read-only check, no fixes yet.
 
 abc_classification now stores TWO methods, 'single' and 't3m', plus a run_id column

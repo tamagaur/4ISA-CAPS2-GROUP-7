@@ -121,6 +121,19 @@ def trends_for(
     for name, by_period in series.items():
         values = [by_period.get(m, 0.0) for m in observed]
         projection = project_category(values)
+        if principal != "unilever" and projection.get("available"):
+            # Del Monte: a month the category was not reported in, or no category was (skipped_months below), is a
+            # collection gap, not a zero, and the fit spaces observed months as if adjacent. A projection resting on
+            # either is refused (2026-11-17). Today none is available anyway: 6 observed months since the regrouping
+            # against MIN_POINTS = 12, so this changes no served answer; it stops a later month from fitting on a zero.
+            window = observed[-len(values):]
+            gaps = [m for m in window if m not in by_period]
+            calendar_gaps = [m for m in month_range(window[0], window[-1]) if m not in set(window)]
+            if gaps or calendar_gaps:
+                projection = {"available": False, "points": projection.get("points", 0), "label": "Months not collected",
+                              "reason": ("No projection: the category was not reported in "
+                                         f"{len(gaps) + len(calendar_gaps)} month(s) of its window, and a month that was "
+                                         "not collected is not a zero sale.")}
         history = []
         for m, v in zip(observed, values):
             point = {"period": m, "revenue": round(v, 2)}

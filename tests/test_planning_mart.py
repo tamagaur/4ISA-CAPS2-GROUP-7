@@ -329,7 +329,9 @@ def test_the_live_mart_answers_the_current_cycle_as_the_joins_do():
     if not applied:
         pytest.skip("mart.planning_mart not present (migration 0046 not applied)")
     try:
-        for case in [c for c in rehearsal.CASES if c[1] == "current" and c[2] in (None, "pending")]:
+        cases = [c for c in rehearsal.CASES if c[1] == "current" and c[2] in (None, "pending")]
+        assert cases, "no current-cycle case left in rehearse_planning_mart.CASES: the comparison below would pass on nothing"
+        for case in cases:
             mart, joins = rehearsal._call("mart", case), rehearsal._call(None, case)
             assert mart is not None, f"{case}: the mart was not served"
             assert rehearsal._diff(joins, mart) == [], case

@@ -985,7 +985,9 @@ def test_not_planned_lists_each_reason_with_stock_and_sales_and_no_quantity(sess
     got = {i["sku_id"]: i for i in _get(session, "/recommendations?principal=unilever")["not_planned"]}
     assert [got[s]["reason"] for s in ("NP1", "NP2", "NP3", "NP4", "NP5")] == ["mase_gate", "insufficient_data", "dead", "other", "other"]
     assert got["NP1"]["current_stock"] == 50.0 and got["NP1"]["recent_monthly_pieces"] == 30.0 and got["NP1"]["reason_text"]
-    assert got["NP2"]["recent_monthly_pieces"] == 0.0
+    # NULL from the SQL means the sales window has no month at all (no data), not zero sales: no figure, and the plan rows'
+    # own reason (2026-11-17; it read 0.0 and "zero or negative" before).
+    assert got["NP2"]["recent_monthly_pieces"] is None and "no sales rows" in got["NP2"]["cover_blocked_reason"]
     # Absent from a count that omits zero-stock items reads as a plan row does: 0, marked as inferred.
     assert got["NP3"]["current_stock"] == 0.0 and got["NP3"]["stock_not_in_count"] is True
     # In the count, but its cases can't be put in pieces: no figure, and why.

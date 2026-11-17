@@ -28,6 +28,7 @@ month-load attestation (`docs/MONTH_LOAD_REHEARSAL.json`) matches this code, so 
 | Build command | `pip install -r requirements.txt` |
 | Start command | `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` |
 | Health check path | `/health` |
+| After the deploy (added 2026-11-17) | `GET /health` answers `{"status": "ok", "commit": "<first 12 of the commit>"}` from Render's own `RENDER_GIT_COMMIT`. It must equal `git rev-parse --short=12 team/kelvin-be`; `unknown` means the build is older than 2026-11-17 or not on Render. Then `GET /batch/status` (signed in as an admin) must say `blocked: null`: anything else means the month-load attestation (`docs/MONTH_LOAD_REHEARSAL.json`) does not match the deployed code and loading is off. |
 | Python | 3.13 (`.python-version`; if the build rejects it, set `PYTHON_VERSION` to a full version such as `3.13.5`) |
 
 | Variable | Value | Needed | What breaks without it (code) |

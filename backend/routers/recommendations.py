@@ -141,7 +141,7 @@ the "PO Qty" of the same opening count the row's stock comes from, in pieces
 (backend/stock_units.ON_ORDER_AT_PERIOD_SQL). It is NOT treated as stock in
 transit and is never subtracted from q_i or any other order quantity
 (decision 2026-10-04, Yuan, DEC-34): on the count of 2 March 2026 it totals
-1,644,300 pieces against an order plan of 325,468 and 3,800,930 on hand,
+1,644,300 pieces against lp_run 1's order plan of 325,468 (2026-10-04) and 3,800,930 on hand,
 and it runs 1-3M pieces every month, which doesn't fit in-transit stock.
 on_order_note says so on every row until SSM explains the column. None with
 on_order_blocked_reason when the count's PO Qty isn't loaded (live rows stay
@@ -724,7 +724,10 @@ def not_planned(db: Session, cycle, principal: str | None, abc_periods: dict | N
         reason = _not_planned_reason(r["forecast_status"], r["mase"])
         stock = None if r["current_stock"] is None else float(r["current_stock"])
         absent = r["in_stock_count"] is False and r["principal"] in COUNT_OMITS_ZERO_STOCK
-        recent = float(r["recent_monthly_pieces"] or 0)
+        # NULL only when the sales window has no month at all (NULLIF): no sales data, not zero sales. A product with no row
+        # in a window that exists is 0 (COALESCE: a Unilever month with no row sold nothing). Until 2026-11-17 the NULL was
+        # read as 0 here, so the row said "zero or negative" where a plan row says "no sales rows".
+        recent = None if r["recent_monthly_pieces"] is None else float(r["recent_monthly_pieces"])
         days_of_cover, cover_reason = _cover(0.0 if absent else stock, recent)
         out.append(NotPlannedItem(
             sku_id=r["sku_id"] or "", product_name=r["product_name"], reason=reason, reason_text=NOT_PLANNED_REASONS[reason],
@@ -1122,7 +1125,8 @@ _UPDATE_DECISION_SQL = """
       AND lr.planning_cycle_date = (
           SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
           JOIN product_dimension p2 ON p2.product_key = l2.product_key
-          WHERE p2.principal = pd.principal)
+          WHERE p2.principal = pd.principal
+              AND l2.status IN ('pending', 'accepted', 'dismissed') AND (l2.status = 'pending' OR l2.lp_run_key IS NOT NULL))
     RETURNING COALESCE(pd.sku_code, pd.category_path) AS sku, lr.planning_cycle_date
 """
 _OPEN_CHANGE_GUARD = """
@@ -1146,7 +1150,8 @@ _WHY_NOT_DECIDED_SQL = """
     SELECT d.status, d.planning_cycle_date,
            (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
             JOIN product_dimension p2 ON p2.product_key = l2.product_key
-            WHERE p2.principal = pd.principal) AS current_cycle
+            WHERE p2.principal = pd.principal
+              AND l2.status IN ('pending', 'accepted', 'dismissed') AND (l2.status = 'pending' OR l2.lp_run_key IS NOT NULL)) AS current_cycle
     FROM lp_recommendation d
     JOIN product_dimension pd ON pd.product_key = d.product_key
     WHERE d.recommendation_key = :key

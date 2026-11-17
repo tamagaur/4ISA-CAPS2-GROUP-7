@@ -89,7 +89,8 @@ _CURRENT_CYCLE = """
     lr.planning_cycle_date = (
         SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
         JOIN product_dimension p2 ON p2.product_key = l2.product_key
-        WHERE p2.principal = pd.principal)"""
+        WHERE p2.principal = pd.principal
+              AND l2.status IN ('pending', 'accepted', 'dismissed') AND (l2.status = 'pending' OR l2.lp_run_key IS NOT NULL))"""
 
 # The row a request is about: its quantity, state, cycle and the principal's current cycle.
 _ROW_SQL = """
@@ -98,7 +99,8 @@ _ROW_SQL = """
            {PACK} AS pack,
            (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
             JOIN product_dimension p2 ON p2.product_key = l2.product_key
-            WHERE p2.principal = pd.principal) AS current_cycle
+            WHERE p2.principal = pd.principal
+              AND l2.status IN ('pending', 'accepted', 'dismissed') AND (l2.status = 'pending' OR l2.lp_run_key IS NOT NULL)) AS current_cycle
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     WHERE lr.recommendation_key = :key
@@ -109,7 +111,8 @@ _LOCK_ROW_SQL = """
     SELECT lr.status, lr.planning_cycle_date,
            (SELECT MAX(l2.planning_cycle_date) FROM lp_recommendation l2
             JOIN product_dimension p2 ON p2.product_key = l2.product_key
-            WHERE p2.principal = pd.principal) AS current_cycle
+            WHERE p2.principal = pd.principal
+              AND l2.status IN ('pending', 'accepted', 'dismissed') AND (l2.status = 'pending' OR l2.lp_run_key IS NOT NULL)) AS current_cycle
     FROM lp_recommendation lr
     JOIN product_dimension pd ON pd.product_key = lr.product_key
     WHERE lr.recommendation_key = :key

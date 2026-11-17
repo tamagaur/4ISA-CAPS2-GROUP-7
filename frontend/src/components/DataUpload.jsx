@@ -10,12 +10,13 @@ import './DataUpload.css';
 // answers, nothing is drawn; if it has no database to process, the page says so.
 const DataUpload = () => {
   const [batch, setBatch] = useState(undefined);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let current = true;
     getBatchAvailable().then((status) => { if (current) setBatch(status); });
     return () => { current = false; };
-  }, []);
+  }, [attempt]);
 
   return (
     <div className="du-page">
@@ -27,7 +28,13 @@ const DataUpload = () => {
           accent="management"
           subtitle="Load a month of sales, check it, and update the forecast and the order plan."
         />
-        {batch && <MonthlyBatchPanel initialStatus={batch} />}
+        {batch && !batch.error && <MonthlyBatchPanel initialStatus={batch} />}
+        {batch?.error && (
+          <EmptyState icon={Database} title="Could not read monthly processing" tone="error" role="alert"
+            actions={<button type="button" className="btn btn-secondary" onClick={() => { setBatch(undefined); setAttempt((a) => a + 1); }}>Try again</button>}>
+            The server did not answer the status of monthly processing: {batch.error}. Nothing was loaded or changed.
+          </EmptyState>
+        )}
         {batch === null && (
           <EmptyState icon={Database} title="Monthly processing is not available">
             This server is not connected to a database it can process a month on. Ask an admin.

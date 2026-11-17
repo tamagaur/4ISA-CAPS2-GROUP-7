@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17.
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17 (final sweep).
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -15,6 +15,40 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    (git-ignored).)
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+FINAL SWEEP (2026-11-17, Kelvin's brief; read side only on live: no live write, plan 115 / 330,212 unchanged; backup of live
+  backups/full_backup_20261117T083516Z, read-only, PASS, for the rehearsal below).
+  DEFECTS FIXED. Dashboard reorder preview read the decided quantity as NULL (select_one without `present`), so after an accept at
+  another quantity Dashboard and Reorder disagreed; its test passed because the fake returned decided_q_i whatever the SQL said
+  (fake now honours the SQL; the test fails on the old code). Dashboard's forecast counts and latest-forecast date took every
+  principal's latest (now the scope's / Unilever's). Decision, approval and request routes found "the current cycle" without the
+  plan-status rule. Not-planned rows read a missing sales window as 0. marts.flow_by_period: a NULL real row wiped the period's sum.
+  segment.py's "as of 2026-02" now read from sku_traits. Del Monte FSN window crossed the 2025 regrouping (now cut at 2025-01;
+  no page calls it). Del Monte category projection over uncollected months now refused (none was available: 6 months < 12).
+  Frontend: Category Trends pop-up drew an uncollected month as PHP 0; the order tooltip printed "- 0 in stock" for NO DATA rows;
+  Data Management hid every /batch/status failure as "not available"; the rollback-failure banner said "Nothing was changed" though
+  the restore commits before the plan/pins checks; the rollback dialog did not say accounts, passwords, MFA and permissions go back
+  too; live loads could choose calendar factor off (backend now refuses it live, 422). Live job logs and job state said "practice".
+  scripts/demo_session.py: the waiting-order accept query lacked the principal and lp_run_key filters of the count; its refusal
+  pointed at a stock-count upload the page cannot do. /health now names the Render commit (RENDER_GIT_COMMIT).
+  CHECKS THAT COULD NOT FAIL, FIXED. manuscript_figures h-k read the committed snapshot CSVs (now live_inputs: the stored as-served
+  runs, the demand view, the latest Unilever forecast, mart.error_decomposition_row; same 72 held, values unchanged);
+  snapshot_published_figures --verify returned 0 when live could not be read (now 3); manuscript api_get ran routes outside a
+  read-only transaction; demo_rehearsal.FILES hashed 21 of the 98 files a load runs (now the computed import closure) and nothing
+  failed when the attestation went stale (tests/test_demo_rehearsal now fails); no check ran most routes' SQL on Postgres
+  (tests/invariants/test_i: every GET route on live: 48 asked, 4 /batch excused, 52 in all; plus the six _Real views' definitions on live);
+  npm test exits 0 on "tests 0" (check.sh now passes every file by name and fails on 0); an invariant file collecting nothing passed
+  --fast (check_helpers every-file); check.sh never said which database it read (now in its first and last line); the gzip-order
+  test compared source positions; two data-driven loops passed on an empty list.
+  MONTH-LOAD REHEARSAL re-run on the widened hash (98 files): restore of full_backup_20261117T083516Z into ssm_rehearsal
+  (127.0.0.1:55432), all 11 steps EXACT (start 115 / 330,212; March 131 / 1,016,754; April 138 / 985,960; every rollback back to
+  115 / 330,212 with the 51 pins reproducing; crash mid-run and the refused third month exact); docs/MONTH_LOAD_REHEARSAL.json rewritten.
+  MEASURED on the final tree: check.sh --full GREEN against live, 745 s: invariants 34 of 34 (9 files, each ran), suite 2863 passed,
+  18 opt-in not run, 0 failed; Chapter 4 totals re-pinned 2901 -> 2915 collected (the 14 new tests; no other pinned figure moved);
+  manuscript 265 statements, 193 agree, the same 72 held with live's values unchanged; frontend 260 tests from 24 files; build OK.
+  STALE DOCS: dated-record banners on BACKEND_GUIDE, SUPABASE_SETUP, DATABASE_ARCHITECTURE, COVERAGE_MAP, ROADMAP,
+  Context-from-the-data-side; LIMITATIONS item 1 (0067 applied 2026-10-23); CLAUDE.md and the runbook said the oldest rollback point
+  is released before a third load (code: after it loads).
 
 ERROR CARD AFTER MARCH, MEASURED (2026-11-17, recon; read-only: ssm_rehearsal on 127.0.0.1:55432, the restored copy with March loaded
   (cycle 2026-04, 131 / 1,016,754), every connection default_transaction_read_only, the whole app in-process on 7355b6f, no sign-in row written; no live access).

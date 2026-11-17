@@ -192,7 +192,10 @@ class Job:
         try:
             LOGS.mkdir(parents=True, exist_ok=True)
             log = open(LOGS / f"{self.id}_{self.kind}.log", "w", encoding="utf-8")
-            log.write(f"{PRACTICE_MARKER}\n{self._marker or PRACTICE_NOTE}\njob {self.id}, {self.kind}, month {self.month}\n\n")
+            # A live job's log is headed as one (until 2026-11-17 every log carried the practice marker, a live load's too).
+            head = ("LIVE: a month load or rollback on the database this server is connected to" if is_live()
+                    else f"{PRACTICE_MARKER}\n{self._marker or PRACTICE_NOTE}")
+            log.write(f"{head}\njob {self.id}, {self.kind}, month {self.month}\n\n")
             return log
         except OSError as exc:
             logger.warning("monthly batch: could not open the job log: %s", exc)
@@ -234,7 +237,7 @@ class Job:
     def state(self) -> dict:
         with self._lock:
             steps, failed_stage = batch_checklist.parse_steps(list(self.lines))
-            return {"practice_note": PRACTICE_NOTE, "id": self.id, "status": self.status, "kind": self.kind, "month": self.month,
+            return {"practice_note": None if is_live() else PRACTICE_NOTE, "id": self.id, "status": self.status, "kind": self.kind, "month": self.month,
                     "exit_code": self.exit_code, "started_at": self.started_at, "finished_at": self.finished_at,
                     "steps": steps, "failed_stage": failed_stage}
 
@@ -700,6 +703,11 @@ def _run_live(body: RunBody, user: TokenPayload, can_decide: bool) -> dict:
         # Accepting an order is a decision, and decisions are an admin's (lp.decide, admin-only): loading a file does not widen who may accept.
         raise ApiError(403, f"{waiting} orders of the {current['decisions']['cycle']} plan await a decision, and accepting them needs the permission to decide "
                             "reorders. Ask an admin to decide them or to run this month.", code="missing_permission", permission="lp.decide")
+    if body.calendar_factor != "on":
+        # The live forecast uses the calendar factor (DEC-41) and the month-load rehearsal that unlocks loading here ran with it
+        # (scripts/demo_session.py's default). A live load without it would plan on a forecast nobody rehearsed (2026-11-17).
+        raise ApiError(422, "On this database a month is loaded with the calendar factor on, as the live forecast is made and as the "
+                            "load was rehearsed.", code="batch_calendar_factor_live")
     folder = _month_folder(body.month, "sales")
     path = next(iter(sorted(folder.iterdir())), None) if folder.is_dir() else None
     if path is None:

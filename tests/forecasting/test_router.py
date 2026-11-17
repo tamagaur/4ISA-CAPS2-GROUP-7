@@ -292,10 +292,14 @@ def test_router_default_path_is_unchanged():
 def test_every_fact_table_read_ends_in_real():
     files = [REPO / "scripts/run_baseline_forecast.py"] + [REPO / "analytics/forecasting" / n
                                                            for n in ("router.py", "switching.py", "global_model.py")]
+    reads = 0
     for path in files:
         src = path.read_text(encoding="utf-8")
         for table in re.findall(r"(?:FROM|JOIN)\s+([A-Za-z_]*_Fact[A-Za-z_]*)", src, flags=re.I):
+            reads += 1
             assert table.lower().endswith("_real"), f"{path.name} reads {table}"
+    # A text check of the SQL; the live views themselves are held by tests/invariants/test_i (pg_get_viewdef on live).
+    assert reads, "no fact-table read found in these files: the check above would pass on nothing (did the SQL move?)"
     for n in ("router.py", "switching.py", "global_model.py"):
         assert "psycopg2" not in (REPO / "analytics/forecasting" / n).read_text(encoding="utf-8")
 

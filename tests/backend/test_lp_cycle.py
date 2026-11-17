@@ -51,3 +51,24 @@ def test_all_or_blank_means_no_principal_filter(raw):
     db = _CaptureDB()
     lp_cycle.current_cycle(db, raw)
     assert "principal" not in db.params
+
+
+def test_every_current_cycle_subquery_of_the_decision_routes_applies_the_plan_rule():
+    """The decision, approval and request routes find "the principal's current cycle" in SQL of their own. Each such
+    subquery must apply the plan rule (lp_cycle.PLAN_STATUS_SQL on alias l2), or a decided row no LP run produced could
+    make a cycle current for writes that every page treats as not current (found 2026-11-17)."""
+    import re
+    from pathlib import Path
+
+    from backend.lp_cycle import PLAN_STATUS_SQL_L2
+    repo = Path(__file__).resolve().parents[2]
+    rule = " ".join(PLAN_STATUS_SQL_L2.strip("()").split())
+    seen = 0
+    for name in ("recommendations.py", "reorder_approval.py", "reorder_requests.py"):
+        src = (repo / "backend" / "routers" / name).read_text(encoding="utf-8")
+        for m in re.finditer(r"SELECT MAX\(l2\.planning_cycle_date\) FROM lp_recommendation l2(.*?)\)\s*(AS current_cycle|\"\"\"|$)",
+                             src, re.S | re.M):
+            seen += 1
+            body = " ".join(m.group(1).split())
+            assert rule.replace("(", "").replace(")", "") in body.replace("(", "").replace(")", ""), (name, body)
+    assert seen >= 6, seen

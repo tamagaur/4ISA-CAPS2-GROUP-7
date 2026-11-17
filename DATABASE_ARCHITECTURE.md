@@ -1,3 +1,5 @@
+> **Dated record (2026-08-16), not a maintained guide.** Its counts and null rates are of that date; the schema has moved on through numbered migrations (latest in STATE.md). Current state: [STATE.md](STATE.md); rules: [CLAUDE.md](CLAUDE.md); trust the code where this disagrees.
+
 # Database Architecture — SSM Decision Support Dashboard
 
 This covers the database only. For the full project (Extract/Transform

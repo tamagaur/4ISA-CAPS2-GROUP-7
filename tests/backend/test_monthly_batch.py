@@ -757,3 +757,27 @@ def test_accepting_orders_as_part_of_a_load_needs_the_permission_to_decide_them(
     _ready(monkeypatch, tmp_path, waiting=0)
     app.dependency_overrides[get_current_user] = _user
     assert client.post("/batch/run", json=_run_body()).status_code == 202            # nothing to accept: upload.run is enough
+
+
+
+def test_a_live_load_refuses_the_calendar_factor_off(monkeypatch, tmp_path):
+    """The live forecast uses the calendar factor and the load was rehearsed with it, so a live run without it is refused
+    before anything starts; with it, the load starts with --calendar-factor on (2026-11-17)."""
+    from backend.deps import TokenPayload
+    monkeypatch.setattr(mb, "UPLOADS", tmp_path)
+    monkeypatch.setattr(mb, "require_live_ready", lambda: None)
+    monkeypatch.setattr(mb, "checklist_for", lambda month, *a: ({"can_run": True, "checks": [],
+                                                                 "decisions": {"unresolved": 0, "cycle": "2026-02"}}, None))
+    monkeypatch.setattr(mb, "audit_event", lambda *a, **k: None)
+    started = []
+    monkeypatch.setattr(mb.JOB, "start", lambda kind, cmd, month, *a: started.append(cmd))
+    monkeypatch.setattr(mb.JOB, "state", lambda: {"id": "j"})
+    user = TokenPayload(1, "a@x", "admin", "A")
+    with pytest.raises(mb.ApiError) as err:
+        mb._run_live(mb.RunBody(month="2026-03", calendar_factor="off"), user, True)
+    assert err.value.status_code == 422 and started == []
+    folder = mb._month_folder("2026-03", "sales")
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "sales.csv").write_text("x", encoding="utf-8")
+    mb._run_live(mb.RunBody(month="2026-03", calendar_factor="on"), user, True)
+    assert started and started[0][started[0].index("--calendar-factor") + 1] == "on"

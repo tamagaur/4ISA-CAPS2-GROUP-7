@@ -379,7 +379,10 @@ def flow_by_period(db: Session, periods: list[str], principal: str, flow: str) -
         for r in snap.flows.get((principal, p, flow), []):
             value = _f(r["pesos"])
             if r["data_kind"] == "real":
-                slot["real"] = value if slot["real"] is None or value is None else slot["real"] + value
+                # A NULL-peso row adds nothing; until 2026-11-17 it replaced the sum already accumulated from the period's other
+                # real rows (more than one source tag in a period), and a later row then restarted the sum from it.
+                if value is not None:
+                    slot["real"] = value if slot["real"] is None else slot["real"] + value
             elif flow != "returns" and r["data_kind"] == "filled" and value is not None:
                 slot["estimated"] = (slot["estimated"] or 0.0) + value
                 slot["estimated_kind"] = "filled"

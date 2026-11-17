@@ -86,17 +86,43 @@ def api_get(paths: dict[str, str]) -> dict[str, dict]:
     from backend.deps import get_current_user, get_token_payload
     from backend.main import app
 
+    from sqlalchemy import create_engine
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.orm import Session
+
+    from backend.deps import get_db
+
     deps._db_url = long_read_db_url
+    # Every route reads through ONE transaction that is SET TRANSACTION READ ONLY and rolled back (tests/invariants/conftest.py's
+    # pattern). Until 2026-11-17 the routes used the app's own GET pool (autocommit, not read-only), so a GET that wrote would
+    # have landed on live during a manuscript check.
+    engine = create_engine(long_read_db_url())
+    conn = engine.connect()
+    tx = conn.begin()
+    conn.execute(sa_text("SET TRANSACTION READ ONLY"))
+    session = Session(bind=conn, autoflush=False)
+    session.info["read_request"] = True
+
+    def _db():
+        yield session
+    app.dependency_overrides[get_db] = _db
     app.dependency_overrides[get_current_user] = get_token_payload
     headers = {"Authorization": "Bearer " + create_access_token(
         user_id=1, email="figures@local", role="admin", full_name="Manuscript figures")}
     client = TestClient(app)
     out = {}
-    for key, path in paths.items():
-        r = client.get(path, headers=headers)
-        if r.status_code != 200:
-            raise SystemExit(f"GET {path} returned {r.status_code}: {r.text[:300]}")
-        out[key] = r.json()
+    try:
+        for key, path in paths.items():
+            r = client.get(path, headers=headers)
+            if r.status_code != 200:
+                raise SystemExit(f"GET {path} returned {r.status_code}: {r.text[:300]}")
+            out[key] = r.json()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        session.close()
+        tx.rollback()
+        conn.close()
+        engine.dispose()
     return out
 
 
@@ -132,13 +158,16 @@ def load() -> dict:
         d["sku_category"] = sql(cur, """
             SELECT sku_code AS sku_id, category_path FROM product_dimension
             WHERE principal = 'unilever' AND grain = 'sku'""")
+        # The backtest rows, money, MASE and decomposition behind figures h-k, read from LIVE (the stored as-served runs,
+        # the demand view, the latest Unilever forecast, mart.error_decomposition_row). Until 2026-11-17 these four came from
+        # the committed frozen CSVs of docs/published_snapshot_2026-10-24/, so a "statement against live" for h-k compared
+        # the manuscript with a file and could never move. scripts.snapshot_published_figures --verify still holds the
+        # frozen files equal to live on every pinned figure.
+        from scripts.snapshot_published_figures import live_inputs
+        d["acc_rows"], d["money"], d["mase"], d["dec"] = live_inputs(cur)
     finally:
         conn.rollback()
         conn.close()
-    d["acc_rows"] = pd.read_csv(SNAP / "accuracy_as_served_rows.csv")
-    d["money"] = pd.read_csv(SNAP / "demand_money.csv")
-    d["mase"] = pd.read_csv(SNAP / "mase_rows.csv")
-    d["dec"] = pd.read_csv(SNAP / "error_decomposition_row.csv")
     d["pinned"] = json.loads(SNAP_JSON.read_text(encoding="utf-8"))
     d["bakeoff"] = pd.read_csv(BAKEOFF)
     d["cells"] = pd.read_csv(CELLS)

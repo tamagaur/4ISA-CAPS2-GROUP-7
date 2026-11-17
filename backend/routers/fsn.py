@@ -39,6 +39,7 @@ from backend.deps import TokenPayload, get_db
 from backend.permissions import require_permission
 from backend.principals import PrincipalQuery, normalize_principal
 from backend.response_cache import cached
+from backend.routers.category_trends import DEL_MONTE_REGROUP_PERIOD
 
 router = APIRouter(prefix="/fsn", tags=["fsn"])
 
@@ -58,8 +59,11 @@ _SOURCES = {
         """,
     ),
     "delmonte": (
+        # From the regrouping only (DEC-43, 2026-11-17): Del Monte has 6 real months in 2025, so "the last 12 observed
+        # months" reached back to 2023-06..2024-02 and mixed the 82 old category paths (each then judged non-moving) with
+        # the 5 current categories (zeros for the pre-2025 months, so judged slow). The page never called /fsn for Del Monte.
         "SELECT DISTINCT _period AS period FROM SellOut_Fact_Real "
-        "WHERE _period <= :end ORDER BY _period DESC LIMIT :n",
+        "WHERE _period <= :end AND _period >= :start ORDER BY _period DESC LIMIT :n",
         """
         SELECT s.product_key, pd.category_path AS sku_id, s._period AS period, SUM(s.quantity) AS qty
         FROM SellOut_Fact_Real s
@@ -77,7 +81,9 @@ def classify_principal(
     """(window, items) for one principal; window None when it has no data."""
     months_sql, qty_sql = (sql.format(demand=unilever_demand(mode)) for sql in _SOURCES[principal])
     end = period or "9999-12"
-    months = sorted(r["period"] for r in db.execute(text(months_sql), {"end": end, "n": FSN_WINDOW_MONTHS}).mappings().all())
+    start = DEL_MONTE_REGROUP_PERIOD if principal == "delmonte" else "0000-01"
+    months = sorted(r["period"] for r in db.execute(
+        text(months_sql), {"end": end, "start": start, "n": FSN_WINDOW_MONTHS}).mappings().all())
     if not months:
         return None, []
     index = {m: i for i, m in enumerate(months)}

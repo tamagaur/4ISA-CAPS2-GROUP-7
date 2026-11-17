@@ -1,3 +1,5 @@
+> **Dated record (2026-08-16), not a maintained guide.** Wrong now: the Supabase database exists, is live and loaded; migrations run through scripts/run_canonical_load.py (CLAUDE.md hard rule 8). Current state: [STATE.md](STATE.md); rules: [CLAUDE.md](CLAUDE.md); trust the code where this disagrees.
+
 # Creating the Supabase database
 
 This walks through standing up the actual Supabase project this codebase

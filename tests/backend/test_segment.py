@@ -56,6 +56,8 @@ class FakeSession:
             if row and params.get("principal") and row["principal"] != params["principal"]:
                 row = None
             return FakeResult([row] if row else [])
+        if "SELECT MAX(cohort_period) AS p FROM sku_traits" in sql:
+            return FakeResult([{"p": max((r["cohort_period"] for r in self.traits.values()), default=None)}])
         if "FROM sku_traits" in sql:
             row = self.traits.get(params["product_key"])
             return FakeResult([row] if row else [])
@@ -137,6 +139,7 @@ def test_unanalyzed_sku_is_200_not_analyzed_with_reason():
     body = resp.json()
     assert body["analyzed"] is False
     assert body["traits"] is None
+    assert "as of 2026-02" in body["not_analyzed_reason"]   # the fixture's latest cohort, read from the rows
     assert body["segments"] == []
     assert "sku_traits" in body["not_analyzed_reason"]
 

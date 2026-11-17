@@ -244,3 +244,17 @@ def test_a_load_writes_no_tracked_report(monkeypatch):
     assert report_target.writes_tracked_reports() is False
     assert "nonlive_reports" in str(report_target.report_path(tracked))
     assert "SSM_DEMO_SESSION" in Path(cli.__file__).read_text(encoding="utf-8")
+
+
+def test_the_attested_files_are_the_whole_import_closure_of_a_load():
+    """FILES is computed (scripts/demo_rehearsal.load_closure), so an import added to anything a load runs joins the hash by itself.
+    Until 2026-11-17 a hand-written list of 21 files left out classify_abc, the LP allocation, the entry test's MASE and the decision
+    code a load runs to accept waiting orders (2026-11-17: 98 files)."""
+    files = set(demo_rehearsal.FILES)
+    assert set(demo_rehearsal.LEGACY_FILES) <= files
+    for name in ("analytics/classification/abc.py", "analytics/allocation.py", "analytics/forecasting/diagnostic_metrics.py",
+                 "backend/routers/recommendations.py", "backend/expected_receipts.py", "scripts/close_cycle.py",
+                 "scripts/snapshot_published_figures.py"):
+        assert name in files, name
+    # a function-level import and a module run by path both count
+    assert "backend/audit.py" in files and "scripts/run_lp.py" in files

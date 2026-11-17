@@ -112,12 +112,18 @@ const coverText = (item, weeks) => {
 // never below 0, less any cut to fit the supplier allocation.
 const orderBreakdown = (item, month) => {
   const n = (v) => Math.round(v).toLocaleString();
-  const stock = item.stock_not_in_count ? '0 (not in the stock count)' : n(item.current_stock ?? 0);
+  // NO DATA: a count row with no usable pack size (or no count) has no stock in pieces. The sum cannot be shown without
+  // inventing the stock, so it says so and gives the plan's own order (until 2026-11-17 it printed "− 0 in stock").
+  if (!item.stock_not_in_count && item.current_stock == null) {
+    return `Stock on hand is not known in pieces for this product (${item.stock_blocked_reason || 'no usable stock count'}), `
+      + `so the sum is not shown. The plan's order is ${n(item.q_i ?? 0)} pcs.`;
+  }
+  const stock = item.stock_not_in_count ? '0 (not in the stock count)' : n(item.current_stock);
   const parts = [
     item.forecast_units != null ? `${n(item.forecast_units)} forecast${month ? ` for ${month}` : ''}` : null,
     `${n(item.rop_i)} order up to (includes ${n(item.ss_i)} keep at least)`,
   ].filter(Boolean).join(' + ');
-  const need = Math.max(0, (item.forecast_units ?? 0) + item.rop_i - (item.current_stock ?? 0));
+  const need = Math.max(0, (item.forecast_units ?? 0) + item.rop_i - (item.stock_not_in_count ? 0 : item.current_stock));
   const line = `${parts} − ${stock} in stock = ${n(need)} pcs.`;
   return item.short_units > 0
     ? `${line} ${n(item.short_units)} cut to fit the supplier allocation, so the order is ${n(item.q_i)} pcs.`

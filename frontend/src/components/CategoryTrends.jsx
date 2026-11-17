@@ -184,7 +184,10 @@ const TrendPopup = ({ category, method }) => {
   const history = category.history || [];
   const fitted = category.fitted || [];
   const pLine = clearText(category, method);
-  if (history.length < 2) {
+  // A month with revenue null is one nobody collected (Del Monte, category absent in a reported month): it is left out of the
+  // line and of High/Low, never drawn as ₱0 (until 2026-11-17 it was read as 0 and could be labelled "Low <month>: ₱0").
+  const known = history.map((h, i) => ({ i, v: h.revenue })).filter((p) => p.v != null);
+  if (history.length < 2 || known.length < 2) {
     return (
       <span>
         {TREND_SENTENCE[category.direction] ?? ''}
@@ -192,7 +195,7 @@ const TrendPopup = ({ category, method }) => {
       </span>
     );
   }
-  const values = history.map((h) => h.revenue ?? 0);
+  const values = known.map((p) => p.v);
   const offset = history.length - fitted.length;
   const all = [...values, ...fitted];
   // Scaled to the series' own range (not from ₱0), so the shape fills the
@@ -204,10 +207,13 @@ const TrendPopup = ({ category, method }) => {
   const ih = POP_H - POP_PAD.top - POP_PAD.bottom;
   const x = (i) => POP_PAD.left + (i / (history.length - 1)) * iw;
   const y = (v) => POP_PAD.top + ih - ((v - min) / span) * ih;
-  const line = values.map((v, i) => ({ x: x(i), y: y(v) }));
+  const line = known.map((p) => ({ x: x(p.i), y: y(p.v) }));
   const trend = fitted.map((v, i) => `${x(i + offset).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const hi = values.indexOf(Math.max(...values));
-  const lo = values.indexOf(Math.min(...values));
+  // Positions in `known`, translated to history positions for x() and the month labels.
+  const hiK = values.indexOf(Math.max(...values));
+  const loK = values.indexOf(Math.min(...values));
+  const hi = known[hiK].i;
+  const lo = known[loK].i;
   // A label sits inside the chart: left-aligned near the left edge,
   // right-aligned near the right one.
   const anchor = (i) => (x(i) < 40 ? 'start' : x(i) > POP_W - 40 ? 'end' : 'middle');
@@ -220,15 +226,15 @@ const TrendPopup = ({ category, method }) => {
         <Curve type="monotone" layout="horizontal" points={line} baseLine={POP_PAD.top + ih} stroke="none" fill={`url(#${shadeId})`} />
         <Curve type="monotone" layout="horizontal" points={line} fill="none" stroke={POP_REVENUE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {trend && <polyline points={trend} fill="none" stroke="#FFFFFF" strokeOpacity="0.9" strokeWidth="1.4" strokeDasharray="4 3" />}
-        <circle cx={x(hi)} cy={y(values[hi])} r="2.5" fill={POP_REVENUE} />
-        <text x={x(hi)} y={y(values[hi]) - 4} textAnchor={anchor(hi)} className="ct-trend-pop-mark">
-          {`High ${formatMonth(history[hi].period)}: ${formatRevenue(values[hi])}`}
+        <circle cx={x(hi)} cy={y(history[hi].revenue)} r="2.5" fill={POP_REVENUE} />
+        <text x={x(hi)} y={y(history[hi].revenue) - 4} textAnchor={anchor(hi)} className="ct-trend-pop-mark">
+          {`High ${formatMonth(history[hi].period)}: ${formatRevenue(history[hi].revenue)}`}
         </text>
         {lo !== hi && (
           <>
-            <circle cx={x(lo)} cy={y(values[lo])} r="2.5" fill={POP_REVENUE} />
-            <text x={x(lo)} y={y(values[lo]) + 11} textAnchor={anchor(lo)} className="ct-trend-pop-mark">
-              {`Low ${formatMonth(history[lo].period)}: ${formatRevenue(values[lo])}`}
+            <circle cx={x(lo)} cy={y(history[lo].revenue)} r="2.5" fill={POP_REVENUE} />
+            <text x={x(lo)} y={y(history[lo].revenue) + 11} textAnchor={anchor(lo)} className="ct-trend-pop-mark">
+              {`Low ${formatMonth(history[lo].period)}: ${formatRevenue(history[lo].revenue)}`}
             </text>
           </>
         )}

@@ -16,11 +16,18 @@ client = TestClient(app)
 SIDEBAR = Path(__file__).resolve().parents[2] / "frontend/src/components/Sidebar.jsx"
 
 
-def test_health_and_status_answer_without_a_token():
+def test_health_and_status_answer_without_a_token(monkeypatch):
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
     for path in ("/health", "/status"):
         response = client.get(path)
         assert response.status_code == 200, path
-        assert response.json() == {"status": "ok"}
+        assert response.json() == {"status": "ok", "commit": "unknown"}
+
+
+def test_health_names_the_commit_render_built(monkeypatch):
+    """So the deployed API's commit can be compared with the branch it is said to deploy (2026-11-17)."""
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "c6fc80a1234567890abcdef")
+    assert client.get("/health").json() == {"status": "ok", "commit": "c6fc80a12345"}
 
 
 def test_sidebar_pings_status_not_health():

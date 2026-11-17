@@ -125,7 +125,7 @@ export const RollbackDialog = ({ month, alsoRemoves, restoresTo, onConfirm, onCl
         </Fact>
       </dl>
     )}
-    <p className="mb-small">Anything decided on the Reorder page since then is undone too. Every table is checked against the saved state, and nothing changes unless all of them match.</p>
+    <p className="mb-small">Anything decided on the Reorder page since then is undone too, and so is every other change saved since then: user accounts, passwords, two-step sign-in set-ups, permissions, invitations and notifications go back to how they were. Only the audit log and the sign-in records are kept. Every table is checked against the saved state, and nothing changes unless all of them match.</p>
   </Shell>
 );
 

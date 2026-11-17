@@ -1,3 +1,5 @@
+> **Dated record (2026-08 (commit 8fc5cd0); a few lines were edited later), not a maintained guide.** Wrong now, among others: the frontend is Vite + React (not Next.js); the database is live and loaded; the deployed forecaster is analytics/forecasting/router.py (SARIMA was retired, never deployed); the test count is not 117. The Tier A basis is t12m_new (DEC-42). Current state: [STATE.md](STATE.md); rules: [CLAUDE.md](CLAUDE.md); trust the code where this disagrees.
+
 # Backend Onboarding Guide
 
 **Last generated against commit `8fc5cd0` (2026-08).** The code moves fast — if something here doesn't match what you see in the file, trust the file and ping Yuan (or whoever touched it last) to get this doc updated.

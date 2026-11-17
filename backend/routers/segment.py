@@ -216,6 +216,13 @@ def get_segment(
     ]
 
     analyzed = traits is not None or bool(segments)
+    covered = None
+    if not analyzed:
+        # The cohort the segmentation run has covered, read from its own rows (was the literal "as of 2026-02", which a
+        # later run would have left stating the old month).
+        covered = db.execute(text("SELECT MAX(cohort_period) AS p FROM sku_traits WHERE abc_method = :abc_method"),
+                             {"abc_method": basis}).mappings().first()
+        covered = covered["p"] if covered else None
     response = SegmentResponse(
         sku_id=sku,
         product_name=product["product_name"],
@@ -224,7 +231,8 @@ def get_segment(
         not_analyzed_reason=(
             None if analyzed
             else "This SKU has no row in sku_traits or sku_segment — the segmentation run "
-                 "has only covered its cohort (Unilever Tier A as of 2026-02) so far."
+                 + (f"has only covered its cohort (Unilever Tier A as of {covered}) so far." if covered
+                    else "has not covered any cohort on this Tier A basis.")
         ),
         traits=traits,
         segments=segments,

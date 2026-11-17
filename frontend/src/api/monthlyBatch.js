@@ -16,15 +16,20 @@ async function readJson(res, fallback) {
   return body;
 }
 
-// Anything but a clear yes hides the panel: the page then behaves as it always did.
+// The panel's status, null when the server names no database to process ({ enabled: false }), or { error } when the
+// status could not be read (a timeout, a 5xx, a refusal), with the server's own reason. Until 2026-11-17 every failure read
+// as "not available", so a slow or failing server looked like a server with no database.
 export async function getBatchAvailable() {
   try {
     const res = await apiFetch('/batch/status');
-    if (!res.ok) return null;
-    const body = await res.json();
-    return body.enabled ? body : null;
-  } catch {
-    return null;
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const reason = body?.detail && typeof body.detail === 'string' ? body.detail : `the server answered ${res.status}`;
+      return { error: reason };
+    }
+    return body?.enabled ? body : null;
+  } catch (e) {
+    return { error: e?.message || 'the server could not be reached' };
   }
 }
 

@@ -22,7 +22,8 @@ has not sent that month…"). Forecast error is not shown for a period that rest
 - A **rollback point** is taken before each month loads: a copy of every table the load can change, a fingerprint of EVERY table, view and function, and the text of the
   two definitions that change while labelled rows are loaded (`analytics/demo_session.py`). It is a schema `demo_revert_m<YYYYMM>` in the database itself, so a restart,
   another browser or another server sees the same history. **Two** are kept (a checkpoint is ~106 MB on the live database, read 2026-11-05); loading a third releases the oldest
-  first, and that month can then no longer be rolled back (the page says so).
+  once the third has loaded (not before: a third month that fails must not cost a rollback point, scripts/demo_session.py), so
+  storage briefly holds three, and the released month can then no longer be rolled back (the page says so).
 - **Roll back March** restores the state before March was loaded, and removes April if it was loaded after (the dialog says so). One transaction; it rolls back unless every
   table, view and function equals the checkpoint's. Afterwards it reads the plan (must equal what it was, no later plan may exist) and, when this returns to the original state,
   runs the 51 pinned figures. Anything saved after the checkpoint, decisions on the Reorder page included, is put back too. Not put back, by design: `app.audit_log`
