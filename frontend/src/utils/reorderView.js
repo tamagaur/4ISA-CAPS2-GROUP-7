@@ -71,6 +71,17 @@ export const awaitsDecision = (row) => !row.actionStatus && !ordersNothing(row);
 // (backend/stock_status.py), so the list follows the urgency rather than a number.
 export const isBelowTarget = (row) => row.urgency === 'CRITICAL' || row.urgency === 'URGENT';
 
+// ── Likely out of stock ─────────────────────────────────────────────────────
+// A row missing from the opening stock count (stock_not_in_count), which the plan
+// reads as 0 on hand (2026-11-09, adviser feedback). Such a row is normally below
+// its target stock already, so it is in Act Now once, never added to it twice; one
+// that isn't (a target stock of 0) still joins Act Now.
+export const isLikelyOutOfStock = (row) => row.stockNotInCount === true;
+export const isActNow = (row) => isBelowTarget(row) || isLikelyOutOfStock(row);
+
+// Likely out of stock first, then the order the rows came in (the plan's rank).
+export const likelyOutFirst = (rows) => [...rows].sort((a, b) => isLikelyOutOfStock(b) - isLikelyOutOfStock(a));
+
 // A forecast under 1 piece is no sale expected, yet the row can still order: with
 // no forecast the target stock is the safety stock, so the order only buys that
 // buffer. Someone should look, so it stays out of Accept all. The review flag means
@@ -124,6 +135,93 @@ export function notPlannedWhy(item) {
   // "1.00" beside a "below 1" rule.
   const mase = Number(item.mase);
   return `${short} (MASE ${mase.toFixed(Math.abs(mase - 1) < 0.01 ? 3 : 2)})`;
+}
+
+// The top sellers outside the plan that are also missing from the stock count
+// (not_planned[].stock_not_in_count): out of stock (not counted), with no order suggested.
+export const notPlannedLikelyOut = (items = []) => items.filter((item) => item.stock_not_in_count === true);
+
+const NOT_PLANNED_SHORT = {
+  mase_gate: 'forecast not reliable yet',
+  insufficient_data: 'too little sales history',
+  dead: 'no sale in the last 6 months',
+};
+
+// The reasons of a group of not-planned rows, in words: one reason alone, several counted.
+function reasonWords(items) {
+  const counts = new Map();
+  items.forEach((item) => {
+    const words = NOT_PLANNED_SHORT[item.reason] ?? 'another reason';
+    counts.set(words, (counts.get(words) || 0) + 1);
+  });
+  return counts.size === 1
+    ? [...counts.keys()][0]
+    : [...counts].map(([words, count]) => `${count.toLocaleString()} ${words}`).join(', ');
+}
+
+// ── The Act Now card ────────────────────────────────────────────────────────
+// Every top seller that needs someone now, in priority order, each SKU in one
+// group only (2026-11-09, adviser feedback: two cards read as separate items):
+//   orderFirst     in the plan, likely out of stock, awaiting a decision
+//   orderNow       in the plan, below target stock, the rest of Act Now, awaiting a decision
+//   checkManually  not in the plan because no forecast can be trusted for it yet
+//                  (accuracy check not passed, or too little sales history), and
+//                  likely out of stock
+//   confirm        not in the plan for any other reason (no sale in 6 months), and
+//                  likely out of stock: maybe discontinued, so outside the total
+// total = orderFirst + orderNow + checkManually. The plan's groups drop as rows are
+// decided; the not-planned ones have no decision to make. A not-planned row whose
+// SKU is also in the plan is left to the plan, so nothing is counted twice.
+const CHECK_MANUALLY_REASONS = new Set(['mase_gate', 'insufficient_data']);
+
+export function actNowGroups(rows = [], notPlanned = []) {
+  const pending = rows.filter((row) => isActNow(row) && awaitsDecision(row));
+  const planned = new Set(rows.map((row) => String(row.sku)));
+  const seen = new Set();
+  const outside = notPlannedLikelyOut(notPlanned).filter((item) => {
+    const sku = String(item.sku_id);
+    if (planned.has(sku) || seen.has(sku)) return false;
+    seen.add(sku);
+    return true;
+  });
+  const groups = {
+    orderFirst: pending.filter(isLikelyOutOfStock),
+    orderNow: pending.filter((row) => !isLikelyOutOfStock(row)),
+    checkManually: outside.filter((item) => CHECK_MANUALLY_REASONS.has(item.reason)),
+    confirm: outside.filter((item) => !CHECK_MANUALLY_REASONS.has(item.reason)),
+  };
+  return { ...groups, total: groups.orderFirst.length + groups.orderNow.length + groups.checkManually.length };
+}
+
+// Tile 2's hint: "Below target stock. 10 critical, 5 urgent." Any other urgency is counted too.
+export function belowTargetHint(rows) {
+  const critical = rows.filter((row) => row.urgency === 'CRITICAL').length;
+  const urgent = rows.filter((row) => row.urgency === 'URGENT').length;
+  const other = rows.length - critical - urgent;
+  const parts = [
+    critical && `${critical.toLocaleString()} critical`,
+    urgent && `${urgent.toLocaleString()} urgent`,
+    other && `${other.toLocaleString()} other`,
+  ].filter(Boolean);
+  return `Below target stock.${parts.length ? ` ${parts.join(', ')}.` : ''}`;
+}
+
+// Tile 3's hint: why these aren't in the plan, in their own reasons.
+export function checkManuallyNote(items) {
+  const why = items.length ? reasonWords(items) : 'forecast not reliable yet';
+  return `Not in the plan. ${why.charAt(0).toUpperCase()}${why.slice(1)}.`;
+}
+
+// The grey line under the rows, or null with none. Worded for the usual reason (no
+// sale in 6 months); any other reason is named.
+export function confirmLine(items = []) {
+  const n = items.length;
+  if (n === 0) return null;
+  const sellers = `${n.toLocaleString()} more top seller${n === 1 ? '' : 's'}`;
+  if (items.every((item) => item.reason === 'dead')) {
+    return `${sellers} may be discontinued: not in the count, no sale in 6 months. Confirm with SSM`;
+  }
+  return `${sellers} not in the count or the plan: ${reasonWords(items)}. Confirm with SSM`;
 }
 
 export function notPlannedLede(items, month) {
@@ -184,10 +282,18 @@ export const casesCell = (note) => (note ? note.replace(/ cases? /, ' ') : null)
 // already links to (?urgency=critical); the other two read the row's own flags:
 //   review        needs_review is true (null, "not assessed", is not listed)
 //   not_in_count  stock_not_in_count is true
+//   below_target  below target stock and in the stock count
+//   review_later  not in Act Now, with something to order
+//   no_order      not in Act Now, with nothing to order
 const URGENCY_VIEWS = { critical: 'CRITICAL', urgent: 'URGENT', planned: 'PLANNED' };
 const FLAG_VIEWS = {
   review: (row) => row.needsReview === true,
   not_in_count: (row) => row.stockNotInCount === true,
+  // The Act Now card's second tile: below target stock and in the stock count.
+  below_target: (row) => isBelowTarget(row) && !isLikelyOutOfStock(row),
+  // The strip under it: not in Act Now, with an order to decide / with nothing to order.
+  review_later: (row) => !isActNow(row) && !ordersNothing(row),
+  no_order: (row) => !isActNow(row) && ordersNothing(row),
 };
 
 export function parseView(params) {

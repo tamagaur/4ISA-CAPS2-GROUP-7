@@ -83,6 +83,18 @@ export const STOCK_STATUS_LABEL = {
   'ON HAND': 'Has stock',
 };
 export const OUT_OF_STOCK = 'Out of stock';
+// OUT_OF_STOCK above is a COUNTED 0. A product missing from the stock count
+// that opens the plan (GET /recommendations stock_not_in_count; Unilever only,
+// whose count never lists a zero) is read as 0 by the plan, but nobody counted
+// that 0, so it says so (adviser feedback, 2026-11-09). Not STOCK_STATUS_LABEL
+// ['NO DATA'] above either: that one is the ABC page's, judged on the latest
+// count and covering Del Monte too, whose count does list zeros.
+export const OUT_OF_STOCK_NOT_COUNTED = 'Out of stock (not counted)';
+// The Reorder page's Act Now groups and their filter: in the plan and below target
+// stock (Critical or Urgent, which keep their badges and "Could run out" / "Running
+// low" above their meanings); a top seller outside the plan to order by hand.
+export const BELOW_TARGET = 'Below target';
+export const MANUAL_ORDER = 'Manual order';
 // No target stock + not in the stock count, together.
 export const CANT_CHECK_YET = 'Can’t check yet';
 

@@ -4,6 +4,7 @@
 import React from 'react';
 import { AlertTriangle, ClipboardList, Filter, Search, X } from 'lucide-react';
 import ReorderActionMenu from './ReorderActionMenu';
+import { BELOW_TARGET, OUT_OF_STOCK_NOT_COUNTED } from '../labels';
 
 const CHIPS = [
   { view: 'critical', label: 'Critical', Icon: AlertTriangle },
@@ -14,7 +15,10 @@ const CHIPS = [
 const MENU_VIEWS = [
   { view: 'urgent', label: 'Urgent' },
   { view: 'planned', label: 'Planned' },
-  { view: 'not_in_count', label: 'Not in stock count' },
+  { view: 'not_in_count', label: OUT_OF_STOCK_NOT_COUNTED },
+  { view: 'below_target', label: BELOW_TARGET },
+  { view: 'review_later', label: 'Review later' },
+  { view: 'no_order', label: 'No order needed' },
 ];
 
 const ReorderTableControls = ({ view, onViewChange, counts, query, onQueryChange }) => {

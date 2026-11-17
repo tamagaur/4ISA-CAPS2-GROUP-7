@@ -20,6 +20,7 @@
 // model-output indigo for all three: they are co-equal weights of a single
 // solver objective, not three categories, and the row labels carry identity.
 import React from 'react';
+import { OUT_OF_STOCK_NOT_COUNTED } from '../labels';
 import { AlertTriangle, ArrowRight, ChevronDown, Info, X } from 'lucide-react';
 import Modal from './Modal';
 import SkuDemandPatternPanel from './SkuDemandPatternPanel';
@@ -187,7 +188,7 @@ const ReorderReviewDrawer = ({
             label="Opening stock"
             value={data.stock != null ? `${formatUnits(data.stock)} pieces` : '—'}
             sub={data.stockNotInCount
-              ? 'Not in stock count, treated as 0'
+              ? `${OUT_OF_STOCK_NOT_COUNTED}: not in the stock count, treated as 0`
               : data.stock == null ? null : `${countLabel}${data.cases?.stock ? ` · ${data.cases.stock}` : ''}`}
           />
           <Figure label="Safety stock" value={`${formatUnits(data.safetyStock)} pieces`} sub={plan} />

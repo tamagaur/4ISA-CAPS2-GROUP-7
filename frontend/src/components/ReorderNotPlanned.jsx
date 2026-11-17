@@ -10,6 +10,7 @@ import InfoTip from './InfoTip';
 import ProductName from './ProductName';
 import { formatMonth } from '../utils/formatDate';
 import { formatCoverDays } from '../utils/formatNumber';
+import { MANUAL_ORDER, OUT_OF_STOCK_NOT_COUNTED } from '../labels';
 import { matchesSearch, notPlannedByCover, notPlannedLede, notPlannedWhy, revenueShareBasis } from '../utils/reorderView';
 
 // How many rows show before "Show all". A length for the page, not a limit on the
@@ -18,20 +19,24 @@ const FIRST_ROWS = 10;
 
 const ReorderNotPlanned = ({
   items, tier, tierPeriod, countLabel, coverSalesLabel, coverNote, abcLabel, notInCountNote, query = '', brandOf, formatSku,
-  onOpenForecast,
+  onOpenForecast, onlySkus = null, onlyLabel, onShowAll, manualOrderSkus = [],
 }) => {
   const [showAll, setShowAll] = useState(false);
   const searching = query.trim() !== '';
-  const ordered = notPlannedByCover(items);
+  // From the Act Now card: that group's SKUs only, every one of them.
+  const only = onlySkus ? new Set(onlySkus.map(String)) : null;
+  // The Act Now card's third tile: out of stock and outside the plan, to order by hand.
+  const manual = new Set(manualOrderSkus.map(String));
+  const ordered = notPlannedByCover(only ? items.filter((item) => only.has(String(item.sku_id))) : items);
   const matched = searching
     ? ordered.filter((item) => matchesSearch({ product: item.product_name, sku: item.sku_id }, query, brandOf({ sku: item.sku_id })))
     : ordered;
   if (matched.length === 0) return null;
-  const listed = searching || showAll ? matched : matched.slice(0, FIRST_ROWS);
+  const listed = searching || showAll || only ? matched : matched.slice(0, FIRST_ROWS);
   const shareBasis = abcLabel ? revenueShareBasis('unilever', abcLabel) : null;
 
   return (
-    <section className={`reorder-notplanned is-${tier}`} aria-labelledby="reorder-notplanned-title">
+    <section id="reorder-notplanned" className={`reorder-notplanned is-${tier}`} aria-labelledby="reorder-notplanned-title" tabIndex={-1}>
       <div className="reorder-notplanned-head">
         <span className="reorder-how-icon" aria-hidden="true"><PackageSearch size={18} /></span>
         <div className="reorder-how-heading">
@@ -41,6 +46,14 @@ const ReorderNotPlanned = ({
             so low stock here raises no alert. Lowest cover first.
             {searching && ` ${matched.length.toLocaleString()} of them match your search.`}
           </p>
+          {only && (
+            <p className="reorder-filter-chip" role="status">
+              <span>
+                Showing <strong>{onlyLabel}</strong> only: {ordered.length.toLocaleString()} of {items.length.toLocaleString()}.
+              </span>
+              {onShowAll && <button type="button" className="link-button" onClick={onShowAll}>Show all {items.length.toLocaleString()}</button>}
+            </p>
+          )}
         </div>
       </div>
 
@@ -85,12 +98,19 @@ const ReorderNotPlanned = ({
                     openLabel="See this product’s sales history and forecast"
                   />
                 </td>
-                <td className="col-text reorder-notplanned-why" data-label="Why It Isn’t Planned" title={item.reason_text}>{notPlannedWhy(item)}</td>
+                <td className="col-text reorder-notplanned-why" data-label="Why It Isn’t Planned" title={item.reason_text}>
+                  {notPlannedWhy(item)}
+                  {manual.has(String(item.sku_id)) && (
+                    <span className="reorder-manual-chip" title="Out of stock and not in the plan, so no order is suggested: order by hand if needed.">
+                      {MANUAL_ORDER}
+                    </span>
+                  )}
+                </td>
                 <td className="table-center" data-label="Opening Stock">
                   {item.stock_not_in_count && (
                     <span className="reorder-count-flag" title={notInCountNote}>
                       <AlertTriangle size={12} aria-hidden="true" />
-                      Not in stock count
+                      {OUT_OF_STOCK_NOT_COUNTED}
                     </span>
                   )}
                   {!item.stock_not_in_count && item.current_stock != null && Math.round(item.current_stock).toLocaleString()}
@@ -117,7 +137,7 @@ const ReorderNotPlanned = ({
         </table>
       </div>
 
-      {!searching && matched.length > FIRST_ROWS && (
+      {!searching && !only && matched.length > FIRST_ROWS && (
         <div className="reorder-notplanned-more">
           <button type="button" className="reorder-group-toggle" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
             <ChevronDown size={14} className={showAll ? 'reorder-notplanned-chevron-open' : undefined} aria-hidden="true" />

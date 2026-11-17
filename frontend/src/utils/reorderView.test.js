@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  COVER_BASIS_NOTE, MONTH_TOTAL_NOTE, awaitsDecision, bulkSummary, casesCell, casesNote, filterRows, formatUpdatedAgo,
+  COVER_BASIS_NOTE, MONTH_TOTAL_NOTE, actNowGroups, awaitsDecision, checkManuallyNote, confirmLine, isActNow, likelyOutFirst,
+  notPlannedLikelyOut, belowTargetHint, bulkSummary, casesCell, casesNote, filterRows, formatUpdatedAgo,
   forecastsNoSales, isBelowTarget, isProjectedOpening, matchesSearch, noOrderReason, notPlannedByCover, notPlannedLede, notPlannedWhy, ordersNothing,
   paramsWithView, parseView, planOrderCounts, projectedLabel,
   projectedNote, provisionalDetail, revenueShareBasis, rowActions, splitBulkRows, tableTier, viewCounts,
@@ -51,7 +52,8 @@ test('needs_review null (not assessed) is not listed as needing review', () => {
 });
 
 test('the counts are the same rows the filters list, whatever the search', () => {
-  assert.deepEqual(viewCounts(rows), { all: 5, critical: 2, urgent: 1, planned: 1, review: 2, not_in_count: 2 });
+  assert.deepEqual(viewCounts(rows), { all: 5, critical: 2, urgent: 1, planned: 1, review: 2, not_in_count: 2, below_target: 2,
+    review_later: 0, no_order: 1 });
 });
 
 test('filtering changes neither the rows nor their order', () => {
@@ -448,7 +450,7 @@ test('Act Now is every row below its target stock, however many that is', () => 
   ];
   assert.deepEqual(ids(list.filter(isBelowTarget)), [1, 2]);
   const page = source('ReorderRecommendations.jsx');
-  assert.ok(page.includes('rankedRows.filter(isBelowTarget)'));
+  assert.ok(page.includes('likelyOutFirst(rankedRows.filter(isActNow))'));
   assert.ok(!page.includes('ACT_NOW_COUNT'), 'no fixed length with no recorded basis');
   assert.ok(!source('Dashboard.jsx').includes('the 20 with'), 'the Dashboard describes the same rule');
 });
@@ -523,4 +525,112 @@ test('the not-planned list offers no quantity and no decision', () => {
   });
   const page = source('ReorderRecommendations.jsx');
   assert.ok(page.includes("view === 'all' && meta?.notPlanned?.length > 0"));
+});
+
+// ── Likely out of stock (adviser feedback, 2026-11-09) ──────────────────────
+
+test('within Act Now, likely out of stock comes first and the rest keep their order', () => {
+  const list = [row(1), row(2, { stockNotInCount: true }), row(3), row(4, { stockNotInCount: true })];
+  assert.deepEqual(ids(likelyOutFirst(list)), [2, 4, 1, 3]);
+  assert.deepEqual(ids(list), [1, 2, 3, 4]); // the list it was given is left as it came
+});
+
+const notPlannedRow = (sku, reason, notInCount = true) => ({ sku_id: sku, reason, stock_not_in_count: notInCount });
+
+test('Act Now: three groups in priority order, each SKU counted once, the total their sum', () => {
+  const plan = [
+    row(1, { sku: 'P1', urgency: 'CRITICAL', stockNotInCount: true }),
+    row(2, { sku: 'P2', urgency: 'CRITICAL' }),
+    row(3, { sku: 'P3', urgency: 'URGENT' }),
+    row(4, { sku: 'P4', urgency: 'PLANNED' }),
+    row(5, { sku: 'P5', urgency: 'URGENT', stockNotInCount: true, actionStatus: 'ACCEPTED' }), // decided
+    row(6, { sku: 'P6', urgency: 'PLANNED', stockNotInCount: true }), // likely out, not below target: still order first
+  ];
+  const notPlanned = [
+    notPlannedRow('N1', 'mase_gate'),
+    notPlannedRow('N2', 'insufficient_data'),
+    notPlannedRow('N3', 'mase_gate', false), // in the stock count: not here at all
+    notPlannedRow('N4', 'dead'),
+    notPlannedRow('P2', 'mase_gate'), // also in the plan: the plan's row counts, this one doesn't
+    notPlannedRow('N1', 'mase_gate'), // the same SKU twice
+  ];
+  const g = actNowGroups(plan, notPlanned);
+  assert.deepEqual(ids(g.orderFirst), [1, 6]);
+  assert.deepEqual(ids(g.orderNow), [2, 3]);
+  assert.deepEqual(g.checkManually.map((i) => i.sku_id), ['N1', 'N2']);
+  assert.deepEqual(g.confirm.map((i) => i.sku_id), ['N4']);
+  assert.equal(g.total, 6);
+  const all = [...g.orderFirst.map((r) => r.sku), ...g.orderNow.map((r) => r.sku), ...g.checkManually.map((i) => i.sku_id),
+    ...g.confirm.map((i) => i.sku_id)];
+  assert.equal(new Set(all).size, all.length, 'no SKU in two groups');
+});
+
+test('Act Now goes down as the plan rows are decided, and reaches 0', () => {
+  const plan = [row(1, { urgency: 'CRITICAL', stockNotInCount: true }), row(2, { urgency: 'URGENT' })];
+  assert.equal(actNowGroups(plan).total, 2);
+  assert.equal(actNowGroups(plan.map((r) => ({ ...r, actionStatus: 'DISMISSED' }))).total, 0);
+  // The table's filter still lists every likely-out-of-stock row, decided or not.
+  assert.deepEqual(ids(filterRows([{ ...plan[0], actionStatus: 'ACCEPTED' }], { view: 'not_in_count' })), [1]);
+  assert.ok(source('ReorderActNowCard.jsx').includes('No top sellers need action right now.'));
+});
+
+test('the second row filter lists below-target rows that are in the stock count', () => {
+  assert.deepEqual(ids(filterRows(rows, { view: 'below_target' })), [2, 3]);
+  assert.equal(parseView(new URLSearchParams('view=below_target')), 'below_target');
+});
+
+test('Act Now notes and the grey line, from the rows own figures and reasons', () => {
+  assert.equal(belowTargetHint([row(1, { urgency: 'CRITICAL' }), row(2, { urgency: 'URGENT' }), row(3, { urgency: 'CRITICAL' })]),
+    'Below target stock. 2 critical, 1 urgent.');
+  assert.equal(belowTargetHint([]), 'Below target stock.');
+  assert.equal(checkManuallyNote([notPlannedRow('A', 'mase_gate')]), 'Not in the plan. Forecast not reliable yet.');
+  assert.equal(checkManuallyNote([notPlannedRow('A', 'mase_gate'), notPlannedRow('B', 'insufficient_data')]),
+    'Not in the plan. 1 forecast not reliable yet, 1 too little sales history.');
+  const dead = ['A', 'B', 'C', 'D'].map((sku) => notPlannedRow(sku, 'dead'));
+  assert.equal(confirmLine(dead), '4 more top sellers may be discontinued: not in the count, no sale in 6 months. Confirm with SSM');
+  assert.equal(confirmLine([notPlannedRow('A', 'dead')]),
+    '1 more top seller may be discontinued: not in the count, no sale in 6 months. Confirm with SSM');
+  assert.equal(confirmLine([]), null);
+  assert.deepEqual(notPlannedLikelyOut(dead).length, 4);
+});
+
+test('one label for a product missing from the stock count, wherever it is shown', () => {
+  ['ReorderRecommendations.jsx', 'ReorderNotPlanned.jsx', 'ReorderTableControls.jsx', 'ReorderReviewDrawer.jsx',
+    'SKUForecast.jsx', 'Charts.jsx', 'DataDictionary.jsx'].forEach((name) => {
+    const text = source(name);
+    assert.ok(text.includes('OUT_OF_STOCK_NOT_COUNTED'), name);
+    assert.ok(!/Not in (the )?stock count['<]|>Not in count<|LIKELY_OUT_OF_STOCK|ikely out of stock['<`]/.test(text), name);
+  });
+  // A counted 0 keeps its own label.
+  const labels = readFileSync(new URL('../labels.js', import.meta.url), 'utf8');
+  assert.ok(labels.includes("export const OUT_OF_STOCK = 'Out of stock';"));
+  assert.ok(labels.includes("export const OUT_OF_STOCK_NOT_COUNTED = 'Out of stock (not counted)';"));
+});
+
+test('the strip under Act Now filters to the rest of the plan, every row in one of its two views', () => {
+  const list = [
+    row(1, { urgency: 'CRITICAL', stockNotInCount: true }),
+    row(2, { urgency: 'URGENT' }),
+    row(3, { urgency: 'PLANNED', orderQty: 50 }),
+    row(4, { urgency: 'PLANNED', orderQty: 0 }),
+    row(5, { urgency: 'PLANNED', orderQty: 12, actionStatus: 'ACCEPTED' }), // decided: still listed
+  ];
+  assert.deepEqual(ids(filterRows(list, { view: 'review_later' })), [3, 5]);
+  assert.deepEqual(ids(filterRows(list, { view: 'no_order' })), [4]);
+  assert.deepEqual(ids(list.filter((r) => !isActNow(r))), [3, 4, 5]);
+  const page = source('ReorderRecommendations.jsx');
+  ["filterFromActNow('review_later')", "filterFromActNow('no_order')", 'onClick={showWholePlan}'].forEach((call) => {
+    assert.ok(page.includes(call), call);
+  });
+  assert.ok(!page.includes('<KPICard'), 'the Review Later and Total cards are gone');
+});
+
+test('the Act Now tiles: their labels, chips and links, and Manual order in the not-planned list', () => {
+  const card = source('ReorderActNowCard.jsx');
+  ["'Order ready · do first'", "'Order ready'", 'chip: MANUAL_ORDER', 'label: BELOW_TARGET',
+    "'Not in the stock count, so treated as 0.'", "onFilterTable('not_in_count')", "onFilterTable('below_target')",
+    "onOpenNotPlanned('checkManually')", "onOpenNotPlanned('confirm')"].forEach((part) => {
+    assert.ok(card.includes(part), part);
+  });
+  assert.ok(source('ReorderNotPlanned.jsx').includes('{MANUAL_ORDER}'));
 });

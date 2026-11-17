@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import SectionLede from './ui/SectionLede';
+import { OUT_OF_STOCK_NOT_COUNTED } from '../labels';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   Search, Pin, ArrowRight, Clock, Filter, X, AlertTriangle, CheckCircle2, BarChart3, MoveVertical,
@@ -95,7 +96,7 @@ const fmtWeeks = (w) => (w == null || !Number.isFinite(w) ? '—' : `${w < 10 ? 
 // plan reads as 0 because it is missing from the stock count says so; a
 // counted 0 is out of stock; under a day (1/7 of a week) says so instead of
 // "0.0 weeks". Display only: the cover is the plan's own figure.
-const NOT_IN_COUNT = 'Not in the stock count';
+const NOT_IN_COUNT = OUT_OF_STOCK_NOT_COUNTED;
 const coverText = (item, weeks) => {
   if (item.stock_not_in_count) return NOT_IN_COUNT;
   if (item.current_stock === 0) return 'Out of stock';
@@ -1955,8 +1956,8 @@ const SKUForecast = () => {
                         </td>
                         <td><ProductName name={target.name} code={target.code} /></td>
                         <td className="num" title={item.forecast_units != null ? `${fmtPcs(item.forecast_units)} pcs (exact)` : undefined}>{formatApprox(item.forecast_units)}</td>
-                        <td className="num" title={item.stock_not_in_count ? 'Missing from the stock count: the plan reads it as 0 on hand' : item.current_stock != null ? `${fmtPcs(item.current_stock)} pcs (exact)` : undefined}>
-                          {item.stock_not_in_count ? 'Not in count' : formatApprox(item.current_stock)}
+                        <td className="num" title={item.stock_not_in_count ? 'Missing from the stock count: the plan reads it as 0 on hand. Check the shelf before ordering.' : item.current_stock != null ? `${fmtPcs(item.current_stock)} pcs (exact)` : undefined}>
+                          {item.stock_not_in_count ? OUT_OF_STOCK_NOT_COUNTED : formatApprox(item.current_stock)}
                         </td>
                         <td className="num">{item.stock_not_in_count ? '—' : coverText(item, weeks)}</td>
                         <td><span className={getUrgencyBadge(item.urgency)} title={URGENCY_HOVER[item.urgency]}>{item.urgency}</span></td>
@@ -2454,7 +2455,8 @@ const SKUForecast = () => {
                               {NOT_IN_COUNT}
                               <InfoTip label="About a product missing from the stock count" size={12}>
                                 This product is missing from the stock count, so the plan reads it as 0 on hand. The stock
-                                file lists no zero rows, so a missing product is most likely out of stock.
+                                file lists no zero rows, so a missing product is most likely out of stock. Check the shelf
+                                before ordering.
                               </InfoTip>
                             </>
                           ) : planItem.current_stock != null ? <><ExactValue value={planItem.current_stock} /> pcs</> : 'no stock count'}

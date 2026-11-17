@@ -325,124 +325,257 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The four summary cards: each tinted in its own accent (the KPICard `accent`
-   prop reads these), on this page only. Act Now is the one to look at first.
-   The wrapper measures the room there is, so the sidebar's state counts: four
-   across while each card has room, then two, then one. */
-.reorder-kpi-wrap {
-  container: reorder-kpis / inline-size;
+/* ── The top of the page (2026-11-09, adviser feedback) ──
+   The Act Now card across the full width, then a slim strip with the rest of the
+   plan. Every height comes from the content, and all text sits at the left. */
+.reorder-top {
+  container: reorder-top / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
 }
 
-.reorder-summary-grid {
-  --reorder-kpi-act: #D92D20;
-  --reorder-kpi-later: #2469C4;
-  --reorder-kpi-count: #C77A0A;
-  --reorder-kpi-total: #6B46D6;
+.reorder-actnow {
+  --actnow-first: #A81C12;
+  --actnow-now: #D92D20;
+  --actnow-manual: #C77A0A;
+  container: reorder-actnow / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1.5px solid color-mix(in srgb, var(--actnow-now) 40%, white);
+  border-radius: var(--radius-card);
+  background-color: color-mix(in srgb, var(--actnow-now) 7%, white);
+  box-shadow: var(--shadow-card);
+}
+
+.reorder-actnow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.reorder-actnow-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reorder-actnow-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--actnow-first);
+}
+
+.reorder-actnow-title {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-text);
+}
+
+.reorder-actnow-period {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-body);
+}
+
+/* The three groups in proportion. */
+.reorder-actnow-bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.reorder-actnow-bar span { flex-basis: 0; min-width: 4px; }
+.reorder-actnow-bar .is-first { background-color: var(--actnow-first); }
+.reorder-actnow-bar .is-now { background-color: var(--actnow-now); }
+.reorder-actnow-bar .is-manual { background-color: var(--actnow-manual); }
+
+.reorder-actnow-tiles {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--card-gap);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-@container reorder-kpis (max-width: 939px) {
-  .reorder-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container reorder-kpis (max-width: 479px) {
-  .reorder-summary-grid {
+@container reorder-actnow (max-width: 620px) {
+  .reorder-actnow-tiles {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.reorder-summary-grid .kpi-card {
-  gap: 10px;
-  padding: 18px;
-  border: 1.5px solid color-mix(in srgb, var(--kpi-accent) 45%, white);
-  border-radius: var(--radius-card);
-  background-color: color-mix(in srgb, var(--kpi-accent) 8%, white);
-  box-shadow: var(--shadow-card);
+.reorder-actnow-tile {
+  --tile-tone: var(--actnow-now);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--tile-tone) 22%, white);
+  border-radius: 12px;
+  background-color: var(--color-surface);
 }
 
-.reorder-summary-grid .kpi-card:first-child {
-  border-width: 2px;
-  border-color: color-mix(in srgb, var(--kpi-accent) 72%, white);
-  background-color: color-mix(in srgb, var(--kpi-accent) 10%, white);
-}
+.reorder-actnow-tile.is-first { --tile-tone: var(--actnow-first); }
+.reorder-actnow-tile.is-manual { --tile-tone: var(--actnow-manual); }
+.reorder-actnow-tile.is-empty { opacity: 0.6; }
 
-.reorder-summary-grid .kpi-card::before {
-  display: none;
-}
-
-.reorder-summary-grid .kpi-header {
-  flex-wrap: nowrap;
-  gap: 8px;
-}
-
-.reorder-summary-grid .kpi-title {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.005em;
-  line-height: 1.25;
-  text-transform: none;
+.reorder-actnow-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
   color: var(--color-text);
 }
 
-.reorder-summary-grid .kpi-card:first-child .kpi-title {
-  color: #A81C12;
+.reorder-actnow-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--tile-tone);
 }
 
-.reorder-summary-grid .kpi-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-}
-
-.reorder-summary-grid .kpi-icon svg {
-  width: 21px;
-  height: 21px;
-}
-
-.reorder-summary-grid .kpi-value {
-  font-size: 2.1rem;
+.reorder-actnow-count {
+  font-size: 2rem;
+  font-weight: 700;
   line-height: 1.05;
+  color: var(--tile-tone);
+  font-variant-numeric: tabular-nums;
 }
 
-.reorder-summary-grid .kpi-unit {
-  font-size: 15px;
-  color: var(--color-text-body);
+.reorder-actnow-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--tile-tone) 12%, white);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--tile-tone) 80%, black);
 }
 
-.reorder-summary-grid .kpi-context {
+.reorder-actnow-hint {
   font-size: 12.5px;
   line-height: 1.4;
   color: var(--color-text-body);
 }
 
-/* The quiet picture beside the figure, only where the card has room for both. */
-.reorder-summary-grid .kpi-decoration {
-  display: none;
-  flex-shrink: 0;
-  color: var(--kpi-accent);
-  opacity: 0.6;
+.reorder-actnow-link,
+.reorder-actnow-grey {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-@container reorder-kpis (min-width: 1100px) {
-  .reorder-summary-grid .kpi-decoration {
-    display: flex;
-  }
+.reorder-actnow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--color-brand-primary);
 }
 
-@container reorder-kpis (min-width: 640px) and (max-width: 939px) {
-  .reorder-summary-grid .kpi-decoration {
-    display: flex;
-  }
+/* Not in the total, so grey, not red. */
+.reorder-actnow-grey {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
 }
 
-@container reorder-kpis (max-width: 479px) {
-  .reorder-summary-grid .kpi-decoration {
-    display: flex;
-  }
+.reorder-actnow-link:hover,
+.reorder-actnow-link:focus-visible,
+.reorder-actnow-grey:hover,
+.reorder-actnow-grey:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The rest of the plan, in one slim line. */
+.reorder-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 0;
+  padding: 6px 8px;
+  list-style: none;
+  border: var(--card-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+}
+
+.reorder-strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px;
+}
+
+.reorder-strip-item + .reorder-strip-item {
+  border-left: 1px solid var(--color-border, #E4E7EC);
+}
+
+.reorder-strip-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 2px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.reorder-strip-btn:hover .reorder-strip-name,
+.reorder-strip-btn:focus-visible .reorder-strip-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.reorder-strip-name { font-weight: 600; color: var(--color-text); }
+.reorder-strip-value { font-size: 15px; color: var(--color-text); font-variant-numeric: tabular-nums; }
+
+@container reorder-top (max-width: 479px) {
+  .reorder-strip-item + .reorder-strip-item { border-left: none; }
+}
+
+/* "Manual order" beside the reason, in the Not in This Plan list. */
+.reorder-manual-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background-color: #FEF3DC;
+  font-size: 11px;
+  font-weight: 650;
+  color: #7A4A07;
+  white-space: nowrap;
 }
 
 /* The heading and controls above the table: title at the left, quick filters

@@ -16,7 +16,7 @@ import {
   AlertTriangle, ArrowLeft, BarChart3, BookOpen, Calculator, ChartLine, ChevronDown, ClipboardCheck, Database, Info,
   Lightbulb, Search, SearchX, Star, TrendingUp, X,
 } from 'lucide-react';
-import { NOT_CONFIRMED, TO_BE_CONFIRMED } from '../labels';
+import { OUT_OF_STOCK_NOT_COUNTED, NOT_CONFIRMED, TO_BE_CONFIRMED } from '../labels';
 import './DataDictionary.css';
 
 // In alphabetical order (Audrey, 2026-10-18), for the pills and the sections.
@@ -203,10 +203,10 @@ const entries = {
     {
       // backend/stock_status.py (COUNT_OMITS_ZERO_STOCK); scripts/run_lp.py
       // (stock on hand: no row counts as 0).
-      term: 'Not in the stock count',
-      definition: 'A planned product that does not appear in the stock count that opens the plan.',
-      plain: 'Unilever’s stock files never list a product with zero stock, so a missing product is treated as out of stock. For Del Monte, a missing product says nothing about its stock, so it is shown as no data.',
-      technical: 'The plan reads a missing Unilever product as 0 pieces on hand, so it can be CRITICAL; the Reorder Recommendations page marks it “not in count”.',
+      term: OUT_OF_STOCK_NOT_COUNTED,
+      definition: 'A planned product that does not appear in the stock count that opens the plan, so it is treated as 0 on hand. Check the shelf before ordering.',
+      plain: 'Unilever’s stock files never list a product with zero stock, so a missing product is most likely out of stock. Nobody counted that 0, which is why it says “not counted”: a product counted at 0 is just “Out of stock”. For Del Monte, a missing product says nothing about its stock, so it is shown as no data.',
+      technical: 'The plan reads a missing Unilever product as 0 pieces on hand, so it is usually CRITICAL. The Reorder Recommendations page marks it “Out of stock (not counted)” and lists it first under Act now. On the Act Now card it is “Out of stock”: the first tile when it is in the plan (order ready, do first), the third when it is not (manual order). Each product is counted once.',
     },
     {
       // SKUForecast.jsx (togglePinSKU, PINNED_FILTER, planRows): browser

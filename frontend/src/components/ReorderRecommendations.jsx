@@ -3,15 +3,14 @@ import SectionLede from './ui/SectionLede';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { isPreviewMode } from '../dataMode';
 import {
-  Loader2, Boxes, ClipboardCheck, ClipboardList, ListChecks, CheckCircle2, Calendar, CalendarClock, ChevronDown, ChevronRight, CheckCheck, AlertTriangle, Clock, Layers, Package,
-  MoreHorizontal, PackageSearch, ShoppingCart, Target, Users,
+  Loader2, ClipboardList, ListChecks, CheckCircle2, Calendar, CalendarClock, ChevronDown, ChevronRight, CheckCheck, AlertTriangle, Clock, Layers,
+  MoreHorizontal, Target, Users,
 } from 'lucide-react';
 import ReorderActionMenu from './ReorderActionMenu';
 import ReorderNotPlanned from './ReorderNotPlanned';
 import ReorderReviewDrawer from './ReorderReviewDrawer';
 import ReorderTableControls from './ReorderTableControls';
 import InfoTip from './InfoTip';
-import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
 import ProductName from './ProductName';
 import OverrideReasonModal from './OverrideReasonModal';
@@ -46,11 +45,15 @@ import { REVIEW_REASON_TEXT } from '../utils/reviewReasons';
 import { compareCycles, previousRunCycleDate, previousWindow, runCycles } from '../utils/cycleComparison';
 import { calendarSignoffText } from '../utils/calendarAdjustment';
 import {
-  COVER_BASIS_NOTE, MONTH_TOTAL_NOTE, NO_SALES_FORECAST_NOTE, awaitsDecision, bulkSummary, casesCell, casesNote, filterRows,
-  forecastsNoSales, formatUpdatedAgo, isBelowTarget, isProjectedOpening, noOrderReason, ordersNothing, paramsWithView, parseView,
+  COVER_BASIS_NOTE, MONTH_TOTAL_NOTE, NO_SALES_FORECAST_NOTE, actNowGroups, awaitsDecision, bulkSummary,
+  casesCell, casesNote, filterRows, forecastsNoSales, formatUpdatedAgo, isActNow, isBelowTarget, isLikelyOutOfStock, isProjectedOpening,
+  likelyOutFirst, noOrderReason, ordersNothing, paramsWithView, parseView,
   planOrderCounts, projectedLabel, projectedNote, provisionalDetail, revenueShareBasis, rowActions, splitBulkRows, tableTier,
   viewCounts,
 } from '../utils/reorderView';
+import { BELOW_TARGET, OUT_OF_STOCK_NOT_COUNTED, MANUAL_ORDER } from '../labels';
+import ReorderActNowCard from './ReorderActNowCard';
+import { prefersReducedMotion } from '../theme/motion';
 import './ReorderRecommendations.css';
 import { URGENCY_HOVER, getUrgencyBadge, urgencyWord } from '../utils/urgency';
 
@@ -96,7 +99,10 @@ const VIEW_LABEL = {
   urgent: { title: 'Urgent', what: 'below target stock' },
   planned: { title: 'Planned', what: 'at or above target stock' },
   review: { title: 'Needs review', what: 'flagged to review before ordering' },
-  not_in_count: { title: 'Not in stock count', what: 'missing from the opening stock count' },
+  not_in_count: { title: OUT_OF_STOCK_NOT_COUNTED, what: 'out of stock (not counted): not in the opening stock count' },
+  below_target: { title: BELOW_TARGET, what: 'below target stock and in the stock count' },
+  review_later: { title: 'Review later', what: 'at or above target stock, with an order to decide' },
+  no_order: { title: 'No order needed', what: 'at or above target stock, with nothing to order' },
 };
 
 // What a wider column needs of the table's width, in pixels: On order when a row
@@ -122,8 +128,8 @@ const piecesTitle = (pieces, packSize) => {
 };
 
 // Said wherever a 0 on hand was inferred rather than counted.
-const NOT_IN_COUNT_NOTE = 'Not in the opening stock count — treated as 0, as the plan does (the stock file lists no '
-  + 'zero-stock rows, so a missing SKU is most likely out of stock).';
+const NOT_IN_COUNT_NOTE = `${OUT_OF_STOCK_NOT_COUNTED}: not in the opening stock count, so treated as 0, as the plan does (the `
+  + 'stock file lists no zero-stock rows). Check the shelf before ordering.';
 
 // The LP's arithmetic for one row, in its Suggested qty tooltip: forecast +
 // target − stock on hand is the need (never below 0), and any cut made to
@@ -704,6 +710,18 @@ const ReorderRecommendations = () => {
   const view = parseView(searchParams);
   const setView = (next) => setSearchParams((prev) => paramsWithView(prev, next), { replace: true });
   const [searchQuery, setSearchQuery] = useState('');
+  // The Act Now card's third row and grey line: the "Not in This Plan" list cut to
+  // that group's SKUs ('checkManually' | 'confirm'), scrolled to. The counter asks
+  // for one scroll per click.
+  const [notPlannedGroup, setNotPlannedGroup] = useState(null);
+  const [notPlannedScroll, setNotPlannedScroll] = useState(0);
+  useEffect(() => {
+    if (notPlannedScroll === 0) return;
+    const section = document.getElementById('reorder-notplanned');
+    if (!section) return;
+    section.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+    section.focus({ preventScroll: true });
+  }, [notPlannedScroll]);
   const clearFilters = () => {
     setSearchQuery('');
     setView('all');
@@ -716,8 +734,9 @@ const ReorderRecommendations = () => {
     () => (filtered ? filterRows(rankedRows, { view, query: searchQuery, brandOf }) : null),
     [filtered, rankedRows, view, searchQuery, brandOf]
   );
-  const topRows = rankedRows.filter(isBelowTarget);
-  const laterRows = rankedRows.filter((r) => !isBelowTarget(r));
+  // Act Now: below target stock or out of stock (not counted), the not counted first.
+  const topRows = likelyOutFirst(rankedRows.filter(isActNow));
+  const laterRows = rankedRows.filter((r) => !isActNow(r));
   const actNowRows = filteredRows ?? topRows;
   const reviewLaterRows = filteredRows ? [] : laterRows;
   const visibleRows = filteredRows ?? (showReviewLater ? rankedRows : actNowRows);
@@ -788,7 +807,9 @@ const ReorderRecommendations = () => {
     // toast is useToast()'s memoised api (ToastProvider.jsx), stable across renders.
   }, [loading, error, data, searchParams, setSearchParams, toast]);
 
-  const actNowPending = topRows.filter(awaitsDecision).length;
+  // The Act Now card: every top seller needing someone now, each SKU in one group
+  // only (utils/reorderView.js actNowGroups). The plan's rows drop as they are decided.
+  const actNow = actNowGroups(rankedRows, meta?.notPlanned || []);
   // Rows the backend could not rank (no stock figure or no revenue share)
   // have an UNKNOWN risk, not a lower one, so the card counts them apart.
   // Counted from the whole cycle, not the list on screen: until 2026-11-02 a
@@ -797,11 +818,34 @@ const ReorderRecommendations = () => {
   const reviewLaterTotal = laterRows.filter(awaitsDecision);
   const reviewLaterNoOrder = laterRows.filter(ordersNothing).length;
   const reviewLaterUnranked = reviewLaterTotal.filter((r) => r.priorityScore == null).length;
-  // Missing from the opening stock count, so planned (and shown) as 0 on
-  // hand — 3 of the 73 rows in the 2026-03 cycle, all cut by the LP. Kept
-  // apart from rows with no stock figure at all (NO DATA: a stock row the
-  // API can't put in pieces), which stay unranked.
-  const notInCountCount = cycleRows.filter((r) => r.stockNotInCount).length;
+  // The table filtered from the Act Now card or the strip under it, then scrolled
+  // to; or the not-planned list cut to a group.
+  const [tableScroll, setTableScroll] = useState(0);
+  useEffect(() => {
+    if (tableScroll === 0 || !tableArea) return;
+    tableArea.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  }, [tableScroll, tableArea]);
+  const filterFromActNow = (next) => {
+    setSearchQuery('');
+    setView(next);
+    setTableScroll((n) => n + 1);
+  };
+  // The strip's total: the whole plan, Review later opened.
+  const showWholePlan = () => {
+    setSearchQuery('');
+    setView('all');
+    setShowReviewLater(true);
+    setTableScroll((n) => n + 1);
+  };
+  const openNotPlannedGroup = (group) => {
+    if (view !== 'all') setView('all'); // the list shows in the All view only
+    setSearchQuery('');
+    setNotPlannedGroup(group);
+    setNotPlannedScroll((n) => n + 1);
+  };
+  // No order needed rows the allocation cut to 0, rather than stock covering them.
+  const laterNoOrderCut = laterRows.filter((r) => ordersNothing(r) && r.shortUnits > 0).length;
+  // Rows with no stock figure in pieces at all (NO DATA), which stay unranked.
   const noStockFigureCount = cycleRows.filter((r) => r.stock == null).length;
   // The LP plans Category A, but a cycle outlives the ABC run it was solved
   // against; GET /recommendations sends each row's tier in the latest run.
@@ -901,6 +945,18 @@ const ReorderRecommendations = () => {
   if (projectedCount) countLabel = projectedLabel(projectedCount);
   else if (meta?.stockCountDate) countLabel = `counted ${formatDate(meta.stockCountDate)}`;
   else if (meta?.stockPeriod) countLabel = `${formatMonth(meta.stockPeriod)} count${meta.stockCountNote ? ' (day not recorded)' : ''}`;
+  // The opening count's day for the Act Now card ("Mar 2, 2026"), else
+  // its month; for a projected opening, the month of the count it started from.
+  const openingCount = (meta?.stockCounts || [])
+    .find((c) => (!selectedCycle || c.cycle === selectedCycle) && (c.available || isProjectedOpening(c))) || null;
+  const countDateText = openingCount?.counted_on && !isProjectedOpening(openingCount)
+    ? formatDate(openingCount.counted_on)
+    : openingCount?.period ? formatMonth(openingCount.period) : null;
+  // The Act Now card's header line: the count's day, or how the opening stock was got.
+  let countHeader = null;
+  if (openingCount && isProjectedOpening(openingCount)) countHeader = `Stock ${projectedLabel(openingCount)}`;
+  else if (openingCount?.counted_on) countHeader = `Stock counted ${countDateText}`;
+  else if (countDateText) countHeader = `Stock count of ${countDateText}`;
   const abcLabel = meta?.abcPeriod ? formatMonth(meta.abcPeriod) : null;
   const coverSalesLabel = meta?.coverSalesStart && meta?.coverSalesEnd
     ? `${formatMonth(meta.coverSalesStart)} – ${formatMonth(meta.coverSalesEnd)}`
@@ -1323,7 +1379,7 @@ const ReorderRecommendations = () => {
           {stockKnown && item.stockNotInCount && (
             <span className="reorder-count-flag">
               <AlertTriangle size={12} aria-hidden="true" />
-              Not in stock count
+              {OUT_OF_STOCK_NOT_COUNTED}
             </span>
           )}
           {stockKnown && !item.stockNotInCount && formatUnits(item.stock)}
@@ -1399,71 +1455,60 @@ const ReorderRecommendations = () => {
         </div>
       )}
 
-      {/* The four figures for the whole cycle: the search and filters below
-          never change them. Each card's accent says what kind of figure it is
-          (ReorderRecommendations.css --reorder-kpi-*). */}
-      <div className="reorder-kpi-wrap">
-      <div className="kpi-strip reorder-summary-grid">
-        <KPICard
-          title="Act Now"
-          value={actNowPending.toLocaleString()}
-          unit="SKUs"
-          metricType={actNowPending > 0 ? 'danger' : undefined}
-          accent="var(--reorder-kpi-act)"
-          contextLine={`${planLabel} · Below target stock`}
-          decoration={<Boxes size={38} strokeWidth={1.4} />}
-          tooltip="Every SKU below its target stock that still awaits a decision, ranked by revenue share × pieces below the target stock."
-          icon={<AlertTriangle size={20} />}
+      {/* The figures for the whole cycle: the search and filters below never
+          change them. Act Now on top, full width, then the rest of the plan in one
+          slim strip (adviser feedback, 2026-11-09). */}
+      <div className="reorder-top">
+        <ReorderActNowCard
+          groups={actNow}
+          planLabel={planLabel.charAt(0).toUpperCase() + planLabel.slice(1)}
+          countHeader={countHeader}
+          noStockFigureCount={noStockFigureCount}
+          onFilterTable={filterFromActNow}
+          onOpenNotPlanned={openNotPlannedGroup}
         />
-        <KPICard
-          title="Review Later"
-          value={reviewLaterTotal.length.toLocaleString()}
-          unit="SKUs"
-          metricType={reviewLaterTotal.length > 0 ? 'watch' : undefined}
-          accent="var(--reorder-kpi-later)"
-          contextLine={`${planLabel} · At or above target stock`}
-          decoration={<ClipboardCheck size={38} strokeWidth={1.4} />}
-          tooltip={`${reviewLaterUnranked > 0
-            ? `${reviewLaterTotal.length - reviewLaterUnranked} at or above the target stock; ${reviewLaterUnranked} not ranked (no stock figure or revenue share).`
-            : 'Every SKU at or above its target stock, still awaiting a decision.'}${reviewLaterNoOrder > 0
-            ? ` Leaves out the ${reviewLaterNoOrder} with nothing to order, which have no decision to make.` : ''}`}
-          icon={<Clock size={20} />}
-        />
-        {/* Until 2026-10-01 "NO STOCK RECORD": these rows showed no stock and
-            went unranked, while the LP had planned them as 0 on hand and cut
-            all three. They are now 0 like in the plan, counted here so the
-            inferred 0 is never mistaken for a counted one. */}
-        <KPICard
-          title="Not in Stock Count"
-          value={notInCountCount.toLocaleString()}
-          unit="SKUs"
-          accent="var(--reorder-kpi-count)"
-          contextLine={`${countLabel.charAt(0).toUpperCase()}${countLabel.slice(1)} · Treated as 0 on hand`}
-          decoration={<PackageSearch size={38} strokeWidth={1.4} />}
-          tooltip={`Missing from the opening stock count, so the plan treats them as out of stock.${noStockFigureCount > 0
-            ? ` ${noStockFigureCount} more have no stock figure in pieces (NO DATA).` : ''}`}
-          icon={<Package size={20} />}
-        />
-        <KPICard
-          title="Total Suggested Order"
-          value={totalOrderQty.toLocaleString()}
-          unit="pieces"
-          metricType="recommendation"
-          accent="var(--reorder-kpi-total)"
-          contextLine={cutCount > 0
-            ? `${planLabel} · ${cutCount} of ${cycleRows.length} SKUs cut to fit the allocation`
-            : noOrderCount > 0
-              ? `${planLabel} · ${orderingCount} SKUs to order, ${noOrderCount} need none`
-              : `${planLabel} · suggested by the optimizer`}
-          tooltip={`${allocationPct != null
-            ? `Suggested by the optimizer within the ${allocationPct}% supplier allocation.`
-            : 'Suggested by the optimizer.'}${noOrderCount > 0
-            ? ` ${noOrderCount} of the ${cycleRows.length} SKUs in the plan have a suggested order of 0 pieces.`
-            : ''} ${MONTH_TOTAL_NOTE}`}
-          decoration={<ShoppingCart size={38} strokeWidth={1.4} />}
-          icon={<ShoppingCart size={20} />}
-        />
-      </div>
+        <ul className="reorder-strip" aria-label="The rest of the plan">
+          <li className="reorder-strip-item">
+            <button type="button" className="reorder-strip-btn" onClick={() => filterFromActNow('review_later')}>
+              <span className="reorder-strip-name">Review later</span>
+              <strong className="reorder-strip-value">{reviewLaterTotal.length.toLocaleString()}</strong>
+              <span className="reorder-strip-what">at or above target</span>
+            </button>
+            <InfoTip label="About Review later">
+              {`${reviewLaterUnranked > 0
+                ? `${reviewLaterTotal.length - reviewLaterUnranked} at or above the target stock; ${reviewLaterUnranked} not ranked (no stock figure or revenue share).`
+                : 'Every SKU at or above its target stock with something to order, still awaiting a decision.'}${reviewLaterNoOrder > 0
+                ? ` Leaves out the ${reviewLaterNoOrder} with nothing to order, which have no decision to make.` : ''}`}
+            </InfoTip>
+          </li>
+          <li className="reorder-strip-item">
+            <button type="button" className="reorder-strip-btn" onClick={() => filterFromActNow('no_order')}>
+              <span className="reorder-strip-name">No order needed</span>
+              <strong className="reorder-strip-value">{reviewLaterNoOrder.toLocaleString()}</strong>
+              <span className="reorder-strip-what">enough stock</span>
+            </button>
+            <InfoTip label="About No order needed">
+              {`SKUs in the ${planLabel} whose suggested order is 0 pieces: stock already covers the month’s forecast and the `
+                + 'target stock, so there is nothing to accept or dismiss.'
+                + `${laterNoOrderCut > 0 ? ` ${laterNoOrderCut} of them got 0 because the allocation left nothing for them, not because stock covers them.` : ''}`}
+            </InfoTip>
+          </li>
+          <li className="reorder-strip-item">
+            <button type="button" className="reorder-strip-btn" onClick={showWholePlan}>
+              <span className="reorder-strip-name">Total to order</span>
+              <strong className="reorder-strip-value">{totalOrderQty.toLocaleString()}</strong>
+              <span className="reorder-strip-what">pieces</span>
+            </button>
+            <InfoTip label="About Total to order">
+              {`${allocationPct != null
+                ? `Suggested by the optimizer within the ${allocationPct}% supplier allocation.`
+                : 'Suggested by the optimizer.'}${cutCount > 0
+                ? ` ${cutCount} of ${cycleRows.length} SKUs were cut to fit the allocation.` : ''}${noOrderCount > 0
+                ? ` ${orderingCount} of the ${cycleRows.length} SKUs in the plan order something; ${noOrderCount} order 0 pieces.`
+                : ''} ${MONTH_TOTAL_NOTE}`}
+            </InfoTip>
+          </li>
+        </ul>
       </div>
 
       {/* How the quantities were arrived at: one line until it is opened, with
@@ -1715,7 +1760,11 @@ const ReorderRecommendations = () => {
                     {filtered
                       ? `${VIEW_LABEL[view]?.title ?? 'Search'} — ${listedText}, by revenue at risk`
                       : actNowRows.length > 0
-                        ? `Act now — ${actNowRows.length} ${actNowRows.length === 1 ? 'SKU' : 'SKUs'} below target stock, by revenue at risk`
+                        ? `Act now — ${actNowRows.length} ${actNowRows.length === 1 ? 'SKU' : 'SKUs'} below target stock`
+                          + `${actNowRows.some((r) => isLikelyOutOfStock(r) && !isBelowTarget(r)) ? ' or out of stock (not counted)' : ''}`
+                          + `${actNowRows.some(isLikelyOutOfStock)
+                            ? `, ${OUT_OF_STOCK_NOT_COUNTED.toLowerCase()} first, then by revenue at risk`
+                            : ', by revenue at risk'}`
                         : 'Act now — no SKU is below its target stock'}
                   </td>
                 </tr>
@@ -1812,6 +1861,10 @@ const ReorderRecommendations = () => {
           brandOf={brandOf}
           formatSku={formatSKU}
           onOpenForecast={canOpenForecast ? (sku) => navigate(`/forecast?sku=${encodeURIComponent(sku)}`) : undefined}
+          onlySkus={notPlannedGroup ? actNow[notPlannedGroup].map((item) => item.sku_id) : null}
+          onlyLabel={notPlannedGroup === 'confirm' ? 'possibly discontinued' : `out of stock, ${MANUAL_ORDER.toLowerCase()}`}
+          manualOrderSkus={actNow.checkManually.map((item) => item.sku_id)}
+          onShowAll={() => setNotPlannedGroup(null)}
         />
       )}
     </>
@@ -2015,10 +2068,8 @@ const ReorderRecommendations = () => {
             <SlowLoadNotice />
             {activeTab === 'RECOMMENDATIONS' ? (
               <>
-                <div className="reorder-kpi-wrap">
-                  <div className="kpi-strip reorder-summary-grid">
-                    <SkeletonStatCards count={4} cardClassName="kpi-card" />
-                  </div>
+                <div className="reorder-top">
+                  <SkeletonStatCards count={1} cardClassName="kpi-card" />
                 </div>
                 <div className="reorder-table-footer" aria-hidden="true">
                   <SkeletonLine width="58%" height="0.8rem" />
@@ -2210,15 +2261,15 @@ const ReorderRecommendations = () => {
                 <div><dt>Planning cycle</dt><dd>{formatMonth(pendingBulk.rows[0]?.planningCycleDate ?? selectedCycle)}</dd></div>
                 <div><dt>Principal</dt><dd>{bulkPrincipals}</dd></div>
                 <div><dt>Critical</dt><dd>{bulkFigures.critical.toLocaleString()}</dd></div>
-                <div><dt>Not in stock count</dt><dd>{bulkFigures.notInCount.toLocaleString()}</dd></div>
+                <div><dt>{OUT_OF_STOCK_NOT_COUNTED}</dt><dd>{bulkFigures.notInCount.toLocaleString()}</dd></div>
               </dl>
               {bulkFigures.notInCount > 0 && (
                 <p className="reorder-bulk-warning">
                   <AlertTriangle size={15} aria-hidden="true" />
                   <span>
-                    {bulkFigures.notInCount.toLocaleString()} of these {bulkFigures.notInCount === 1 ? 'is' : 'are'} not in the
-                    opening stock count, so the plan treats {bulkFigures.notInCount === 1 ? 'it' : 'them'} as 0 on hand. That 0
-                    was never counted: confirm the stock before ordering.
+                    {bulkFigures.notInCount.toLocaleString()} of these {bulkFigures.notInCount === 1 ? 'is' : 'are'} out of
+                    stock (not counted): not in the opening stock count, so the plan treats {bulkFigures.notInCount === 1 ? 'it' : 'them'} as
+                    0 on hand. That 0 was never counted: check the shelf before ordering.
                   </span>
                 </p>
               )}

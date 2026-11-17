@@ -33,6 +33,7 @@ import {
 } from '../utils/periodComparison';
 import { pesoTicks } from '../utils/pesoTicks';
 import { demandHighlights, labelsThatFit } from '../utils/forecastHighlights';
+import { OUT_OF_STOCK_NOT_COUNTED } from '../labels';
 import { reviewReasonsSentence } from '../utils/reviewReasons';
 import MonthTick, { monthName } from './MonthTick';
 import { Callout, CalloutLine, CalloutNote, Callouts } from './ui/ChartParts';
@@ -3302,7 +3303,7 @@ export const ReorderRecommendationWidget = ({
               <strong className={shownCritical > 0 ? 'is-critical' : undefined}>{shownCritical}</strong> critical
             </span>
             <span className="reorder-mini-strip-item">
-              <strong className={shownNotInCount > 0 ? 'is-caution' : undefined}>{shownNotInCount}</strong> not in the stock count
+              <strong className={shownNotInCount > 0 ? 'is-caution' : undefined}>{shownNotInCount}</strong> out of stock (not counted)
             </span>
             <span className="reorder-mini-strip-item">
               <strong className={shownToCheck > 0 ? 'is-caution' : undefined}>{shownToCheck}</strong> to check before ordering
@@ -3370,7 +3371,7 @@ export const ReorderRecommendationWidget = ({
                         className={`urgency-badge-mini${URGENCY_CLASS[r.urgency] ? ` ${URGENCY_CLASS[r.urgency]}` : ''}`}
                         title={r.safetyStock != null
                           ? `${r.urgency === 'CRITICAL' ? 'Below' : r.urgency === 'URGENT' ? 'Above' : 'Well above'} its safety stock of ${formatUnits(r.safetyStock)} pieces`
-                            + `${r.notInCount ? '; not in the stock count, so read as 0 on hand' : ''}`
+                            + `${r.notInCount ? '; out of stock (not counted): not in the stock count, so read as 0 on hand' : ''}`
                           : undefined}
                       >
                         {r.urgency === 'CRITICAL' && <AlertTriangle size={11} strokeWidth={2.5} aria-hidden="true" />}
@@ -3379,11 +3380,11 @@ export const ReorderRecommendationWidget = ({
                     </td>
                     {/* The stock the urgency was judged on. A product missing
                         from the opening count is read as 0 by the plan; the
-                        cell says "not in count" (amber), never a 0 that would
+                        cell says "Out of stock (not counted)" (amber), never a 0 that would
                         look like a counted, empty shelf. */}
                     <td role="cell" className="reorder-mini-qty" data-label="Stock (pieces)">
                       {r.notInCount
-                        ? <span className="reorder-mini-nocount" title="Not in the cycle's opening stock count; the plan reads it as 0 on hand">Not in count</span>
+                        ? <span className="reorder-mini-nocount" title="Not in the cycle's opening stock count; the plan reads it as 0 on hand. Check the shelf before ordering.">{OUT_OF_STOCK_NOT_COUNTED}</span>
                         : r.stock != null ? formatUnits(r.stock) : '—'}
                     </td>
                     <td role="cell" className="reorder-mini-qty" data-label="Order (pieces)">
