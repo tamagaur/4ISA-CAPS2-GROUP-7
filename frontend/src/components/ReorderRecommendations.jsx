@@ -1499,6 +1499,8 @@ const ReorderRecommendations = () => {
             ? `Suggested by the optimizer within the ${allocationPct}% supplier allocation.`
             : 'Suggested by the optimizer.'}${noOrderCount > 0
             ? ` ${noOrderCount} of the ${cycleRows.length} SKUs in the plan have a suggested order of 0 pieces.`
+            : ''}${cycleRows.some((r) => r.actionStatus)
+            ? " Decided rows stay in the total: an accepted order counts at the quantity accepted, a dismissed one at the optimizer's."
             : ''} ${MONTH_TOTAL_NOTE}`}
           decoration={<ShoppingCart size={38} strokeWidth={1.4} />}
           icon={<ShoppingCart size={20} />}

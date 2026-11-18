@@ -46,9 +46,13 @@ const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
   const rule = PAGE_RULES[pathname];
   if (!rule) return null;
   const versus = comparisonRange(range, compare);
+  // A comparison window that starts before the first month of data has nothing in it (scenario audit 2026-11-18: the strip
+  // said "compared with the same months last year (Jan 2022 – Dec 2022)" on the quick range 2023).
   const compareText = compare === COMPARE_MODES.NONE || !versus
     ? 'no comparison'
-    : `compared with ${compare === COMPARE_MODES.YEAR ? 'the same months last year' : 'the previous period'} (${versus.label})`;
+    : versus.beforeData
+      ? `no comparison: there is no data for ${versus.label}`
+      : `compared with ${compare === COMPARE_MODES.YEAR ? 'the same months last year' : 'the previous period'} (${versus.label})`;
   const look = rule.look ?? rule.follows;
   const tone = look === true || look === 'follows' ? 'is-follows' : look === 'partly' ? 'is-partly' : 'is-fixed';
   return (

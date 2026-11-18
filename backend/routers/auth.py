@@ -298,7 +298,9 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
         raise _too_many_attempts(wait)
 
     row = db.execute(
-        text("SELECT user_id, password_hash, role, full_name FROM users WHERE email = :email"),
+        # lower() on both sides, like register and forgot-password (users_email_lower_key, migration 0034): an account created as
+        # "Ana@x.com" is the same account when the person types "ana@x.com" (scenario audit 2026-11-18).
+        text("SELECT user_id, password_hash, role, full_name FROM users WHERE lower(email) = lower(:email)"),
         {"email": body.email},
     ).mappings().first()
 

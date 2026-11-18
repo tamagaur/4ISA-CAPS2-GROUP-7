@@ -92,7 +92,7 @@ class FakeSession:
     def execute(self, stmt, params=None):
         sql = " ".join(str(stmt).split())
         p = params or {}
-        if sql.startswith("SELECT user_id, password_hash, role, full_name FROM users WHERE email"):
+        if sql.startswith("SELECT user_id, password_hash, role, full_name FROM users WHERE lower(email)"):
             user = next((u for u in self.users.values() if u["email"] == p["email"]), None)
             return FakeResult(user)
         if sql.startswith("SELECT user_id, email, full_name, role FROM users WHERE user_id"):

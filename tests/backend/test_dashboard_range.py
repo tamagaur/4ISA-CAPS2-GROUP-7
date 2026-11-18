@@ -65,6 +65,9 @@ class FakeSession:
         stamp = [{"latest_actual_month": "2026-02", "demand_rows": 10, "demand_pieces": 100.0, "fingerprint": "ab" * 16,
                   "latest_load_event_key": 7, "mart_refresh_id": 3, "mart_refreshed_at": "2026-10-22T14:25:29+00:00"}]
         self.routes = [("'sales' AS src", default if snapshot is None else snapshot),
+                       # marts.REAL_COVERAGE_SQL: each principal's first and latest month of real sales (2023-01, as live)
+                       ("MAX(period) AS latest", [{"principal": "unilever", "first": "2023-01", "latest": "2026-02"},
+                                                 {"principal": "delmonte", "first": "2023-01", "latest": "2025-12"}]),
                        ("to_regclass('mart.refresh_log')", [{"present": False}]),
                        ("AS fingerprint", stamp),
                        # the plan's entry test beside the error card's WAPEs (dashboard_range._range_entry_test)
@@ -202,6 +205,21 @@ def test_yoy_says_why_a_side_is_empty_sold_nothing_or_outside_lifespan():
     assert rows[2]["prior_pesos_reason"] == "outside_product_lifespan" and "pesos_reason" not in rows[2]
     assert rows[3]["pesos_reason"] == "outside_product_lifespan"
     assert "[no_sale]" in body["gap_note"] and "[outside_product_lifespan]" in body["gap_note"]
+
+
+def test_yoy_with_the_whole_prior_window_before_the_data_is_not_new():
+    """Scenario audit 2026-11-18: quick range '2023' has its prior window in 2022, before SSM's records. A null prior there
+    is 'no earlier data', not 'new' (the page printed 'new' for every product)."""
+    def yoy(_p, first="2023-01"):
+        return [{"sku_code": "S", "product_name": "P", "category_path": "C", "pieces": None, "prior_pieces": None,
+                 "principal_months": 12, "principal_prior_months": 0, "product_key": 1, "pesos": 10.0, "months": 12,
+                 "prior_pesos": None, "prior_months": 0, "first_period": first, "last_period": "2026-02"}]
+    body = get(FakeSession([("WITH cur AS", yoy)]), "/dashboard/yoy?principal=unilever&period=2023-12&start_period=2023-01")
+    assert body["principals"][0]["rows"][0]["prior_pesos_reason"] == "before_data_began"
+    # a prior window that overlaps the data keeps the old reading
+    later = get(FakeSession([("WITH cur AS", lambda p: yoy(p, first="2025-01"))]),
+                "/dashboard/yoy?principal=unilever&period=2024-12&start_period=2024-01")
+    assert later["principals"][0]["rows"][0]["prior_pesos_reason"] == "outside_product_lifespan"
 
 
 def test_yoy_del_monte_distinguishes_a_month_nobody_reported_from_a_category_that_is_absent():
@@ -360,6 +378,21 @@ def test_class_changes_list_who_entered_and_left_class_a():
     assert (uni["left_revenue"], uni["left_compare_revenue"]) == (150.0, 300.0)
     ranked = [s for s, _ in session.calls if "WITH rev AS" in s]
     assert len(ranked) == 2
+
+
+def test_class_changes_refuse_a_compare_window_that_starts_before_the_data():
+    """Scenario audit 2026-11-18: the Dashboard's quick range '2023' compares with 2022, where nothing was ever sold. Ranked
+    from nothing, every top seller 'entered' from 0. It must say there is nothing to compare, and never rank the empty side."""
+    session = FakeSession([])
+    body = get(session, "/dashboard/class-changes?principal=unilever&period=2023-12&start_period=2023-01")
+    assert (body["compare_start_period"], body["compare_end_period"]) == ("2022-01", "2022-12")
+    uni = body["principals"][0]
+    assert "No comparison" in uni["blocked_reason"] and "Jan 2023" in uni["blocked_reason"]
+    assert uni["entered"] == [] and uni["left"] == [] and uni["class_a_count"] is None
+    assert not any("WITH rev AS" in s for s, _ in session.calls), "the empty window is never ranked"
+    # a window that only STRADDLES the first month is refused too: N months against fewer would inflate every delta
+    straddle = get(FakeSession([]), "/dashboard/class-changes?principal=unilever&period=2023-12&start_period=2023-07")
+    assert "No comparison" in straddle["principals"][0]["blocked_reason"]
 
 
 def test_class_changes_say_why_a_side_has_no_class():

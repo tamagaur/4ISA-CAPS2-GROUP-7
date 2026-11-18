@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-17 (figure provenance; demo runs 10-12).
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-18 (scenario audit; figure provenance and demo runs 10-12 of 2026-11-17).
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -15,6 +15,22 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    (git-ignored).)
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+SCENARIO AND LOGIC AUDIT (2026-11-18, Kelvin's brief; four read-only trace agents, findings re-read in code before use; no live write: live read only in the
+  invariants' READ ONLY transactions; plan 115 / 330,212 unchanged; no file of the month-load closure edited, tests/test_demo_rehearsal passes, so no re-rehearsal).
+  FIXED (outside the closure). (1) Dashboard quick range "2023" (any Unilever range starting before Jan 2024): /dashboard/class-changes compared with 2022, ranked
+  from nothing, and said every top seller "entered" from 0; it now answers blocked_reason "No comparison ..." when the compare window starts before the principal's
+  first real month (dashboard_range.py; live 2025 range unchanged, 167 / 161 / 44). (2) /dashboard/yoy: a prior window wholly before the data now carries
+  prior_pesos_reason "before_data_began" and the class list prints "No data a year earlier", not "new" (ClassProductsModal.jsx). (3) PeriodContextStrip no longer says
+  "compared with Jan 2022 - Dec 2022". (4) Reorder banner: a pending row that orders nothing is counted apart ("N order nothing, so need no decision"), not as "not decided"
+  (decisionCounts.js + test); the Total Suggested Order tooltip says decided rows stay in the total. (5) Login matches the e-mail without regard to case, like register and
+  forgot-password (auth.py + test); a non-JSON 5xx at sign-in no longer says "Check your email and password" (auth.js). (6) SKU Forecast's browser MA3 no longer averages a blank-capture month as 0.
+  NOT FIXED, decisions in the session report: lockout thresholds (5 per e-mail, 20 per IP, in memory, 15 min, also for the right password); accepted quantity 0 or any size
+  (recommendations.py is in the closure); Accept does not pin the quantity the planner saw (closure); /status is liveness only; three different "Class A" counts across pages;
+  a load killed by a server restart leaves a dead end (admin rollback is the exit). CHECKED, no defect: two planners on one row (row lock + guarded UPDATE), double submit, cache after a write,
+  staff reaching URLs (every route gated server-side), self-demotion and last admin, deep link when signed out, the rollback dialog (it does warn about accounts and permissions).
+  MEASURED: tests/backend test_dashboard_range 27 passed, test_auth + test_mfa + test_accounts 140 passed, frontend 261 tests, build OK, figure_provenance GREEN,
+  tests/invariants test_i every GET route on live (read only) passed. The full check.sh --full was NOT run.
 
 DEMO RUNS 10-12 (2026-11-17, Kelvin's brief; live read in READ ONLY transactions, nothing written or removed).
   WHAT THEY ARE. Three demo.run rows labelled demonstration_unilever, the same generator digest (b7b5d938...). 10: written

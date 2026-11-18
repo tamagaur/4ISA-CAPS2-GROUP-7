@@ -49,6 +49,9 @@ from backend.series_gaps import gap_note
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
+# A year-over-year prior window that lies wholly before the principal's first real month (frontend/src/components/ClassProductsModal.jsx labels it).
+BEFORE_DATA_BEGAN = "before_data_began"
+
 PERIOD = PERIOD_PATTERN
 PeriodQuery = Query(None, pattern=PERIOD, description="'YYYY-MM': the range's end month.")
 StartQuery = Query(None, pattern=PERIOD, description="'YYYY-MM': the range's first month.")
@@ -135,8 +138,13 @@ def get_range_yoy(
     start, end = resolve_range(db, period, start_period, scope)
     prior_start, prior_end = marts.month_add(start, -12), marts.month_add(end, -12)
     out = []
+    firsts = {r["principal"]: r["first"] for r in batch.rows(db, marts.REAL_COVERAGE_SQL) if r["first"]}
     for who in _principals(scope):
         rows = marts.product_yoy(db, start, end, who)
+        if who in firsts and prior_end < firsts[who]:
+            # The whole earlier window predates SSM's records: a null prior is "no earlier data", not "new" (the page read
+            # `outside_product_lifespan` as "new" for every product on the quick range '2023'; scenario audit 2026-11-18).
+            rows = [{**r, "prior_pesos_reason": BEFORE_DATA_BEGAN} if r.get("prior_pesos") is None else r for r in rows]
         cur = [r["pesos"] for r in rows if r["pesos"] is not None]
         prev = [r["prior_pesos"] for r in rows if r["prior_pesos"] is not None]
         out.append({
@@ -187,7 +195,22 @@ def get_class_changes(
         if compare_start > compare_end:
             raise HTTPException(status_code=422, detail="compare_start_period is after compare_period.")
     out = []
+    firsts = {r["principal"]: r["first"] for r in batch.rows(db, marts.REAL_COVERAGE_SQL) if r["first"]}
     for who in _principals(scope):
+        # A compare window that starts before the principal's first real month is not a window of sales: ranked
+        # from nothing, every current Class A product "entered" from 0 (scenario audit 2026-11-18, quick range
+        # "2023" on the Dashboard). Same rule as the page's own `versus.beforeData`: say there is nothing to compare.
+        if who in firsts and compare_start < firsts[who]:
+            out.append({
+                "principal": who, "grain": "category" if who == "delmonte" else "sku",
+                "pesos_basis": marts.PESOS_BASIS_LABEL["ex_vat" if who == "delmonte" else "vat_inclusive"],
+                "class_a_count": None, "compare_class_a_count": None, "stayed_count": None,
+                "entered_count": None, "left_count": None, "entered": [], "left": [],
+                "blocked_reason": (f"No comparison: {'Del Monte' if who == 'delmonte' else 'Unilever'} sales start in {marts.range_label(firsts[who], firsts[who])}, "
+                                   f"so there is no earlier window ({marts.range_label(compare_start, compare_end)}) "
+                                   "to rank against."),
+            })
+            continue
         block = marts.class_changes(db, start, end, compare_start, compare_end, who)
         block["pesos_basis"] = marts.PESOS_BASIS_LABEL["ex_vat" if who == "delmonte" else "vat_inclusive"]
         block["blocked_reason"] = None if block["class_a_count"] or block["compare_class_a_count"] else (

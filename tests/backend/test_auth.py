@@ -78,7 +78,8 @@ class FakeSession:
         sql = str(stmt)
         params = params or {}
         if "SELECT user_id, password_hash, role, full_name FROM users" in sql:
-            row = next((u for u in self.users if u["email"] == params["email"]), None)
+            assert "lower(email) = lower(:email)" in sql, "sign-in matches the address without regard to case"
+            row = next((u for u in self.users if u["email"].lower() == params["email"].lower()), None)
             return FakeResult(row)
         if "SELECT 1 FROM users" in sql:
             assert "lower(email) = lower(:email)" in sql
@@ -309,6 +310,16 @@ def test_login_success(client):
     decoded = auth_utils.decode_access_token(body["access_token"])
     assert decoded.email == "admin@ssmcapstone.com"
     assert decoded.full_name == "Admin User"
+
+
+def test_login_matches_the_email_without_regard_to_case(client):
+    """Scenario audit 2026-11-18: register and forgot-password compare lower(email); login compared exactly, so an account
+    created as 'Admin@...' refused 'admin@...' as 'Incorrect email or password' (and counted toward the lockout)."""
+    resp = client.post(
+        "/auth/login", json={"email": "ADMIN@ssmcapstone.com", "password": "correct-horse-battery-staple"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["role"] == "admin"
 
 
 def test_login_wrong_password(client):

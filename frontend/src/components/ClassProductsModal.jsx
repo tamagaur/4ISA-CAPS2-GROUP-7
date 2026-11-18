@@ -33,6 +33,7 @@ const YOY_PRIOR = {
   not_collected: 'Not collected a year earlier',
   category_absent: 'Not reported a year earlier',
   blank_capture: 'Not recorded a year earlier',
+  before_data_began: 'No data a year earlier (records begin Jan 2023)',
 };
 
 export const yoyText = (row) => {

@@ -1271,8 +1271,14 @@ const SKUForecast = () => {
         const qtyByPeriod = new Map(history.map((a) => [a.period, a.quantity]));
         const windowStart = periodMinusMonths(cutoff, MA_WINDOW);
         let sum = 0;
-        for (let p = windowStart; p <= cutoff; p = addMonth(p)) sum += qtyByPeriod.get(p) ?? 0;
-        return {
+        let blankMonth = false;
+        for (let p = windowStart; p <= cutoff; p = addMonth(p)) {
+          // A month with a row but no quantity is a blank capture, not a zero sale (CLAUDE.md, NULL QUANTITY): the
+          // runner leaves it out, so this page does not average it in as 0 (scenario audit 2026-11-18).
+          if (qtyByPeriod.has(p) && qtyByPeriod.get(p) == null) blankMonth = true;
+          sum += qtyByPeriod.get(p) ?? 0;
+        }
+        if (!blankMonth) return {
           period: target,
           value: Math.max(0, sum / MA_WINDOW),
           confidenceLower: null,
