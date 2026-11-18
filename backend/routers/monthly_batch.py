@@ -247,8 +247,12 @@ JOB = Job()
 
 def _script_json(*args: str) -> dict:
     """A read-only script's JSON answer. Its own process, so this one never imports analytics."""
-    done = subprocess.run([sys.executable, "-m", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=SCRIPT_TIMEOUT_S, env=step_env())
+    try:
+        done = subprocess.run([sys.executable, "-m", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=SCRIPT_TIMEOUT_S, env=step_env())
+    except subprocess.TimeoutExpired:
+        # A very large workbook, or a read blocked behind a rollback's brief lock: say so instead of a bare 500 (2026-11-18).
+        raise ApiError(504, "Reading that took too long. Try again in a moment; a very large file may need to be split.", code="batch_status_timeout") from None
     if done.returncode != 0:
         raise ApiError(502, "The batch status could not be read.", code="batch_status_failed")
     return json.loads(done.stdout.strip().splitlines()[-1])

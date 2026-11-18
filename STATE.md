@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-18 (master fix-and-audit sweep; scenario audit; figure provenance and demo runs 10-12 of 2026-11-17).
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-18 (close-it-out run: FSN blank captures, staff badge, Category Trends labels, closure read and re-rehearsal; master fix-and-audit sweep; scenario audit; figure provenance and demo runs 10-12 of 2026-11-17).
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -15,6 +15,31 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
    (git-ignored).)
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
+
+CLOSE-IT-OUT RUN (2026-11-18, Kelvin's master prompt; live read only in READ ONLY transactions: no database write; plan 115 / 330,212 unchanged).
+  THE BRIEF'S ERRORS. The tree was already clean and 7e75ed4 (with the 2959 pin) was already on team/kelvin-be, so item 1 had nothing to commit. "98 files a month load runs":
+  98 is the import closure of the load, rollback and run_month; it over-approximates what executes (the ETL loaders, fill_missing and the apply_/build_ scripts are
+  imported but not run by a load) and it OMITS the HTTP entry backend/routers/monthly_batch.py (not hashed). "27-minute re-rehearsal" is about 25 minutes.
+  FSN (backend/routers/fsn.py): a month whose every row has a NULL quantity (a blank capture) was read as a zero month. Live, read-only, Unilever, window 2025-03..2026-02:
+  34 product-months in 33 products. Before F/S/N 619 / 351 / 121, after 620 / 350 / 121; one product (key 736, Class A) moves Slow -> Fast, 33 products' ADI and months observed
+  change. Figure e (manuscript_figures.py): Class A F/S/N 164/20/5 -> 165/19/5, B and C unchanged; FIGURES.md regenerated. The chapter's sentence "Of 1,091 products, 619 (56.7%) were
+  Fast-moving" becomes 620 (56.8%): the chapter is out of scope and was NOT edited. A month with no row at all is still zero (Unilever gap rule); a blank in the last 6 months does not rescue
+  a product with no other sale (stays non-moving).
+  STAFF BADGE: the Reorder tab badge counts requests waiting on the plan the page shows (pendingByCycle); older-plan requests stay pending and listed, are counted apart in a note, nothing is closed.
+  CATEGORY TRENDS (preview): revenue column, Trend header and each row say "sample months" when the revenue window or the fit window reaches the generated months; nothing hidden.
+  CLOSURE (read in full by four reviewers; files edited => re-rehearsal): scripts/demo_session.py (resume now allowed once the next plan is written; a resume with a different file is refused),
+  analytics/month_file.py (impossible dates, decimal commas, nan/inf refused with a reason; no more 502), scripts/run_baseline_forecast.py (git absent no longer stops the step; month count in the log),
+  scripts/cycle_feedback.py (Philippine day), backend/marts.py (YoY blank_capture reason), backend/routers/recommendations.py (stock-count run label date compare), scripts/fill_missing.py and
+  scripts/build_unilever_demo.py (refuse while a generated month is loaded), backend/routers/monthly_batch.py (a read timeout answers 504; not in the closure).
+  REHEARSAL re-run on the final closure (restore of full_backup_20261117T083516Z into ssm_rehearsal on 127.0.0.1:55432; live not written): 11 of 11 steps EXACT (start 115 / 330,212;
+  March 131 / 1,016,754; April 138 / 985,960; every rollback back to 115 / 330,212; crash mid-run and the refused third month exact); docs/MONTH_LOAD_REHEARSAL.json rewritten, tests/test_demo_rehearsal 5 passed.
+  MEASURED on the final tree (2026-11-18): check.sh --full GREEN against live, 995 s, 13 of 13 steps (provenance, invariants 42 tests, suite 2902 passed / 18 opt-in not run / 0 failed, Chapter 4
+  totals 2944 passed + 18 skipped of 2962 collected: the pin is now confirmed by a run, re-pinned 2959 -> 2962 for 3 new tests: 2962 / 2956 / 2944 / 2935; manuscript 265 statements, 193 agree, the same 72
+  held; frontend 264 tests; build). Audit passes: 1 the four closure reads (about 30 findings, fixed or listed below), 2 my own diff (found two defects of my own: FSN read a no-row month as blank, and a
+  docstring's numbers failed the provenance check, so the rehearsal was restarted), 3 the final run (nothing new). Not exercised against a database with a loaded month: the fill_missing and build_unilever_demo refusals.
+  NOT FIXED, decisions (see the session report): expected_on from the decision date (April and May plans take every accepted order as arriving, cumulatively); Reorder page stock is the count while the
+  plan uses stock_opening_v; accuracy_mart mixes data_kind and source_tag (a migration); review flags are not produced for a loaded month; treatments.py reads blanks as 0 (moves forecasts);
+  no database lock between two writers; free storage unread.
 
 MASTER FIX-AND-AUDIT SWEEP (2026-11-18, Kelvin's brief; live read only, READ ONLY transactions: no database write; plan 115 / 330,212 unchanged;
   no file of the month-load closure edited, so docs/MONTH_LOAD_REHEARSAL.json stays valid). The tree was committed first (5efd0dc, pushed to team/kelvin-be).

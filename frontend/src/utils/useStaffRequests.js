@@ -12,14 +12,14 @@
 // (changesReady / dismissalsReady false), never as an error.
 import { useCallback, useEffect, useState } from 'react';
 import { getDismissalRequests, getQuantityChanges, getStockObservations } from '../api/recommendations';
-import { requestCounts, serverTime } from './reorderRequests';
+import { pendingByCycle, requestCounts, serverTime } from './reorderRequests';
 
 // A server older than the endpoint answers 404 or 405 (seen 2026-10-28 on a
 // local server with migration 0068's routes but not 0070's): not set up too.
 const isNotReady = (err) => [404, 405, 503].includes(err?.status)
   || err?.code === 'approval_not_ready' || err?.code === 'requests_not_ready';
 
-export function useStaffRequests({ enabled, isAdmin }) {
+export function useStaffRequests({ enabled, isAdmin, cycle = null }) {
   const [state, setState] = useState({ status: enabled ? 'loading' : 'off' });
   const [attempt, setAttempt] = useState(0);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
@@ -78,7 +78,11 @@ export function useStaffRequests({ enabled, isAdmin }) {
   }, [enabled, isAdmin, attempt]);
 
   // For an admin, everyone's requests waiting for a decision; for staff, their own.
-  const counts = requestCounts(state.status === 'ready' ? state.items : []);
-  return { ...state, counts, pendingCount: counts.pending_approval, reload };
+  // The badge counts only what is waiting on the plan the page shows (`cycle`); requests left on an earlier plan stay
+  // in the list and in the Pending card, and are counted apart in pendingEarlier.
+  const readyItems = state.status === 'ready' ? state.items : [];
+  const counts = requestCounts(readyItems);
+  const { current, earlier } = pendingByCycle(readyItems, cycle);
+  return { ...state, counts, pendingCount: current, pendingEarlier: earlier, reload };
 }
 

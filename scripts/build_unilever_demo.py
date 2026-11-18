@@ -86,6 +86,11 @@ def read_inputs(db_url: str):
         cur.execute("SET TRANSACTION READ ONLY")
         cur.execute("SHOW transaction_read_only")
         assert cur.fetchone()[0] == "on"
+        from analytics.demo_session import permits_labelled_rows
+        if permits_labelled_rows(cur):
+            # The demand view admits a loaded generated month while one is loaded; copying it here would label it real_copy (2026-11-18).
+            raise SystemExit("REFUSED: a generated month is loaded in this database. Roll it back before building the demonstration, "
+                             "which copies the real view and would label the generated month as real.")
         cur.execute(ABC_PERIOD_SQL, (PRINCIPAL, abc_method(PRINCIPAL)))
         row = cur.fetchone()
         if not row or row[0] is None:

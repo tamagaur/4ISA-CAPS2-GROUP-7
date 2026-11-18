@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from analytics.classification.fsn import (
     FAST_ADI_BELOW, FSN_LABELS, FSN_WINDOW_MONTHS, MIN_FAST_SALES_MONTHS, NON_MOVING_MONTHS, classify_fsn,
+    no_sale_in_last_months,
 )
 from backend.periods import PERIOD_PATTERN
 from backend.data_mode import PREVIEW, REAL, get_data_mode, preview_block, unilever_demand
@@ -89,16 +90,35 @@ def classify_principal(
     index = {m: i for i, m in enumerate(months)}
     series: dict[int, dict] = {}
     for r in db.execute(text(qty_sql), {"months": months}).mappings().all():
-        entry = series.setdefault(int(r["product_key"]), {"sku_id": r["sku_id"], "qty": np.zeros(len(months))})
-        entry["qty"][index[r["period"]]] += float(r["qty"] or 0)
+        # A month with no row at all is a month of no sale (0, Unilever's gap rule). A month whose every row has a NULL
+        # quantity is a blank capture (CLAUDE.md, "NULL QUANTITY"): NaN, "not captured", left out of that product's
+        # series below, never read as 0.
+        entry = series.setdefault(
+            int(r["product_key"]), {"sku_id": r["sku_id"], "qty": np.zeros(len(months)), "has_value": set(), "has_blank": set()})
+        slot = index[r["period"]]
+        if r["qty"] is None:
+            entry["has_blank"].add(slot)
+        else:
+            entry["has_value"].add(slot)
+            entry["qty"][slot] += float(r["qty"])
 
     items = []
     for product_key, entry in series.items():
-        if not (entry["qty"] > 0).any():
+        for slot in entry["has_blank"] - entry["has_value"]:
+            entry["qty"][slot] = np.nan
+        captured = ~np.isnan(entry["qty"])
+        qty = entry["qty"][captured]
+        labels = [m for m, ok in zip(months, captured) if ok]
+        if not (qty > 0).any():
             continue
-        # The window's own month labels: non-moving is judged on calendar months
-        # ending at the window's last month, so a gap month counts as no sale.
-        result = classify_fsn(entry["qty"], months)
+        # Non-moving is judged on the calendar months ending at the WINDOW's last month (a gap month counts as no
+        # sale), so it is decided here on the window's own labels; a blank in those months cannot be shown to be a
+        # sale, so it does not rescue a product with no other. Everything else is judged on the captured months only,
+        # so a blank never lengthens the average demand interval or counts as a month observed.
+        if no_sale_in_last_months(labels, qty, months[-1], NON_MOVING_MONTHS):
+            result = {"fsn": "N", "adi": None, "months_with_sales": int((qty > 0).sum()), "months_observed": int(len(qty))}
+        else:
+            result = classify_fsn(qty, labels)
         last_sale = max(i for i, q in enumerate(entry["qty"]) if q > 0)
         items.append({
             "product_key": product_key,

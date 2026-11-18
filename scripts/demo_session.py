@@ -283,7 +283,10 @@ def load_month(args) -> int:
         cycle = datetime.date.fromisoformat(f"{month}-01")
         cur.execute(NEWEST_CYCLE_SQL, {"principal": PRINCIPAL})
         newest = cur.fetchone()[0]
-        if newest != cycle:
+        # A load that stopped AFTER its plan step (the marts refresh or the review failed) has already written the next month's plan, so
+        # "run it again to continue" must be allowed to see that plan as the newest one: run_month resumes from there (2026-11-18).
+        written_next = datetime.date.fromisoformat(f"{ds.next_month(month)}-01")
+        if newest != cycle and not (resume and newest == written_next):
             conn.rollback()
             raise SystemExit(f"REFUSED: the newest order plan is {newest:%Y-%m}, not {month}: this database is not where {month} is next")
         cur.execute(WAITING_SQL, {"principal": PRINCIPAL, "cycle": cycle})
@@ -302,10 +305,19 @@ def load_month(args) -> int:
             mark(conn, month, state="failed", note="some waiting orders could not be accepted")
             raise SystemExit("REFUSED: some waiting orders could not be accepted, so the month was not loaded. Roll it back, or decide them on the Reorder page")
         cur = conn.cursor()
-        cur.execute("SELECT count(*) FROM unilever_sku_demand_fact WHERE is_demo AND _src_file = %s AND calendar_month = %s", (ds.TAG, month))
-        have = cur.fetchone()[0]
+        cur.execute("SELECT count(*), COALESCE(sum(quantity_sold), 0), COALESCE(sum(net_amount), 0) FROM unilever_sku_demand_fact "
+                    "WHERE is_demo AND _src_file = %s AND calendar_month = %s", (ds.TAG, month))
+        have, have_qty, have_amount = cur.fetchone()
         conn.rollback()
         if have:
+            # A resume keeps the rows already written. A file that is not those rows is refused rather than ignored: the plan would
+            # be built on the old file while the session recorded the new one's name (2026-11-18).
+            want_qty = sum(float(r["quantity_sold"] or 0) for r in rows)
+            want_amount = sum(float(r["net_amount"] or 0) for r in rows)
+            slack = 0.005 * len(rows) + 0.01          # each stored cell may be rounded to 2 decimals
+            if have != len(rows) or abs(float(have_qty) - want_qty) > slack or abs(float(have_amount) - want_amount) > slack:
+                raise SystemExit(f"REFUSED: {month} is already part-loaded from a different file ({have} rows written, this file has {len(rows)}). "
+                                 "Roll the month back to load a different file, or upload the same file to continue")
             say("load", f"{have} sales rows for {month} are already written")
         else:
             n = write_rows(conn, rows, month)

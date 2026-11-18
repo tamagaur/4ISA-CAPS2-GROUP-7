@@ -21,7 +21,7 @@ Figures keep the chapter's section-level scheme (Figure 4.2.N within §4.2, Figu
 | Figure 4.2.9 | new (d) | ABC Pareto Curve, Unilever (Tier A as of 2026-02, basis t12m_new) | §4.2.1.1.4, after Table 4.2.5, before "As of February 2026, 1,091 Unilever products were ranked…" | pass |
 | Figure 4.2.10 | Figure 4.2.6 | Products Entering and Leaving Class A, Unilever (Dashboard) (screenshot) | unchanged position | n/a |
 | Figure 4.2.11 | Figure 4.2.7 | FSN Classification, Unilever (ABC Classification page) (screenshot) | unchanged position | n/a |
-| Figure 4.2.12 | new (e) | FSN Movement by ABC Class, Unilever (Tier A as of 2026-02) | §4.2.1.1.6, after Table 4.2.7, before "Of 1,091 products, 619 (56.7%) were Fast-moving…" | pass |
+| Figure 4.2.12 | new (e) | FSN Movement by ABC Class, Unilever (Tier A as of 2026-02) | §4.2.1.1.6, after Table 4.2.7, before "Of 1,091 products, 620 (56.8%) were Fast-moving…" | pass |
 | Figure 4.2.13 | Figure 4.2.8 | Demand Pattern Panel of a Tier A Product (SKU Forecast page) (screenshot) | unchanged position | n/a |
 | Figure 4.2.14 | Figure 4.2.9 | Idle Stock and Stock Above Policy, Unilever (Dashboard) (screenshot) | unchanged position | n/a |
 | Figure 4.2.15 | Figure 4.2.10 | Key Performance Indicators, Del Monte (Dashboard) (screenshot) | unchanged position | n/a |

@@ -62,7 +62,7 @@ DECISIONS_SQL = """
 """
 RECEIPTS_SQL = """
     SELECT er.state, er.not_visible_in_count, COUNT(*), COALESCE(SUM(er.pieces), 0),
-           COUNT(*) FILTER (WHERE er.state = 'expected' AND er.expected_on < CURRENT_DATE)
+           COUNT(*) FILTER (WHERE er.state = 'expected' AND er.expected_on < (now() AT TIME ZONE 'Asia/Manila')::date)
     FROM expected_receipt er JOIN lp_recommendation lr ON lr.recommendation_key = er.recommendation_key
     WHERE lr.planning_cycle_date = %(cycle)s
     GROUP BY er.state, er.not_visible_in_count ORDER BY er.state, er.not_visible_in_count

@@ -128,3 +128,22 @@ test('counts and filters come from one state=all list', async () => {
   assert.equal(filterRequests(items, { query: 'dr-1' })[0].product_name, 'Shampoo');
   assert.equal(filterRequests(items, { status: 'approved', query: '333' }).length, 0);
 });
+
+test('the badge counts only requests waiting on the plan the page shows; earlier ones stay pending and are counted apart', async () => {
+  const { pendingByCycle, requestCounts } = await import('./reorderRequests.js');
+  const items = [
+    { state: 'pending_approval', planning_cycle_date: '2026-03-01' },
+    { state: 'pending_approval', planning_cycle_date: '2026-03-01T00:00:00' },
+    { state: 'pending_approval', planning_cycle_date: '2026-02-01' },
+    { state: 'approved', planning_cycle_date: '2026-02-01' },
+    { state: 'rejected', planning_cycle_date: '2026-03-01' },
+  ];
+  assert.deepEqual(pendingByCycle(items, '2026-03-01'), { current: 2, earlier: 1 });
+  // nothing is closed: the Pending card still counts all three
+  assert.equal(requestCounts(items).pending_approval, 3);
+  // no plan cycle known: never fewer than all of them
+  assert.deepEqual(pendingByCycle(items, null), { current: 3, earlier: 0 });
+  // a request with no cycle on it is not called earlier
+  assert.deepEqual(pendingByCycle([{ state: 'pending_approval' }], '2026-03-01'), { current: 1, earlier: 0 });
+  assert.deepEqual(pendingByCycle(undefined, '2026-03-01'), { current: 0, earlier: 0 });
+});

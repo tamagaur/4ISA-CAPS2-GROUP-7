@@ -485,7 +485,7 @@ const ReorderRecommendations = () => {
   // (an admin starts on Pending, staff on All).
   const [requestsFilter, setRequestsFilter] = useState(null);
   const requestsView = requestsFilter ?? (isAdmin ? 'pending_approval' : 'all');
-  const staffRequests = useStaffRequests({ enabled: canSeeRequests, isAdmin });
+  const staffRequests = useStaffRequests({ enabled: canSeeRequests, isAdmin, cycle: meta?.cycleDate || null });
 
   // Deep link from the notification bell: /reorder?tab=requests&request=quantity_change-7
   // (or dismissal-4) opens the Requests tab, and the tab opens that request

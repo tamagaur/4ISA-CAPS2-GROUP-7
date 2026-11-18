@@ -959,7 +959,7 @@ def get_recommendations(
         # when it was counted, or why there is none.
         principals = sorted({r["principal"] for r in cycle_rows})
         counts.extend(stock_counts(db, opening_period(planning_cycle), principals, cycle=planning_cycle,
-                                   run=current_run if planning_cycle == freshness["cycle_date"] else None))
+                                   run=current_run if str(planning_cycle)[:10] == freshness["cycle_date"] else None))
     items = [_to_item(r, present, freshness["cycle_date"]) for r in rows]
     return _attach_demo_unilever(_with_data_mode(RecommendationsResponse(
         items=items,

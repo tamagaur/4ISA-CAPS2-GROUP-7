@@ -762,13 +762,16 @@ def product_yoy(db: Session, start: str, end: str, principal: str) -> list[dict]
         cur, prior = r["pesos"], r["prior_pesos"]
         item_reasons = {}
         if cur is None:
-            reason = _null_side_reason(principal, r.get("first_period"), r.get("last_period"), start, end,
-                                       r.get("principal_months"))
+            # A side with rows in range whose every amount is NULL is a blank capture, not a month of no sale (2026-11-18).
+            reason = ("blank_capture" if principal == "unilever" and (r.get("months") or 0) > 0 else
+                      _null_side_reason(principal, r.get("first_period"), r.get("last_period"), start, end,
+                                        r.get("principal_months")))
             if reason:
                 item_reasons["pesos_reason"] = reason
         if prior is None:
-            reason = _null_side_reason(principal, r.get("first_period"), r.get("last_period"), prior_start, prior_end,
-                                       r.get("principal_prior_months"))
+            reason = ("blank_capture" if principal == "unilever" and (r.get("prior_months") or 0) > 0 else
+                      _null_side_reason(principal, r.get("first_period"), r.get("last_period"), prior_start, prior_end,
+                                        r.get("principal_prior_months")))
             if reason:
                 item_reasons["prior_pesos_reason"] = reason
         out.append({**item_reasons,

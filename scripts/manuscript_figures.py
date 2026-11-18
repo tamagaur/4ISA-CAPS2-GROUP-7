@@ -479,7 +479,7 @@ def fig_e(plt, d) -> Fig:
     fsn = pd.DataFrame(d["api"]["fsn"]["items"])[["product_key", "fsn"]]
     j = abc.merge(fsn, on="product_key", how="left")
     ct = pd.crosstab(j.tier, j.fsn).reindex(columns=["F", "S", "N"], fill_value=0)
-    expected = {"A": (164, 20, 5), "B": (190, 24, 16), "C": (265, 307, 100)}
+    expected = {"A": (165, 19, 5), "B": (190, 24, 16), "C": (265, 307, 100)}
     for t, vals in expected.items():
         for k, v in zip("FSN", vals):
             f.check(f"Class {t} {k}", int(ct.loc[t, k]), v, basis="Table 4.2.7")
@@ -1242,7 +1242,7 @@ SEQUENCE = [
     ("new", "d", "§4.2.1.1.4, after Table 4.2.5, before \"As of February 2026, 1,091 Unilever products were ranked…\""),
     ("old", "4.2.6", "Products Entering and Leaving Class A, Unilever (Dashboard)"),
     ("old", "4.2.7", "FSN Classification, Unilever (ABC Classification page)"),
-    ("new", "e", "§4.2.1.1.6, after Table 4.2.7, before \"Of 1,091 products, 619 (56.7%) were Fast-moving…\""),
+    ("new", "e", "§4.2.1.1.6, after Table 4.2.7, before \"Of 1,091 products, 620 (56.8%) were Fast-moving…\""),
     ("old", "4.2.8", "Demand Pattern Panel of a Tier A Product (SKU Forecast page)"),
     ("old", "4.2.9", "Idle Stock and Stock Above Policy, Unilever (Dashboard)"),
     ("old", "4.2.10", "Key Performance Indicators, Del Monte (Dashboard)"),

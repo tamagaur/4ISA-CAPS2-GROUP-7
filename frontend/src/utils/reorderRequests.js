@@ -251,6 +251,23 @@ export function requestCounts(items) {
   return counts;
 }
 
+// The waiting requests split by the plan they were made on (the request's planning_cycle_date, the cycle of the
+// recommendation it is about) against the plan the page is showing. `current` is what can still be decided; `earlier`
+// were made on a plan a newer run has since replaced: they stay listed and pending (nothing closes them), the server
+// refuses to approve them, and the tab's badge does not count them. With no plan cycle known, nothing is called
+// earlier: the badge then counts every waiting request, never fewer.
+export function pendingByCycle(items, cycle) {
+  const day = (v) => String(v || '').slice(0, 10);
+  const want = day(cycle);
+  const out = { current: 0, earlier: 0 };
+  (items || []).forEach((r) => {
+    if (r.state !== 'pending_approval') return;
+    if (want && r.planning_cycle_date && day(r.planning_cycle_date) !== want) out.earlier += 1;
+    else out.current += 1;
+  });
+  return out;
+}
+
 // The list under a status filter and a search (staff name or email,
 // product, SKU, request ID), case-insensitive.
 export function filterRequests(items, { status = 'all', query = '' } = {}) {

@@ -17,9 +17,11 @@ Pure reading: no database, no network, nothing written.
 """
 from __future__ import annotations
 
+import calendar
 import csv
 import datetime
 import io
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -113,6 +115,32 @@ def header_row(rows: list[list]) -> int | None:
     return None
 
 
+def _day_or_unreadable(year: int, month: int, day: int):
+    """(year, month, day), or 'unreadable' for a day the month does not have (2026-02-30): datetime.date would raise on it, and the
+    upload would answer with a server error instead of naming the file's date (2026-11-18)."""
+    return (year, month, day) if 1 <= day <= calendar.monthrange(year, month)[1] else "unreadable"
+
+
+_PLAIN_NUMBER = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)$")
+_THOUSANDS_NUMBER = re.compile(r"^[+-]?\d{1,3}(,\d{3})+(\.\d*)?$")
+
+
+def _number(raw) -> float:
+    """A quantity or amount cell as a float. A comma is read only as a thousands separator, always followed by exactly three digits: a
+    decimal comma (in a file written with ';') would otherwise be stripped and read as a number a hundred times too large, so it is
+    refused. nan and inf are refused too (ValueError)."""
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        value = float(raw)
+    else:
+        text = str(raw).strip()
+        if not (_PLAIN_NUMBER.match(text) or _THOUSANDS_NUMBER.match(text)):
+            raise ValueError(text)
+        value = float(text.replace(",", ""))
+    if not math.isfinite(value):
+        raise ValueError(str(raw))
+    return value
+
+
 def _ymd(value) -> tuple[int, int, int | None] | None | str:
     """(year, month, day or None) for one date cell; None for blank; 'ambiguous' / 'unreadable' for text that cannot be read safely."""
     if value is None or (isinstance(value, float) and value != value) or str(value).strip() == "":
@@ -123,7 +151,7 @@ def _ymd(value) -> tuple[int, int, int | None] | None | str:
         return value.year, value.month, value.day
     text = str(value).strip()
     if (found := _ISO_DAY.match(text)):
-        return int(found[1]), int(found[2]), int(found[3])
+        return _day_or_unreadable(int(found[1]), int(found[2]), int(found[3]))
     if (found := _YEAR_MONTH_ONLY.match(text)):
         return int(found[1]), int(found[2]), None
     if (found := _MONTH_YEAR_ONLY.match(text)):
@@ -131,10 +159,10 @@ def _ymd(value) -> tuple[int, int, int | None] | None | str:
     if (found := _SLASH_DAY.match(text)):
         a, b, year = int(found[1]), int(found[2]), int(found[3])
         if a > 12 >= b:
-            return year, b, a
+            return _day_or_unreadable(year, b, a)
         if b > 12 >= a:
-            return year, a, b
-        return "ambiguous" if a != b else (year, a, b)
+            return _day_or_unreadable(year, a, b)
+        return "ambiguous" if a != b else _day_or_unreadable(year, a, b)
     return "unreadable"
 
 
@@ -201,7 +229,7 @@ def read_month_file(path: Path) -> MonthFile:
             out.period = f"{y}-{m:02d}"
             basis = f"its “{label}” column"
     if out.period is None and not out.problems:
-        period, where = title_period(cells[:start] if start else cells)
+        period, where = title_period(cells[:start])
         if period:
             out.period, basis = period, where
         elif where:
@@ -228,8 +256,8 @@ def read_month_file(path: Path) -> MonthFile:
             out.problems.append(f"row {n}: no product code")
             continue
         try:
-            qty, net = float(str(cell("quantity_sold")).replace(",", "")), float(str(cell("net_amount")).replace(",", ""))
-            gsv = float(str(cell("gsv")).replace(",", "")) if cell("gsv") not in (None, "") else None
+            qty, net = _number(cell("quantity_sold")), _number(cell("net_amount"))
+            gsv = _number(cell("gsv")) if cell("gsv") not in (None, "") else None
         except ValueError:
             out.problems.append(f"row {n}: {sku} has a quantity, amount or gsv that is not a number")
             continue

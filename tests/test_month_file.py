@@ -106,3 +106,19 @@ def test_a_python_date_cell_is_a_date(tmp_path):
     path = tmp_path / "d.xlsx"
     pd.DataFrame({"sku_code": ["A1"], "date": [datetime.date(2026, 5, 3)], "quantity_sold": [1], "net_amount": [2]}).to_excel(path, index=False)
     assert read_month_file(path).period == "2026-05"
+
+
+def test_a_day_the_month_does_not_have_is_refused_as_a_date_not_a_crash(tmp_path):
+    # 2026-02-30 and 31/02/2026 used to raise out of datetime.date and the upload answered "the batch status could not be read" (2026-11-18)
+    for bad in ("2026-02-30", "31/02/2026", "2026-04-31"):
+        found = read_month_file(csv(tmp_path, f"sku_code,date,quantity_sold,net_amount\nA1,{bad},5,100\n"))
+        assert not found.ok and "not dates the system can read" in found.message(), bad
+
+
+def test_a_decimal_comma_nan_or_inf_is_refused_never_read_as_a_number(tmp_path):
+    # "1234,56" used to become 123456 (the comma was stripped); nan and inf passed the negative check
+    for cell in ("1234,56", "12,5", "nan", "inf", "-inf"):
+        found = read_month_file(csv(tmp_path, f"sku_code,calendar_month,quantity_sold,net_amount\nA1,2026-03,5,\"{cell}\"\n"))
+        assert not found.ok and "not a number" in found.message(), cell
+    ok = read_month_file(csv(tmp_path, 'sku_code,calendar_month,quantity_sold,net_amount\nA1,2026-03,5,"1,234.50"\n'))
+    assert ok.ok and ok.rows[0]["net_amount"] == 1234.5

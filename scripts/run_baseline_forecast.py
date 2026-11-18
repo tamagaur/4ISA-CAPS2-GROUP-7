@@ -438,7 +438,7 @@ def main():
         print(f"\n  *** {len(etl_gaps)} ETL GAP MONTH(S): {etl_gaps} - a per-SKU missing month in")
         print("      one of these is a FILE gap, not 'this SKU sold nothing'. ***")
     else:
-        print("\n  All 38 expected months have demand rows - a per-SKU missing month")
+        print(f"\n  All {len(expected)} expected months have demand rows - a per-SKU missing month")
         print("  reads as 'this SKU had zero sales that month'.")
 
     # A principal-wide missing month is a file gap, not a zero-sale month: ADI
@@ -1109,7 +1109,11 @@ def _keep_forecast_history(conn) -> None:
 
     from analytics.marts import capture_forecast_cursor, refresh_marts_cursor, vacuum_marts
 
-    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() or None
+    # Like _code_version: a machine with no git (or one that hangs) must not stop the step after Forecast_Result has committed (2026-11-18).
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        head = None
     previous = conn.autocommit
     conn.autocommit = False
     counts = None

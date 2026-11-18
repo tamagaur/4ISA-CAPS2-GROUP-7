@@ -96,6 +96,27 @@ def test_fsn_classifies_over_observed_months():
     assert body["windows"]["unilever"] == {"start": "2025-01", "end": "2025-12", "observed_months": 12}
 
 
+def test_fsn_blank_capture_is_not_a_zero_month_but_a_gap_is():
+    """A month whose quantity is NULL is a blank capture: left out of that product's series (CLAUDE.md, NULL QUANTITY).
+    A month with no row at all is a no-sale month (Unilever's gap rule) and stays a zero. 2026-11-18: the blank was read
+    as 0, so 34 product-months on live lengthened ADIs and one product (Class A) read Slow instead of Fast."""
+    blank = [{"product_key": 1, "sku_id": "BLANK", "period": m, "qty": None if m == "2025-06" else 10} for m in MONTHS_2025]
+    gap = [{"product_key": 2, "sku_id": "GAP", "period": m, "qty": 10} for m in MONTHS_2025 if m != "2025-06"]
+    # sold, then nothing but a blank in the last six months: the blank cannot be shown to be a sale, so non-moving as before
+    late_blank = ([{"product_key": 3, "sku_id": "LATEBLANK", "period": m, "qty": 5} for m in MONTHS_2025[:5]]
+                  + [{"product_key": 3, "sku_id": "LATEBLANK", "period": "2025-12", "qty": None}])
+    only_blank = [{"product_key": 4, "sku_id": "ONLYBLANK", "period": "2025-12", "qty": None}]
+    session = FakeSession([
+        ("DISTINCT calendar_month AS period", [{"period": m} for m in reversed(MONTHS_2025)]),
+        ("SUM(d.quantity_sold) AS qty", blank + gap + late_blank + only_blank),
+    ])
+    by_sku = {i["sku_id"]: i for i in get(session, "/fsn?principal=unilever").json()["items"]}
+    assert by_sku["BLANK"]["months_observed"] == 11 and by_sku["BLANK"]["adi"] == 1.0 and by_sku["BLANK"]["fsn"] == "F"
+    assert by_sku["GAP"]["months_observed"] == 12 and by_sku["GAP"]["adi"] == round(12 / 11, 3)
+    assert by_sku["LATEBLANK"]["fsn"] == "N"
+    assert "ONLYBLANK" not in by_sku          # nothing sold: not listed, as before
+
+
 def test_fsn_period_param_is_the_window_end():
     seen = {}
 

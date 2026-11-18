@@ -691,6 +691,13 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
       - (Number(trailing[0].slice(0, 4)) * 12 + Number(trailing[0].slice(5, 7))) + 1
     : 0;
   const trailingGapNote = spanMonths > trailing.length ? ` (${trailing.length} months with data)` : '';
+  // Sample (generated) months in preview, labelled where they feed a figure, never hidden (2026-11-18): the revenue column sums
+  // the last trailing_months observed months and the trend line and projection fit the last window_months, so either window
+  // can reach back into the generated 2021-22 months when the range ends early.
+  const sampleHere = method && section.principal === placeholder?.principal ? placeholder : null;
+  const revenueUsesSample = Boolean(sampleHere) && trailing.some((m) => isPlaceholderPeriod(m, sampleHere));
+  const trendUsesSample = Boolean(sampleHere) && Boolean(method?.window_months)
+    && observed.slice(-method.window_months).some((m) => isPlaceholderPeriod(m, sampleHere));
   const sharedProjection = categories.find((c) => c.projection_periods?.length)?.projection_periods || [];
   const projectionWindow = monthSpan(sharedProjection[0], sharedProjection[sharedProjection.length - 1]);
   const exactWindows = projectionWindow && trailingWindow ? `${projectionWindow} vs ${trailingWindow}` : null;
@@ -787,9 +794,11 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                   {trailingWindow
                     ? <span className="ct-th-period">{trailingWindow}{trailingGapNote}</span>
                     : <span className="ct-th-period">last {method?.trailing_months} months</span>}
+                  {revenueUsesSample && <span className="ct-th-period">includes sample months, not SSM&apos;s</span>}
                 </th>
                 <th role="columnheader" className="table-center">
                   Trend
+                  {trendUsesSample && <span className="ct-th-period">fit uses sample months</span>}
                   <InfoTip label="About the trend">
                     Clear means the direction is unlikely to be chance: a Mann–Kendall test p-value below{' '}
                     {method?.significance_alpha}. No clear trend means it could be noise. Each row&apos;s p-value is in
@@ -854,6 +863,13 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
                         <InfoTip label="About small categories" trigger="Small category" triggerClassName="ct-small-tag" className="ct-small-tip">
                           {`${(share * 100).toFixed(2)}% of ${labelForPrincipal(section.principal)}'s revenue over these months: `
                             + 'a large % change here is a small amount of money.'}
+                        </InfoTip>
+                      )}
+                      {(revenueUsesSample || trendUsesSample) && (
+                        <InfoTip label="About sample months" trigger="Sample months" triggerClassName="ct-small-tag" className="ct-small-tip">
+                          {`${formatMonth(sampleHere.start)} – ${formatMonth(sampleHere.end)} is sample data, not SSM's. `
+                            + `${revenueUsesSample ? "This row's revenue adds some of it. " : ''}`
+                            + `${trendUsesSample ? "Its trend line and projection fit some of it." : ''}`}
                         </InfoTip>
                       )}
                       {unclassified && (

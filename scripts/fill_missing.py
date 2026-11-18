@@ -680,6 +680,21 @@ def main() -> int:
         p.error("--target-public and --schema public go together")
     from analytics.config import get_settings
     engine = create_engine(get_settings().supabase_db_url)
+    if args.target_public:
+        # While a generated month is loaded the demand view admits it, so the derived receipts and balances would be computed from
+        # generated sales and tagged only 'derived_stock_balance' (2026-11-18). Not reachable from a month load (it passes no --slice).
+        from analytics.demo_session import permits_labelled_rows
+        raw = engine.raw_connection()
+        try:
+            cur = raw.cursor()
+            cur.execute("BEGIN")
+            cur.execute("SET TRANSACTION READ ONLY")
+            loaded = permits_labelled_rows(cur)
+            raw.rollback()
+        finally:
+            raw.close()
+        if loaded:
+            raise SystemExit("REFUSED: a generated month is loaded in this database. Roll it back before filling: the fill would read it as sales.")
     out = run_step(engine, args.schema, trigger="manual", end=args.end, dry_run=args.dry_run,
                    allow_public=args.target_public)
     # Run on its own (not from the loader, which refreshes after its own fill): rebuild

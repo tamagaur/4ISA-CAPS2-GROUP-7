@@ -1130,6 +1130,13 @@ export function StaffRequestsTab({
     body = (
       <>
         <SummaryCards counts={counts} isAdmin={isAdmin} filter={filter} onFilterChange={onFilterChange} />
+        {requests.pendingEarlier > 0 && (
+          <p className="rq-help">
+            {requests.pendingEarlier.toLocaleString()} of the pending {requests.pendingEarlier === 1 ? 'request was' : 'requests were'} made on an
+            earlier plan that a newer run has replaced. {requests.pendingEarlier === 1 ? 'It stays' : 'They stay'} listed and
+            can no longer be approved, and the tab&rsquo;s badge does not count {requests.pendingEarlier === 1 ? 'it' : 'them'}.
+          </p>
+        )}
         {!requests.dismissalsReady && (
           <p className="rq-help">Dismissal requests and stock counts are not set up on this server yet; quantity changes are listed.</p>
         )}
