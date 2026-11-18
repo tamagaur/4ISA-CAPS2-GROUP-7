@@ -47,6 +47,11 @@ PUBLISHED_JSON = REPO / "docs" / "PUBLISHED_FIGURES_SNAPSHOT_2026-10-24.json"
 PRINCIPAL = "unilever"                      # backend/marts.ACCURACY_PRINCIPAL: the only principal with per-product forecasts
 LIVE_TOLERANCE = 1e-7                       # relative and absolute; counts are compared exactly
 R2_MIN_MONTHS = 3                           # a product's R² needs at least this many months with a benchmark
+# The mean MASE and mean R² are pinned two ways: over every product of the population, and without this one product. Its
+# R² is far below every other's (a product whose past average predicts its sales far better than the forecast does), and a
+# mean moves with it where a median does not (2026-11-18). Named, never found by a statistical rule: the figure says whose
+# exclusion it is.
+MEAN_EXCLUDED_SKU = "68763994"
 
 WINDOWS = {
     "card": {"start": "2025-03", "end": "2026-02",
@@ -96,6 +101,12 @@ CONTEXT = {
     "MAPE_mean": "the mean instead of the median of the same per-product percentages.",
     "MASE_share_below_1": "share of the MASE products with MASE below 1.",
     "R2_share_above_0": "share of the R² products with R² above 0.",
+    "MASE_mean": "the mean instead of the median of the same per-product MASEs (every product with a MASE in the population).",
+    "MASE_mean_without_sku": f"the same mean without SKU {MEAN_EXCLUDED_SKU}; MASE_mean_without_sku_products is its product count.",
+    "R2_mean": ("the mean instead of the median of the same per-product R²s. A mean follows the worst product: over the full span one R² far below "
+                f"the rest (SKU {MEAN_EXCLUDED_SKU}) moves it where the median does not; in the card window that product has no R² "
+                "(it is not in the set), so the two means agree there."),
+    "R2_mean_without_sku": f"the same mean without SKU {MEAN_EXCLUDED_SKU}; R2_mean_without_sku_products is its product count.",
 }
 
 
@@ -138,7 +149,12 @@ def _median(x) -> float | None:
     return float(np.median(x)) if x else None
 
 
-def cell(W: pd.DataFrame, keys: set, start: str, series: dict) -> dict:
+def _mean(x) -> float | None:
+    x = list(x)
+    return float(np.mean(x)) if x else None
+
+
+def cell(W: pd.DataFrame, keys: set, start: str, series: dict, excluded: frozenset = frozenset()) -> dict:
     """The six metrics, their counts and the context figures on the window's rows W for the products `keys`."""
     X = W[W.product_key.isin(keys)].copy()
     e = X.f - X.a
@@ -161,20 +177,25 @@ def cell(W: pd.DataFrame, keys: set, start: str, series: dict) -> dict:
         if not math.isnan(sc) and sc > 0:
             mase[int(k)] = float(m) / sc
     o["MASE"] = _median(mase.values())
+    o["MASE_mean"], o["MASE_mean_without_sku"] = _mean(mase.values()), _mean(v for k, v in mase.items() if k not in excluded)
+    o["MASE_mean_without_sku_products"] = sum(1 for k in mase if k not in excluded)
     o["MASE_share_below_1"] = float(np.mean([v < 1 for v in mase.values()])) if mase else None
     o["MASE_products"], o["MASE_product_months"] = len(mase), int(X.product_key.isin(list(mase)).sum())
     X["b"] = [earlier_mean(series.get(int(pk)), mo) for pk, mo in zip(X.product_key, X.month)]
     Y = X[X.b.notna()]
-    r2, n_m = [], 0
-    for _, g in Y.groupby("product_key"):
+    r2, n_m, r2_by_key = [], 0, {}
+    for pk, g in Y.groupby("product_key"):
         if len(g) < R2_MIN_MONTHS:
             continue
         ssb = float(np.sum((g.a - g.b) ** 2))
         if ssb <= 0:
             continue
         r2.append(1 - float(np.sum((g.a - g.f) ** 2)) / ssb)
+        r2_by_key[int(pk)] = r2[-1]
         n_m += len(g)
     o["R2"] = _median(r2)
+    o["R2_mean"], o["R2_mean_without_sku"] = _mean(r2), _mean(v for k, v in r2_by_key.items() if k not in excluded)
+    o["R2_mean_without_sku_products"] = sum(1 for k in r2_by_key if k not in excluded)
     o["R2_share_above_0"] = float(np.mean([v > 0 for v in r2])) if r2 else None
     o["R2_products"], o["R2_product_months"] = len(r2), n_m
     return o
@@ -189,7 +210,8 @@ def populations(W: pd.DataFrame, plan_keys: set, near_zero_share: float) -> dict
     return {"forecastable": fc, "order_plan": fc & plan_keys, "all_scored": scored}
 
 
-def compute(rows: pd.DataFrame, demand: pd.DataFrame, plan_keys: set, near_zero_share: float) -> dict:
+def compute(rows: pd.DataFrame, demand: pd.DataFrame, plan_keys: set, near_zero_share: float,
+            excluded_keys: frozenset = frozenset()) -> dict:
     """rows: product_key, month, forecast_pieces, actual_pieces (raw net), avg_monthly_pieces. Returns {window: {population: cell}}."""
     R = rows.copy()
     R["product_key"] = R.product_key.astype(int)
@@ -204,7 +226,7 @@ def compute(rows: pd.DataFrame, demand: pd.DataFrame, plan_keys: set, near_zero_
     for wn, w in WINDOWS.items():
         W = R[(R.month >= w["start"]) & (R.month <= w["end"])]
         pops = populations(W, {int(k) for k in plan_keys}, near_zero_share)
-        out[wn] = {pn: cell(W, pops[pn], w["start"], series) for pn in POPULATION_ORDER}
+        out[wn] = {pn: cell(W, pops[pn], w["start"], series, frozenset(int(k) for k in excluded_keys)) for pn in POPULATION_ORDER}
     return out
 
 
@@ -248,7 +270,11 @@ def read_live(cur) -> dict:
     p = cur.fetchone()
     plan = {"planning_cycle_date": p[0], "lp_run_key": int(p[1]) if p[1] is not None else None, "plan_rows": int(p[2]),
             "plan_products": len(p[3])} if p else None
-    return {"rows": rows, "demand": demand, "plan_keys": set(p[3]) if p else set(), "plan": plan,
+    cur.execute("SELECT product_key FROM product_dimension WHERE sku_code = %s AND principal = %s", (MEAN_EXCLUDED_SKU, PRINCIPAL))
+    excluded = {int(r[0]) for r in cur.fetchall()}
+    if len(excluded) != 1:
+        raise RuntimeError(f"expected one product for SKU {MEAN_EXCLUDED_SKU}, found {len(excluded)}")
+    return {"rows": rows, "demand": demand, "plan_keys": set(p[3]) if p else set(), "plan": plan, "excluded_keys": excluded,
             "run": {"run_id": run_id, "label": DEFAULT_BACKTEST_LABEL, "principal": PRINCIPAL,
                     "scored_product_months": int(len(rows))},
             "actuals_version": actuals_version.read(cur)}
@@ -262,7 +288,7 @@ def live_pin() -> dict:
     finally:
         conn.rollback()
         conn.close()
-    figures = compute(live["rows"], live["demand"], live["plan_keys"], NEAR_ZERO_SHARE)
+    figures = compute(live["rows"], live["demand"], live["plan_keys"], NEAR_ZERO_SHARE, frozenset(live["excluded_keys"]))
     return {"pinned_on": PIN_DATE, "source": {"run": live["run"], "plan": live["plan"],
                                               "actuals_version": live["actuals_version"]},
             "basis": BASIS, "windows": WINDOWS, "populations": POPULATIONS, "definitions": DEFINITIONS, "context": CONTEXT,
@@ -304,6 +330,13 @@ def render_md(pin: dict) -> str:
             c = pin["figures"][wn][pn]
             L.append(f"| {pn.replace('_', ' ')} | {_num(c['mean_actual_pieces'])} | {_pct(c['MAPE_mean'])} | "
                      f"{_pct(c['MASE_share_below_1'])} | {_pct(c['R2_share_above_0'])} |")
+        L += ["", f"| Population | MASE (mean) | MASE (mean without SKU {MEAN_EXCLUDED_SKU}) | R² (mean) | R² (mean without SKU {MEAN_EXCLUDED_SKU}) |",
+              "|---|---|---|---|---|"]
+        for pn in POPULATION_ORDER:
+            c = pin["figures"][wn][pn]
+            L.append(f"| {pn.replace('_', ' ')} | {_num(c['MASE_mean'], 3)} | {_num(c['MASE_mean_without_sku'], 3)} "
+                     f"({c['MASE_mean_without_sku_products']}) | {_num(c['R2_mean'], 3)} | {_num(c['R2_mean_without_sku'], 3)} "
+                     f"({c['R2_mean_without_sku_products']}) |")
         L.append("")
     L += ["Counts in brackets are the products / product-months that metric covers, where they differ from the population's.", "",
           "## Populations", ""] + [f"- **{k.replace('_', ' ')}**: {v}" for k, v in pin["populations"].items()]

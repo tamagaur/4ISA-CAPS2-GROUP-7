@@ -122,3 +122,23 @@ def test_the_committed_pin_is_this_codes_and_its_markdown_is_its_rendering():
         c = pin["figures"][w][p]
         for m in ("MAE", "RMSE", "WAPE", "MAPE", "MASE", "R2"):
             assert c[m] is not None and c[f"{m}_products"] > 0 and c[f"{m}_product_months"] > 0, (w, p, m)
+
+
+def test_the_means_are_pinned_with_and_without_the_named_product():
+    """Mean MASE / mean R² beside the medians (2026-11-18): a mean follows the worst product, so it is given over every product
+    and without the one named SKU. A median ignores that product, so it must not move."""
+    dem = _demand([(k, m, q) for k in (1, 2, 3) for m, q in (("2025-01", 100), ("2025-02", 110), ("2025-03", 100), ("2025-04", 105),
+                                                              ("2025-05", 95), ("2025-06", 100))])
+    rows = _rows([(1, "2025-04", 105, 105, 100), (1, "2025-05", 95, 95, 100), (1, "2025-06", 100, 100, 100),
+                  (2, "2025-04", 100, 105, 100), (2, "2025-05", 100, 95, 100), (2, "2025-06", 100, 100, 100),
+                  (3, "2025-04", 5000, 105, 100), (3, "2025-05", 5000, 95, 100), (3, "2025-06", 5000, 100, 100)])
+    series = em.demand_series(dem, "2025-06")
+    R = rows.assign(product_key=rows.product_key.astype(int), f=rows.forecast_pieces.astype(float), a_raw=rows.actual_pieces.astype(float))
+    R["a"], R["avg"] = R.a_raw.clip(lower=0), R.avg_monthly_pieces.astype(float)
+    every = em.cell(R, {1, 2, 3}, "2025-04", series)
+    without = em.cell(R, {1, 2, 3}, "2025-04", series, frozenset({3}))
+    assert every["R2_mean"] < without["R2_mean_without_sku"] - 100          # product 3's R² is hugely negative
+    assert every["R2_mean_without_sku"] == every["R2_mean"]                 # nothing excluded: the two means agree
+    assert (without["R2_products"], without["R2_mean_without_sku_products"]) == (3, 2)
+    assert without["MASE_mean_without_sku_products"] == without["MASE_products"] - 1
+    assert without["R2"] == every["R2"]                                     # the median does not move when the mean does

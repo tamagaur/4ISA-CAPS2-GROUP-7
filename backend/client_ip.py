@@ -8,7 +8,7 @@ real address after it, and the start command's --forwarded-allow-ips="*" makes
 uvicorn take the first entry. So a visitor could name any IP they liked:
 checked 2026-09-29 on the live API, a request sent with
 "X-Forwarded-For: 203.0.113.77" was logged as 203.0.113.77, and the
-20-failures-per-IP lock could be dodged by changing that value every time.
+per-IP sign-in lock could be dodged by changing that value every time.
 
 Render's traffic comes through Cloudflare, which sets CF-Connecting-IP to the
 address that actually connected and overwrites any value the visitor sent.

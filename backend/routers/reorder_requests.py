@@ -268,7 +268,7 @@ def approve_dismissal(
     _require_requests(present)
     request = _locked_pending_request(db, request_key, admin)
     current = db.execute(text(_ROW_SQL), {"key": request["recommendation_key"]}).mappings().first()
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     if current["planning_cycle_date"] != current["current_cycle"]:
         note = (f"Closed automatically: the {current['planning_cycle_date']} cycle was superseded by the "
                 f"{current['current_cycle']} LP run, so this request can no longer be applied.")
@@ -322,7 +322,7 @@ def reject_dismissal(
     request = _locked_pending_request(db, request_key, admin)
     note = body.reason.strip()
     resolved = db.execute(text(_RESOLVE_SQL), {"state": "rejected", "resolved_by": admin.email,
-                                               "resolved_at": datetime.datetime.utcnow(), "note": note,
+                                               "resolved_at": datetime.datetime.now(datetime.timezone.utc), "note": note,
                                                "request_key": request_key}).mappings().first()
     if resolved is None:
         db.rollback()
@@ -396,7 +396,7 @@ def verify_stock_observation(
         SET verification_state = :state, verified_by = :by, verified_at = :at, verification_note = :note
         WHERE observation_key = :k AND verification_state = 'unverified'
         RETURNING observation_key
-    """), {"state": state, "by": admin.email, "at": datetime.datetime.utcnow(), "note": note,
+    """), {"state": state, "by": admin.email, "at": datetime.datetime.now(datetime.timezone.utc), "note": note,
            "k": observation_key}).mappings().first()
     if updated is None:
         db.rollback()

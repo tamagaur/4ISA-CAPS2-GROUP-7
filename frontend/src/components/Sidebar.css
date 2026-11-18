@@ -609,6 +609,15 @@
   background-color: #fc8181;
 }
 
+/* The server answers but its database does not (GET /status?db=1): red like offline. */
+.status-indicator.status-database {
+  color: #fc8181;
+}
+
+.status-indicator.status-database .status-dot {
+  background-color: #fc8181;
+}
+
 .status-indicator.status-checking {
   color: var(--color-nav-subheading);
 }

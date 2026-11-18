@@ -543,12 +543,16 @@ GOOD = {"email": "admin@ssmcapstone.com", "password": "correct-horse-battery-sta
 BAD = {"email": "admin@ssmcapstone.com", "password": "wrong-password"}
 
 
-def test_fifth_wrong_password_locks_the_email(client, fake_session):
+def test_last_allowed_wrong_password_locks_the_email(client, fake_session):
     for _ in range(MAX_FAILURES_PER_EMAIL - 1):
         assert client.post("/auth/login", json=BAD).status_code == 401
     locked = client.post("/auth/login", json=BAD)
     assert locked.status_code == 429
-    assert locked.json()["detail"] == "Too many failed sign-in attempts. Try again in 15 minutes."
+    # Names the account, not the password, and says a right password is refused meanwhile.
+    assert locked.json()["detail"] == (
+        "Too many failed attempts on this account. A correct password or code is not accepted until the pause ends. "
+        "Try again in 15 minutes."
+    )
     assert locked.headers["Retry-After"] == "900"
     # Each failure is on the record under the email's digest, then the lock
     # under the email that was tried.
@@ -660,28 +664,64 @@ def test_lock_entry_names_the_per_email_limit(client, fake_session):
     [row] = _lock_rows(fake_session)
     assert row["details"] == (
         "admin@ssmcapstone.com locked for 15 minutes: per-email limit "
-        "(5 failed sign-ins within 15 minutes). Last attempt: admin@ssmcapstone.com from testclient"
+        f"({MAX_FAILURES_PER_EMAIL} failed sign-ins within 15 minutes). Last attempt: admin@ssmcapstone.com from testclient"
     )
 
 
 def test_lock_entry_names_the_per_ip_limit(client, fake_session):
-    """Four guesses on each of five emails never trips the per-email limit;
-    the 20th failure from the one address trips the per-IP limit, and the
-    entry must say so instead of blaming the last email."""
-    for n in range(MAX_FAILURES_PER_IP // (MAX_FAILURES_PER_EMAIL - 1)):
-        for _ in range(MAX_FAILURES_PER_EMAIL - 1):
-            client.post("/auth/login", json={"email": f"guess{n}@ssmcapstone.com", "password": "wrong-password"})
+    """One short of the per-email limit on each of many emails never trips it;
+    the failure that reaches the per-IP limit trips that one, and the entry
+    must say so instead of blaming the last email."""
+    per = MAX_FAILURES_PER_EMAIL - 1
+    sent = 0
+    last = 0
+    for n in range(MAX_FAILURES_PER_IP):
+        for _ in range(per):
+            if sent < MAX_FAILURES_PER_IP:
+                client.post("/auth/login", json={"email": f"guess{n}@ssmcapstone.com", "password": "wrong-password"})
+                sent += 1
+                last = n
     [row] = _lock_rows(fake_session)
     assert row["details"] == (
         "testclient locked for 15 minutes: per-IP limit "
-        "(20 failed sign-ins within 15 minutes). Last attempt: guess4@ssmcapstone.com from testclient"
+        f"({MAX_FAILURES_PER_IP} failed sign-ins within 15 minutes). Last attempt: guess{last}@ssmcapstone.com from testclient"
     )
 
 
 def test_lock_entry_names_both_limits_when_one_failure_trips_both():
     lock = auth_router.Lock(900, ("email", "ip"))
     assert auth_router._lockout_details("a@x.com", "203.0.113.9", lock) == (
-        "a@x.com and 203.0.113.9 locked for 15 minutes: per-email limit (5 failed sign-ins within "
-        "15 minutes) and per-IP limit (20 failed sign-ins within 15 minutes). "
+        f"a@x.com and 203.0.113.9 locked for 15 minutes: per-email limit ({MAX_FAILURES_PER_EMAIL} failed sign-ins within "
+        f"15 minutes) and per-IP limit ({MAX_FAILURES_PER_IP} failed sign-ins within 15 minutes). "
         "Last attempt: a@x.com from 203.0.113.9"
     )
+
+
+def test_a_network_lock_says_network_and_that_a_right_password_waits(client):
+    """At a defence everyone shares one address: the 429 must say the network is
+    paused, not that this person mistyped, and that even a correct password waits
+    (the lock holds before the password is read)."""
+    sent = 0
+    n = 0
+    while sent < MAX_FAILURES_PER_IP:
+        for _ in range(MAX_FAILURES_PER_EMAIL - 1):
+            if sent < MAX_FAILURES_PER_IP:
+                resp = client.post("/auth/login", json={"email": f"guest{n}@ssmcapstone.com", "password": "wrong-password"})
+                sent += 1
+        n += 1
+    assert resp.status_code == 429
+    expected = (
+        "Sign-in is paused on this network after too many failed attempts from it, which may not have been yours. "
+        "A correct password or code is not accepted until it ends. Try again in 15 minutes."
+    )
+    assert resp.json()["detail"] == expected
+    # A different account on the same network is refused the same way, with the right password.
+    assert client.post("/auth/login", json=GOOD).json()["detail"] == expected
+
+
+def test_the_new_limits_are_the_ones_the_message_and_docs_state():
+    """10 per email and 100 per network (5 and 20 until 2026-11-18); the
+    forgot-password flood guard keeps 5 and 20."""
+    from backend.login_limiter import MAX_RESET_REQUESTS_PER_EMAIL, MAX_RESET_REQUESTS_PER_IP
+    assert (MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP) == (10, 100)
+    assert (MAX_RESET_REQUESTS_PER_EMAIL, MAX_RESET_REQUESTS_PER_IP) == (5, 20)

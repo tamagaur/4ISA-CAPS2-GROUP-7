@@ -385,7 +385,9 @@ def _failed_names(checklist: dict) -> str:
 def _finish_audit(action_done: str, action_failed: str, month: str, user: TokenPayload) -> Callable[[Job], None]:
     def finish(job: Job) -> None:
         if job.status == "done":
-            audit_event(action_done, f"Month {month}, job {job.id}", user)
+            audit_event(action_done, f"Month {month}, job {job.id}" + (
+                ". Decisions made on the Reorder page since then are undone; their entries above stay in this log"
+                if action_done == "Month Rolled Back" else ""), user)
         else:
             _, stage = batch_checklist.parse_steps(list(job.lines))
             audit_event(action_failed, f"Month {month}, job {job.id}, exit code {job.exit_code}" + (f", stopped at {stage}" if stage else ""), user)

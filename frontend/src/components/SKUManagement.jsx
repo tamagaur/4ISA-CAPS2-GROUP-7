@@ -308,6 +308,13 @@ const SKUManagement = () => {
   // the ABC page's Class A for the same runs.
   const categoryASKUs = skus.filter(s => s.cat === 'A' && !s.preRegroup).length;
   const preRegroupA = skus.filter(s => s.cat === 'A' && s.preRegroup).length;
+  // The same count split by principal, so the card says what the one number is made of
+  // (Unilever SKUs and Del Monte categories are different things; 2026-11-18).
+  const categoryAByPrincipal = skus.reduce((acc, s) => {
+    if (s.cat === 'A' && !s.preRegroup) acc[s.principal] = (acc[s.principal] || 0) + 1;
+    return acc;
+  }, {});
+  const categoryAParts = Object.entries(categoryAByPrincipal).map(([p, n]) => `${n.toLocaleString()} ${labelForPrincipal(p)} ${p === 'delmonte' ? (n === 1 ? 'category' : 'categories') : 'SKUs'}`).join(' + ');
   const preRegroupRows = skus.filter(s => s.preRegroup).length;
 
   // Each principal's newest classification period — its current ABC run.
@@ -557,7 +564,9 @@ const SKUManagement = () => {
             value={categoryASKUs.toLocaleString()}
             unit={countUnit}
             contextLine={`latest ABC run per SKU${runMonthsText ? ` · ${runMonthsText}` : ''}`}
-            tooltip={`Each SKU's class in the most recent ABC run that ranked it.${categoryACarried > 0
+            tooltip={`${categoryAParts && Object.keys(categoryAByPrincipal).length > 1 ? `Made up of ${categoryAParts}. ` : ''}`
+              + 'The Dashboard ring ranks only the sales in its selected range, so it can show fewer. '
+              + `Each SKU's class is from the most recent run that ranked it.${categoryACarried > 0
               ? ` ${categoryACarried.toLocaleString()} of these are carried forward from earlier runs.` : ''}${preRegroupA > 0
               ? ` Left out: ${preRegroupA.toLocaleString()} old Del Monte sub-categories ranked A before the Jan 2025 regrouping, which no longer exist (the ABC page leaves them out too).` : ''}`}
             icon={<Layers size={20} />}

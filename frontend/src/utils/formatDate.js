@@ -19,6 +19,18 @@ export function formatDate(value) {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
+// The Philippine calendar day ('YYYY-MM-DD') of a timestamp. The API sends instants in UTC ("2026-11-13T08:08:47+00:00");
+// cutting the first ten characters named the UTC day, which is the day before in the Philippines from 00:00 to 08:00 there
+// (2026-11-18). A date-only string is already a calendar day and is returned as it is.
+export function philippineDay(value) {
+  if (!value) return null;
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const d = value instanceof Date ? value : new Date(text);
+  if (Number.isNaN(d.getTime())) return text.slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
 export function formatDateTime(value) {
   if (!value) return '—';
   const d = value instanceof Date ? value : new Date(value);

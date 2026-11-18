@@ -738,7 +738,12 @@ const PrincipalSection = ({ section, method, placeholder = null }) => {
             ` Only months since ${labelForPrincipal(section.principal)} regrouped its categories in ${formatMonth(section.series_start)} count — the older sub-categories are different categories.`}
           {method && section.principal === placeholder?.principal && observed.some((m) => isPlaceholderPeriod(m, placeholder)) &&
             ` ${formatMonth(placeholder.start)} – ${formatMonth(placeholder.end)} is sample data, not SSM's.`
-            + ` The trend line and projection use only the last ${method.window_months} months, all real, so they are the same as without it.`}
+            + (observed.slice(-method.window_months).some((m) => isPlaceholderPeriod(m, placeholder))
+              // The fit takes the last window_months observed months up to the range's end: a range ending before the
+              // sample months end uses some of them, so it must not say "all real" (2026-11-18: HAIR CARE ending Dec 2023
+              // fitted 12 generated months of 24 and read as a real trend).
+              ? ` The trend line and projection for this range use sample months among the last ${method.window_months}, so they are not a measure of SSM's sales.`
+              : ` The trend line and projection use only the last ${method.window_months} months, all real, so they are the same as without it.`)}
           {/* The page sends only the range's end (CategoryTrends below), and
               the fit takes the last window_months observed months up to it
               (category_trend.py), so the range's start never moves a trend. */}

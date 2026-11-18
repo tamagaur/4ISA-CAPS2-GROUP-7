@@ -42,10 +42,11 @@ const PAGE_RULES = {
   },
 };
 
-const PeriodContextStrip = ({ pathname, principal, range, compare }) => {
+// `floor`: the first month any data exists; preview starts it at Jan 2021 (the generated back-cast), real data at Jan 2023.
+const PeriodContextStrip = ({ pathname, principal, range, compare, floor }) => {
   const rule = PAGE_RULES[pathname];
   if (!rule) return null;
-  const versus = comparisonRange(range, compare);
+  const versus = comparisonRange(range, compare, floor);
   // A comparison window that starts before the first month of data has nothing in it (scenario audit 2026-11-18: the strip
   // said "compared with the same months last year (Jan 2022 – Dec 2022)" on the quick range 2023).
   const compareText = compare === COMPARE_MODES.NONE || !versus

@@ -67,9 +67,18 @@ def test_failures_older_than_the_window_stop_counting():
 
 def test_email_matching_ignores_case_and_spaces():
     limiter, _ = make()
-    for email in ("A@x.com", " a@X.com", "a@x.com ", "A@X.COM"):
-        limiter.record_failure(email, "1.1.1.1")
+    spellings = ("A@x.com", " a@X.com", "a@x.com ", "A@X.COM")
+    for i in range(MAX_FAILURES_PER_EMAIL - 1):
+        limiter.record_failure(spellings[i % len(spellings)], "1.1.1.1")
     assert limiter.record_failure("a@x.com", "1.1.1.1") == Lock(LOCKOUT_SECONDS, ("email",))
+
+
+def test_locked_says_which_limit_holds():
+    limiter, _ = make()
+    assert limiter.locked("a@x.com", "1.1.1.1") is None
+    fail(limiter, MAX_FAILURES_PER_EMAIL)
+    assert limiter.locked("a@x.com", "1.1.1.1") == Lock(LOCKOUT_SECONDS, ("email",))
+    assert limiter.locked("b@x.com", "1.1.1.1") is None
 
 
 def test_success_clears_the_email_count():
@@ -80,12 +89,12 @@ def test_success_clears_the_email_count():
 
 
 def test_ip_limit_catches_a_few_guesses_on_many_emails():
-    """Four wrong passwords on each of many emails never trips the
+    """One short of the per-email limit on each of many emails never trips the
     per-email rule; the per-IP rule is what stops it."""
     limiter, _ = make()
     total = 0
     locks = []
-    for n in range(10):
+    for n in range(MAX_FAILURES_PER_IP):
         for _ in range(MAX_FAILURES_PER_EMAIL - 1):
             if total < MAX_FAILURES_PER_IP:
                 locks.append(limiter.record_failure(f"user{n}@x.com", "6.6.6.6"))
@@ -130,5 +139,6 @@ def test_failure_log_budget_starts_over_each_window():
     assert [budget.take() for _ in range(2)] == ["log", "pause"]
 
 
-def test_failure_log_cap_is_tied_to_the_per_ip_limit():
-    assert MAX_LOGGED_FAILURES_PER_WINDOW == 5 * MAX_FAILURES_PER_IP == 100
+def test_failure_log_cap_is_five_addresses_worth_of_the_per_ip_limit():
+    """One address filling its own limit must leave room in the log for four more (Yuan, 2026-09-30: 5 x the limit)."""
+    assert MAX_LOGGED_FAILURES_PER_WINDOW == 5 * MAX_FAILURES_PER_IP == 500

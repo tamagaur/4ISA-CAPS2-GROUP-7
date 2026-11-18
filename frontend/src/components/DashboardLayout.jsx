@@ -616,6 +616,7 @@ const DashboardLayoutInner = ({ initialCoverage }) => {
           principal={principal}
           range={{ startMonth, startYear, endMonth, endYear }}
           compare={compare}
+          floor={isPreviewMode(dataMode) ? PLACEHOLDER_START : undefined}
         />
         {/* The routed page, faded out and in on every change of page
             (PageTransition renders the outlet). Keyed on the refresh count

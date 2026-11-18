@@ -75,7 +75,7 @@ const navSections = [
   },
 ];
 
-const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SERVER ONLINE', offline: 'SERVER OFFLINE' };
+const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SERVER ONLINE', offline: 'SERVER OFFLINE', database: 'DATABASE OFFLINE' };
 
 const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
 
@@ -86,8 +86,15 @@ const Sidebar = ({ isOpen, onClose, onNavAttempt }) => {
   useEffect(() => {
     let cancelled = false;
     const check = () => {
-      fetch(`${API_URL}/status`)
-        .then((res) => { if (!cancelled) setApiStatus(res.ok ? 'online' : 'offline'); })
+      // ?db=1: the server also says whether the database answers. Up with the database down is not "online" (the light stayed
+      // green through a Supabase outage until 2026-11-18). An older server ignores the parameter and says nothing: online.
+      fetch(`${API_URL}/status?db=1`)
+        .then(async (res) => {
+          if (cancelled) return;
+          if (!res.ok) { setApiStatus('offline'); return; }
+          const body = await res.json().catch(() => ({}));
+          setApiStatus(body.database === 'unreachable' ? 'database' : 'online');
+        })
         .catch(() => { if (!cancelled) setApiStatus('offline'); });
     };
     check();

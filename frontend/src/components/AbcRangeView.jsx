@@ -131,7 +131,9 @@ const AbcRangeView = ({ startPeriod, endPeriod, principal, initialClass = null, 
     </p>
   );
 
-  if (loading && !state.pareto) {
+  // Whenever the answer is for another range or principal (not only the first load): `pareto` is null then, and the
+  // page below read that as an empty ranking (every count 0, "No SKUs match") until the response landed (2026-11-18).
+  if (loading) {
     return (
       <>
         {monthNote}

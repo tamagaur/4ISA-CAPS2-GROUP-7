@@ -2,11 +2,14 @@
 backend.login_limiter — stops password guessing on POST /auth/login.
 
 Rules:
-  * 5 failed sign-ins for one email within 15 minutes lock that email for
-    15 minutes.
-  * 20 failed sign-ins from one IP address within 15 minutes lock that
+  * 10 failed sign-ins for one email within 15 minutes lock that email for
+    15 minutes (5 until 2026-11-18).
+  * 100 failed sign-ins from one IP address within 15 minutes lock that
     address for 15 minutes — catches someone trying a few passwords each on
-    many different emails, which the per-email rule alone would not.
+    many different emails, which the per-email rule alone would not (20 until
+    2026-11-18: everyone at a defence shares the venue's one address, and 20
+    mistyped passwords across a room locked every account out at once, the
+    correct password included).
 
 While locked, every attempt is refused with 429 BEFORE the password is
 checked. If a correct password still got through during the lock, the
@@ -35,8 +38,14 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
-MAX_FAILURES_PER_EMAIL = 5
-MAX_FAILURES_PER_IP = 20
+# Team-set (Kelvin, 2026-11-18), not measured. A bcrypt check costs about 0.2 s, so 100 is a ceiling of
+# roughly one password guess every 9 seconds per address, and 10 per account.
+MAX_FAILURES_PER_EMAIL = 10
+MAX_FAILURES_PER_IP = 100
+# The forgot-password form's flood guard keeps its own, unchanged limits (it counts requests, not
+# failures, and bounds how many reset emails one address or one network can be sent).
+MAX_RESET_REQUESTS_PER_EMAIL = 5
+MAX_RESET_REQUESTS_PER_IP = 20
 WINDOW_SECONDS = 15 * 60
 LOCKOUT_SECONDS = 15 * 60
 # Once this many emails/IPs are remembered, expired ones are dropped, so a
@@ -57,22 +66,37 @@ class Lock(NamedTuple):
 
 
 class LoginLimiter:
-    def __init__(self, clock=time.monotonic) -> None:
+    def __init__(self, clock=time.monotonic, max_per_email: int | None = None, max_per_ip: int | None = None) -> None:
         self._clock = clock
+        self._max_per_email = MAX_FAILURES_PER_EMAIL if max_per_email is None else max_per_email
+        self._max_per_ip = MAX_FAILURES_PER_IP if max_per_ip is None else max_per_ip
         self._mutex = threading.Lock()  # sync endpoints run on a thread pool
         self._records: dict[str, _Record] = {}
 
     def retry_after(self, email: str, ip: str) -> int | None:
         """Seconds until this email and IP may try again, or None if neither
         is locked."""
+        lock = self.locked(email, ip)
+        return lock.seconds if lock else None
+
+    def locked(self, email: str, ip: str) -> Lock | None:
+        """The lock that holds this email and IP now: seconds left (the
+        longer of the two) and which of them is locked, ("email",), ("ip",)
+        or both, so the refusal can say whether it is the account or the
+        network. None if neither is locked."""
         now = self._clock()
         with self._mutex:
-            waits = [
-                rec.locked_until - now
-                for rec in (self._records.get(key) for key in (_email_key(email), _ip_key(ip)))
+            held = [
+                (rule, rec.locked_until - now)
+                for rule, rec in (
+                    ("email", self._records.get(_email_key(email))),
+                    ("ip", self._records.get(_ip_key(ip))),
+                )
                 if rec is not None and rec.locked_until > now
             ]
-        return math.ceil(max(waits)) if waits else None
+        if not held:
+            return None
+        return Lock(math.ceil(max(wait for _, wait in held)), tuple(rule for rule, _ in held))
 
     def record_failure(self, email: str, ip: str) -> Lock | None:
         """Counts one failed sign-in against the email and the IP. Returns the
@@ -82,8 +106,8 @@ class LoginLimiter:
         tripped = []
         with self._mutex:
             for rule, key, limit in (
-                ("email", _email_key(email), MAX_FAILURES_PER_EMAIL),
-                ("ip", _ip_key(ip), MAX_FAILURES_PER_IP),
+                ("email", _email_key(email), self._max_per_email),
+                ("ip", _ip_key(ip), self._max_per_ip),
             ):
                 rec = self._records.setdefault(key, _Record())
                 while rec.failures and rec.failures[0] <= now - WINDOW_SECONDS:
@@ -125,15 +149,16 @@ def _ip_key(ip: str) -> str:
 
 
 # Failed sign-ins are written to the audit log (backend/routers/auth.py,
-# 2026-09-30). The limits above already cap that per email (5) and per IP
-# (20) in any 15 minutes: while locked, a request is refused before its
+# 2026-09-30). The limits above already cap that per email and per IP
+# in any 15 minutes: while locked, a request is refused before its
 # password is checked and nothing is logged for it. They don't cap many
 # addresses together, so at most MAX_LOGGED_FAILURES_PER_WINDOW failures are
 # written in any one 15-minute window. Past that, one row says logging paused;
 # the rest of the window still counts toward locks but is not written.
-# 100 is team-set (Yuan, 2026-09-30), not measured: five addresses' worth of
-# the per-IP limit, and under 9,700 rows a day even in a flood that never
-# stops. It is due to move into the params module (session 5f).
+# Five addresses' worth of the per-IP limit (team-set, Yuan, 2026-09-30, not measured), so one venue network that fills
+# its own 100 failures cannot use up the log for every other address. It was 100 = 5 x 20; kept at 5 x the limit
+# when that moved to 100 (2026-11-18): at most 48,000 rows a day in a flood that never stops (96 windows x 500).
+# It is due to move into the params module (session 5f).
 MAX_LOGGED_FAILURES_PER_WINDOW = 5 * MAX_FAILURES_PER_IP
 
 
@@ -173,6 +198,7 @@ login_limiter = LoginLimiter()
 failure_log_budget = FailureLogBudget()
 
 # POST /auth/forgot-password counts every request here (not just failures):
-# at most 5 reset emails per address, and 20 per IP, every 15 minutes, so the
-# form can't be used to flood someone's inbox.
-reset_limiter = LoginLimiter()
+# at most MAX_RESET_REQUESTS_PER_EMAIL reset emails per address, and
+# MAX_RESET_REQUESTS_PER_IP per IP, every 15 minutes, so the form can't be used
+# to flood someone's inbox.
+reset_limiter = LoginLimiter(max_per_email=MAX_RESET_REQUESTS_PER_EMAIL, max_per_ip=MAX_RESET_REQUESTS_PER_IP)

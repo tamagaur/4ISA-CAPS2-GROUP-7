@@ -203,6 +203,7 @@ export async function login(email, password, { remember = true } = {}) {
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     // A proxy's HTML 502/503 (Render waking or restarting) is not a JSON answer: it says nothing about the password.
+    if (!body && res.status === 429) throw new Error('Too many sign-in attempts. Wait a few minutes and try again.');
     if (!body && res.status >= 500) throw new Error("The server isn't responding yet. Wait a few seconds and try again.");
     throw new Error(extractErrorMessage(body, 'Login failed. Check your email and password.'));
   }

@@ -52,9 +52,9 @@ def _client_ip(request: Request) -> str:
 def _check_code(db: Session, user: TokenPayload, code: str, client_ip: str) -> str:
     """A current app or recovery code for the caller, counted like a sign-in
     attempt. Returns 'app' or 'recovery'; raises 400 or 429 otherwise."""
-    wait = login_limiter.retry_after(user.email, client_ip)
-    if wait is not None:
-        raise _too_many_attempts(wait)
+    held = login_limiter.locked(user.email, client_ip)
+    if held is not None:
+        raise _too_many_attempts(held.seconds, limits=held.limits)
     try:
         method = mfa.verify(db, user.user_id, code)
     except mfa.MfaUnavailable:
@@ -66,7 +66,7 @@ def _check_code(db: Session, user: TokenPayload, code: str, client_ip: str) -> s
         lock = login_limiter.record_failure(user.email, client_ip)
         if lock is not None:
             _record_lockout(db, user.email, client_ip, lock)
-            raise _too_many_attempts(lock.seconds)
+            raise _too_many_attempts(lock.seconds, limits=lock.limits)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=wrong_code_message(code))
     return method
 

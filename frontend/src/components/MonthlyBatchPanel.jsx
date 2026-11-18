@@ -269,6 +269,28 @@ const LiveJobBanner = ({ job }) => {
   );
 };
 
+// A load that stopped without the server saying so (it restarted: its job list is in memory). Two ways to know: this page was
+// following a job the server no longer has, or the month's sales are in the database, the server has no job, and no plan was
+// written (the "ready" stage, which a live load passes through only while it runs). The exit is the admin's rollback, below.
+const LostJobNotice = ({ lost, month, canRollback }) => {
+  const what = lost ? (lost.kind === 'rollback' ? 'a rollback' : lost.kind === 'plan' ? 'a month load' : 'a step') : 'a month load';
+  const label = monthName(lost?.month || month);
+  return (
+    <div className="mb-result is-failed" role="alert">
+      <h5><AlertTriangle size={16} aria-hidden="true" /> {lost ? `The server stopped following ${what} for ${label}` : `${label} did not finish loading`}</h5>
+      <p>
+        {lost
+          ? `The server restarted while ${what} was running, so this page cannot tell how it ended. Check the months listed under Loaded months below before doing anything else.`
+          : `The sales for ${label} are in the database but its plan was not written. That usually means the server restarted during the load; nothing will finish it by itself.`}
+        {' '}
+        {canRollback
+          ? 'An administrator can roll the month back from Loaded months, then upload the file again.'
+          : 'Ask an administrator to roll the month back, then upload the file again.'}
+      </p>
+    </div>
+  );
+};
+
 // The last job: how it ended and the stages it reached. The raw lines are not here on
 // purpose: GET /batch/job stopped returning them because they can carry internals
 // (docs/MONTHLY_BATCH_REVIEW.md), and the full output stays in the saved log.
@@ -362,6 +384,8 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
   const [dialog, setDialog] = useState(null);     // 'decisions' | 'run' | 'approve' | 'rollback'
   const [rejected, setRejected] = useState({});   // { sales | count: { name, message } }
   const [rollbackTarget, setRollbackTarget] = useState(null);
+  const [lostJob, setLostJob] = useState(null);     // a job this page saw running that the server no longer knows (it restarted), { kind, month }
+  const followed = useRef(null);                      // the running job being followed: { kind, month }
   const uploadStep = useRef(null);
   const live = status.mode === 'live';             // the database the pages read: months are loaded and rolled back, not closed
   const canRollback = live && hasPermission(P.DATA_ROLLBACK);
@@ -396,6 +420,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
     inFlight.current = true;
     setError('');
     setNotice('');
+    setLostJob(null);
     setBusy(true);
     try {
       await fn();
@@ -411,16 +436,24 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
   // While a step runs, follow it; when it ends, read the new state of the month.
   useEffect(() => {
     if (job?.status !== 'running') return undefined;
+    followed.current = { kind: job.kind, id: job.id, month: job.month };
     const timer = setInterval(async () => {
       try {
         const next = await getBatchJob();
         setJob(next);
+        // The server keeps its job in memory only. A restart (Render redeploys, sleeps and restarts) leaves it answering
+        // "idle" or a different job: say so, instead of dropping the job without a word (scenario audit 2026-11-18).
+        if (next.status === 'idle' || (next.id && followed.current?.id && next.id !== followed.current.id)) {
+          setLostJob(followed.current);
+        } else if (next.status !== 'running') {
+          setLostJob(null);
+        }
         if (next.status !== 'running') {
           clearInterval(timer);
           setFeedback(null);
           const list = await refresh(month);
           if (next.kind === 'validate' && decisionsBlocked(list)) setDialog('decisions');
-          if (live && ['plan', 'rollback'].includes(next.kind)) {
+          if (live && ['plan', 'rollback'].includes(next.kind || followed.current?.kind)) {
             // The data changed under every page: forget what they fetched, and let the layout read the newest month again.
             invalidateCache();
             window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
@@ -573,6 +606,7 @@ const MonthlyBatchPanel = ({ initialStatus }) => {
         {notice && <p className="ui-note is-success mb-note-raised" role="status"><CheckCircle2 size={16} aria-hidden="true" /><span>{notice}</span></p>}
         <RunResult result={shownResult} job={job} />
         {live && !running && <LiveJobBanner job={job} />}
+        {live && !running && (lostJob || (stage === 'ready' && status.checks.sales_loaded && !job?.id)) && <LostJobNotice lost={lostJob} month={month} canRollback={canRollback} />}
         {stage === 'closed' && (
           <ClosedBanner month={month} nextMonth={status.next_month} nextPlan={status.next_plan} closedAt={job?.kind === 'close' ? formatWhen(job.finished_at) : null} />
         )}

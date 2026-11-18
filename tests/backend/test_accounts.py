@@ -27,7 +27,7 @@ from backend import auth_utils, deps, mailer
 from backend.account_links import LINK_INVALID
 from backend.auth_utils import TokenPayload, hash_link_token
 from backend.deps import get_db
-from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_FAILURES_PER_IP
+from backend.login_limiter import MAX_FAILURES_PER_EMAIL, MAX_RESET_REQUESTS_PER_EMAIL, MAX_RESET_REQUESTS_PER_IP
 from backend.main import app
 from backend.routers import auth as auth_router
 
@@ -387,20 +387,20 @@ def test_a_reset_link_replaces_the_old_password(client, db, outbox):
 
 
 def test_forgot_password_requests_are_rate_limited(client, outbox):
-    for _ in range(MAX_FAILURES_PER_EMAIL):
+    for _ in range(MAX_RESET_REQUESTS_PER_EMAIL):
         assert client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"}).status_code == 202
     resp = client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"})
     assert resp.status_code == 429
     assert resp.json()["detail"].startswith("Too many reset requests. Try again in")
     assert int(resp.headers["Retry-After"]) > 0
-    assert len(outbox) == MAX_FAILURES_PER_EMAIL
+    assert len(outbox) == MAX_RESET_REQUESTS_PER_EMAIL
 
 
 def test_checking_which_emails_have_accounts_is_capped(client):
     """Since the page says which emails have no account, the per-address
     limit is what stops anyone trying emails in bulk: after 20 tries in 15
     minutes every email gets 429, registered or not."""
-    for n in range(MAX_FAILURES_PER_IP):
+    for n in range(MAX_RESET_REQUESTS_PER_IP):
         assert client.post("/auth/forgot-password", json={"email": f"guess{n}@example.com"}).status_code == 404
     assert client.post("/auth/forgot-password", json={"email": "guess99@example.com"}).status_code == 429
     assert client.post("/auth/forgot-password", json={"email": "staff@ssmcapstone.com"}).status_code == 429

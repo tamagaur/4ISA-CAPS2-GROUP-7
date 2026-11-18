@@ -58,6 +58,7 @@ import { CATEGORY_MISS_COLUMNS, ForecastErrorSummaryCard, OVER_RUN_COLUMNS, Prod
 import { accuracyScopeLine } from '../utils/forecastAccuracyScope';
 import ExactValue from './ExactValue';
 import { formatApprox } from '../utils/formatNumber';
+import { philippineDay } from '../utils/formatDate';
 import {
   PAGE_NAMES, RELIABILITY_SHORT, TIER_LABEL, tierBadge, tierSingular, tierTechnical,
 } from '../labels';
@@ -1742,7 +1743,7 @@ const SKUForecast = () => {
             {whatIf && !syntheticOn && (
               <p className="chart-placeholder-note">
                 Sample data: this forecast is a what-if run of the same models on the five-year history, 2021–22
-                sample months included (built {String(dashboardRange.previewInfo.outputs.built_at).slice(0, 10)}).
+                sample months included (built {philippineDay(dashboardRange.previewInfo.outputs.built_at)}).
                 It is never saved and is not the live forecast.
               </p>
             )}

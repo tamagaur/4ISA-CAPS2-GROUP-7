@@ -1,4 +1,4 @@
-# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-18 (scenario audit; figure provenance and demo runs 10-12 of 2026-11-17).
+# STATE (current state only; reference lives in CLAUDE.md / ARCHITECTURE.md). Last verified 2026-11-18 (master fix-and-audit sweep; scenario audit; figure provenance and demo runs 10-12 of 2026-11-17).
 # Keep the `plan:` line exact: tests/invariants/test_a_plan_agreement.py fails if it disagrees with live.
 
 plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
@@ -16,6 +16,37 @@ plan: rows=115 pieces=330212 cycle=2026-03-01 lp_run=10
   Next migration: 0082 (ledger ends at 0081, 82 rows; 0081_lock_down_every_schema live 2026-11-16 after backup full_backup_20261115T192811Z: the 8 functions with EXECUTE for PUBLIC, 1 in app and 7 in mart, now 0 in app, mart, demo and public; row-level security on 64 of 64 tables there; no data row touched). kelvin-be is the
   branch to write Chapter 4 from AND the branch to deploy (Render and Vercel): docs/DEPLOY_AND_TEST_2026-11-13.md.
 
+MASTER FIX-AND-AUDIT SWEEP (2026-11-18, Kelvin's brief; live read only, READ ONLY transactions: no database write; plan 115 / 330,212 unchanged;
+  no file of the month-load closure edited, so docs/MONTH_LOAD_REHEARSAL.json stays valid). The tree was committed first (5efd0dc, pushed to team/kelvin-be).
+  FIXED. (1) Sign-in lockout: per email 5 -> 10, per network 20 -> 100 failures in 15 minutes (backend/login_limiter.py; the 15-minute lock and the refusal of a
+  correct password during it are unchanged, by design: a correct password that got through would tell a guesser which attempt was right). The 429 now names its cause:
+  "Sign-in is paused on this network after too many failed attempts from it, which may not have been yours" / "Too many failed attempts on this account"
+  (LoginLimiter.locked() reports which limit holds). The forgot-password flood guard keeps its own 5 / 20 (MAX_RESET_REQUESTS_PER_*). The audit-log write budget stays
+  100 per window. Team-set (Kelvin, 2026-11-18), not measured. (2) Class A: the three counts answer three questions and now say so: SKU Management = who is in each
+  principal's latest monthly run (190 = 189 Unilever SKUs + 1 Del Monte category, split in its tooltip), the ABC page the same list, the Dashboard ring the range's own
+  ranking (177 under All principals, Mar 2025 - Feb 2026), now with a line on the ring card. (3) Rollback vs audit log: the Audit page says entries stay and describe
+  decisions a rollback undid; the "Month Rolled Back" entry says so too. (4) Server restart mid-load: the Data Management panel says the server stopped following the
+  job (or that the month's sales are in but its plan is not) and where the exit is, instead of showing nothing. (5) Sidebar light: GET /status?db=1 runs SELECT 1 (cached
+  15 s) and the light reads DATABASE OFFLINE when it fails; plain /status stays database-free for the login wake check. (6) Pinned: mean MASE and mean R2 beside the
+  medians, each also without SKU 68763994, all populations and windows (docs/EVALUATION_METRICS.*). Existing pinned figures did not move.
+  AUDITS (three passes, see the session report). Found and fixed outside the closure: "62 of 115 ... the other 53 get less" now says "the same or less" (5 zero-forecast
+  SKUs have target 0); Dashboard preview range Jan 2021 - Dec 2022 no longer reads "nothing to show" over labelled back-cast; Category Trends no longer says "all real"
+  for a fit that uses sample months; the ABC range page no longer blanks on a range or principal change; the comparison strip uses the preview floor; a UTC timestamp's
+  first ten characters (plan run day, forecast run day, closed-on day, preview built-on day) now name the Philippine day (formatDate.philippineDay); decision, approval and
+  request timestamps are aware UTC instead of naive. Timezone: nothing asks the clock what "this month" is (every month comes from the data); tests/test_clock_reads.py fails on a
+  new reader of the date clock and lists why each existing one is safe (live session time zone read: UTC; no timestamp-without-time-zone column in public).
+  MEASURED on the final tree (2026-11-18): check.sh --full against live, 961 s: 12 of 13 steps PASS (provenance, invariants 42 tests in 10 files, suite 2899 passed /
+  18 skipped (opt-in, not run) / 0 failed, manuscript 265 statements with 193 agreeing and the same 72 held, frontend 263 tests, build); the 13th, the Chapter 4 test totals,
+  FAILED only because the pin read 2945 collected and the run collected 2959 (14 new tests): re-pinned by hand to 2959 / 2953 / 2941 / 2932 in docs/CHAPTER4_CODE_FIGURES.json,
+  `pytest --collect-only` reads 2959 and chapter_figures --verify passes, but that one step was NOT re-run end to end. Pinned evaluation figures: 180 (144 before; the 36 new
+  are the means), all equal live. Three audit passes, a fourth was not run as a separate pass (its checks are the full run above).
+  NOT FIXED, with reasons: inside the closure (recommendations.py: accepted quantity 0 or any size, Accept not pinning the quantity seen, naive decided_at; expected_receipts.py:
+  expected_on from the UTC date); policy comparison "peak" uses T_i as the stock after a delivery, which flips the "rule read as a peak" sign on another reading (a decision);
+  FSN reads a blank capture as 0 and Del Monte FSN rests on 6 observed months (no page calls it; manuscript figure e reads it, so a change would move a verified figure);
+  staff requests are not closed when an LP re-run supersedes their cycle (a decision); abc.py counts every row carried forward under All principals (API only);
+  a failed ABC refetch keeps old rows under new labels (not reproduced); weeks-of-stock chart basis (pesos at purchase vs selling price) undisclosed in its tooltip;
+  verdict thresholds in kpiMath.js and the Dashboard have no named origin.
+
 SCENARIO AND LOGIC AUDIT (2026-11-18, Kelvin's brief; four read-only trace agents, findings re-read in code before use; no live write: live read only in the
   invariants' READ ONLY transactions; plan 115 / 330,212 unchanged; no file of the month-load closure edited, tests/test_demo_rehearsal passes, so no re-rehearsal).
   FIXED (outside the closure). (1) Dashboard quick range "2023" (any Unilever range starting before Jan 2024): /dashboard/class-changes compared with 2022, ranked
@@ -25,9 +56,9 @@ SCENARIO AND LOGIC AUDIT (2026-11-18, Kelvin's brief; four read-only trace agent
   "compared with Jan 2022 - Dec 2022". (4) Reorder banner: a pending row that orders nothing is counted apart ("N order nothing, so need no decision"), not as "not decided"
   (decisionCounts.js + test); the Total Suggested Order tooltip says decided rows stay in the total. (5) Login matches the e-mail without regard to case, like register and
   forgot-password (auth.py + test); a non-JSON 5xx at sign-in no longer says "Check your email and password" (auth.js). (6) SKU Forecast's browser MA3 no longer averages a blank-capture month as 0.
-  NOT FIXED, decisions in the session report: lockout thresholds (5 per e-mail, 20 per IP, in memory, 15 min, also for the right password); accepted quantity 0 or any size
-  (recommendations.py is in the closure); Accept does not pin the quantity the planner saw (closure); /status is liveness only; three different "Class A" counts across pages;
-  a load killed by a server restart leaves a dead end (admin rollback is the exit). CHECKED, no defect: two planners on one row (row lock + guarded UPDATE), double submit, cache after a write,
+  NOT FIXED at the time, decisions in the session report (the lockout thresholds, /status and the Class A labels were fixed later the same day: see the sweep above): accepted quantity 0 or any size
+  (recommendations.py is in the closure); Accept does not pin the quantity the planner saw (closure);
+  (a load killed by a server restart now says so on the page; the admin rollback is still the exit). CHECKED, no defect: two planners on one row (row lock + guarded UPDATE), double submit, cache after a write,
   staff reaching URLs (every route gated server-side), self-demotion and last admin, deep link when signed out, the rollback dialog (it does warn about accounts and permissions).
   MEASURED: tests/backend test_dashboard_range 27 passed, test_auth + test_mfa + test_accounts 140 passed, frontend 261 tests, build OK, figure_provenance GREEN,
   tests/invariants test_i every GET route on live (read only) passed. The full check.sh --full was NOT run.

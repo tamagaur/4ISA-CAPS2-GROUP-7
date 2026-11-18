@@ -23,10 +23,12 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -170,9 +172,42 @@ if monthly_batch.on_practice_copy():   # never the deployed API: it is not conne
         return response
 
 
+_DB_PROBE_TTL_SECONDS = 15
+_db_probe: dict = {"at": float("-inf"), "ok": True}   # -inf: the first call always probes, whatever the host's uptime
+_db_probe_lock = threading.Lock()
+
+
+def _database_answers() -> bool:
+    """One trivial query on the read pool, remembered for _DB_PROBE_TTL_SECONDS: the route is public, so strangers
+    hammering it must not open a connection each. Never raises."""
+    now = time.monotonic()
+    with _db_probe_lock:
+        if now - _db_probe["at"] < _DB_PROBE_TTL_SECONDS:
+            return bool(_db_probe["ok"])
+        # One caller probes; the others read the last answer until it lands. Stamped BEFORE the probe, so a database that
+        # hangs (connect_timeout 10 s) does not start one probe, and hold one thread, per request after the TTL.
+        _db_probe["at"] = now
+    ok = False
+    for attempt in (1, 2):
+        # Twice: the read pool does not pre-ping (deps._get_read_engine), so one silently dropped pooled connection fails the
+        # first try while the database is up. The retry takes a fresh one; "unreachable" needs both to fail.
+        try:
+            from sqlalchemy import text as _text
+            from backend.deps import _get_read_engine
+            with _get_read_engine().connect() as conn:
+                conn.execute(_text("SELECT 1"))
+            ok = True
+            break
+        except Exception:  # noqa: BLE001 - any failure to answer is "unreachable"; nothing about it is shown to the caller
+            logger.warning("Status check: the database did not answer (try %s of 2).", attempt, exc_info=True)
+    with _db_probe_lock:
+        _db_probe["at"], _db_probe["ok"] = time.monotonic(), ok
+    return ok
+
+
 @app.get("/health", tags=["health"])
 @app.get("/status", tags=["health"])
-def health() -> dict[str, str]:
+def health(db: int = Query(default=0, ge=0, le=1)) -> dict[str, str]:
     """Unauthenticated liveness check — deliberately outside every
     router's get_current_user dependency so uptime monitoring doesn't
     need an API key. Only confirms the process is up, not that Supabase
@@ -187,4 +222,9 @@ def health() -> dict[str, str]:
     build), else "unknown". Nothing checked which commit the deployed API runs (on 2026-11-06 it was an older build than the
     branch it was said to deploy); compare it with `git rev-parse team/kelvin-be`. A commit id is not a secret: the repo is public."""
     commit = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()
-    return {"status": "ok", "commit": commit[:12] if commit else "unknown"}
+    answer = {"status": "ok", "commit": commit[:12] if commit else "unknown"}
+    if db == 1:
+        # Only when asked (the sidebar's light does, since 2026-11-18): the process being up said nothing about the database,
+        # so the light stayed green with Supabase down. Still HTTP 200, so the login page's wake check is not affected.
+        answer["database"] = "ok" if _database_answers() else "unreachable"
+    return answer

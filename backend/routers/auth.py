@@ -41,8 +41,8 @@ who has forgotten the current one uses Forgot password from the same dialog.
 An administrator locked out on a server without email gets a link from
 backend/scripts/reset_link.py.
 
-FAILED SIGN-INS (2026-09-21): repeated wrong passwords lock the email (5 in
-15 min) or the IP address (20 in 15 min) for 15 minutes — see
+FAILED SIGN-INS (2026-09-21): repeated wrong passwords lock the email (10 in
+15 min) or the IP address (100 in 15 min) for 15 minutes (5 and 20 until 2026-11-18) — see
 backend/login_limiter.py for the rules and why they are shaped that way.
 Each lock is also written to the audit log, naming the limit that tripped
 (per-email or per-IP, 2026-09-30). So is every failed sign-in (2026-09-30):
@@ -146,7 +146,7 @@ LOGOUT_SQL = """
 # instead of waiting for an email that never comes. Until then it answered
 # the same either way. The trade-off: anyone can use the page to check
 # whether an email has an account here. reset_limiter caps that at 5 tries
-# per email and 20 per network address in 15 minutes (backend/login_limiter.py).
+# per email and 20 per network address in 15 minutes (MAX_RESET_REQUESTS_PER_*, backend/login_limiter.py).
 EMAIL_NOT_REGISTERED = (
     "No account uses this email. Enter the email address your account was created with."
 )
@@ -198,11 +198,28 @@ def _touch_session(db: Session, session_id: str | None, final_sql: str) -> None:
         logger.warning("Could not update user_session %s.", session_id, exc_info=True)
 
 
-def _too_many_attempts(seconds: int, what: str = "failed sign-in attempts") -> HTTPException:
+def _too_many_attempts(seconds: int, what: str = "failed sign-in attempts", limits: tuple[str, ...] = ()) -> HTTPException:
+    """The 429. When the lock is known to be the network's ("ip" in limits), the
+    message says so and that a correct password is not accepted meanwhile: at a
+    venue everyone shares one address, and "failed sign-in attempts" read as if
+    this person had mistyped (2026-11-18). An account-only lock names the
+    account. No limits given (reset requests): the plain sentence."""
     minutes = max(1, math.ceil(seconds / 60))
+    wait = f"Try again in {minutes} minute{'' if minutes == 1 else 's'}."
+    if "ip" in limits:
+        detail = (
+            f"Sign-in is paused on this network after too many failed attempts from it, which may not have been yours. "
+            f"A correct password or code is not accepted until it ends. {wait}"
+        )
+    elif "email" in limits:
+        detail = (
+            f"Too many failed attempts on this account. A correct password or code is not accepted until the pause ends. {wait}"
+        )
+    else:
+        detail = f"Too many {what}. {wait}"
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail=f"Too many {what}. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+        detail=detail,
         headers={"Retry-After": str(seconds)},
     )
 
@@ -215,7 +232,7 @@ _LIMITS = {
 
 def _lockout_details(email: str, client_ip: str, lock: Lock) -> str:
     """What was locked and which limit did it, e.g. '203.0.113.9 locked for 15
-    minutes: per-IP limit (20 failed sign-ins within 15 minutes). Last
+    minutes: per-IP limit (100 failed sign-ins within 15 minutes). Last
     attempt: a@x.com from 203.0.113.9'. Before 2026-09-30 every lock read as
     the email's, even when the per-IP limit tripped."""
     minutes = max(1, math.ceil(lock.seconds / 60))
@@ -293,9 +310,9 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
     client_ip = request.client.host if request.client else "unknown"
     # Checked before the password so that nothing about a locked account's
     # password can be learned while the lock lasts.
-    wait = login_limiter.retry_after(body.email, client_ip)
-    if wait is not None:
-        raise _too_many_attempts(wait)
+    held = login_limiter.locked(body.email, client_ip)
+    if held is not None:
+        raise _too_many_attempts(held.seconds, limits=held.limits)
 
     row = db.execute(
         # lower() on both sides, like register and forgot-password (users_email_lower_key, migration 0034): an account created as
@@ -329,7 +346,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)) -
                 "+".join(lock.limits), mask_email(body.email), client_ip,
             )
             _record_lockout(db, body.email, client_ip, lock)
-            raise _too_many_attempts(lock.seconds)
+            raise _too_many_attempts(lock.seconds, limits=lock.limits)
         raise invalid_credentials
 
     # Two-step sign-in: the password was right, but no session yet, and the
@@ -389,9 +406,9 @@ def _pending_account(db: Session, mfa_token: str, step: str):
 
 
 def _check_not_locked(email: str, client_ip: str) -> None:
-    wait = login_limiter.retry_after(email, client_ip)
-    if wait is not None:
-        raise _too_many_attempts(wait)
+    held = login_limiter.locked(email, client_ip)
+    if held is not None:
+        raise _too_many_attempts(held.seconds, limits=held.limits)
 
 
 def _wrong_code(db: Session, email: str, client_ip: str, message: str = WRONG_CODE) -> HTTPException:
@@ -406,7 +423,7 @@ def _wrong_code(db: Session, email: str, client_ip: str, message: str = WRONG_CO
             "+".join(lock.limits), mask_email(email), client_ip,
         )
         _record_lockout(db, email, client_ip, lock)
-        return _too_many_attempts(lock.seconds)
+        return _too_many_attempts(lock.seconds, limits=lock.limits)
     return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
 
 
@@ -745,9 +762,9 @@ def change_password(
     """The signed-in person's own password (My profile). A wrong current
     password is a 400, not a 401: the app signs out on any 401."""
     client_ip = request.client.host if request.client else "unknown"
-    wait = login_limiter.retry_after(current_user.email, client_ip)
-    if wait is not None:
-        raise _too_many_attempts(wait)
+    held = login_limiter.locked(current_user.email, client_ip)
+    if held is not None:
+        raise _too_many_attempts(held.seconds, limits=held.limits)
     row = db.execute(
         text("SELECT password_hash FROM users WHERE user_id = :user_id"),
         {"user_id": current_user.user_id},
@@ -757,7 +774,7 @@ def change_password(
         lock = login_limiter.record_failure(current_user.email, client_ip)
         if lock is not None:
             _record_lockout(db, current_user.email, client_ip, lock)
-            raise _too_many_attempts(lock.seconds)
+            raise _too_many_attempts(lock.seconds, limits=lock.limits)
         raise ApiError(400, WRONG_CURRENT_PASSWORD, code="wrong_current_password")
     login_limiter.record_success(current_user.email)
     if verify_password(body.new_password, current_hash):

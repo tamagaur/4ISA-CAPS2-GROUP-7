@@ -1,3 +1,5 @@
+import { philippineDay } from './utils/formatDate.js';
+
 // Where the current plan's decisions stand. `items` is GET /recommendations?cycle=current with no status filter, whose rows are
 // exactly the plan. A pending row that orders nothing (0 pieces) has no Accept or Dismiss button, so it is not "not decided":
 // it is counted apart as `noOrder`, the way the Dashboard (`no_order`) and the month-load check (`q_i > 0`) treat it. Before
@@ -24,7 +26,7 @@ export function decisionLine({ accepted, dismissed, pending, noOrder = 0 }) {
 const STATE_WORDS = { run: 'run, not closed', closing: 'closing, not finished', closed: 'closed' };
 export function planStateLine(state) {
   if (!state) return null;
-  const closedOn = state.state === 'closed' && state.closed_at ? ` on ${String(state.closed_at).slice(0, 10)}` : '';
+  const closedOn = state.state === 'closed' && state.closed_at ? ` on ${philippineDay(state.closed_at)}` : '';
   const prior = state.prior ? ` ${state.prior.cycle} is ${STATE_WORDS[state.prior.state]}.` : '';
   return `This plan (${state.cycle}) is ${STATE_WORDS[state.state]}${closedOn}.${prior}`;
 }

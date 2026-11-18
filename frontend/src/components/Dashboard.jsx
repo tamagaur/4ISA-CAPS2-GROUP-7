@@ -32,7 +32,7 @@ import { prefersReducedMotion } from '../theme/motion';
 import RefreshingNote from './RefreshingNote';
 import { DemoForecastList } from './DemoForecasts';
 import { DemoOrderPlanCard } from './DemoOrderPlan';
-import { formatDate, formatMonth } from '../utils/formatDate';
+import { formatDate, formatMonth, philippineDay } from '../utils/formatDate';
 import { monthsBetween } from '../utils/timeline';
 import { noSaleNote } from '../utils/aboveRuleNote';
 import { calendarFactorText, calendarSignoffText, calendarYearsText } from '../utils/calendarAdjustment';
@@ -770,6 +770,12 @@ const Dashboard = () => {
     const points = Array.isArray(d.sales_vs_stock) ? d.sales_vs_stock : [];
     const shown = (p) => [p.sales, p.stock_on_hand, p.sales_estimated, p.stock_on_hand_estimated].some((v) => v != null);
     if (points.some(shown)) return null;
+    // Preview (synthetic data on): the labelled demonstration's months stand in the range (GET /dashboard's demonstration.
+    // monthly_totals, schema demo), so a range of them is not "nothing to show" although no REAL month is in it (2026-11-18:
+    // Del Monte Jan 2021 - Dec 2022 read "SSM's records start in January 2023" over 24 months of labelled back-cast).
+    const generated = preview && d.demonstration?.demonstration && d.demonstration.principal === pagePrincipal
+      ? (d.demonstration.monthly_totals || []) : [];
+    if (generated.some((m) => m.pesos != null && (!startPeriod || m.period >= startPeriod) && (!period || m.period <= period))) return null;
     return d.kpis?.soh_value != null ? 'sales' : 'all';
   })();
   const emptyReason = (() => {
@@ -783,7 +789,9 @@ const Dashboard = () => {
       return `The latest month with ${labelForPrincipal(pagePrincipal)} sales is ${periodLabel(latest)}; `
         + "later months haven't been loaded yet.";
     }
-    return `No sales were recorded for ${labelForPrincipal(pagePrincipal)} in these months.`;
+    return pagePrincipal === 'delmonte'
+      ? 'No Del Monte sales are on record for these months. A month with no record can be a collection gap, not zero sales.'
+      : `No sales were recorded for ${labelForPrincipal(pagePrincipal)} in these months.`;
   })();
   const latestRangeAction = handleResetToToday && (
     <button type="button" className="btn btn-primary" onClick={handleResetToToday}>Go to the latest data</button>
@@ -1479,10 +1487,10 @@ const Dashboard = () => {
   // When the plan was generated (lp.lp_generated_at), so a figure that moved
   // since yesterday can be traced to a re-run (the LP ran on 19 Oct 2026
   // while the cards were being checked).
-  const planRun = lp.lp_generated_at ? dayLabel(String(lp.lp_generated_at).slice(0, 10)) : null;
+  const planRun = lp.lp_generated_at ? dayLabel(philippineDay(lp.lp_generated_at)) : null;
   // When the served forecasts were written (lp.forecast_generated_at), for the
   // stale-plan note's plain sentence.
-  const forecastRun = lp.forecast_generated_at ? dayLabel(String(lp.forecast_generated_at).slice(0, 10)) : null;
+  const forecastRun = lp.forecast_generated_at ? dayLabel(philippineDay(lp.forecast_generated_at)) : null;
   // The plan orders the same gated SKUs the forecast card sums, from their
   // stored forecasts: when those carry the calendar factor, every plan row
   // made after that forecast is built on it. lp.is_stale is true when even
@@ -1985,6 +1993,10 @@ const Dashboard = () => {
                   : null}
                 coverage={abcCoverage}
                 units={abcUnits}
+                planningNote={data.abc_basis?.differs_from_planning_basis && pagePrincipal !== 'delmonte'
+                  ? 'Ranks sales over the range on screen only. The ABC page, the SKU list and the order plan use each principal’s own monthly run '
+                    + '(Unilever: the last 12 months, plus products first sold within them), so their Class A count can be higher.'
+                  : null}
                 atRisk={canListAtRisk && !ssPinned
                   ? { below: exposure.below_count, measurable: exposure.comparable_count, onOpen: openAtRisk, tierLabel: planTierPhrase }
                   : null}

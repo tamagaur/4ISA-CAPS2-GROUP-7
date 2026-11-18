@@ -218,7 +218,7 @@ const AuditLog = () => {
   return (
     <div className="audit-page">
       <div className="audit-content">
-        <PageHeader title="Audit" accent="log" subtitle="Who signs in, and what they change. Visible to people with Audit Log access." />
+        <PageHeader title="Audit" accent="log" subtitle={'Who signs in, and what they change. Visible to people with Audit Log access. Entries are never removed: after a “Month Rolled Back” entry, earlier entries such as “Reorder accepted” describe decisions that rollback undid, so the Reorder page shows those rows as waiting again.'} />
 
         <section className="audit-section ui-card is-flush" aria-labelledby="audit-users-heading">
           <div className="ui-card-intro">

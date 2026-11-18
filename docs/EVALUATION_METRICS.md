@@ -20,6 +20,12 @@ Run 21 (as-served backtest 2023-10..2026-02, Tier A the month before each month,
 | order plan | 11,898.6 | 30.71% | 93.98% | 83.33% |
 | all scored | 12,199.7 | 1057.11% | 74.74% | 75.37% |
 
+| Population | MASE (mean) | MASE (mean without SKU 68763994) | R² (mean) | R² (mean without SKU 68763994) |
+|---|---|---|---|---|
+| forecastable | 0.849 | 0.850 (144) | 0.208 | 0.208 (161) |
+| order plan | 0.653 | 0.653 (83) | 0.279 | 0.279 (96) |
+| all scored | 0.827 | 0.828 (189) | 0.243 | 0.243 (203) |
+
 ## Jan 2024-Feb 2026, every month the backtest run scores (2024-01 to 2026-02)
 
 | Population | Products / product-months | MAE (pieces) | RMSE (pieces) | WAPE | MAPE (median) | MASE (median) | R² (median) |
@@ -33,6 +39,12 @@ Run 21 (as-served backtest 2023-10..2026-02, Tier A the month before each month,
 | forecastable | 15,277.0 | 79.12% | 55.47% | 68.39% |
 | order plan | 15,147.6 | 34.53% | 67.19% | 72.83% |
 | all scored | 13,928.1 | 1216.59% | 59.07% | 73.48% |
+
+| Population | MASE (mean) | MASE (mean without SKU 68763994) | R² (mean) | R² (mean without SKU 68763994) |
+|---|---|---|---|---|
+| forecastable | 1.090 | 1.090 (128) | 0.006 | 0.137 (192) |
+| order plan | 0.893 | 0.893 (64) | 0.145 | 0.145 (92) |
+| all scored | 1.001 | 1.001 (193) | 0.156 | 0.246 (278) |
 
 Counts in brackets are the products / product-months that metric covers, where they differ from the population's.
 
@@ -57,6 +69,10 @@ Counts in brackets are the products / product-months that metric covers, where t
 - **MAPE_mean**: the mean instead of the median of the same per-product percentages.
 - **MASE_share_below_1**: share of the MASE products with MASE below 1.
 - **R2_share_above_0**: share of the R² products with R² above 0.
+- **MASE_mean**: the mean instead of the median of the same per-product MASEs (every product with a MASE in the population).
+- **MASE_mean_without_sku**: the same mean without SKU 68763994; MASE_mean_without_sku_products is its product count.
+- **R2_mean**: the mean instead of the median of the same per-product R²s. A mean follows the worst product: over the full span one R² far below the rest (SKU 68763994) moves it where the median does not; in the card window that product has no R² (it is not in the set), so the two means agree there.
+- **R2_mean_without_sku**: the same mean without SKU 68763994; R2_mean_without_sku_products is its product count.
 
 ## Not these measures
 

@@ -2015,7 +2015,7 @@ const AbcHoverTooltip = ({ hover, facts, ringRef }) => {
 // page's filter ("Unilever only", Dashboard.jsx's coverageNote). `units` is
 // what a row is: 'SKUs', or 'categories' for Del Monte, which is ranked by
 // product category.
-export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null }) => {
+export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, coverage = null, units = 'SKUs', atRisk = null, onOpenClass = null, syntheticNote = null, planningNote = null }) => {
   const [selectedTier, setSelectedTier] = useState('A');
   const [hover, setHover] = useState(null);
   const ringRef = useRef(null);
@@ -2107,6 +2107,8 @@ export const ABCDonutWidget = ({ data = [], revenue, rules, emptyReason, note, c
     !sharesAddUp ? revenue?.blocked_reason : null,
     note,
     syntheticNote,
+    // Says on the card why its Class A count can be lower than the ABC page's, the SKU list's and the plan's (2026-11-18).
+    planningNote,
   ].filter(Boolean);
 
   // The card, top to bottom (2026-10-19, after the mockup): the finding,
@@ -3477,7 +3479,8 @@ export const PolicyComparisonWidget = ({ comparison, emptyReason }) => {
           {c.skus_above_rule != null && (
             <p className="dashboard-chart-footnote">
               {c.skus_above_rule} of {c.sku_count} SKUs get a target above {ruleWeeks} weeks (the ones with the
-              most volatile demand); the other {c.sku_count - c.skus_above_rule} get less.
+              most volatile demand); the other {c.sku_count - c.skus_above_rule} get the same or less (a product forecast
+              at 0 has a target of 0, the same as the rule).
             </p>
           )}
           <div className="policy-bars">

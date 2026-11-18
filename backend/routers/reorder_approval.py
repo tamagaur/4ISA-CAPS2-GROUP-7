@@ -423,7 +423,7 @@ def approve_change(
         note = (f"Closed automatically: the {current['planning_cycle_date']} cycle was superseded by the "
                 f"{current['current_cycle']} LP run, so this change can no longer be applied.")
         closed = db.execute(text(_RESOLVE_SQL), {
-            "state": "rejected", "resolved_by": admin.email, "resolved_at": datetime.datetime.utcnow(), "note": note,
+            "state": "rejected", "resolved_by": admin.email, "resolved_at": datetime.datetime.now(datetime.timezone.utc), "note": note,
             "change_key": change_key,
         }).mappings().first()
         if closed is not None:
@@ -447,7 +447,7 @@ def approve_change(
         db.rollback()
         raise
     note = ((body.note if body else None) or "").strip() or None
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     resolved = db.execute(text(_RESOLVE_SQL), {
         "state": "approved", "resolved_by": admin.email, "resolved_at": now, "note": note, "change_key": change_key,
     }).mappings().first()
@@ -492,7 +492,7 @@ def reject_change(
         raise
     note = body.reason.strip()
     resolved = db.execute(text(_RESOLVE_SQL), {
-        "state": "rejected", "resolved_by": admin.email, "resolved_at": datetime.datetime.utcnow(), "note": note,
+        "state": "rejected", "resolved_by": admin.email, "resolved_at": datetime.datetime.now(datetime.timezone.utc), "note": note,
         "change_key": change_key,
     }).mappings().first()
     if resolved is None:
@@ -547,7 +547,7 @@ def reverse_decision(
             "This decision was made before LP runs were recorded, so the row is not part of the current plan and "
             "can't be returned to pending. It stays as history."))
     reason = body.reason.strip()
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     db.execute(text(_LOG_REVERSAL_SQL), {
         "key": recommendation_key, "prior_status": prior["status"], "prior_decided_q_i": prior["decided_q_i"],
         "prior_reason": prior["decision_reason"], "prior_decided_by": prior["decided_by"],

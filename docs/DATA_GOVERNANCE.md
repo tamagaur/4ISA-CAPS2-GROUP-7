@@ -38,7 +38,7 @@ These are the team's own assignments, made 2026-11-02. Every role is held only u
 |---|---|---|
 | Password storage | bcrypt hashes; a constant-time dummy check on sign-in | `backend/auth_utils.py:29`, `:55` |
 | Session tokens | JWT, HS256, expiry from `JWT_EXPIRY_HOURS`, default 8 | `backend/auth_utils.py:31`, `:32`, `:39` |
-| Sign-in brute force | 5 failures per email and 20 per IP per 15 min, then a 15-minute lockout, logged | `backend/login_limiter.py:38-41` |
+| Sign-in brute force | 10 failures per email and 100 per IP per 15 min, then a 15-minute lockout, logged (5 and 20 until 2026-11-18) | `backend/login_limiter.py:43-50` |
 | Two-step sign-in | Authenticator secret encrypted with a Fernet key (`MFA_ENCRYPTION_KEY`); recovery codes stored as sha256 only | `backend/mfa.py:23-25`, `:149` |
 | Transport to database | `sslmode=require` | `backend/deps.py:71` |
 | Access control | Role presets plus per-user permission boxes; admin-only keys (`lp.decide`) cannot be granted to staff | `backend/permissions.py:96`, `:204` |

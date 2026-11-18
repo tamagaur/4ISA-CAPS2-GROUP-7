@@ -211,8 +211,9 @@ def get_category_trends(
             trends_for(db, p, mode, start_period, period) for p in ([scope] if scope else ["unilever", "delmonte"])
         ],
     }
-    # The projection fits the last TREND_WINDOW_MONTHS (24) observed months,
-    # all real, so preview lengthens the history without moving a projection.
+    # The projection fits the last TREND_WINDOW_MONTHS observed months up to the range's end. They are all real only when the
+    # range ends late enough that the window has left the sample months (preview, a range ending before Dec 2024 fits generated
+    # months); the page says so then (CategoryTrends.jsx). Corrected 2026-11-18: this said "all real" for every range.
     if mode == PREVIEW:
         payload["data_mode"] = preview_block(db)
     return payload
