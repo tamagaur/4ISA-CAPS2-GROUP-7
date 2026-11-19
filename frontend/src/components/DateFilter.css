@@ -96,7 +96,7 @@
   cursor: default;
 }
 
-/* Quiet outline, not a solid brand fill — "Today" is a reset/utility
+/* Quiet outline, not a solid brand fill — "Latest year" is a reset/utility
    action taken constantly while browsing, not a primary call to action.
    A solid red button here competed visually with genuine alerts (a
    CRITICAL badge) elsewhere on the same screen; matches .refresh-btn's

@@ -43,6 +43,7 @@ import LoadError, { describeLoadError } from './ui/LoadError';
 import SlowLoadNotice from './ui/SlowLoadNotice';
 import TierBasisLabel from './TierBasisLabel';
 import AnnualViewChart from './AnnualViewChart';
+import { calendarYearView } from './calendarYearView';
 import './Dashboard.css';
 import './Charts.css';
 
@@ -592,7 +593,7 @@ const Dashboard = () => {
   const { role, hasPermission } = usePermissions();
   const isAdmin = role === 'admin';
   const {
-    startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR, handleResetToToday,
+    startMonth, startYear, endMonth, endYear, principal, dataMode, compare = COMPARE_MODES.YEAR, handleResetToLatestYear,
     dataLatest: outletLatest,
   } = useOutletContext() || {};
   const preview = isPreviewMode(dataMode);
@@ -785,8 +786,8 @@ const Dashboard = () => {
     }
     return `No sales were recorded for ${labelForPrincipal(pagePrincipal)} in these months.`;
   })();
-  const latestRangeAction = handleResetToToday && (
-    <button type="button" className="btn btn-primary" onClick={handleResetToToday}>Go to the latest data</button>
+  const latestRangeAction = handleResetToLatestYear && (
+    <button type="button" className="btn btn-primary" onClick={handleResetToLatestYear}>Go to the latest data</button>
   );
 
   const sectionsReady = Boolean(loaded) && !currentError && rangeEmpty !== 'all';
@@ -1314,6 +1315,11 @@ const Dashboard = () => {
       + 'and its Class A list.',
   };
   const rangeBasis = { label: 'Selected range', follows: true, detail: FOLLOWS_RANGE };
+  const annualChartSales = preview
+    ? withDemoYears(data.annual_sales, data.demonstration, pagePrincipal)
+    : data.annual_sales;
+  const selectedYearView = calendarYearView(data.annual_sales, data.allocation || {}, endYear);
+  const allocation = selectedYearView?.allocation || data.allocation || {};
   const BASIS = {
     sales: { ...rangeBasis, detail: `${FOLLOWS_RANGE} The big figure is the range's last month; the range total is under it.` },
     stock: {
@@ -1355,72 +1361,30 @@ const Dashboard = () => {
         + 'sales, drawn when the range ends there.',
     },
     allocation: {
-      label: data.allocation?.allocation_year ? `Year ${data.allocation.allocation_year}` : 'Range’s end year',
+      label: selectedYearView
+        ? `${selectedYearView.year} → ${selectedYearView.targetYear}`
+        : 'Selected year',
       follows: true,
-      detail: `${FOLLOWS_RANGE} It reads the year the range ends in: that year’s sales so far against its `
-        + 'allocation, set from the year before (SSM’s rule).',
+      detail: `${FOLLOWS_RANGE} The selected calendar year's sales are compared with the previous year, and set `
+        + 'the next calendar year’s allocation target. This changes the visual reference only; it does not change the LP plan.',
     },
   };
 
   // ── The top row (HeroKpis.jsx): the figures above, side by side ─────────
-  const allocation = data.allocation || {};
-  const allocMonthName = allocation.latest_month ? periodLabel(allocation.latest_month).split(' ')[0] : null;
-  // The annual card does not follow the date range (Audrey, 2026-10-09):
-  // the year being planned, its sales so far against the same months of
-  // the previous year (allocation.prior_ytd_sales), and the latest month
-  // with sales — all from GET /dashboard's allocation block, which reads
-  // the same whatever the range.
-  const yoy = (() => {
-    if (allocation.ytd_sales == null || !allocation.latest_month) return null;
-    const y = Number(allocation.latest_month.slice(0, 4));
-    const label = allocation.ytd_months === 12
-      ? String(y - 1)
-      : `${allocation.ytd_months === 1 ? allocMonthName : `Jan–${allocMonthName}`} ${y - 1}`;
-    if (allocation.prior_ytd_sales == null) return { note: `No ${label} sales on record to compare with.` };
-    if (allocation.prior_ytd_months !== allocation.ytd_months) {
-      return { note: `Not like-for-like: ${allocation.ytd_months} months on record now, ${allocation.prior_ytd_months} in ${label}.` };
-    }
-    return allocation.prior_ytd_sales > 0
-      ? { pct: ((allocation.ytd_sales - allocation.prior_ytd_sales) / allocation.prior_ytd_sales) * 100, label }
-      : null;
-  })();
-  const annualLatestMonth = periodLabel(allocation.latest_month);
-  const annualTrend = allocation.latest_sales != null ? trendExtras(allocation.trend, CHART_COLORS.salesSeries) : {};
+  const yoy = selectedYearView?.yoy || null;
   const rangeSales = kpis.sales_cumulative || {};
-  // No sales yet in the year being planned (Del Monte: latest sales Dec 2025,
-  // planning 2026): the card's headline falls back to the selected range.
-  const annualHasYtd = allocation.ytd_sales != null && allocation.ytd_months > 0;
   // Synthetic months (generated to complete the range, not SSM's files) are
   // named in the banner above the cards. Each figure built on them says so
   // on its own card too (the Technical Adviser: what is real and what is
   // generated must be visible where the number is). Only the selected
   // range's months are known here (kpis.sales_cumulative.synthetic_months).
   const syntheticInRange = rangeSales.synthetic_months || [];
-  const syntheticSet = new Set(syntheticInRange);
   const monthsText = (list) => list.map(periodLabel).join(', ');
   const rangeSyntheticMark = syntheticInRange.length > 0
     ? `Includes ${syntheticInRange.length} sample-data month${syntheticInRange.length === 1 ? '' : 's'}`
     : null;
-  const latestPrev = allocation.trend?.prev_period;
-  const latestSyntheticMark = syntheticSet.has(allocation.latest_month)
-    ? `${annualLatestMonth} is a sample-data month`
-    : latestPrev && syntheticSet.has(latestPrev) ? `${periodLabel(latestPrev)} is a sample-data month` : null;
-  const basisSynthetic = allocation.basis_year
-    ? syntheticInRange.filter((m) => m.startsWith(`${allocation.basis_year}-`))
-    : [];
-  // The planned year's months so far (Jan to the latest month with sales),
-  // for the "FY sales so far" figure's own synthetic mark.
-  const allocLatestYear = allocation.latest_month ? Number(allocation.latest_month.slice(0, 4)) : null;
-  const allocLatestIndex = allocation.latest_month ? Number(allocation.latest_month.slice(5, 7)) : 0;
-  const ytdSynthetic = allocLatestYear && allocLatestYear === allocation.allocation_year
-    ? Array.from({ length: allocLatestIndex }, (_, i) => `${allocLatestYear}-${String(i + 1).padStart(2, '0')}`)
-      .filter((m) => syntheticSet.has(m))
-    : [];
-  const ytdSyntheticMark = ytdSynthetic.length > 0
-    ? `FY ${allocation.allocation_year} sales so far include sample-data months: ${monthsText(ytdSynthetic)}`
-    : null;
-  const allocSyntheticMark = basisSynthetic.length > 0
-    ? `FY ${allocation.basis_year} sales include sample-data months: ${monthsText(basisSynthetic)}`
+  const allocSyntheticMark = selectedYearView?.syntheticMonths.length > 0
+    ? `Calendar year ${selectedYearView.year} includes sample-data months: ${monthsText(selectedYearView.syntheticMonths)}`
     : null;
   // The chart's sentence quotes two months; say so when either is synthetic.
   const insightSynthetic = syntheticInRange.filter((m) => (data.sales_vs_stock_insight?.text || '').includes(periodLabel(m)));
@@ -1431,34 +1395,15 @@ const Dashboard = () => {
   const annualCard = {
     allocation,
     yoy,
-    latest: {
-      month: annualLatestMonth,
-      value: allocation.latest_sales != null ? formatCompactPesos(allocation.latest_sales) : '—',
-      trend: annualTrend.trend || null,
-      change: annualTrend.deltaLine ? annualTrend : null,
-      blockedReason: allocation.latest_sales == null ? allocation.blocked_reason || null : null,
-      synthetic: latestSyntheticMark,
-    },
+    yearView: selectedYearView,
     allocSynthetic: allocSyntheticMark,
-    ytdSynthetic: ytdSyntheticMark,
-    range: {
-      label: rangeSales.label ? `Sales, ${rangeSales.label}` : 'Sales',
-      value: rangeSales.value != null && !kpis.sales_blocked_reason ? formatCompactPesos(rangeSales.value) : '—',
-      synthetic: rangeSyntheticMark,
-    },
     basis: {
-      // Without sales in the planned year the tag names the target's year,
-      // rather than labelling the range's figures as that year's.
-      label: !allocation.allocation_year ? 'Current year'
-        : annualHasYtd
-          ? `${allocLatestIndex === 1 ? allocMonthName : `Jan–${allocMonthName}`} ${allocation.allocation_year}`
-          : `FY ${allocation.allocation_year} target`,
-      follows: false,
-      detail: (annualHasYtd ? '' : `No FY ${allocation.allocation_year ?? ''} sales are on record yet, so the headline `
-        + 'shows the selected range\u2019s sales instead; the allocation target is for that year. ')
-        + 'Does not change with the date filter: the year being planned, its sales so far against the same '
-        + 'months a year earlier, and the latest month with sales. The allocation is the previous year\u2019s sales '
-        + '\u00d7 103/105/108%, one year only, whatever the range.',
+      label: selectedYearView
+        ? `Calendar year ${selectedYearView.year} → ${selectedYearView.targetYear}`
+        : 'Selected calendar year',
+      follows: true,
+      detail: `${FOLLOWS_RANGE} The selected year’s sales are compared with the previous year and set the next year’s `
+        + 'allocation target. Partial years show a monthly reference only. This does not change the LP plan.',
     },
     tooltip: salesTooltip,
   };
@@ -1965,7 +1910,7 @@ const Dashboard = () => {
                   annual_sales). */}
               <div className="dash-split-host">
                 <div className="dash-split">
-                  <AnnualViewChart annual={preview ? withDemoYears(data.annual_sales, data.demonstration, pagePrincipal) : data.annual_sales} allocation={allocation} note={vatNote} selectedPct={allocPct} />
+                  <AnnualViewChart annual={annualChartSales} allocation={allocation} note={vatNote} selectedPct={allocPct} />
                   <SalesVsStockWidget data={salesVsStock} gapNote={data.gap_note ?? null} placeholder={placeholder} insight={data.sales_vs_stock_insight} syntheticNote={chartSyntheticNote} note={vatNote} basis={data.sales_vs_stock_basis} compare={chartCompare} range={chartRange} policyWeeks={policyWeeks} />
                 </div>
               </div>

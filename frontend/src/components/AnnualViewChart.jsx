@@ -20,8 +20,8 @@
 // is an empty slot labelled "No data recorded" and when SSM's records start;
 // with synthetic data on, its synthetic months make it a hatched bar.
 //
-// Fixed, like the allocation card: the date filter and the comparison
-// setting do not change it (the "All years" tag says so).
+// Every year's bar stays visible; the highlighted basis year and its next-
+// year target band follow the selected date range.
 import React from 'react';
 import BasisTag from './BasisTag';
 import {
@@ -56,7 +56,7 @@ const AXIS_TITLE = { fontSize: 11, fontWeight: 600, fill: CHART_COLORS.axisLabel
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthNumber = (period) => Number(String(period).slice(5, 7));
-const fy = (year) => `FY${String(year).slice(-2)}`;
+const calendarYear = (year) => String(year);
 
 // "Jan–Feb" when the months on record run without a gap, "9 of 12 months"
 // when they do not: a span must never hide a missing month inside it.
@@ -77,7 +77,7 @@ const buildRows = (annual, allocation) => {
       ? 'base'
       : partial && y.year === latest ? 'ytd' : 'history';
     return {
-      key: fy(y.year),
+      key: calendarYear(y.year),
       year: y.year,
       value: y.sales,
       months: y.months,
@@ -147,7 +147,7 @@ const syntheticText = (row) => {
 const AnnualTooltip = ({ active, payload, band }) => {
   const row = active && payload?.[0]?.payload;
   if (!row) return null;
-  const period = `FY ${row.year}${row.span ? ` · ${row.span}` : ''}`;
+  const period = `Calendar year ${row.year}${row.span ? ` · ${row.span}` : ''}`;
   if (row.value == null) {
     return (
       <Callouts>
@@ -174,7 +174,7 @@ const AnnualTooltip = ({ active, payload, band }) => {
         {row.toGo != null && band && (
           <CalloutLine><strong>{formatCompactPesos(row.toGo)}</strong> to go to the {formatCompactPesos(band.line)} target</CalloutLine>
         )}
-        {row.role === 'base' && band && <CalloutLine>Base year of the {fy(band.year)} allocation target</CalloutLine>}
+        {row.role === 'base' && band && <CalloutLine>Base year of the {calendarYear(band.year)} allocation target</CalloutLine>}
       </Callout>
       {row.synthetic > 0 && <CalloutNote>{syntheticText(row)}, not SSM&apos;s own figures.</CalloutNote>}
     </Callouts>
@@ -362,7 +362,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
           <h4>
             <InfoTip
               label="About Sales per year"
-              trigger={<span>Sales <span className="title-accent">per year</span>{band ? `, against the ${fy(band.year)} target` : ''}</span>}
+              trigger={<span>Sales <span className="title-accent">per calendar year</span>{band ? `, against the ${calendarYear(band.year)} target` : ''}</span>}
               triggerClassName="dash-tip-title"
               className="dash-tip-wrap"
             >
@@ -371,21 +371,21 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
                 recorded{ytd?.span ? `, so ${ytd.key} is ${ytd.span} only` : ''}.
                 {band && (
                   <>
-                    {' '}The band is FY {band.basisYear} sales × SSM&apos;s targets ({band.pcts}); the dashed line is the
+                    {' '}The band is calendar year {band.basisYear} sales × SSM&apos;s targets ({band.pcts}); the dashed line is the
                     target selected on the Summary card{hasToGo ? ', and the dashed bar is what is still to go to it' : ''}.
                   </>
                 )}
-                {' '}This chart shows all years and doesn&apos;t follow the date filter.
+                {' '}All years stay visible; the highlighted basis year and following-year target follow the date filter.
               </span>
               <span className="chart-tip-line">
                 SSM&apos;s records start {recordsStart}
                 {hidden.length > 0 ? `, so ${hidden.map((r) => r.key).join(' and ')} ${hidden.length === 1 ? 'has' : 'have'} no data and ${hidden.length === 1 ? 'shows' : 'show'} as an empty slot` : ''};
                 {' '}earlier years appear as hatched bars only with sample data on.
-                {earlier.length > 0 && <> Also on record, before these years: {earlier.map(fy).join(', ')}.</>}
+                {earlier.length > 0 && <> Also on record, before these years: {earlier.map(calendarYear).join(', ')}.</>}
               </span>
               {note && <span className="chart-tip-line">{note}.</span>}
             </InfoTip>
-            <BasisTag label="All years" follows={false} />
+            <BasisTag label="Target follows filter" follows />
           </h4>
         </div>
       </div>
@@ -408,7 +408,7 @@ const AnnualViewChart = ({ annual, allocation, note, selectedPct = null }) => {
             {band && (
               <span>
                 <i className="annual-view-legend-band" />
-                {fy(band.year)} target band, {band.pcts} of {fy(band.basisYear)}
+                {calendarYear(band.year)} target band, {band.pcts} of {calendarYear(band.basisYear)}
               </span>
             )}
             {hasToGo && (

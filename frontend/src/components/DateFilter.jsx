@@ -7,23 +7,9 @@ import './DateFilter.css';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// System-wide selectable range: Jan 2023 through FEBRUARY 2026 — the span
-// of real Unilever demand data (Unilever_SKU_Demand_Fact_Real: MIN =
-// 2023-01, MAX = 2026-02). Both principals are in scope again (Del Monte
-// was restored 2026-09-17, see principals.js); Del Monte's real sell-out
-// runs 2023-01 to 2025-12, inside this window, so Unilever's span still
-// bounds the picker.
-//
-// The ceiling was Mar 2026 before, which conflated two different things:
-// 2026-03 is the FORECAST month (every served model projects last-actual
-// + 1), not a month anyone has actuals for. Offering it as a selectable end
-// let the user pick a window whose final month is empty by definition on
-// every page that plots actuals. The forecast month is now derived from the
-// selected end rather than being pickable itself.
-//
-// 2023 is the floor, so all of its months are valid; the latest year is the
-// ceiling, so only its months up to the latest data month are. The years in
-// between sit entirely inside the range and need no month restriction.
+// The picker offers calendar months from the first data year through the
+// latest data year. A latest-year range can extend through December; months
+// with no records remain missing rather than being treated as zero.
 // The ceiling is the layout's `dataLatest` — the latest month with data for
 // either principal, from GET /data-mode (2026-10-20) — so a new month of
 // data appears in the lists by itself; dataCoverage.js's constant is only
@@ -35,11 +21,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // placeholder month) passes `realOnly` and keeps the real floor.
 const pickerBounds = (ceiling) => {
   const latestYear = String(ceiling.year);
-  const latestYearMonths = MONTHS.slice(0, MONTHS.indexOf(ceiling.month) + 1);
   return {
     latestYear,
-    latestYearMonths,
-    monthsForYear: (year) => (year === latestYear ? latestYearMonths : MONTHS),
+    monthsForYear: () => MONTHS,
     yearsFrom: (firstYear) => Array.from(
       { length: Number(ceiling.year) - firstYear + 1 },
       (_, i) => String(firstYear + i)
@@ -75,7 +59,7 @@ const noop = () => {};
 // SKU Forecast, ABC Classification, Reorder Recs) so the control stays in
 // one uniform place app-wide.
 //
-// Two modes, same bounded option logic either way (Jan 2023 to the latest month with data):
+// Two modes, with months offered through December of the latest data year:
 //   SHARED (default — no `localValue`/`onLocalChange` passed): edits the
 //     *pending* period held in DashboardLayout, not the applied one —
 //     nothing the rest of the app reads changes until Save is clicked
@@ -88,10 +72,10 @@ const noop = () => {};
 //     and never touches DashboardLayout's shared range. This is what
 //     gives SKU Forecast "freedom to pick a range for this one chart"
 //     without ever dragging every other page's date along with it. In
-//     place of Save/Today it takes an optional `onReset` — the caller's
+//     place of Save/Latest year it takes an optional `onReset` — the caller's
 //     own "go back to the dashboard's range" handler, since "reset to
 //     what" means something different per page in local mode (there is
-//     no single shared "Today" default to fall back to here).
+//     no shared latest-year default to fall back to here).
 // `singleMonth` (local mode only) shows one month + year instead of a range,
 // for pages that read a single period — ABC Classification ignores the start
 // of a range entirely. Not supported in shared mode: writing a one-month
@@ -99,11 +83,11 @@ const noop = () => {};
 // trend minimum.
 const DateFilter = ({
   onRefresh, localValue, onLocalChange, onReset, minMonths = DEFAULT_MIN_RANGE_MONTHS, singleMonth = false, realOnly = false,
-  showToday = true, ceiling = null,
+  showLatestYear = true, ceiling = null,
 }) => {
   const outlet = useOutletContext() || {};
   const dataCeiling = outlet.dataLatest || LATEST_DATA_PERIOD;
-  const { latestYear, latestYearMonths, monthsForYear, yearsFrom } = pickerBounds(dataCeiling);
+  const { latestYear, monthsForYear, yearsFrom } = pickerBounds(dataCeiling);
   const years = yearsFrom(
     !realOnly && isPreviewMode(outlet.dataMode) ? Number(PLACEHOLDER_START.year) : FIRST_DATA_YEAR
   );
@@ -131,36 +115,21 @@ const DateFilter = ({
     ? (isRangeValid && isRangeLongEnough)
     : (outlet.canApplyPendingPeriod ?? (isRangeValid && isRangeLongEnough));
 
-  // Changing TO the latest year can strand the other field's already-selected month
-  // outside Jan-Mar (e.g. start year was 2025 with month=Aug, then the
-  // user picks 2026) — clamp it to the boundary rather than leaving an
-  // option selected that no longer exists in that side's own dropdown.
-  // Never clamps unnecessarily: only fires when the current month isn't
-  // already within latestYearMonths. In local mode both fields live in
-  // ONE object, so the clamp is folded into a single onLocalChange call —
-  // two separate calls would have the second overwrite the first's year
-  // change, since each would spread the same still-stale `localValue`.
+  // Changing either year preserves its month so the picker can represent a
+  // full Jan-Dec calendar year, including months not yet in the data.
   const handleStartYearChange = (year) => {
-    const nextMonth = (year === latestYear && !latestYearMonths.includes(sm))
-      ? latestYearMonths[latestYearMonths.length - 1]
-      : sm;
     if (isLocal) {
-      onLocalChange({ ...localValue, startYear: year, startMonth: nextMonth });
+      onLocalChange({ ...localValue, startYear: year });
     } else {
       (outlet.setPendingStartYear || noop)(year);
-      if (nextMonth !== sm) (outlet.setPendingStartMonth || noop)(nextMonth);
     }
   };
 
   const handleEndYearChange = (year) => {
-    const nextMonth = (year === latestYear && !latestYearMonths.includes(em))
-      ? latestYearMonths[latestYearMonths.length - 1]
-      : em;
     if (isLocal) {
-      onLocalChange({ ...localValue, endYear: year, endMonth: nextMonth });
+      onLocalChange({ ...localValue, endYear: year });
     } else {
       (outlet.setPendingEndYear || noop)(year);
-      if (nextMonth !== em) (outlet.setPendingEndMonth || noop)(nextMonth);
     }
   };
 
@@ -321,10 +290,14 @@ const DateFilter = ({
         </button>
       )}
 
-      {!isLocal && showToday && (
-        <button className="date-today-btn" onClick={outlet.handleResetToToday || noop}>
+      {!isLocal && showLatestYear && (
+        <button
+          className="date-today-btn"
+          onClick={outlet.handleResetToLatestYear || noop}
+          title="Reset to the latest data year (January–December)"
+        >
           <Calendar size={14} />
-          Today
+          Latest year
         </button>
       )}
 

@@ -13,9 +13,9 @@
 // (HoverValue: dotted underline, hover or tap) for its formula with the live
 // values; a base figure opens its detail (NumLink: underlined on hover); each
 // card's own explanation opens from its title. A figure the backend does not
-// send yet is "—" with the reason, never a made-up number: the same month a
-// year earlier on the annual card, the reasons Class A products can't be
-// checked, and the value of the pending orders (no cost data from SSM).
+// send yet is "—" with the reason, never a made-up number: comparisons without
+// matching months, the reasons Class A products can't be checked, and the value
+// of pending orders (no cost data from SSM).
 import React from 'react';
 import { COULD_RUN_OUT } from '../labels';
 import { Link } from 'react-router-dom';
@@ -121,17 +121,141 @@ export const KpiCard = ({
   );
 };
 
-// ── Card 1: annual sales and the supplier allocation ──────────────────────
-// `tooltip` is the sales basis sentence from Dashboard.jsx. `ytdSynthetic`,
-// `allocSynthetic` and `latest.synthetic` name generated months beside the
-// figure they are in (the Technical Adviser's rule).
-// `onOpenYearly` scrolls to the Sales per year chart. `pct` / `onPctChange`:
-// the SSM target picked (Dashboard.jsx holds it, so the Sales per year chart
-// follows the same level); null means the allocation's default_pct.
+const CalendarYearAllocationCard = ({
+  yearView, basis = null, tooltip = null, allocSynthetic = null, pct: chosenPct = null, onPctChange = null,
+  onOpenYearly = null,
+}) => {
+  const levels = yearView.levels || [];
+  const pct = chosenPct ?? yearView.defaultPct ?? levels[0]?.pct ?? null;
+  const level = levels.find((item) => item.pct === pct) || levels[0] || null;
+  const fullYearTarget = level?.annual ?? null;
+  const monthlyTarget = level?.monthly ?? null;
+  const tooltipLines = Array.isArray(tooltip) ? tooltip : tooltip ? [tooltip] : [];
+  const comparisonText = yearView.yoy
+    ? `${signed(yearView.yoy.pct)} vs ${yearView.yoy.label}`
+    : null;
+  const levelButtons = levels.length > 0 ? (
+    <div className="hero-alloc-levels" role="group" aria-label="Allocation level">
+      {levels.map((item) => (
+        <button
+          key={item.pct}
+          type="button"
+          className={`hero-level${item.pct === pct ? ' is-active' : ''}`}
+          aria-pressed={item.pct === pct}
+          onClick={() => onPctChange?.(item.pct)}
+        >
+          {item.pct}%
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  return (
+    <KpiCard
+      tone="blue"
+      title={`Calendar year ${yearView.year} sales → ${yearView.targetYear} allocation`}
+      tooltip={[
+        ...tooltipLines,
+        `Calendar year ${yearView.year} sales are compared with the prior year. The next year's allocation uses `
+          + `${yearView.year} sales × the selected SSM level. This visual does not change order quantities.`,
+      ]}
+      basis={basis}
+      className="hero-card-wide"
+    >
+      <div className="hero-annual-lead">
+        <div className="hero-annual-figure">
+          <p className="hero-label">Calendar year {yearView.year} sales</p>
+          <p className="hero-value hero-value-xl">{yearView.sales == null ? '—' : fp(yearView.sales)}</p>
+          {yearView.months > 0 && (
+            <p className="hero-kpi-asof">{yearView.months} of 12 months on record</p>
+          )}
+        </div>
+        <div className="hero-annual-figure">
+          <p className="hero-label">
+            Calendar year {yearView.targetYear} allocation · based on {yearView.year} sales
+          </p>
+          {level ? (
+            <>
+              <p className="hero-value hero-value-xl">
+                <HoverValue
+                  label="How the following year's allocation is worked out"
+                  what={fullYearTarget != null
+                    ? `Calendar year ${yearView.year} sales × the ${level.pct}% SSM target.`
+                    : `Average monthly sales in calendar year ${yearView.year} × the ${level.pct}% SSM target.`}
+                  sums={[fullYearTarget != null
+                    ? `${fp(yearView.sales)} × ${level.pct}% = ${fp(fullYearTarget)}`
+                    : `${fp(yearView.sales)} ÷ ${yearView.months} months × ${level.pct}% = ${fp(monthlyTarget)} a month`]}
+                >
+                  {fullYearTarget != null
+                    ? fp(fullYearTarget)
+                    : <>{fp(monthlyTarget)}<span className="hero-value-per">/month</span></>}
+                </HoverValue>
+              </p>
+              {fullYearTarget == null && (
+                <p className="hero-kpi-asof">
+                  Based on {yearView.months} of 12 months; no annual total is projected.
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="hero-note">{yearView.blockedReason || 'The allocation target is unavailable for this year.'}</p>
+          )}
+          {levelButtons && (
+            <div className="hero-alloc-levels-box">
+              <p className="hero-label">Target level</p>
+              {levelButtons}
+            </div>
+          )}
+        </div>
+        <div className="hero-pills">
+          {comparisonText ? (
+            <Pill
+              text={comparisonText}
+              tone={yearView.yoy.pct >= 0 ? 'positive' : 'negative'}
+              icon={yearView.yoy.pct >= 0 ? ArrowUpRight : ArrowDownRight}
+            />
+          ) : (
+            <span className="hero-note">{yearView.comparisonNote || `No like-for-like comparison with ${yearView.year - 1} is available.`}</span>
+          )}
+        </div>
+      </div>
+      {allocSynthetic && <p className="hero-note hero-synthetic">{allocSynthetic}</p>}
+      <details className="dash-more">
+        <summary>Details</summary>
+        <p className="hero-kpi-asof">
+          Sales are compared with the previous calendar year. The target shown is for {yearView.targetYear} and is based on
+          {' '}{yearView.year} sales. The current order plan is unchanged.
+          {onOpenYearly && (
+            <> See <button type="button" className="hero-num-link" onClick={onOpenYearly}>sales per calendar year</button>.</>
+          )}
+        </p>
+      </details>
+    </KpiCard>
+  );
+};
+
+// The selected calendar year's sales, its comparable prior-year change, and
+// the successor year's reference target. The legacy allocation display below
+// remains for callers that do not supply `yearView`.
 export const AnnualSalesCard = ({
   allocation, yoy = null, latest = null, range = null, basis = null, tooltip = null,
-  allocSynthetic = null, ytdSynthetic = null, onOpenYearly = null, pct: chosenPct = null, onPctChange = null,
+  allocSynthetic = null, ytdSynthetic = null, yearView = null, onOpenYearly = null,
+  pct: chosenPct = null, onPctChange = null,
 }) => {
+  if (yearView) {
+    return (
+      <CalendarYearAllocationCard
+        yearView={yearView}
+        basis={basis}
+        tooltip={tooltip}
+        allocSynthetic={allocSynthetic}
+        pct={chosenPct}
+        onPctChange={onPctChange}
+        onOpenYearly={onOpenYearly}
+      />
+    );
+  }
+
   const a = allocation || {};
   const levels = [...(a.levels || [])].sort((x, y) => x.pct - y.pct);
   const setChosenPct = (value) => onPctChange?.(value);
@@ -175,7 +299,7 @@ export const AnnualSalesCard = ({
   const latestYearAgo = a.latest_month
     ? formatMonth(`${Number(a.latest_month.slice(0, 4)) - 1}-${a.latest_month.slice(5, 7)}`) : null;
 
-  // The SSM target buttons, under the figure and FY sales (or the reason when
+  // The SSM target buttons, under the figure and calendar-year sales (or the reason when
   // there is no figure).
   const levelButtons = levels.length > 0 ? (
     <div className="hero-alloc-levels" role="group" aria-label="Allocation level">
@@ -206,7 +330,7 @@ export const AnnualSalesCard = ({
   ];
 
   return (
-    <KpiCard tone="blue" title={year ? `FY ${year} sales vs allocation` : 'Sales vs allocation'} tooltip={tips} basis={basis} className="hero-card-wide">
+    <KpiCard tone="blue" title={year ? `Calendar year ${year} sales vs allocation` : 'Sales vs allocation'} tooltip={tips} basis={basis} className="hero-card-wide">
       {/* What the card is for, on its face (2026-11-05): sales to date, the
           allocation, and how far behind or ahead. The rest is under Details. */}
       <div className="hero-annual-lead">
@@ -232,8 +356,8 @@ export const AnnualSalesCard = ({
               <HoverValue
                 label="How the allocation is worked out"
                 what={target
-                  ? `FY ${a.basis_year} sales × the SSM target you picked.`
-                  : `An average month of FY ${a.basis_year} sales × the SSM target you picked. FY ${a.basis_year} has `
+                  ? `Calendar year ${a.basis_year} sales × the SSM target you picked.`
+                  : `An average month of calendar year ${a.basis_year} sales × the SSM target you picked. Calendar year ${a.basis_year} has `
                     + `${a.basis_months} of 12 months on record, so there is no yearly figure.`}
                 sums={[target
                   ? `${fp(a.basis_sales)} × ${level.pct}% = ${fp(target)}`
@@ -247,7 +371,7 @@ export const AnnualSalesCard = ({
           )}
           {/* Fewer than 12 months behind the figure is a gap in the data, so it stays on the face. */}
           {level && a.basis_months < 12 && (
-            <p className="hero-kpi-asof">FY {a.basis_year} sales: <strong>{fp(a.basis_sales)}</strong> ({a.basis_months} of 12 months on record)</p>
+            <p className="hero-kpi-asof">Calendar year {a.basis_year} sales: <strong>{fp(a.basis_sales)}</strong> ({a.basis_months} of 12 months on record)</p>
           )}
         </div>
         {hasYtd && (
@@ -281,7 +405,7 @@ export const AnnualSalesCard = ({
       {allocSynthetic && <p className="hero-note hero-synthetic">{allocSynthetic}</p>}
       {hasYtd && ytdSynthetic && <p className="hero-note hero-synthetic">{ytdSynthetic}</p>}
       {!hasYtd && range?.synthetic && <p className="hero-note hero-synthetic">{range.synthetic}</p>}
-      {!hasYtd && year && <p className="hero-note">No FY {year} sales are on record yet.</p>}
+      {!hasYtd && year && <p className="hero-note">No calendar year {year} sales are on record yet.</p>}
       {hasYtd && yoy?.note && <p className="hero-note">{yoy.note}</p>}
       {latest?.blockedReason && latest.blockedReason !== a.blocked_reason && (
         <p className="hero-note">{latest.blockedReason}</p>
@@ -319,7 +443,7 @@ export const AnnualSalesCard = ({
         <div className="hero-annual-more">
           {level && a.basis_months === 12 && (
             <p className="hero-kpi-asof">
-              FY {a.basis_year} sales:{' '}
+              Calendar year {a.basis_year} sales:{' '}
               <NumLink onClick={onOpenYearly} title="See sales per year"><strong>{fp(a.basis_sales)}</strong></NumLink>
             </p>
           )}
@@ -327,7 +451,7 @@ export const AnnualSalesCard = ({
             <p className="hero-figure-aside">
               <HoverValue
                 label="How the share is worked out"
-                what={`FY ${year} sales so far ÷ the ${level.pct}% allocation.`}
+                what={`Calendar year ${year} sales so far ÷ the ${level.pct}% allocation.`}
                 sums={[`${fp(a.ytd_sales)} ÷ ${fp(target)} = ${shareText}`]}
               >
                 {shareText}
@@ -367,11 +491,11 @@ export const AnnualSalesCard = ({
               </div>
               {a.basis_sales > 0 && a.basis_months === 12 && (
                 <div>
-                  <span>FY {a.basis_year} avg / month</span>
+                  <span>Calendar year {a.basis_year} avg / month</span>
                   <strong>
                     <HoverValue
-                      label="Previous fiscal year's average monthly sales"
-                      what={`FY ${a.basis_year} sales ÷ 12 months.`}
+                      label="Previous calendar year's average monthly sales"
+                      what={`Calendar year ${a.basis_year} sales ÷ 12 months.`}
                       sums={[`${fp(a.basis_sales)} ÷ 12 = ${fp(a.basis_sales / 12)}`]}
                     >
                       {fp(a.basis_sales / 12)}

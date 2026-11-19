@@ -682,15 +682,15 @@ def _annual_sales(db: Session, scope: str, mode: str) -> dict:
     scaled up: a year with fewer than 12 months on record is the sum of
     the months it has, and `months` says how many.
 
-    Fixed like the allocation card: it does not follow the date range.
-    Fiscal year = calendar year, as on that card ("FY 2026 sales, Jan-Feb").
-
-    years[]: {year, sales, months, first_month, last_month,
-    synthetic_months}. `sales` is null (never 0) for a year in the window
-    with no month on record. `synthetic_months` are the months counted in
-    `sales` that are not SSM's own figures (_not_real_sales_months); the
-    card must mark them. earlier_years: years with sales that fall before
-    the window, so the card can say they exist."""
+    The API returns the same calendar-year series regardless of the selected
+    range; the dashboard selects the range-end year for its card and target
+    band. Each year's allocation_levels applies the existing per-principal
+    target rule to that year's recorded sales; combined-principal targets
+    are withheld. `comparison` is available only when the exact recorded
+    months also exist in the prior year. `synthetic_months` are the months
+    counted in `sales` that are not SSM's own figures
+    (_not_real_sales_months); the card must mark them. earlier_years: years
+    with sales that fall before the window, so the chart can say they exist."""
     out: dict = {"years": [], "window_years": ANNUAL_SALES_YEARS, "earlier_years": [], "blocked_reason": None}
     span = marts.sales_month_span(db, scope)
     if span is None:
@@ -710,13 +710,27 @@ def _annual_sales(db: Session, scope: str, mode: str) -> dict:
     start_year = end_year - ANNUAL_SALES_YEARS + 1
     for year in range(start_year, end_year + 1):
         months = [p for p in counted if p.startswith(f"{year:04d}-")]
+        sales_total = round(sum(by_period[p] for p in months), 2) if months else None
+        comparison_periods = [f"{year - 1:04d}-{period[5:7]}" for period in months]
+        comparison = None
+        if comparison_periods and all(by_period.get(period) is not None for period in comparison_periods):
+            comparison = {
+                "sales": round(sum(by_period[period] for period in comparison_periods), 2),
+                "months": len(comparison_periods),
+                "label": str(year - 1) if len(months) == 12 else f"same months in {year - 1}",
+            }
         out["years"].append({
             "year": year,
-            "sales": round(sum(by_period[p] for p in months), 2) if months else None,
+            "sales": sales_total,
             "months": len(months),
             "first_month": months[0] if months else None,
             "last_month": months[-1] if months else None,
+            "comparison": comparison,
             "synthetic_months": [p for p in months if p in not_real],
+            "allocation_levels": (
+                allocation_levels(sales_total, unit="pesos", basis_months=len(months))
+                if scope != "all" and sales_total is not None and sales_total > 0 else []
+            ),
         })
     out["earlier_years"] = sorted({int(p[:4]) for p in counted if int(p[:4]) < start_year})
     return out

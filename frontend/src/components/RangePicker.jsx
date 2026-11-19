@@ -29,10 +29,18 @@ const RangePicker = ({ localValue, onLocalChange, onReset, minMonths, realOnly =
     endMonth: outlet.endMonth, endYear: outlet.endYear,
   };
   const preview = !realOnly && isPreviewMode(outlet.dataMode);
-  // Relative to the latest month with data for the page's principal (the
-  // layout's latestPeriod, from GET /data-mode).
-  const quick = quickRanges(preview ? Number(PLACEHOLDER_START.year) : undefined, outlet.latestPeriod || undefined);
+  const calendarLatest = outlet.dataLatest || outlet.latestPeriod;
+  // Rolling ranges use the latest month for this principal; calendar years
+  // reach through the latest year across both principals.
+  const quick = quickRanges(
+    preview ? Number(PLACEHOLDER_START.year) : undefined,
+    outlet.latestPeriod || undefined,
+    calendarLatest || undefined,
+  );
   const activeQuick = quick.find((q) => sameRange(q.range, applied)) || null;
+  const calendarRanges = quick.filter((q) => q.key.startsWith('y'));
+  const rollingRanges = quick.filter((q) => !q.key.startsWith('y'));
+  const defaultCalendarKey = calendarLatest?.year ? `y${calendarLatest.year}` : null;
   const appliedKey = rangeText(applied);
   // "Mar 25 – Feb 26" for a phone-width button.
   const shortText = `${applied.startMonth} ${String(applied.startYear).slice(2)} – ${applied.endMonth} ${String(applied.endYear).slice(2)}`;
@@ -56,8 +64,20 @@ const RangePicker = ({ localValue, onLocalChange, onReset, minMonths, realOnly =
   }, [open]);
   useEffect(() => { setOpen(false); }, [appliedKey]);
 
-  const isDefault = activeQuick?.key === 'last12' && outlet.compare === COMPARE_MODES.YEAR;
+  const isDefault = activeQuick?.key === defaultCalendarKey && outlet.compare === COMPARE_MODES.YEAR;
   const applyQuick = (q) => (isLocal ? onLocalChange(q.range) : outlet.applyPreset(q.range, q.key));
+  const renderQuickRange = (q) => (
+    <button
+      key={q.key}
+      type="button"
+      className={`range-quick-btn${activeQuick?.key === q.key ? ' is-active' : ''}`}
+      aria-pressed={activeQuick?.key === q.key}
+      onClick={() => { applyQuick(q); setOpen(false); }}
+    >
+      {q.label}
+      <span className="range-quick-sub">{q.subtitle || rangeText(q.range)}</span>
+    </button>
+  );
 
   return (
     <div className="range-picker" ref={rootRef}>
@@ -89,40 +109,34 @@ const RangePicker = ({ localValue, onLocalChange, onReset, minMonths, realOnly =
 
       {open && (
         <div className="range-panel" role="dialog" aria-label="Date range">
-          {quick.length > 0 && (
+          {calendarRanges.length > 0 && (
             <>
-              <p className="range-panel-title">Quick ranges</p>
+              <p className="range-panel-title">Calendar years</p>
               <div className="range-panel-quick">
-                {quick.map((q) => (
-                  <button
-                    key={q.key}
-                    type="button"
-                    className={`range-quick-btn${activeQuick?.key === q.key ? ' is-active' : ''}`}
-                    aria-pressed={activeQuick?.key === q.key}
-                    // Close on every pick, the active one included: it
-                    // changes nothing, so the close-on-change effect below
-                    // would leave the panel open over the page.
-                    onClick={() => { applyQuick(q); setOpen(false); }}
-                  >
-                    {q.label}
-                    <span className="range-quick-sub">{rangeText(q.range)}</span>
-                  </button>
-                ))}
+                {calendarRanges.map(renderQuickRange)}
+              </div>
+            </>
+          )}
+          {rollingRanges.length > 0 && (
+            <>
+              <p className="range-panel-title">Rolling ranges</p>
+              <div className="range-panel-quick">
+                {rollingRanges.map(renderQuickRange)}
               </div>
             </>
           )}
           <p className="range-panel-title">Custom months</p>
           {isLocal ? (
-            <DateFilter showToday={false} localValue={localValue} onLocalChange={onLocalChange}
+            <DateFilter showLatestYear={false} localValue={localValue} onLocalChange={onLocalChange}
               minMonths={minMonths} realOnly={realOnly} />
           ) : (
-            <DateFilter showToday={false} />
+            <DateFilter showLatestYear={false} />
           )}
           <div className="range-panel-foot">
             <span className="range-panel-default">
               {isLocal
                 ? 'Follows the Dashboard’s range until you pick one here; a pick here changes this page only.'
-                : 'Default: last 12 months, compared with the same months last year.'}
+                : 'Default: the latest data calendar year (Jan–Dec), compared with the same calendar year before it. Months without records stay missing.'}
             </span>
             {isLocal ? onReset && (
               <button type="button" className="range-reset-btn" onClick={() => { onReset(); setOpen(false); }}>
@@ -130,7 +144,7 @@ const RangePicker = ({ localValue, onLocalChange, onReset, minMonths, realOnly =
                 Back to the Dashboard&apos;s range
               </button>
             ) : !isDefault && (
-              <button type="button" className="range-reset-btn" onClick={outlet.handleResetToToday}>
+              <button type="button" className="range-reset-btn" onClick={outlet.handleResetToLatestYear}>
                 <RotateCcw size={13} aria-hidden="true" />
                 Back to default
               </button>

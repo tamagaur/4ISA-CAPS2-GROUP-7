@@ -2346,7 +2346,38 @@ def test_annual_sales_totals_each_year_and_agrees_with_the_allocation_card():
     # The bars and the allocation card are the same sums.
     assert years[2025]["sales"] == body["allocation"]["basis_sales"] == pytest.approx(1200.0)
     assert years[2026]["sales"] == body["allocation"]["ytd_sales"]
+    assert years[2025]["allocation_levels"] == body["allocation"]["levels"]
+    assert years[2026]["comparison"] == {
+        "sales": 200.0,
+        "months": 2,
+        "label": "same months in 2025",
+    }
+    assert years[2024]["allocation_levels"][0]["annual"] is None
+    assert years[2024]["allocation_levels"][0]["monthly"] == pytest.approx(51.5)
+    assert years[2026]["allocation_levels"][0]["annual"] is None
+    assert years[2026]["allocation_levels"][0]["monthly"] == pytest.approx(118.45)
     assert annual["earlier_years"] == []
+
+
+def test_annual_sales_only_compares_years_with_the_same_recorded_months():
+    sales = {"2025-02": 100.0, "2025-03": 100.0, "2026-01": 110.0, "2026-03": 120.0}
+    annual = _get(FakeSession(latest_sales_period="2026-03", sales=sales), "principal=unilever")["annual_sales"]
+    years = {year["year"]: year for year in annual["years"]}
+
+    # Both years have two recorded months, but their calendar months differ.
+    assert years[2026]["comparison"] is None
+
+
+def test_annual_sales_compares_complete_years():
+    sales = {
+        f"{year}-{month:02d}": amount
+        for year, amount in ((2024, 50.0), (2025, 100.0))
+        for month in range(1, 13)
+    }
+    annual = _get(FakeSession(latest_sales_period="2025-12", sales=sales), "principal=unilever")["annual_sales"]
+    years = {year["year"]: year for year in annual["years"]}
+
+    assert years[2025]["comparison"] == {"sales": 600.0, "months": 12, "label": "2024"}
 
 
 @pytest.mark.parametrize("query", ["principal=unilever", "principal=unilever&start_period=2025-06&period=2025-09"])
@@ -2404,6 +2435,7 @@ def test_annual_sales_under_all_needs_both_principals_in_a_month():
     year = _get(session, "principal=all")["annual_sales"]["years"][-1]
     assert year["year"] == 2025 and year["sales"] == pytest.approx(230.0) and year["months"] == 2
     assert (year["first_month"], year["last_month"]) == ("2025-01", "2025-02")
+    assert year["allocation_levels"] == []
 
 
 def test_annual_sales_is_blocked_with_a_reason_when_there_are_no_sales():

@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import PeriodContextStrip from './PeriodContextStrip';
 import {
-  COMPARE_MODES, COMPARE_STORAGE_KEY, RELATIVE_RANGES, isValidCompare, lastNRange, periodFromParam, periodToParam, sameRange,
+  calendarYearRange, COMPARE_MODES, COMPARE_STORAGE_KEY, RELATIVE_RANGES, isValidCompare, lastNRange,
+  periodFromParam, periodToParam, sameRange,
 } from '../periodFilter';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, FlaskConical } from 'lucide-react';
@@ -58,18 +59,12 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // user just saw an empty chart with no indication why.
 const periodValue = (month, year) => Number(year) * 12 + MONTHS.indexOf(month);
 
-// Default period: the 12 months ending "today" (the latest month with real
-// data) — Mar 2025-Feb 2026 as of 2026-09. Twelve, not the seven this
-// opened on until 2026-09-29, because a full year is one of every season:
-// Unilever dips every July and February and peaks in June, and seven months
-// (Aug-Feb) left out the June peak and the July dip, so one dip could read
-// as a trend. It also shows Del Monte's real months properly (6 in the last
-// year against 3 in seven months, its data being patchy), and matches SSM's
-// own yearly view — its supplier allocation is last year's sales x
-// 103-108%. Still comfortably inside the data (real demand starts Jan 2023).
-// Both the initial state below and the "Today" reset button build off this
-// same function, so they can never drift apart.
-const DEFAULT_RANGE_KEY = 'last12';
+// The shared filter opens on the latest overall data calendar year,
+// Jan-Dec. Months without records stay missing; they are not treated as zero.
+const DEFAULT_RANGE_KEY = 'calendarYear';
+const rangeForAnchor = (anchor, latest) => (anchor === DEFAULT_RANGE_KEY
+  ? calendarYearRange(latest.year)
+  : lastNRange(RELATIVE_RANGES[anchor], latest));
 
 // Minimum SELECTABLE range width (inclusive month count, not "months
 // back" — a 6-month minimum means Sep 2025-Feb 2026 is the shortest
@@ -85,12 +80,8 @@ const DEFAULT_RANGE_KEY = 'last12';
 // says something about direction.
 const MIN_RANGE_MONTHS = 6;
 
-// The same 12 months in both modes (Audrey, 2026-10-18): with synthetic data
-// on, the dashboard is the real-data dashboard plus the synthetic months, not
-// a five-year view that drops every comparison. The picker still reaches back
-// to Jan 2021 in that mode for anyone who wants the whole span.
-// `latest`: the latest month with data for the page's principal.
-const getDefaultDateRange = (latest) => lastNRange(RELATIVE_RANGES[DEFAULT_RANGE_KEY], latest);
+// `latest`: the latest month with data for either principal.
+const getDefaultDateRange = (latest) => calendarYearRange(latest.year);
 
 // Whether a range can be shown in a mode: real mode's picker starts in
 // January of FIRST_DATA_YEAR, synthetic mode's at PLACEHOLDER_START.
@@ -105,12 +96,11 @@ const rangeFitsMode = (range, mode) => {
 const RANGE_STORAGE_KEY = 'san2_date_range_v2';
 const LEGACY_RANGE_KEYS = ['san2_start_month', 'san2_start_year', 'san2_end_month', 'san2_end_year'];
 
-// A range in the address (?from=2025-03&to=2026-02), so a link or a reload
-// shows the same view. Checked against what the picker offers: inside the
-// data, not backwards, and at least MIN_RANGE_MONTHS long. `today` is the
-// latest month for either principal (the picker's ceiling). `search`: the
-// address to read, the current one by default (2026-10-22: the layout also
-// re-reads the one it opened on, once live coverage arrives).
+// A range in the address (?from=2025-01&to=2025-12), so a link or a reload
+// shows the same view. It may end in any month of the latest data year; later
+// months are requested as unrecorded, not as zero sales. `search`: the
+// address to read, the current one by default (the layout also re-reads it
+// once live coverage arrives).
 const loadUrlRange = (mode, today, search = window.location.search) => {
   const params = new URLSearchParams(search);
   const from = periodFromParam(params.get('from'));
@@ -120,16 +110,16 @@ const loadUrlRange = (mode, today, search = window.location.search) => {
   const start = periodValue(from.month, from.year);
   const end = periodValue(to.month, to.year);
   const fits = start >= periodValue(first.month, first.year)
-    && end <= periodValue(today.month, today.year)
+    && Number(to.year) <= Number(today.year)
     && end - start + 1 >= MIN_RANGE_MONTHS;
   return fits ? { startMonth: from.month, startYear: from.year, endMonth: to.month, endYear: to.year } : null;
 };
 
-// A relative range named in the address (?range=last12): the range is then
-// worked out from "today" for the principal, whatever from/to say.
+// An anchored range named in the address: either the current calendar year
+// or one of the rolling ranges, worked out from the principal's coverage.
 const loadUrlAnchor = () => {
   const key = new URLSearchParams(window.location.search).get('range');
-  return key && RELATIVE_RANGES[key] ? key : null;
+  return key === DEFAULT_RANGE_KEY || (key && RELATIVE_RANGES[key]) ? key : null;
 };
 
 // The comparison in the address, else the default: the same months a year
@@ -195,31 +185,30 @@ const DashboardLayout = () => {
   // dataCoverage.js's values meanwhile, so the first render already ends on
   // the right month in the normal case.
   const [coverage, setCoverage] = useState(null);
-  // "Today": the latest month with data for this page's principal (where the
-  // default and the "Last N months" ranges end), and for either principal
-  // (the date picker's ceiling).
+  // Latest month for this principal (the rolling ranges' end), and the
+  // latest month across both principals (the calendar-year default's basis
+  // and the date picker's coverage ceiling).
   const latestPeriod = latestFor(coverage, principal);
   const dataLatest = latestFor(coverage, 'all');
 
   // Where the page opens (2026-10-09): the filters in the address when there
-  // are any (a reload, a shared link), else the default view — the last 12
-  // months, compared with the same months a year earlier. A range picked on
-  // an earlier visit is no longer carried over, so every new visit starts on
-  // the full-year, like-for-like view the Technical Adviser reads first.
-  // Which relative range is showing ('last6' | 'last12' | 'last24'), or null
-  // for a fixed one (a custom pick, a calendar year, a fixed range from the
-  // address). A relative range moves with "today": when GET /data-mode
-  // answers with a newer month, or the principal changes to one whose data
-  // ends earlier, it is recomputed (the effect below). A fixed one stays put.
-  // The address keeps it (?range=last12), so a reload stays relative.
+  // are any (a reload, a shared link), else the latest calendar year,
+  // compared with the same calendar year before it. A range picked on an
+  // earlier visit is no longer carried over. The current-calendar-year
+  // anchor follows the latest overall data year; selected
+  // calendar years and custom ranges stay fixed. The address keeps anchors
+  // such as ?range=calendarYear stable across reloads.
   const [rangeAnchor, setRangeAnchor] = useState(() => {
     const fromUrl = loadUrlAnchor();
     if (fromUrl) return fromUrl;
     return loadUrlRange(dataMode, latestFor(null, 'all')) ? null : DEFAULT_RANGE_KEY;
   });
   const [initialRange] = useState(() => (rangeAnchor
-    ? lastNRange(RELATIVE_RANGES[rangeAnchor], latestFor(null, principal))
-    : loadUrlRange(dataMode, latestFor(null, 'all')) || getDefaultDateRange(latestFor(null, principal))));
+    ? rangeForAnchor(
+      rangeAnchor,
+      rangeAnchor === DEFAULT_RANGE_KEY ? latestFor(null, 'all') : latestFor(null, principal),
+    )
+    : loadUrlRange(dataMode, latestFor(null, 'all')) || getDefaultDateRange(latestFor(null, 'all'))));
   // A shared link's from/to that failed the check above (audit FE-13,
   // 2026-10-22). That check runs before GET /data-mode answers, against
   // dataCoverage.js's fallback ceiling, so a link ending in a month of real
@@ -252,7 +241,7 @@ const DashboardLayout = () => {
   // it has none, and the banner says so if the view is on anyway.
   const [syntheticAvailable, setSyntheticAvailable] = useState(null);
 
-  // Applied range: the saved one, or the 12-month default ending "today".
+  // Applied range: the link's range, or the current calendar year.
   const [startMonth, setStartMonth] = useState(initialRange.startMonth);
   const [startYear, setStartYear] = useState(initialRange.startYear);
   const [endMonth, setEndMonth] = useState(initialRange.endMonth);
@@ -275,15 +264,14 @@ const DashboardLayout = () => {
   const [pendingEndMonth, setPendingEndMonth] = useState(endMonth);
   const [pendingEndYear, setPendingEndYear] = useState(endYear);
 
-  // A relative range follows "today" for the page's principal: recomputed
-  // when GET /data-mode brings a different latest month or the principal
-  // changes (Del Monte's "Last 12 months" is Jan – Dec 2025, Unilever's
-  // Mar 2025 – Feb 2026, as of 2026-10-20). A fixed range is left alone.
-  // Setters only, which are stable, so this runs on those two inputs alone.
-  const latestKey = `${latestPeriod.month} ${latestPeriod.year}`;
+  // The default calendar year follows overall coverage; rolling ranges
+  // follow the page principal's latest month. Selected years and custom
+  // ranges are fixed.
+  const rangeLatest = rangeAnchor === DEFAULT_RANGE_KEY ? dataLatest : latestPeriod;
+  const latestKey = `${rangeLatest.month} ${rangeLatest.year}`;
   useEffect(() => {
-    if (!rangeAnchor || !RELATIVE_RANGES[rangeAnchor]) return;
-    const next = lastNRange(RELATIVE_RANGES[rangeAnchor], latestPeriod);
+    if (!rangeAnchor || (rangeAnchor !== DEFAULT_RANGE_KEY && !RELATIVE_RANGES[rangeAnchor])) return;
+    const next = rangeForAnchor(rangeAnchor, rangeLatest);
     if (sameRange(next, { startMonth, startYear, endMonth, endYear })) return;
     setStartMonth(next.startMonth);
     setStartYear(next.startYear);
@@ -293,7 +281,7 @@ const DashboardLayout = () => {
     setPendingStartYear(next.startYear);
     setPendingEndMonth(next.endMonth);
     setPendingEndYear(next.endYear);
-    // Only "today" and the anchor move a relative range; the range itself
+    // Only coverage and the anchor move a relative range; the range itself
     // is what this writes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestKey, rangeAnchor]);
@@ -387,11 +375,10 @@ const DashboardLayout = () => {
     setEndYear(pendingEndYear);
   };
 
-  // A quick range (Last 12 months, 2025, ...) applies at once, with no Save
+  // A quick range (a calendar year or a rolling window) applies at once, with no Save
   // step: the Technical Adviser changes the filter first and expects the
   // screen to answer.
-  // `key`: the quick range's own key — a "Last N months" one keeps following
-  // "today" (rangeAnchor), a calendar year does not.
+  // `key`: rolling ranges keep following coverage; a selected calendar year does not.
   const applyPreset = (range, key = null) => {
     setRangeAnchor(key && RELATIVE_RANGES[key] ? key : null);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
@@ -442,13 +429,13 @@ const DashboardLayout = () => {
     setPendingEndYear(endYear);
   };
 
-  // "Today" is a one-click reset to the default range — unlike a manual
+  // "Latest year" is a one-click reset to the latest data calendar year — unlike a manual
   // month/year pick, it applies immediately (via updatePeriodImmediately,
   // defined below) rather than staging a pending change that still needs
   // a separate Save — and forgets the saved range, so the next visit opens
   // on the default too.
-  const handleResetToToday = () => {
-    const range = getDefaultDateRange(latestPeriod);
+  const handleResetToLatestYear = () => {
+    const range = getDefaultDateRange(dataLatest);
     setRangeAnchor(DEFAULT_RANGE_KEY);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
     setCompareState(COMPARE_MODES.YEAR);
@@ -457,7 +444,7 @@ const DashboardLayout = () => {
   // Flipping the mode keeps the range and comparison on screen, so the same
   // dashboard comes back with or without the synthetic months. Only a range
   // that reaches into 2021-22, which real mode can't show, falls back to the
-  // 12-month default when synthetic data is turned off. The principal stays:
+  // calendar-year default when synthetic data is turned off. The principal stays:
   // since the demonstration data (2026-10-15) both principals have synthetic
   // months. Every cached response is dropped and the page remounts, like the
   // Refresh button.
@@ -467,7 +454,7 @@ const DashboardLayout = () => {
     setDataModeState(mode);
     const current = { startMonth, startYear, endMonth, endYear };
     const fits = rangeFitsMode(current, mode);
-    const range = fits ? current : getDefaultDateRange(latestPeriod);
+    const range = fits ? current : getDefaultDateRange(dataLatest);
     if (!fits) setRangeAnchor(DEFAULT_RANGE_KEY);
     updatePeriodImmediately(range.startMonth, range.startYear, range.endMonth, range.endYear);
     invalidateCache();
@@ -568,7 +555,7 @@ const DashboardLayout = () => {
           setPendingEndYear={setPendingEndYear}
           isPending={isPending}
           handleApplyPeriod={handleApplyPeriod}
-          handleResetToToday={handleResetToToday}
+          handleResetToLatestYear={handleResetToLatestYear}
           realWorldMonth={latestPeriod.month}
           realWorldYear={latestPeriod.year}
           principal={principal}
@@ -636,7 +623,7 @@ const DashboardLayout = () => {
               pendingEndMonth, setPendingEndMonth,
               pendingEndYear, setPendingEndYear,
               isPending, isPendingRangeValid, isPendingRangeLongEnough, canApplyPendingPeriod,
-              handleApplyPeriod, handleResetToToday,
+              handleApplyPeriod, handleResetToLatestYear,
               updatePeriodImmediately, applyPreset,
               // "Today" for this principal, and for either (the picker's ceiling).
               latestPeriod, dataLatest, realWorldPeriod: latestPeriod,

@@ -220,9 +220,9 @@ const entries = {
   summary: [
     {
       term: 'Annual sales and allocation',
-      definition: 'Sales for the financial year (FY, January to December) so far, next to the supplier-allocation level you picked.',
-      plain: 'The allocation is last year’s sales times the level you choose (103%, 105% or 108%). The card shows whether this year’s sales are on pace to reach it.',
-      technical: 'The target is the prior year’s sales multiplied by the selected 103%, 105%, or 108% level. The pace compares average monthly sales so far with that level’s monthly amount. Year-to-date sales are compared with the same months in the prior year; if the months on record differ, the page marks the comparison as not like-for-like. FY is the calendar year.',
+      definition: 'Calendar-year sales so far, next to the next year’s supplier-allocation reference based on those sales.',
+      plain: 'Each year’s allocation comes from the previous calendar year’s sales times the level you choose (103%, 105% or 108%). The card labels both years.',
+      technical: 'The target is the prior calendar year’s sales multiplied by the selected 103%, 105%, or 108% level. The pace compares average monthly sales so far with that level’s monthly amount. Year-to-date sales are compared with the same months in the prior year; if the months on record differ, the page marks the comparison as not like-for-like.',
     },
     {
       term: 'Inventory value',
@@ -278,9 +278,9 @@ const entries = {
     },
     {
       term: 'Annual sales',
-      definition: 'Sales for each financial year (FY), January to December.',
+      definition: 'Sales for each calendar year, January to December.',
       plain: 'Each bar is one year’s total sales. A year with only some months on record is labelled with those months.',
-      technical: 'FY is the calendar year, the same as on the Annual sales and allocation card. With sample data on, sample-data months are hatched and are not presented as real results.',
+      technical: 'The year is January to December, the same as on the Annual sales and allocation card. With sample data on, sample-data months are hatched and are not presented as real results.',
     },
     {
       term: 'Missing months and estimates',

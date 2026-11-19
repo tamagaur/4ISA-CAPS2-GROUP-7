@@ -81,8 +81,8 @@ export function comparisonAvailable(versus, floor = { month: 'Jan', year: String
   return { startPeriod: periodToParam(floor.month, floor.year), endPeriod: versus.endPeriod };
 }
 
-// The last `n` months ending at `latest` ({ month, year }): the quick ranges
-// that move with the data. The default view is lastNRange(12, latest).
+// The last `n` months ending at `latest` ({ month, year }): secondary quick
+// ranges for users who need a rolling view.
 export const RELATIVE_RANGES = { last6: 6, last12: 12, last24: 24 };
 export function lastNRange(n, latest = LATEST_DATA_PERIOD) {
   const end = ordinal(latest.month, latest.year);
@@ -90,24 +90,37 @@ export function lastNRange(n, latest = LATEST_DATA_PERIOD) {
   return { startMonth: start.month, startYear: start.year, endMonth: latest.month, endYear: String(latest.year) };
 }
 
-// The quick ranges. Each is at least six months, the picker's own minimum,
-// and inside the data (Jan 2023 to the latest month). A whole calendar year
-// is offered only once all twelve of its months are in the data.
-// `firstYear`: the earliest whole year offered (synthetic mode reaches back
-// to 2021; real data starts in FIRST_DATA_YEAR). `latest`: the latest month
-// with data for the page's principal (dataCoverage.latestFor), so "Last 12
-// months" for Del Monte ends at its own latest month, not Unilever's.
-export function quickRanges(firstYear = FIRST_DATA_YEAR, latest = LATEST_DATA_PERIOD) {
-  const last = ordinal(latest.month, latest.year);
-  const ranges = Object.entries(RELATIVE_RANGES).map(([key, n]) => ({
-    key, label: `Last ${n} months`, range: lastNRange(n, latest),
-  }));
-  for (let y = Number(latest.year); y >= firstYear; y -= 1) {
-    if (ordinal('Dec', y) <= last) {
-      ranges.push({ key: `y${y}`, label: String(y), range: { startMonth: 'Jan', startYear: String(y), endMonth: 'Dec', endYear: String(y) } });
-    }
+export const calendarYearRange = (year) => ({
+  startMonth: 'Jan',
+  startYear: String(year),
+  endMonth: 'Dec',
+  endYear: String(year),
+});
+
+// Calendar years lead the quick filter, including the latest incomplete
+// year. Months without records remain missing; they are not treated as zero.
+// `firstYear`: the earliest year offered (synthetic mode reaches back to
+// 2021; real data starts in FIRST_DATA_YEAR). `latest`: the latest month with
+// data for the page's principal. `calendarLatest` sets the final calendar
+// year, which may be newer than that principal's latest month.
+export function quickRanges(firstYear = FIRST_DATA_YEAR, latest = LATEST_DATA_PERIOD, calendarLatest = latest) {
+  const ranges = [];
+  for (let y = Number(calendarLatest.year); y >= firstYear; y -= 1) {
+    ranges.push({
+      key: `y${y}`,
+      label: String(y),
+      range: calendarYearRange(y),
+      subtitle: y === Number(calendarLatest.year) && calendarLatest.month !== 'Dec'
+        ? `Jan–Dec · overall data through ${calendarLatest.month}`
+        : 'Jan–Dec',
+    });
   }
-  return ranges;
+  return [
+    ...ranges,
+    ...Object.entries(RELATIVE_RANGES).map(([key, n]) => ({
+      key, label: `Last ${n} months`, range: lastNRange(n, latest),
+    })),
+  ];
 }
 
 export const sameRange = (a, b) => Boolean(a && b)
