@@ -422,9 +422,9 @@ const DASHBOARD_SKELETON_ROWS = [
 const DashboardSkeleton = () => (
   <div className="dashboard-body" aria-hidden="true">
     <div className="hero-kpis">
+      <SkeletonStatCards count={3} cardClassName="hero-card" />
       <SkeletonStatCards count={1} cardClassName="hero-card hero-card-wide" />
       <SkeletonStatCards count={1} cardClassName="hero-card hero-card-inventory" />
-      <SkeletonStatCards count={3} cardClassName="hero-card" />
     </div>
     {DASHBOARD_SKELETON_ROWS.map(([rowClass, cards], i) => (
       <div className={`dash-row ${rowClass}`} key={i}>
@@ -1830,39 +1830,19 @@ const Dashboard = () => {
             </p>
           )}
           </div>
-          {/* Lead with sales and allocation beside inventory value, then
-              move through stock cover, below-safety risk and pending orders. */}
+          {/* Lead with reorder actions and the stock risks behind them, then
+              show the allocation basis and inventory context. */}
           <div className="hero-kpis dash-section-anchor" id="dash-summary">
-            <AnnualSalesCard {...annualCard} pct={allocPct} onPctChange={setAllocPct} onOpenYearly={() => jumpTo('dash-sales')} />
-            <InventoryCard
-              value={sohValue.value}
-              subtitle={inventorySubtitle}
-              subtitleTitle={inventorySubtitleTitle}
-              asOf={hasStock ? sohCoverage || null : null}
-              lastCount={lastCountCell}
-              yearAgo={yearAgoCell}
-              idle={idleCell}
-              tooltip={inventoryTooltip}
-              onOpenChart={() => jumpTo('dash-sales')}
-              onOpenIdle={idleCell.value != null ? () => openRangeList('idle') : null}
-            />
-            <StockCoverCard
-              cover={inventoryCover}
-              reason={cover.blocked_reason || null}
-              policyWeeks={policyWeeks}
-              salesWindow={coverWindow}
-              runningLow={belowBlocked ? null : exposure.below_count}
-              onOpenLow={canListAtRisk ? openAtRisk : null}
-              // What is still to confirm about the figure, as served: where
-              // stock and sales come from (weeks_of_cover.caveat). An unusual
-              // count (kpis.soh_count_note) is said once, at the top of the page.
-              toConfirm={hasStock ? (cover.caveat ? cover.caveat.split(' · ') : [])
-                .map((line) => line && `${capitalise(line)}${/[.!?]$/.test(line) ? '' : '.'}`) : []}
-              tooltip={coverTooltip}
-              // The pesos beyond the rule, product by product (kpis.above_policy),
-              // and the list behind them (GET /dashboard/stock-detail).
-              abovePolicy={kpis.above_policy || null}
-              onOpenAbove={kpis.above_policy?.products > 0 ? () => openRangeList('above') : null}
+            <PendingReordersCard
+              count={lpHidden || noPlan ? null : pendingCount}
+              reason={noPlan ? (categoryOnly ? null : noPlanNote) : LP_HIDDEN_NOTE}
+              asOf={planLabel}
+              parts={pendingParts}
+              orderQty={pendingParts ? reorderPreview.total_order_qty : null}
+              tooltip={pendingTooltip}
+              to="/reorder"
+              scope={planScope}
+              criticalNote={criticalNote}
             />
             <BelowSafetyCard
               below={belowBlocked ? null : exposure.below_count}
@@ -1885,16 +1865,36 @@ const Dashboard = () => {
               scopeNote={belowScopeNote}
               methodNote={SAFETY_STOCK_METHOD_NOTE}
             />
-            <PendingReordersCard
-              count={lpHidden || noPlan ? null : pendingCount}
-              reason={noPlan ? (categoryOnly ? null : noPlanNote) : LP_HIDDEN_NOTE}
-              asOf={planLabel}
-              parts={pendingParts}
-              orderQty={pendingParts ? reorderPreview.total_order_qty : null}
-              tooltip={pendingTooltip}
-              to="/reorder"
-              scope={planScope}
-              criticalNote={criticalNote}
+            <StockCoverCard
+              cover={inventoryCover}
+              reason={cover.blocked_reason || null}
+              policyWeeks={policyWeeks}
+              salesWindow={coverWindow}
+              runningLow={belowBlocked ? null : exposure.below_count}
+              onOpenLow={canListAtRisk ? openAtRisk : null}
+              // What is still to confirm about the figure, as served: where
+              // stock and sales come from (weeks_of_cover.caveat). An unusual
+              // count (kpis.soh_count_note) is said once, at the top of the page.
+              toConfirm={hasStock ? (cover.caveat ? cover.caveat.split(' · ') : [])
+                .map((line) => line && `${capitalise(line)}${/[.!?]$/.test(line) ? '' : '.'}`) : []}
+              tooltip={coverTooltip}
+              // The pesos beyond the rule, product by product (kpis.above_policy),
+              // and the list behind them (GET /dashboard/stock-detail).
+              abovePolicy={kpis.above_policy || null}
+              onOpenAbove={kpis.above_policy?.products > 0 ? () => openRangeList('above') : null}
+            />
+            <AnnualSalesCard {...annualCard} pct={allocPct} onPctChange={setAllocPct} onOpenYearly={() => jumpTo('dash-sales')} />
+            <InventoryCard
+              value={sohValue.value}
+              subtitle={inventorySubtitle}
+              subtitleTitle={inventorySubtitleTitle}
+              asOf={hasStock ? sohCoverage || null : null}
+              lastCount={lastCountCell}
+              yearAgo={yearAgoCell}
+              idle={idleCell}
+              tooltip={inventoryTooltip}
+              onOpenChart={() => jumpTo('dash-sales')}
+              onOpenIdle={idleCell.value != null ? () => openRangeList('idle') : null}
             />
           </div>
 

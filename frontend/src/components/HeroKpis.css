@@ -1,5 +1,4 @@
-/* The dashboard's top row: one annual card across the width, then four
-   compact KPI cards. Keep emphasis on figures, bars and status labels. */
+/* Lead with the action and stock-risk cards; allocation and inventory follow. */
 
 .hero-kpis {
   display: grid;

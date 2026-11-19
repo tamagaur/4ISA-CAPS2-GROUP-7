@@ -1,10 +1,6 @@
-// The dashboard's top row (2026-10-18 redesign, after Thea's mock-up): the
-// annual sales card across the full width in two columns (Allocation |
-// Progress so far, the latest month as one line at its foot; the monthly
-// chart and the Latest month column came off 2026-10-18), then the four KPI
-// cards in one row of
-// equal columns. The bottom two (below safety stock, pending reorders) are
-// operational and tinted, so the things to act on read apart from the rest.
+// The dashboard's KPI area leads with the action and stock-risk cards:
+// pending reorders, below safety stock, and stock cover. The annual sales /
+// allocation and inventory-value cards follow as context.
 //
 // Presentation only. Every figure is one GET /dashboard already serves and
 // Dashboard.jsx already reads; the arithmetic on them (a pace, a split, a
