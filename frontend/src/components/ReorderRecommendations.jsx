@@ -13,6 +13,7 @@ import ReorderTableControls from './ReorderTableControls';
 import InfoTip from './InfoTip';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
+import NextTabLink from './NextTabLink';
 import ProductName from './ProductName';
 import OverrideReasonModal from './OverrideReasonModal';
 import Modal from './Modal';
@@ -2105,6 +2106,7 @@ const ReorderRecommendations = () => {
             ? (meta?.demoOrderPlan && <DemoOrderPlanCard plan={meta.demoOrderPlan} kind="delmonte" id="demo-order-plan" />)
             : (meta?.demoUnileverPlan && <DemoOrderPlanCard plan={meta.demoUnileverPlan} kind="unilever" id="demo-order-plan" />)
         )}
+        <NextTabLink />
         </div>
       </div>
 

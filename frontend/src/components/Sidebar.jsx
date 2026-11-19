@@ -1,18 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
-  BookOpen,
-  Layers, 
-  Package,
-  Database,
-  TrendingUp,
-  RotateCcw,
   LogOut,
   X,
-  ClipboardList,
-  Users,
-  ChartLine,
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
@@ -20,6 +10,7 @@ import { logout, getCurrentUser, API_URL } from '../auth';
 import { getMfaStatus, MFA_STATUS_EVENT } from '../api/mfa';
 import { usePermissions } from '../permissions/context';
 import { permissionForPath } from '../permissions/keys';
+import { navSections } from '../navigation';
 import Modal from './Modal';
 import AccountSecurityModal from './AccountSecurityModal';
 import AuthHandoff, { holdForHandoff } from './AuthHandoff';
@@ -33,47 +24,6 @@ const getInitials = (name) => {
   const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
   return (first + last).toUpperCase();
 };
-
-// Navigation groups follow the sidebar reference: dashboard first, then
-// inventory operations, analytics, and data governance. Routes and
-// permissions are unchanged.
-const navSections = [
-  {
-    label: null,
-    items: [
-      { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    ],
-  },
-  {
-    label: 'Inventory Operations',
-    items: [
-      { name: 'Reorder Recommendations', icon: RotateCcw, path: '/reorder' },
-      { name: 'SKU Management', icon: Package, path: '/sku-management' },
-      { name: 'ABC Classification', icon: Layers, path: '/abc' },
-    ],
-  },
-  {
-    label: 'Analytics & Forecasting',
-    items: [
-      { name: 'SKU Forecast', icon: TrendingUp, path: '/forecast' },
-      { name: 'Category Trends', icon: ChartLine, path: '/category-trends' },
-    ],
-  },
-  {
-    label: 'Data & Governance',
-    items: [
-      { name: 'Reference Guide', icon: BookOpen, path: '/data-dictionary' },
-      { name: 'Audit Log', icon: ClipboardList, path: '/audit-log' },
-    ],
-  },
-  {
-    label: 'Administration',
-    items: [
-      { name: 'Data Management', icon: Database, path: '/upload' },
-      { name: 'User Management', icon: Users, path: '/users' },
-    ],
-  },
-];
 
 const API_STATUS_LABEL = { checking: 'CHECKING…', online: 'SERVER ONLINE', offline: 'SERVER OFFLINE' };
 

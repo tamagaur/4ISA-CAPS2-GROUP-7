@@ -1,0 +1,26 @@
+.next-tab {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-8, 32px);
+  padding-top: var(--space-4, 16px);
+  border-top: 1px solid rgba(17, 26, 53, 0.1);
+}
+
+.next-tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  color: var(--color-info, #2B4C7E);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.next-tab-link:hover {
+  text-decoration: underline;
+}
+
+.next-tab-link:focus-visible {
+  border-radius: var(--radius-sm, 6px);
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

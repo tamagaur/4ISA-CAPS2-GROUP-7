@@ -7,6 +7,7 @@ import { ParetoCard } from './AbcBreakdowns';
 import KPICard from './KPICard';
 import PageHeader from './ui/PageHeader';
 import SectionHeading from './ui/SectionHeading';
+import NextTabLink from './NextTabLink';
 import BasisTag from './BasisTag';
 import { ClassBadge } from './ui/StatusBadge';
 import DateFilter from './DateFilter';
@@ -1007,6 +1008,7 @@ const ABCClassification = () => {
         <div className="abc-content">
           {header}
           <LoadError what="the ABC classification" message={error} onRetry={() => setAttempt((n) => n + 1)} />
+          <NextTabLink />
         </div>
       </div>
     );
@@ -1678,6 +1680,7 @@ const ABCClassification = () => {
           </div>
           </section>
         </div>
+        <NextTabLink />
       </div>
     </div>
   );

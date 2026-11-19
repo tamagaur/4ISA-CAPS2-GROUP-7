@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import SectionLede from './ui/SectionLede';
+import NextTabLink from './NextTabLink';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   Search, Pin, ArrowRight, Clock, Filter, X, AlertTriangle, CheckCircle2, BarChart3, MoveVertical,
@@ -3221,6 +3222,7 @@ const SKUForecast = () => {
             )}
           </>
         )}
+        <NextTabLink />
       </div>
     </div>
   );
