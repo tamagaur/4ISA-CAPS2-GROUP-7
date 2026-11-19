@@ -220,7 +220,7 @@ const entries = {
   summary: [
     {
       term: 'Annual sales and allocation',
-      definition: 'Calendar-year sales so far, next to the next year’s supplier-allocation reference based on those sales.',
+      definition: 'Calendar-year sales so far, next to that year’s supplier-allocation reference based on the previous year’s sales.',
       plain: 'Each year’s allocation comes from the previous calendar year’s sales times the level you choose (103%, 105% or 108%). The card labels both years.',
       technical: 'The target is the prior calendar year’s sales multiplied by the selected 103%, 105%, or 108% level. The pace compares average monthly sales so far with that level’s monthly amount. Year-to-date sales are compared with the same months in the prior year; if the months on record differ, the page marks the comparison as not like-for-like.',
     },

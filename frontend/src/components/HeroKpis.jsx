@@ -153,11 +153,11 @@ const CalendarYearAllocationCard = ({
   return (
     <KpiCard
       tone="blue"
-      title={`Calendar year ${yearView.year} sales → ${yearView.targetYear} allocation`}
+      title={`Calendar year ${yearView.year} sales and allocation`}
       tooltip={[
         ...tooltipLines,
-        `Calendar year ${yearView.year} sales are compared with the prior year. The next year's allocation uses `
-          + `${yearView.year} sales × the selected SSM level. This visual does not change order quantities.`,
+        `Calendar year ${yearView.year} sales are compared with the prior year. This year's allocation uses `
+          + `${yearView.basisYear} sales × the selected SSM level. This visual does not change order quantities.`,
       ]}
       basis={basis}
       className="hero-card-wide"
@@ -172,19 +172,19 @@ const CalendarYearAllocationCard = ({
         </div>
         <div className="hero-annual-figure">
           <p className="hero-label">
-            Calendar year {yearView.targetYear} allocation · based on {yearView.year} sales
+            Calendar year {yearView.allocationYear} allocation · based on {yearView.basisYear} sales
           </p>
           {level ? (
             <>
               <p className="hero-value hero-value-xl">
                 <HoverValue
-                  label="How the following year's allocation is worked out"
+                  label="How this year's allocation is worked out"
                   what={fullYearTarget != null
-                    ? `Calendar year ${yearView.year} sales × the ${level.pct}% SSM target.`
-                    : `Average monthly sales in calendar year ${yearView.year} × the ${level.pct}% SSM target.`}
+                    ? `Calendar year ${yearView.basisYear} sales × the ${level.pct}% SSM target.`
+                    : `Average monthly sales in calendar year ${yearView.basisYear} × the ${level.pct}% SSM target.`}
                   sums={[fullYearTarget != null
-                    ? `${fp(yearView.sales)} × ${level.pct}% = ${fp(fullYearTarget)}`
-                    : `${fp(yearView.sales)} ÷ ${yearView.months} months × ${level.pct}% = ${fp(monthlyTarget)} a month`]}
+                    ? `${fp(yearView.basisSales)} × ${level.pct}% = ${fp(fullYearTarget)}`
+                    : `${fp(yearView.basisSales)} ÷ ${yearView.basisMonths} months × ${level.pct}% = ${fp(monthlyTarget)} a month`]}
                 >
                   {fullYearTarget != null
                     ? fp(fullYearTarget)
@@ -193,12 +193,18 @@ const CalendarYearAllocationCard = ({
               </p>
               {fullYearTarget == null && (
                 <p className="hero-kpi-asof">
-                  Based on {yearView.months} of 12 months; no annual total is projected.
+                  Based on {yearView.basisMonths} of 12 months; no annual total is projected.
                 </p>
               )}
             </>
           ) : (
             <p className="hero-note">{yearView.blockedReason || 'The allocation target is unavailable for this year.'}</p>
+          )}
+          {yearView.basisSales != null && (
+            <p className="hero-kpi-asof">
+              Previous calendar year {yearView.basisYear} sales: <strong>{fp(yearView.basisSales)}</strong>
+              {' '}({yearView.basisMonths} of 12 months on record)
+            </p>
           )}
           {levelButtons && (
             <div className="hero-alloc-levels-box">
@@ -223,8 +229,8 @@ const CalendarYearAllocationCard = ({
       <details className="dash-more">
         <summary>Details</summary>
         <p className="hero-kpi-asof">
-          Sales are compared with the previous calendar year. The target shown is for {yearView.targetYear} and is based on
-          {' '}{yearView.year} sales. The current order plan is unchanged.
+          Sales are compared with the previous calendar year. The allocation shown is for {yearView.allocationYear} and is based on
+          {' '}{yearView.basisYear} sales. The current order plan is unchanged.
           {onOpenYearly && (
             <> See <button type="button" className="hero-num-link" onClick={onOpenYearly}>sales per calendar year</button>.</>
           )}
@@ -234,9 +240,9 @@ const CalendarYearAllocationCard = ({
   );
 };
 
-// The selected calendar year's sales, its comparable prior-year change, and
-// the successor year's reference target. The legacy allocation display below
-// remains for callers that do not supply `yearView`.
+// The selected calendar year's sales and its allocation, based on the
+// previous calendar year's sales. The legacy allocation display below remains
+// for callers that do not supply `yearView`.
 export const AnnualSalesCard = ({
   allocation, yoy = null, latest = null, range = null, basis = null, tooltip = null,
   allocSynthetic = null, ytdSynthetic = null, yearView = null, onOpenYearly = null,

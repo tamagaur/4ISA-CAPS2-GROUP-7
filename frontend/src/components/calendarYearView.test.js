@@ -8,10 +8,10 @@ const levels = (annual, monthly) => [
   { pct: 108, annual: annual == null ? null : annual * 108 / 103, monthly: monthly * 108 / 103 },
 ];
 
-test('a complete selected year compares with the previous full year and targets its successor', () => {
+test('a calendar year allocation uses and displays the previous year sales', () => {
   const view = calendarYearView({
     years: [
-      { year: 2024, sales: 1000, months: 12, allocation_levels: [] },
+      { year: 2024, sales: 1000, months: 12, allocation_levels: levels(1030, 1000 / 12) },
       {
         year: 2025, sales: 1200, months: 12, allocation_levels: levels(1236, 103),
         comparison: { sales: 1000, months: 12, label: '2024' },
@@ -20,11 +20,15 @@ test('a complete selected year compares with the previous full year and targets 
   }, { allocation_year: 2026, basis_year: 2025, default_pct: 103, levels: levels(1236, 103) }, 2025);
 
   assert.equal(view.year, 2025);
-  assert.equal(view.targetYear, 2026);
+  assert.equal(view.allocationYear, 2025);
+  assert.equal(view.basisYear, 2024);
+  assert.equal(view.basisSales, 1000);
+  assert.equal(view.basisMonths, 12);
   assert.equal(view.sales, 1200);
   assert.deepEqual(view.yoy, { pct: 20, label: '2024' });
-  assert.equal(view.allocation.allocation_year, 2026);
-  assert.equal(view.allocation.basis_year, 2025);
+  assert.equal(view.levels[0].annual, 1030);
+  assert.equal(view.allocation.allocation_year, 2025);
+  assert.equal(view.allocation.basis_year, 2024);
 });
 
 test('an incomplete latest year compares only matching recorded months', () => {
@@ -39,15 +43,31 @@ test('an incomplete latest year compares only matching recorded months', () => {
   }, {
     allocation_year: 2026,
     basis_year: 2025,
+    basis_sales: 900,
+    basis_months: 12,
     default_pct: 103,
     levels: levels(927, 77.25),
   }, 2026);
 
-  assert.equal(view.targetYear, 2027);
-  assert.equal(view.levels[0].annual, null);
-  assert.equal(view.levels[0].monthly, 118.45);
+  assert.equal(view.allocationYear, 2026);
+  assert.equal(view.basisSales, 900);
+  assert.equal(view.levels[0].annual, 927);
   assert.deepEqual(view.yoy, { pct: (50 / 180) * 100, label: 'same months in 2025' });
   assert.equal(view.comparisonNote, null);
+});
+
+test('a partial previous year shows its sales and monthly allocation basis only', () => {
+  const view = calendarYearView({
+    years: [
+      { year: 2025, sales: 230, months: 2, allocation_levels: levels(null, 118.45) },
+      { year: 2026, sales: 80, months: 1, allocation_levels: levels(null, 82.4) },
+    ],
+  }, { default_pct: 103 }, 2026);
+
+  assert.equal(view.basisSales, 230);
+  assert.equal(view.basisMonths, 2);
+  assert.equal(view.levels[0].annual, null);
+  assert.equal(view.levels[0].monthly, 118.45);
 });
 
 test('it does not compare incomplete years with mismatched recorded months', () => {
@@ -67,5 +87,5 @@ test('an unrecorded calendar year has no sales or allocation target', () => {
 
   assert.equal(view.sales, null);
   assert.equal(view.levels.length, 0);
-  assert.match(view.blockedReason, /No sales are on record/);
+  assert.match(view.blockedReason, /No sales are on record for calendar year 2025/);
 });

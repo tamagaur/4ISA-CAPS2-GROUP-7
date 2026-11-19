@@ -1362,11 +1362,11 @@ const Dashboard = () => {
     },
     allocation: {
       label: selectedYearView
-        ? `${selectedYearView.year} → ${selectedYearView.targetYear}`
+        ? `${selectedYearView.basisYear} → ${selectedYearView.allocationYear}`
         : 'Selected year',
       follows: true,
-      detail: `${FOLLOWS_RANGE} The selected calendar year's sales are compared with the previous year, and set `
-        + 'the next calendar year’s allocation target. This changes the visual reference only; it does not change the LP plan.',
+      detail: `${FOLLOWS_RANGE} The selected calendar year's allocation is based on the previous calendar year's sales. `
+        + 'This changes the visual reference only; it does not change the LP plan.',
     },
   };
 
@@ -1384,7 +1384,7 @@ const Dashboard = () => {
     ? `Includes ${syntheticInRange.length} sample-data month${syntheticInRange.length === 1 ? '' : 's'}`
     : null;
   const allocSyntheticMark = selectedYearView?.syntheticMonths.length > 0
-    ? `Calendar year ${selectedYearView.year} includes sample-data months: ${monthsText(selectedYearView.syntheticMonths)}`
+    ? `Calendar year ${selectedYearView.year} sales include sample-data months: ${monthsText(selectedYearView.syntheticMonths)}`
     : null;
   // The chart's sentence quotes two months; say so when either is synthetic.
   const insightSynthetic = syntheticInRange.filter((m) => (data.sales_vs_stock_insight?.text || '').includes(periodLabel(m)));
@@ -1399,11 +1399,11 @@ const Dashboard = () => {
     allocSynthetic: allocSyntheticMark,
     basis: {
       label: selectedYearView
-        ? `Calendar year ${selectedYearView.year} → ${selectedYearView.targetYear}`
+        ? `Calendar year ${selectedYearView.basisYear} → ${selectedYearView.allocationYear}`
         : 'Selected calendar year',
       follows: true,
-      detail: `${FOLLOWS_RANGE} The selected year’s sales are compared with the previous year and set the next year’s `
-        + 'allocation target. Partial years show a monthly reference only. This does not change the LP plan.',
+      detail: `${FOLLOWS_RANGE} The selected year’s allocation is based on the previous calendar year’s sales. `
+        + 'Partial previous years show a monthly reference only. This does not change the LP plan.',
     },
     tooltip: salesTooltip,
   };
